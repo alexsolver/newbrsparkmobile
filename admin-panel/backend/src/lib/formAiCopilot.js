@@ -8,6 +8,7 @@ const {
   countOperationalSchemaFields,
   mergeFormContextWithSchemaInference,
   formatTransitDisplacementRulesForPrompt,
+  formatOsDestinationVsGeometryConventionForPrompt,
   formatAutomaticIconRulesForPrompt,
 } = require('./formAiFieldCatalog');
 const { applySchemaPatch } = require('./formAiSchemaPatch');
@@ -186,6 +187,8 @@ Quando existir no prompt uma seção «### Preenchimentos anteriores deste model
 Quando existir «### Modelos semelhantes na biblioteca (RAG — referência)», use-a só como inspiração de **estrutura** (etapas, tipos de campo, densidade de perguntas). **Não** reutilize **ids** de campos desses modelos no schemaPatch do formulário atual — copie apenas ideias e adapte aos **id** do JSON compacto atual.
 
 ${formatTransitDisplacementRulesForPrompt()}
+
+${formatOsDestinationVsGeometryConventionForPrompt()}
 `;
 }
 

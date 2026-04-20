@@ -18,6 +18,7 @@ const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverag
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 const { startChallenge, verifyChallenge } = require('../lib/otpLoginService');
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
+const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
 
 function buildSafeTenantForApp(tenant) {
   if (!tenant) return null;
@@ -31,6 +32,11 @@ function buildSafeTenantForApp(tenant) {
     name: tenant.name,
     status: tenant.status,
     branding: branding.effective,
+    /**
+     * Placeholder; o valor efectivo (moondream vs yolo) vem de `buildSafeAppUserPayloadAsync`
+     * com base em `tenant.features` e nas integrações globais na BD.
+     */
+    visionDetectionEngine: 'yolo',
   };
 }
 
@@ -115,8 +121,24 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
 
   return {
     token,
-    user: buildSafeAppUserPayload(fresh),
+    user: await buildSafeAppUserPayloadAsync(fresh),
   };
+}
+
+/**
+ * Igual a `buildSafeAppUserPayload`, mas resolve `tenant.visionDetectionEngine` com a mesma
+ * lógica que `/api/checklists/vision/analyze` (Moondream vs YOLO).
+ */
+async function buildSafeAppUserPayloadAsync(user) {
+  const payload = buildSafeAppUserPayload(user);
+  if (payload.tenant && user.tenant) {
+    try {
+      payload.tenant.visionDetectionEngine = await resolveVisionDetectionEngineLabelForApp(prisma, user.tenant.features);
+    } catch (e) {
+      console.warn('[account] visionDetectionEngine', e && e.message);
+    }
+  }
+  return payload;
 }
 
 // /api/vision/* — biometria de campo / checklists (FaceMatch conforme plano). Gate IA do cadastro prestador: index.js → /api/ai-technician-profile-photo.
@@ -946,7 +968,7 @@ router.get('/me', authUser, async (req, res) => {
       },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
-    res.json(buildSafeAppUserPayload(user));
+    res.json(await buildSafeAppUserPayloadAsync(user));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1025,7 +1047,7 @@ router.put('/me', authUser, async (req, res) => {
       },
     });
     const { password: _, ...safe } = updated;
-    res.json(fresh ? buildSafeAppUserPayload(fresh) : safe);
+    res.json(fresh ? await buildSafeAppUserPayloadAsync(fresh) : safe);
   } catch (err) { 
     res.status(500).json({ error: err.message }); 
   }

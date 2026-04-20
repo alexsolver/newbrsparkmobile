@@ -74,6 +74,35 @@ export async function updateStoredJsonArray<T>(
   });
 }
 
+/**
+ * Atualiza array JSON sem adquirir o lock da chave — usar **apenas** dentro de
+ * `withAsyncStorageKeyLock(key, ...)` para o mesmo `key`, para evitar deadlock com `updateStoredJsonArray`.
+ */
+export async function updateStoredJsonArrayWhileLockHeld<T>(
+  key: string,
+  updater: (current: T[]) => T[] | Promise<T[]>,
+  options?: UpdateJsonArrayOptions
+): Promise<T[]> {
+  const raw = await AsyncStorage.getItem(key);
+  let current: T[] = [];
+  try {
+    current = raw ? JSON.parse(raw) : [];
+  } catch {
+    current = [];
+  }
+  if (!Array.isArray(current)) current = [];
+
+  const nextRaw = await updater([...current]);
+  const next = Array.isArray(nextRaw) ? nextRaw : [];
+
+  if (options?.removeWhenEmpty && next.length === 0) {
+    await AsyncStorage.removeItem(key);
+  } else {
+    await AsyncStorage.setItem(key, JSON.stringify(next));
+  }
+  return next;
+}
+
 export async function appendUniqueStringToStoredArray(
   key: string,
   value: string

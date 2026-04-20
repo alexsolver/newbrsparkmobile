@@ -53,6 +53,14 @@ function run() {
     true,
     'deve remover quando reopenCount>0'
   );
+  assert.equal(
+    shouldRemoveExecutedCacheForRemoteTask(
+      { id: 'os-5', status: 'IN_PROGRESS', metadata: { reopenCount: 2 } },
+      new Set(['os-5'])
+    ),
+    false,
+    'não deve remover quando o id ainda está em checklist pendente (outbox/conflitos)'
+  );
 
   // Status terminal nunca remove.
   assert.equal(

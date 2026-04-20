@@ -17,6 +17,7 @@ import { Header } from '../src/components/Header';
 import { AppProvider } from '../src/context/AppContext';
 import { PersonaProvider, usePersona } from '../src/context/PersonaContext';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
+import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
 import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryBridge';
 import { pollStaleGpsReminders } from '../src/services/syncService';
 import { NotificationService, preparePushNotificationInfrastructure } from '../src/services/notifications';
@@ -86,7 +87,13 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     }
 
     if (user && inClient && activePersona === 'provider') {
-      router.replace(getPersonaHomeHref('provider') as any);
+      void (async () => {
+        if (!(await isProviderOnboardingComplete())) {
+          router.replace('/auth/onboarding' as any);
+          return;
+        }
+        router.replace(getPersonaHomeHref('provider') as any);
+      })();
     }
     if (user && inProvider && activePersona === 'client') {
       router.replace(getPersonaHomeHref('client') as any);

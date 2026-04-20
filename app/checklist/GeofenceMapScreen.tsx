@@ -13,6 +13,8 @@ import * as Location from 'expo-location';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
+import { evaluateCombinedGlobalFence, parsePolygonRaw } from './globalGeofenceCombined';
+import GlobalGeofenceMapLayers from './GlobalGeofenceMapLayers';
 
 interface TaskLocation {
   id?: string;
@@ -23,6 +25,11 @@ interface TaskLocation {
   locationRadius?: number | null;
   locationAddress?: string | null;
   locationPolygon?: number[][] | string | null;
+  /** Destino de navegação explícito (ex.: ponto ≠ primeiro vértice do KML). */
+  metadata?: {
+    navigationDestination?: { kind?: string; lat?: number; lng?: number };
+    globalGeofence?: import('./globalGeofenceCombined').GlobalGeofenceMeta;
+  } | null;
 }
 
 interface Props {
@@ -91,6 +98,19 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
     if (!zoneType || zoneType === 'none') {
       setStatus('inside'); setStatusMsg('Sem restrição geográfica nesta OS.'); return;
     }
+    if (zoneType === 'combined') {
+      const gfm = task.metadata?.globalGeofence;
+      if (!gfm) {
+        setStatus('unknown');
+        setStatusMsg('Configuração de cerca global indisponível.');
+        return;
+      }
+      const r = evaluateCombinedGlobalFence(lat, lng, gfm);
+      setStatus(r.inside ? 'inside' : 'outside');
+      setStatusMsg(r.statusMsg);
+      setDistance(r.distanceDest ?? r.distanceGeom ?? null);
+      return;
+    }
     if (zoneType === 'radius') {
       const destLat = Number(task.locationLat);
       const destLng = Number(task.locationLng);
@@ -122,7 +142,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
       } else {
         setStatus('outside');
         setStatusMsg(
-          `AVISO: ~${dist} m do trajeto planejado (corredor ${threshold} m). Não bloqueia — pode iniciar; o percurso fica registrado.`
+          `AVISO: ~${dist} m do trajeto planejado (corredor ${threshold} m). Não bloqueia, pode iniciar; o percurso fica registrado.`
         );
       }
     } else if (zoneType === 'segment') {
@@ -154,20 +174,74 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
       // Fit map to show both user and zone
       setTimeout(() => {
         if (!mapRef.current) return;
-        const points = polygon.length > 0
-          ? [...polygon.map(c => ({ latitude: c[0], longitude: c[1] })), { latitude: lat, longitude: lng }]
-          : [{ latitude: lat, longitude: lng }];
+        const zt = task.locationZoneType;
+        const gfm = task.metadata?.globalGeofence;
+        if (zt === 'combined' && gfm) {
+          const points: { latitude: number; longitude: number }[] = [{ latitude: lat, longitude: lng }];
+          if (gfm.destination) {
+            points.push({ latitude: gfm.destination.lat, longitude: gfm.destination.lng });
+          }
+          const gp = gfm.geometry ? parsePolygonRaw(gfm.geometry.locationPolygon) : [];
+          for (const c of gp) {
+            if (Number.isFinite(c[0]) && Number.isFinite(c[1])) {
+              points.push({ latitude: c[0], longitude: c[1] });
+            }
+          }
+          mapRef.current.fitToCoordinates(points, {
+            edgePadding: { top: 80, right: 40, bottom: 200, left: 40 },
+            animated: true,
+          });
+          return;
+        }
+        const points =
+          polygon.length > 0
+            ? [...polygon.map((c) => ({ latitude: c[0], longitude: c[1] })), { latitude: lat, longitude: lng }]
+            : [{ latitude: lat, longitude: lng }];
         const zoneLat = Number(task.locationLat);
         const zoneLng = Number(task.locationLng);
         if (Number.isFinite(zoneLat) && Number.isFinite(zoneLng)) {
           points.push({ latitude: zoneLat, longitude: zoneLng });
         }
-        mapRef.current.fitToCoordinates(points, { edgePadding: { top: 80, right: 40, bottom: 200, left: 40 }, animated: true });
+        mapRef.current.fitToCoordinates(points, {
+          edgePadding: { top: 80, right: 40, bottom: 200, left: 40 },
+          animated: true,
+        });
       }, 500);
     })();
   }, []);
 
   const openInMaps = () => {
+    if (zoneType === 'combined') {
+      const gfm = task.metadata?.globalGeofence;
+      const gPoly = gfm?.geometry ? parsePolygonRaw(gfm.geometry.locationPolygon) : [];
+      const gzt = String(gfm?.geometry?.zoneType || '').toLowerCase();
+      if (gzt === 'segment' && gPoly.length >= 2) {
+        Alert.alert(
+          'Navegar para OS',
+          'Para qual extremidade do trecho deseja navegar?',
+          [
+            { text: 'Ponto A', onPress: () => openDestInMaps(gPoly[0][0], gPoly[0][1]) },
+            { text: 'Ponto B', onPress: () => openDestInMaps(gPoly[1][0], gPoly[1][1]) },
+            { text: 'Cancelar', style: 'cancel' },
+          ],
+        );
+        return;
+      }
+      const nav = (task as TaskLocation).metadata?.navigationDestination;
+      if (nav?.kind === 'point' && Number.isFinite(Number(nav.lat)) && Number.isFinite(Number(nav.lng))) {
+        openDestInMaps(Number(nav.lat), Number(nav.lng));
+        return;
+      }
+      if (gfm?.destination) {
+        openDestInMaps(gfm.destination.lat, gfm.destination.lng);
+        return;
+      }
+      if (gPoly.length > 0) {
+        openDestInMaps(gPoly[0][0], gPoly[0][1]);
+      }
+      return;
+    }
+
     // Caso seja Trecho, mostrar alerta para escolher Ponto A ou Ponto B
     if (zoneType === 'segment' && polygon.length >= 2) {
       Alert.alert(
@@ -182,10 +256,25 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
       return;
     }
 
-    // Para rotas, navegamos para o ponto INICIAL (polygon[0]). Para outros, para o centro.
-    const targetLat = (zoneType === 'route' && polygon.length > 0) ? polygon[0][0] : task.locationLat;
-    const targetLng = (zoneType === 'route' && polygon.length > 0) ? polygon[0][1] : task.locationLng;
-    openDestInMaps(targetLat, targetLng);
+    // Rota / polígono KML: navegar para o **destino** do despacho, não para o 1.º vértice do ficheiro.
+    const nav = (task as TaskLocation).metadata?.navigationDestination;
+    if (zoneType === 'route' || zoneType === 'polygon') {
+      if (nav?.kind === 'point' && Number.isFinite(Number(nav.lat)) && Number.isFinite(Number(nav.lng))) {
+        openDestInMaps(Number(nav.lat), Number(nav.lng));
+        return;
+      }
+      const nlat = Number(task.locationLat);
+      const nlng = Number(task.locationLng);
+      if (Number.isFinite(nlat) && Number.isFinite(nlng)) {
+        openDestInMaps(nlat, nlng);
+        return;
+      }
+      if (polygon.length > 0) {
+        openDestInMaps(polygon[0][0], polygon[0][1]);
+      }
+      return;
+    }
+    openDestInMaps(task.locationLat, task.locationLng);
   };
 
   const openDestInMaps = (targetLat?: number | null, targetLng?: number | null) => {
@@ -236,10 +325,17 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
           : '#dc2626'
         : '#6b7280';
 
-  const taskLat = Number(task.locationLat);
-  const taskLng = Number(task.locationLng);
-  const initialLat = Number.isFinite(taskLat) ? taskLat : (myPos?.lat ?? -23.55);
-  const initialLng = Number.isFinite(taskLng) ? taskLng : (myPos?.lng ?? -46.63);
+  const gfm = task.metadata?.globalGeofence;
+  const taskLat =
+    zoneType === 'combined' && gfm?.destination
+      ? Number(gfm.destination.lat)
+      : Number(task.locationLat);
+  const taskLng =
+    zoneType === 'combined' && gfm?.destination
+      ? Number(gfm.destination.lng)
+      : Number(task.locationLng);
+  const initialLat = Number.isFinite(taskLat) ? taskLat : myPos?.lat ?? -23.55;
+  const initialLng = Number.isFinite(taskLng) ? taskLng : myPos?.lng ?? -46.63;
 
   // Map region defaults
   const initialRegion = {
@@ -272,8 +368,14 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
             </View>
           </Marker>
         )}
+        {zoneType === 'combined' && gfm ? (
+          <GlobalGeofenceMapLayers gf={gfm} destMarkerTitle={task.title || 'Destino da OS'} />
+        ) : null}
         {/* Radius zone */}
-        {zoneType === 'radius' && Number.isFinite(Number(task.locationLat)) && Number.isFinite(Number(task.locationLng)) && (
+        {zoneType !== 'combined' &&
+          zoneType === 'radius' &&
+          Number.isFinite(Number(task.locationLat)) &&
+          Number.isFinite(Number(task.locationLng)) && (
           <>
             <Circle
               center={{ latitude: Number(task.locationLat), longitude: Number(task.locationLng) }}
@@ -291,7 +393,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
         )}
 
         {/* Polygon zone */}
-        {zoneType === 'polygon' && polygon.length >= 3 && (
+        {zoneType !== 'combined' && zoneType === 'polygon' && polygon.length >= 3 && (
           <Polygon
             coordinates={polygon.map(c => ({ latitude: c[0], longitude: c[1] }))}
             fillColor="rgba(59,130,246,0.12)"
@@ -301,7 +403,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
         )}
 
         {/* Route */}
-        {zoneType === 'route' && polygon.length >= 2 && (
+        {zoneType !== 'combined' && zoneType === 'route' && polygon.length >= 2 && (
           <>
             <Polyline
               coordinates={polygon.map(c => ({ latitude: c[0], longitude: c[1] }))}
@@ -320,7 +422,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
         )}
 
         {/* Segment zone */}
-        {zoneType === 'segment' && polygon.length >= 2 && (
+        {zoneType !== 'combined' && zoneType === 'segment' && polygon.length >= 2 && (
           <>
             <Polyline
               coordinates={[{ latitude: polygon[0][0], longitude: polygon[0][1] }, { latitude: polygon[1][0], longitude: polygon[1][1] }]}

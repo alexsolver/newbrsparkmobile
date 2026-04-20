@@ -98,6 +98,52 @@ model Tenant {
   routineTaskAssignments RoutineTaskAssignment[]
   planUsagePeriods      TenantPlanUsagePeriod[]
   checklistTemplates     ChecklistTemplate[]
+  referenceLibraries     ReferenceLibrary[]
+}
+
+/// Biblioteca de referência por tenant (catálogo para integrações e pré-carga de dados).
+model ReferenceLibrary {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  maxImageEdgePx Int      @default(768)
+  imageQuality   Int      @default(80)
+  revision       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  fields ReferenceLibraryField[]
+  rows   ReferenceLibraryRow[]
+
+  @@index([tenantId])
+}
+
+model ReferenceLibraryField {
+  id        String   @id @default(cuid())
+  libraryId String
+  library   ReferenceLibrary @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+  key       String
+  label     String?
+  type      String   @default("text")
+  sortOrder Int      @default(0)
+
+  @@unique([libraryId, key])
+  @@index([libraryId])
+}
+
+model ReferenceLibraryRow {
+  id          String   @id @default(cuid())
+  libraryId   String
+  library     ReferenceLibrary @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+  externalKey String
+  payload     Json     @default("{}")
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([libraryId, externalKey])
+  @@index([libraryId, updatedAt])
 }
 
 /// Política de registro de horas trabalhadas (ponto) — 1 registro por tenant.
@@ -733,7 +779,7 @@ model Integration {
   updatedAt                 DateTime @updatedAt
 }
 
-// IntType.VISION: integração «Visão IA - YOLO» (nome legado na BD: «Visão IA (checklists)») — POST multipart para serviço externo (foto/vídeo + perguntas sim/não).
+// IntType.VISION: «Visão IA - YOLO» (legado: «Visão IA (checklists)») — POST multipart; «Visão IA - Moondream» — API cloud (VQA).
 enum IntType {
   AI_LLM
   EMAIL
@@ -1357,6 +1403,7 @@ enum TelemetryEventType {
   HEARTBEAT
   GEOFENCE_ENTER
   GEOFENCE_EXIT
+  GEOFENCE_FIELD_AUDIT
   PAUSE
   RESUME
   FRAUD_FLAG

@@ -370,9 +370,9 @@ function ensureShowFieldInstructionsFlag(f) {
   return base;
 }
 
-/** Visão IA Análise: só 1×1 e 2×2; valores antigos migram para 2×2. */
+/** Visão IA (análise e detecção): só 1×1 e 2×2; valores antigos migram para 2×2. */
 function normalizeVisionAnalysisGridStored(f) {
-  if (!f || f.type !== 'vision_ai_analysis') return f;
+  if (!f || (f.type !== 'vision_ai_analysis' && f.type !== 'vision_checklist')) return f;
   const raw = String(f.visionAnalysisGrid || '1x1')
     .trim()
     .toLowerCase()
@@ -826,6 +826,8 @@ let currentFormIconLibrary = 'Ionicons';
 let currentFormFolderId = null;
 /** Pasta aberta no modal “Meus Formulários” */
 let builderBrowseFolderId = null;
+/** Vista em colunas (Finder): ids da raiz até a pasta selecionada (último = pasta atual). */
+window.formsFinderPathIds = [];
 /** Lista plana de pastas (GET /template-folders) */
 let builderFolders = [];
 let lastSemanticAudit = [];
@@ -2081,7 +2083,9 @@ function installNativePaletteDropOnCanvas() {
                     return;
                 }
             }
-            const newField = createNewFieldFromToolboxType(type, rawText);
+            const nTransit =
+                type === 'transit_start' ? fields.filter((ff) => ff && ff.type === 'transit_start').length : 0;
+            const newField = createNewFieldFromToolboxType(type, rawText, nTransit);
             fields.splice(Math.max(0, Math.min(insertAt, fields.length)), 0, newField);
             renderCanvas();
             selectField(newField.id);
@@ -2124,7 +2128,8 @@ function absorbStrayPaletteItemsIntoFields() {
         cy = 0;
     }
     const insertAt = computePaletteDropInsertFieldsIndex(b, cy);
-    const newField = createNewFieldFromToolboxType(t, rawText);
+    const nTransit = t === 'transit_start' ? fields.filter((ff) => ff && ff.type === 'transit_start').length : 0;
+    const newField = createNewFieldFromToolboxType(t, rawText, nTransit);
     fields.splice(Math.max(0, Math.min(insertAt, fields.length)), 0, newField);
     fixTransitDisplacementViolations(fields);
     if (node.parentNode) node.parentNode.removeChild(node);
@@ -2146,7 +2151,7 @@ function defaultLabelForNewToolboxField(type, rawText) {
     return rawText;
 }
 
-function createNewFieldFromToolboxType(type, rawText) {
+function createNewFieldFromToolboxType(type, rawText, existingTransitStartCount) {
     return {
         id: 'field_' + Math.floor(Math.random() * 99999),
         type: type,
@@ -2160,6 +2165,8 @@ function createNewFieldFromToolboxType(type, rawText) {
         dependsOnOperator: '==',
         dependsOnValue: '',
         geofenceRadius: type === 'geofence_check' ? '150' : null,
+        geofenceGeometryToleranceM: type === 'geofence_check' ? '150' : null,
+        geofenceSegmentBufferM: type === 'geofence_check' ? '150' : null,
         options: type === 'dropdown' || type === 'multiselect' ? 'Opção 1, Opção 2' : null,
         calcFormula: type === 'calculated' ? '' : null,
         textMask: type === 'text' || type === 'number' || type === 'phone' ? '' : null,
@@ -2180,21 +2187,50 @@ function createNewFieldFromToolboxType(type, rawText) {
         ...(type === 'vision_checklist'
             ? {
                   visionStructuredPrompt: fbStr(
-                      'fb_prop_vision_default_detection_prompt',
+                      'fb_prop_vision_default_structured_prompt',
                       null,
-                      'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
+                      'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+                          'Tarefa:\n' +
+                          '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+                          '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+                          'Campo value (obrigatório):\n' +
+                          '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+                          '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+                          'Rubrica orientativa:\n' +
+                          '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+                          '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+                          '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+                          '- 7–8: bom estado geral; apenas falhas leves.\n' +
+                          '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+                          'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
                   ),
                   visionQuestions: [
                       {
                           id: 'q1',
                           text: fbStr(
-                              'fb_prop_vision_default_detection_prompt',
+                              'fb_prop_vision_default_structured_prompt',
                               null,
-                              'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
+                              'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+                                  'Tarefa:\n' +
+                                  '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+                                  '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+                                  'Campo value (obrigatório):\n' +
+                                  '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+                                  '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+                                  'Rubrica orientativa:\n' +
+                                  '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+                                  '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+                                  '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+                                  '- 7–8: bom estado geral; apenas falhas leves.\n' +
+                                  '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+                                  'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
                           ),
                       },
                   ],
                   visionCaptureMode: 'photo_and_video',
+                  visionAnalysisGrid: '1x1',
+                  visionRating0To10Enabled: true,
+                  visionShowAiResponseInForm: true,
                   requireOnlineValidation: false,
               }
             : {}),
@@ -2284,7 +2320,13 @@ function createNewFieldFromToolboxType(type, rawText) {
               }
             : {}),
         ...(type === 'transit_start'
-            ? { transitKeepScreenAwake: true, transitPurpose: 'service' }
+            ? {
+                  transitKeepScreenAwake: true,
+                  transitPurpose:
+                      typeof existingTransitStartCount === 'number' && existingTransitStartCount >= 1
+                          ? 'reimbursement'
+                          : 'service',
+              }
             : {}),
     };
 }
@@ -3125,34 +3167,6 @@ function updateField(key, val, opts) {
     }
 }
 
-/** Texto do textarea «Visão de IA — detecção»: um único prompt (modelos antigos com várias entradas são fundidos). */
-function getVisionChecklistPromptEditorText(f) {
-    const defaultVisionPrompt = fbStr(
-        'fb_prop_vision_default_detection_prompt',
-        null,
-        'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
-    );
-    const arr = Array.isArray(f?.visionQuestions) ? f.visionQuestions : [];
-    const lines = [];
-    for (let i = 0; i < arr.length; i++) {
-        const q = arr[i];
-        const text =
-            q && typeof q === 'object'
-                ? String(q.text || q.question || '')
-                      .replace(/\r\n/g, '\n')
-                      .trim()
-                : '';
-        if (text) lines.push(text);
-    }
-    if (lines.length >= 2) {
-        return lines.join('\n\n').slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-    }
-    if (lines.length === 1) return lines[0];
-    const sp = String(f?.visionStructuredPrompt || '').trim();
-    if (sp) return sp;
-    return defaultVisionPrompt;
-}
-
 function renderProperties() {
     if (!elPropsBody) return;
     if(!selectedFieldId) {
@@ -3226,12 +3240,12 @@ function renderProperties() {
                 ? fbStr(
                       'fb_prop_geofence_hint_radius',
                       null,
-                      'O app calcula a distância entre o GPS do técnico e o ponto central da OS.',
+                      'Validação contra o destino da OS: disco em torno do ponto GPS da OS (Haversine).',
                   )
                 : fbStr(
                       'fb_prop_geofence_hint_polygon',
                       null,
-                      'O app verifica se o técnico está dentro do polígono definido na OS.',
+                      'Validação contra a geometria definida no despacho (polígono, rota KML ou trecho A↔B).',
                   );
         const geoErrPh = escapeHtmlAttr(
             fbStr('fb_prop_geofence_error_msg_ph', null, 'Ex.: Você está fora da área de serviço autorizada.'),
@@ -3245,32 +3259,51 @@ function renderProperties() {
             <!-- Tipo de Zona -->
             <div>
                 <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_zone_type_lbl', null, 'Tipo de zona'))}</label>
-                <select class="prop-input" onchange="window.handleFieldUpdate('geofenceType', this.value)" style="font-size:12px;">
-                    <option value="radius" ${(f.geofenceType||'radius') === 'radius' ? 'selected' : ''}>📍 ${escapeHtmlLogic(fbStr('fb_prop_geofence_opt_radius', null, 'Ponto + raio (Haversine)'))}</option>
-                    <option value="polygon" ${f.geofenceType === 'polygon' ? 'selected' : ''}>🔷 ${escapeHtmlLogic(fbStr('fb_prop_geofence_opt_polygon', null, 'Polígono (definido na OS)'))}</option>
+                <select class="prop-input" onchange="window.handleFieldUpdate('geofenceType', this.value); if(typeof renderProperties==='function') renderProperties();" style="font-size:12px;">
+                    <option value="radius" ${(f.geofenceType||'radius') === 'radius' ? 'selected' : ''}>📍 ${escapeHtmlLogic(fbStr('fb_prop_geofence_opt_radius', null, 'Destino da OS (ponto + raio Haversine)'))}</option>
+                    <option value="polygon" ${f.geofenceType === 'polygon' ? 'selected' : ''}>🔷 ${escapeHtmlLogic(fbStr('fb_prop_geofence_opt_polygon', null, 'Geometria da OS (rota, área, polígono / KML no despacho)'))}</option>
                 </select>
                 <div style="font-size:10px; color:#059669; margin-top:3px; line-height:1.3">
                     ${escapeHtmlLogic(geoHint)}
                 </div>
             </div>
 
-            <!-- Raio (só se radius) -->
-            <div id="geofence-radius-block">
-                <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_radius_lbl', null, 'Raio de aceitação (metros)'))}</label>
+            ${(f.geofenceType || 'radius') === 'radius' ? `
+            <div id="geofence-dest-block">
+                <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_dest_radius_lbl', null, 'Raio de aceitação (metros)'))}</label>
                 <input class="prop-input" type="number" min="10" max="10000" value="${f.geofenceRadius || 150}" onkeyup="window.handleFieldUpdate('geofenceRadius', this.value)" />
                 <div style="font-size:10px; color:#059669; margin-top:3px;">
-                    ${escapeHtmlLogic(fbStr('fb_prop_geofence_radius_help', null, 'A OS pode sobrescrever este raio. Este é o padrão do formulário.'))}
+                    ${escapeHtmlLogic(fbStr('fb_prop_geofence_dest_radius_help', null, 'Padrão se a OS não fixar raio no despacho; caso contrário prevalece o da OS.'))}
                 </div>
             </div>
+            ` : `
+            <div id="geofence-geom-block">
+                <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_geom_tol_lbl', null, 'Corredor da rota / polilinha (metros)'))}</label>
+                <input class="prop-input" type="number" min="10" max="10000" value="${f.geofenceGeometryToleranceM != null ? f.geofenceGeometryToleranceM : 150}" onkeyup="window.handleFieldUpdate('geofenceGeometryToleranceM', this.value)" />
+                <div style="font-size:10px; color:#059669; margin-top:3px;">
+                    ${escapeHtmlLogic(fbStr('fb_prop_geofence_geom_tol_help', null, 'Rota, patrulhamento ou KML em linha: distância máxima do GPS ao traçado (evitar desvio do caminho). Predefinição se a OS não fixar tolerância no despacho.'))}
+                </div>
+                <label class="prop-label" style="color:#047857; font-size:10px; margin-top:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_seg_buf_lbl', null, 'Tolerância nos extremos A↔B (metros)'))}</label>
+                <input class="prop-input" type="number" min="10" max="10000" value="${f.geofenceSegmentBufferM != null ? f.geofenceSegmentBufferM : 150}" onkeyup="window.handleFieldUpdate('geofenceSegmentBufferM', this.value)" />
+                <div style="font-size:10px; color:#059669; margin-top:3px;">
+                    ${escapeHtmlLogic(fbStr('fb_prop_geofence_seg_buf_help', null, 'Só quando o despacho usa zona «trecho» (dois pontos A e B): distância máxima até A ou até B. Não substitui o corredor da rota acima — seguir linha/polilinha é sempre o campo de cima.'))}
+                </div>
+            </div>
+            `}
 
             <!-- Modo de Falha -->
             <div>
                 <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_mode_lbl', null, 'Modo de falha'))}</label>
                 <select class="prop-input" onchange="window.handleFieldUpdate('geofenceFailMode', this.value)" style="font-size:12px;">
                     <option value="block" ${(f.geofenceFailMode||'block') === 'block' ? 'selected' : ''}>🚫 ${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_block', null, 'Bloquear — impede avanço do formulário'))}</option>
-                    <option value="warn" ${f.geofenceFailMode === 'warn' ? 'selected' : ''}>⚠️ ${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_warn', null, 'Apenas alertar — registra desvio e continua'))}</option>
+                    <option value="allow_warn" ${(f.geofenceFailMode === 'warn' || f.geofenceFailMode === 'allow_warn') ? 'selected' : ''}>⚠️ ${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_allow_warn', null, 'Registar e permitir — alerta se fora da zona'))}</option>
+                    <option value="record_only" ${f.geofenceFailMode === 'record_only' ? 'selected' : ''}>📋 ${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_record_only', null, 'Só registo — fora/dentro sem bloquear'))}</option>
                 </select>
             </div>
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-top:8px;">
+                <input type="checkbox" ${f.geofenceUnblockOnReentry === true ? 'checked' : ''} onchange="window.handleFieldUpdate('geofenceUnblockOnReentry', this.checked)" style="accent-color:#059669;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <span style="font-size:11px;font-weight:600;color:#065f46;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_geofence_unblock_reentry', null, 'Com bloqueio: libertar automaticamente ao voltar à zona permitida'))}</span>
+            </label>
 
             <!-- Mensagem customizada -->
             <div>
@@ -3280,11 +3313,32 @@ function renderProperties() {
         </div>`;
     } else if (f.type === 'transit_start') {
         const keepAwake = f.transitKeepScreenAwake !== false;
-        const reimb = f.transitPurpose === 'reimbursement';
+        const trIdx = Array.isArray(fields) ? fields.filter((x) => x && x.type === 'transit_start').findIndex((x) => x.id === f.id) : -1;
+        const isFirstTransitStart = trIdx === 0;
+        const purposeRaw = f.transitPurpose;
+        const effectivePurpose =
+            purposeRaw === 'patrol' || purposeRaw === 'reimbursement' || purposeRaw === 'service'
+                ? purposeRaw
+                : isFirstTransitStart
+                  ? 'service'
+                  : 'reimbursement';
+        const isService = effectivePurpose === 'service';
+        const isReimb = effectivePurpose === 'reimbursement';
+        const isPatrol = effectivePurpose === 'patrol';
         const trHelp = fbStr(
             'fb_prop_transit_keep_awake_help_html',
             null,
             'O equipamento pode consumir mais bateria, mas tende a aumentar a precisão e a continuidade da coleta de GPS enquanto o deslocamento estiver em curso (mapa visível ou minimizado). A opção desliga automaticamente ao tocar em <strong>Finalizar deslocamento</strong>.',
+        );
+        const firstHint = isFirstTransitStart
+            ? `<div style="font-size:10px;color:#1d4ed8;font-weight:700;margin-bottom:6px;line-height:1.4;border-left:3px solid #3b82f6;padding-left:8px;">${escapeHtmlLogic(fbStr('fb_prop_transit_first_default_hint', null, 'O primeiro «Iniciar deslocamento» do formulário vem por padrão com destino na OS — indicado para o deslocamento até o local de atendimento.'))}</div>`
+            : '';
+        const docHelp = escapeHtmlLogic(
+            fbStr(
+                'fb_prop_transit_vs_geofence_help',
+                null,
+                'Deslocamento (transit) regista trilha e tempos; a cerca eletrônica (campo à parte) é a prova de entrada na área de serviço.',
+            ),
         );
         extraProps = `
         <div style="background:#eff6ff;border:1px solid #3b82f6;padding:14px;border-radius:10px;margin-top:16px;display:flex;flex-direction:column;gap:10px;">
@@ -3299,12 +3353,24 @@ function renderProperties() {
                 ${trHelp}
             </div>
         </div>
-        <div style="background:#fff7ed;border:1px solid #fdba74;padding:14px;border-radius:10px;margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;padding:12px;border-radius:10px;margin-top:12px;font-size:10px;color:#475569;line-height:1.45;">${docHelp}</div>
+        <div style="background:#fff7ed;border:1px solid #fdba74;padding:14px;border-radius:10px;margin-top:12px;display:flex;flex-direction:column;gap:10px;">
+            <div style="font-size:12px;font-weight:800;color:#9a3412;">${escapeHtmlLogic(fbStr('fb_prop_transit_purpose_title', null, 'Finalidade deste início de deslocamento'))}</div>
+            ${firstHint}
             <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
-                <input type="checkbox" ${reimb ? 'checked' : ''} onchange="window.handleFieldUpdate('transitPurpose', this.checked ? 'reimbursement' : 'service'); if(typeof renderProperties==='function') renderProperties();" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isService ? 'checked' : ''} onchange="window.handleFieldUpdate('transitPurpose', 'service'); if(typeof renderProperties==='function') renderProperties();" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <span style="font-size:12px;font-weight:700;color:#9a3412;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_dest_os_lbl', null, 'Destino: local de atendimento da OS (ETA, mapa, acompanhamento)'))}</span>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
+                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isReimb ? 'checked' : ''} onchange="window.handleFieldUpdate('transitPurpose', 'reimbursement'); if(typeof renderProperties==='function') renderProperties();" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
                 <span style="font-size:12px;font-weight:700;color:#9a3412;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_reimbursement_lbl', null, 'Apenas registro de deslocamento durante a atividade'))}</span>
             </label>
             <div style="font-size:10px;color:#c2410c;line-height:1.45;">${escapeHtmlLogic(fbStr('fb_prop_transit_reimbursement_help', null, 'Regista só a trilha GPS no app. Sem ETA, sem chat com o cliente e sem página de acompanhamento — use um segundo par início/fim depois do deslocamento operacional.'))}</div>
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-top:8px;">
+                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isPatrol ? 'checked' : ''} onchange="window.handleFieldUpdate('transitPurpose', 'patrol'); if(typeof renderProperties==='function') renderProperties();" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <span style="font-size:12px;font-weight:700;color:#9a3412;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_patrol_lbl', null, 'Patrulhamento (trajeto KML / geometria da OS no mapa)'))}</span>
+            </label>
+            <div style="font-size:10px;color:#c2410c;line-height:1.45;">${escapeHtmlLogic(fbStr('fb_prop_transit_patrol_help', null, 'O mapa de deslocamento usa a polilinha ou zona enviada no despacho (ex.: KML). Indicado para seguir o percurso planeado sem assumir o destino como «serviço no cliente».'))}</div>
         </div>`;
     } else if (f.type === 'location_pick') {
         extraProps = `
@@ -3364,37 +3430,37 @@ function renderProperties() {
         </div>`;
     } else if (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') {
         const isVisionAnalysis = f.type === 'vision_ai_analysis';
-        const promptDisplay = isVisionAnalysis
-            ? (() => {
-                  const sp = String(f.visionStructuredPrompt || '').trim();
-                  if (sp) return sp;
-                  if (Array.isArray(f.visionQuestions)) {
-                      const joined = f.visionQuestions
-                          .map((q) => String((q && q.text) || '').trim())
-                          .filter(Boolean)
-                          .join('\n\n');
-                      if (joined) return joined;
-                  }
-                  return fbStr(
-                      'fb_prop_vision_default_structured_prompt',
-                      null,
-                      'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
-                          'Tarefa:\n' +
-                          '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
-                          '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
-                          'Campo value (obrigatório):\n' +
-                          '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
-                          '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
-                          'Rubrica orientativa:\n' +
-                          '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
-                          '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
-                          '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
-                          '- 7–8: bom estado geral; apenas falhas leves.\n' +
-                          '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
-                          'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
-                  );
-              })()
-            : getVisionChecklistPromptEditorText(f);
+        const defaultStructuredPromptFb = () =>
+            fbStr(
+                'fb_prop_vision_default_structured_prompt',
+                null,
+                'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+                    'Tarefa:\n' +
+                    '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+                    '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+                    'Campo value (obrigatório):\n' +
+                    '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+                    '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+                    'Rubrica orientativa:\n' +
+                    '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+                    '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+                    '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+                    '- 7–8: bom estado geral; apenas falhas leves.\n' +
+                    '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+                    'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
+            );
+        const promptDisplay = (() => {
+            const sp = String(f.visionStructuredPrompt || '').trim();
+            if (sp) return sp;
+            if (Array.isArray(f.visionQuestions)) {
+                const joined = f.visionQuestions
+                    .map((q) => String((q && q.text) || '').trim())
+                    .filter(Boolean)
+                    .join('\n\n');
+                if (joined) return joined;
+            }
+            return defaultStructuredPromptFb();
+        })();
         const capMode =
             f.visionCaptureMode === 'photo_only' ||
             f.visionCaptureMode === 'video_only' ||
@@ -3450,30 +3516,36 @@ function renderProperties() {
             },
         ];
         const ratingEnabled = !!f.visionRating0To10Enabled;
-        const ratingPickHtml = isVisionAnalysis
-            ? `
-            <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid ${ratingEnabled ? '#fecaca' : '#e2e8f0'};background:${ratingEnabled ? '#fff1f2' : '#fff'}">
-              <input type="checkbox" ${ratingEnabled ? 'checked' : ''} onchange="window.handleFieldUpdate('visionRating0To10Enabled', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:#dc2626;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
-              <span style="font-size:12px;font-weight:700;color:#450a0a;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_rating_chk_lbl', null, 'Classificação 0–10 (preenchida pela API após a análise)'))}</span>
+        const ratingPickHtml = (() => {
+            const red = isVisionAnalysis;
+            const border = ratingEnabled ? (red ? '#fecaca' : '#7dd3fc') : '#e2e8f0';
+            const bg = ratingEnabled ? (red ? '#fff1f2' : '#f0f9ff') : '#fff';
+            const spanColor = red ? '#450a0a' : '#0c4a6e';
+            const accent = red ? '#dc2626' : '#0284c7';
+            return `
+            <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid ${border};background:${bg}">
+              <input type="checkbox" ${ratingEnabled ? 'checked' : ''} onchange="window.handleFieldUpdate('visionRating0To10Enabled', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:${accent};width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+              <span style="font-size:12px;font-weight:700;color:${spanColor};line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_rating_chk_lbl', null, 'Classificação 0–10 (preenchida pela API após a análise)'))}</span>
             </label>
             <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">${fbStr(
                 'fb_prop_vision_rating_hint_html',
                 null,
-                'Com esta opção, o Gemini devolve <code>rating0To10</code> na raiz do JSON (inteiro de 0 a 10, ou <code>null</code> se não for possível). O app mostra a nota junto ao resultado e nos relatórios.',
-            )}</div>`
-            : '';
+                'Com esta opção, a API devolve <code>rating0To10</code> na raiz do JSON (inteiro de 0 a 10, ou <code>null</code> se não for possível). O app mostra a nota junto ao resultado e nos relatórios.',
+            )}</div>`;
+        })();
         const showAiResp = f.visionShowAiResponseInForm !== false;
-        const showAiResponseHtml = isVisionAnalysis
-            ? `
+        const visionShowAiAccent = isVisionAnalysis ? '#dc2626' : '#0284c7';
+        const visionShowAiTextColor = isVisionAnalysis ? '#450a0a' : '#0c4a6e';
+        const showAiResponseHtml = `
             <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff">
-              <input type="checkbox" ${showAiResp ? 'checked' : ''} onchange="window.handleFieldUpdate('visionShowAiResponseInForm', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:#dc2626;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
-              <span style="font-size:12px;font-weight:700;color:#450a0a;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_show_ai_chk_lbl', null, 'Mostrar detalhes da resposta da IA no app'))}</span>
+              <input type="checkbox" ${showAiResp ? 'checked' : ''} onchange="window.handleFieldUpdate('visionShowAiResponseInForm', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:${visionShowAiAccent};width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+              <span style="font-size:12px;font-weight:700;color:${visionShowAiTextColor};line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_show_ai_chk_lbl', null, 'Mostrar detalhes da resposta da IA no app'))}</span>
             </label>
-            <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_show_ai_hint', null, 'Desmarque para ocultar no formulário do técnico o texto da resposta, confiança, racional e bloco de classificação 0–10 (a mídia e o estado «concluído» mantêm-se). Relatórios e resumo de assinatura podem continuar a mostrar os dados.'))}</div>`
-            : '';
-        const gridPickHtml = isVisionAnalysis
-            ? `
-            <label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_grid_lbl', null, 'Grade de fotos (envio único ao Gemini)'))}</label>
+            <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_show_ai_hint', null, 'Desmarque para ocultar no formulário do técnico o texto da resposta, confiança, racional e bloco de classificação 0–10 (a mídia e o estado «concluído» mantêm-se). Relatórios e resumo de assinatura podem continuar a mostrar os dados.'))}</div>`;
+        const gridAccent = isVisionAnalysis ? '#dc2626' : '#0284c7';
+        const gridLabelStrong = isVisionAnalysis ? '#450a0a' : '#0c4a6e';
+        const gridPickHtml = `
+            <label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_grid_lbl', null, 'Grade de fotos (composição única antes do envio)'))}</label>
             <div style="font-size:9px;color:#64748b;margin:-2px 0 10px;line-height:1.35">
               ${fbStr(
                   'fb_prop_vision_grid_help',
@@ -3486,59 +3558,38 @@ function renderProperties() {
                     .map(
                         (o) => `
                 <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;border:1px solid ${
-                    curGridNorm === o.v ? '#dc2626' : '#e2e8f0'
-                };background:${curGridNorm === o.v ? '#fff1f2' : '#fff'}">
+                    curGridNorm === o.v ? gridAccent : '#e2e8f0'
+                };background:${curGridNorm === o.v ? (isVisionAnalysis ? '#fff1f2' : '#f0f9ff') : '#fff'}">
                   <input type="radio" name="visionAnalysisGrid_${escapeHtmlAttr(f.id)}" value="${o.v}" ${
                             curGridNorm === o.v ? 'checked' : ''
-                        } onchange="window.handleFieldUpdate('visionAnalysisGrid', this.value); if(typeof renderProperties==='function')renderProperties();" style="accent-color:#dc2626;flex-shrink:0" />
+                        } onchange="window.handleFieldUpdate('visionAnalysisGrid', this.value); if(typeof renderProperties==='function')renderProperties();" style="accent-color:${gridAccent};flex-shrink:0" />
                   ${miniVisionAnalysisGridPreview(o.c, o.r)}
-                  <span style="font-size:12px;font-weight:700;color:#450a0a">${escapeHtmlLogic(o.label)}</span>
+                  <span style="font-size:12px;font-weight:700;color:${gridLabelStrong}">${escapeHtmlLogic(o.label)}</span>
                 </label>`,
                     )
                     .join('')}
-            </div>`
-            : '';
-        const visionPromptLabelRow = isVisionAnalysis
-            ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+            </div>`;
+        const exBtnBorder = isVisionAnalysis ? '#fecaca' : '#7dd3fc';
+        const exBtnColor = isVisionAnalysis ? '#b91c1c' : '#0369a1';
+        const visionPromptLabelRow = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
             <label class="prop-label" style="color:${vLabel}; font-size:10px; margin:0;">${escapeHtmlLogic(fbStr('fb_prop_vision_prompt_lbl', null, 'Prompt estruturado (único)'))}</label>
-            <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px;white-space:nowrap;border-color:#fecaca;color:#b91c1c;" onclick="window.openVisionAiStructuredPromptExamplesModal()" title="${escapeHtmlAttr(
+            <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px;white-space:nowrap;border-color:${exBtnBorder};color:${exBtnColor};" onclick="window.openVisionAiStructuredPromptExamplesModal()" title="${escapeHtmlAttr(
                 fbStr('fb_vision_prompt_ex_btn_title', null, 'Modelos de prompt para serviços de campo (Visão de IA — análise)'),
             )}"><ion-icon name="sparkles-outline" style="vertical-align:-2px"></ion-icon> ${escapeHtmlLogic(fbStr('fb_vision_prompt_ex_btn', null, 'Exemplos'))}</button>
-          </div>`
-            : `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
-            <label class="prop-label" style="color:${vLabel}; font-size:10px; margin:0;">${escapeHtmlLogic(
-                fbStr('fb_prop_vision_detection_prompt_lbl', null, 'Prompt (sim/não)'),
-            )}</label>
-            <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px;white-space:nowrap;border-color:#bae6fd;color:#0369a1;" onclick="window.openVisionDetectionPromptExamplesModal()" title="${escapeHtmlAttr(
-                fbStr('fb_vision_detection_ex_btn_title', null, 'Exemplos de perguntas para objetos e contagem (Visão de IA — detecção)'),
-            )}"><ion-icon name="list-outline" style="vertical-align:-2px"></ion-icon> ${escapeHtmlLogic(fbStr('fb_vision_prompt_ex_btn', null, 'Exemplos'))}</button>
           </div>`;
-        const visionPromptBlurHandler = isVisionAnalysis
-            ? 'window.updateVisionStructuredPrompt(this.value)'
-            : 'window.updateVisionDetectionQuestions(this.value)';
-        const visionPromptHintBlock = isVisionAnalysis
-            ? fbStr(
-                  'fb_prop_vision_ai_structured_prompt_hint',
-                  {
-                      max:
-                          typeof window.fbFormatInt === 'function'
-                              ? window.fbFormatInt(MAX_VISION_STRUCTURED_PROMPT_CHARS)
-                              : String(MAX_VISION_STRUCTURED_PROMPT_CHARS),
-                  },
-                  'Descreva critérios, o formato desejado da resposta e o que a IA deve verificar na mídia. Limite aproximado de ' +
-                      MAX_VISION_STRUCTURED_PROMPT_CHARS.toLocaleString('pt-BR') +
-                      ' caracteres. A API responde em JSON com a lista <code>answers</code> (cada item com o identificador da pergunta, ex.: <code>q1</code>). Se você ativar a classificação 0–10 acima, o objeto na raiz também inclui <code>rating0To10</code>.',
-              )
-            : fbStr(
-                  'fb_prop_vision_detection_prompt_hint',
-                  {
-                      maxSingle:
-                          typeof window.fbFormatInt === 'function'
-                              ? window.fbFormatInt(MAX_VISION_STRUCTURED_PROMPT_CHARS)
-                              : String(MAX_VISION_STRUCTURED_PROMPT_CHARS),
-                  },
-                  'Um <b>único</b> critério por envio de mídia (até <b>{maxSingle}</b> caracteres). A API devolve JSON com <code>answers</code> (sempre <code>q1</code>) e valor <code>yes</code>, <code>no</code> ou <code>unknown</code> quando o critério é sim/não.',
-              );
+        const visionPromptBlurHandler = 'window.updateVisionStructuredPrompt(this.value)';
+        const visionPromptHintBlock = fbStr(
+            'fb_prop_vision_ai_structured_prompt_hint',
+            {
+                max:
+                    typeof window.fbFormatInt === 'function'
+                        ? window.fbFormatInt(MAX_VISION_STRUCTURED_PROMPT_CHARS)
+                        : String(MAX_VISION_STRUCTURED_PROMPT_CHARS),
+            },
+            'Descreva critérios, o formato desejado da resposta e o que a IA deve verificar na mídia. Limite aproximado de ' +
+                MAX_VISION_STRUCTURED_PROMPT_CHARS.toLocaleString('pt-BR') +
+                ' caracteres. A API responde em JSON com a lista <code>answers</code> (cada item com o identificador da pergunta, ex.: <code>q1</code>). Se você ativar a classificação 0–10 acima, o objeto na raiz também inclui <code>rating0To10</code>.',
+        );
         extraProps = `
         <div class="prop-group" style="background:${vBoxBg}; border:1px solid ${vBoxBr}; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:11px; font-weight:800; color:${vTitleColor}; margin-bottom:6px">${vTitle}</div>
@@ -3563,13 +3614,11 @@ function renderProperties() {
             ${gridPickHtml}
             ${visionPromptLabelRow}
             <textarea class="prop-input" placeholder="${escapeHtmlAttr(
-                isVisionAnalysis
-                    ? fbStr(
-                          'fb_prop_vision_prompt_placeholder',
-                          null,
-                          'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\nTarefa:\n1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\nCampo value (obrigatório):\n- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\nRubrica orientativa:\n- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n- 5–6: aceitável com ressalvas; melhorias necessárias.\n- 7–8: bom estado geral; apenas falhas leves.\n- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\nNo rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
-                      )
-                    : '',
+                fbStr(
+                    'fb_prop_vision_prompt_placeholder',
+                    null,
+                    'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\nTarefa:\n1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\nCampo value (obrigatório):\n- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\nRubrica orientativa:\n- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n- 5–6: aceitável com ressalvas; melhorias necessárias.\n- 7–8: bom estado geral; apenas falhas leves.\n- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\nNo rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
+                ),
             )}" style="height:160px; font-size:12px; font-family:system-ui,sans-serif; line-height:1.45;" onblur="${visionPromptBlurHandler}">${escapeHtmlLogic(
                 promptDisplay,
             )}</textarea>
@@ -4058,7 +4107,7 @@ window.handleFieldUpdate = function(key, val) {
 window.updateVisionStructuredPrompt = function (text) {
     if (!selectedFieldId) return;
     const f = fields.find((x) => x.id === selectedFieldId);
-    if (!f || f.type !== 'vision_ai_analysis') return;
+    if (!f || (f.type !== 'vision_ai_analysis' && f.type !== 'vision_checklist')) return;
     const raw = String(text || '').trim();
     const s = raw.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
     const fallback = fbStr(
@@ -4090,17 +4139,7 @@ window.updateVisionDetectionQuestions = function (text) {
     if (!selectedFieldId) return;
     const f = fields.find((x) => x.id === selectedFieldId);
     if (!f || f.type !== 'vision_checklist') return;
-    const raw = String(text || '');
-    const fallback = fbStr(
-        'fb_prop_vision_default_detection_prompt',
-        null,
-        'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
-    );
-    const finalText = (raw.trim() || fallback).slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-    f.visionStructuredPrompt = finalText;
-    f.visionQuestions = [{ id: 'q1', text: finalText }];
-    renderCanvas();
-    if (window.fieldPropertiesModalOpen) renderProperties();
+    window.updateVisionStructuredPrompt(text);
 };
 
 function closeVisionPromptExamplesModalById(modalId) {
@@ -4114,7 +4153,13 @@ function closeVisionPromptExamplesModalById(modalId) {
 function openVisionPromptExamplesModal(opts) {
     if (!selectedFieldId) return;
     const f = fields.find((x) => x.id === selectedFieldId);
-    if (!f || f.type !== opts.fieldType) return;
+    const allowed =
+        Array.isArray(opts.fieldTypes) && opts.fieldTypes.length
+            ? opts.fieldTypes
+            : opts.fieldType
+              ? [opts.fieldType]
+              : [];
+    if (!f || !allowed.includes(f.type)) return;
     closeVisionPromptExamplesModalById(opts.modalId);
 
     const closeModal = function () {
@@ -4284,6 +4329,7 @@ function closeVisionDetectionPromptExamplesModal() {
 /** Modal com modelos de prompt (só «Visão de IA — análise»). */
 window.openVisionAiStructuredPromptExamplesModal = function () {
     openVisionPromptExamplesModal({
+        fieldTypes: ['vision_ai_analysis', 'vision_checklist'],
         fieldType: 'vision_ai_analysis',
         modalId: 'vision-ai-prompt-examples-modal',
         titleKey: 'fb_vision_prompt_ex_modal_title',
@@ -4308,10 +4354,10 @@ window.openVisionDetectionPromptExamplesModal = function () {
         fieldType: 'vision_checklist',
         modalId: 'vision-detection-prompt-examples-modal',
         titleKey: 'fb_vision_detection_ex_modal_title',
-        titleFallback: 'Exemplos de perguntas para detecção',
+        titleFallback: 'Modelos de prompt para detecção',
         introKey: 'fb_vision_detection_ex_modal_intro',
         introFallback:
-            'Escolha um exemplo e adapte os objetos, sinônimos e exclusões ao seu modelo YOLO. Prefira uma linha por pergunta e, para contagem, explicite o que deve ser ignorado.',
+            'Cada modelo inclui contexto, tarefa, critério (q1) e nota sobre answers[0] — o mesmo molde do prompt padrão do campo. Adapte o critério ao seu checklist. Um envio de mídia por critério; Moondream ou o proxy YOLO normalizam sim/não em answers[0].value. Para contagem, diga o que deve ser ignorado.',
         catalogGetter:
             typeof window.getVisionDetectionExampleCatalog === 'function'
                 ? window.getVisionDetectionExampleCatalog
@@ -5682,7 +5728,7 @@ window.previewPDF = function() {
     doc.save("roteiro_rascunho_brspark.pdf");
 };
 
-// --- MULTI-FORM HYBRID STORAGE MANAGEMENT + PASTAS (Finder no admin) --- //
+// --- MULTI-FORM HYBRID STORAGE MANAGEMENT + PASTAS (vista em colunas estilo Finder) --- //
 
 window._formsDbCache = {};
 
@@ -5704,36 +5750,32 @@ async function refreshTemplateFolders() {
     }
 }
 
-const FORMS_SIDEBAR_EXPANDED_LS = 'brspark_forms_sidebar_expanded_v1';
-
-function readSidebarExpandedSet() {
-    try {
-        const raw = sessionStorage.getItem(FORMS_SIDEBAR_EXPANDED_LS);
-        if (raw) {
-            const arr = JSON.parse(raw);
-            if (Array.isArray(arr) && arr.length) return new Set(arr);
-        }
-    } catch (_) {}
-    return new Set(['__root']);
-}
-
-function writeSidebarExpandedSet(set) {
-    try {
-        sessionStorage.setItem(FORMS_SIDEBAR_EXPANDED_LS, JSON.stringify([...set]));
-    } catch (_) {}
-}
-
 /**
- * Ao navegar para uma pasta, expande na árvore lateral os antecessores e a própria pasta
- * (e a raiz), para os formulários ficarem visíveis debaixo do nó correspondente.
+ * Alinha a vista em colunas com `builderBrowseFolderId` (ex.: após abrir o modal numa pasta).
  */
 window.ensureFormsSidebarExpandedPath = function () {
-    const expanded = readSidebarExpandedSet();
     if (builderBrowseFolderId != null && builderBrowseFolderId !== '') {
-        expanded.add('__root');
-        folderPathChain(builderBrowseFolderId).forEach((f) => expanded.add(f.id));
+        window.formsFinderPathIds = folderPathChain(builderBrowseFolderId).map((f) => f.id);
     }
-    writeSidebarExpandedSet(expanded);
+};
+
+function syncBuilderBrowseFromFinderPath() {
+    const p = window.formsFinderPathIds || [];
+    builderBrowseFolderId = p.length ? p[p.length - 1] : null;
+}
+
+function formsSidebarHideArchived() {
+    const el = document.getElementById('forms-filter-hide-archived');
+    return !!(el && el.checked);
+}
+
+window.onFormsFilterArchivedChange = function () {
+    try {
+        const chk = document.getElementById('forms-filter-hide-archived');
+        if (chk) localStorage.setItem('brspark_forms_list_hide_archived', chk.checked ? '1' : '0');
+    } catch (_) {}
+    window.renderFormsGridFromLocal(window._formsDbCache || {});
+    if (window.filterFormsList) window.filterFormsList();
 };
 
 function folderPathChain(folderId) {
@@ -5751,13 +5793,51 @@ function folderPathChain(folderId) {
     return chain;
 }
 
+function getFormsTreeExpandedState() {
+    if (!window.__formsTreeExpanded) {
+        try {
+            const raw = sessionStorage.getItem('brspark_forms_tree_expanded');
+            window.__formsTreeExpanded = raw ? JSON.parse(raw) : {};
+        } catch (_) {
+            window.__formsTreeExpanded = {};
+        }
+    }
+    return window.__formsTreeExpanded;
+}
+
+function isFormsTreeFolderExpanded(folderId) {
+    const st = getFormsTreeExpandedState();
+    if (Object.prototype.hasOwnProperty.call(st, folderId)) return st[folderId] !== false;
+    return true;
+}
+
+function setFormsTreeFolderExpanded(folderId, expanded) {
+    const st = getFormsTreeExpandedState();
+    st[folderId] = expanded;
+    try {
+        sessionStorage.setItem('brspark_forms_tree_expanded', JSON.stringify(st));
+    } catch (_) {}
+    window.__formsTreeExpanded = st;
+}
+
+function formatFormUpdatedShort(iso) {
+    if (!iso) return '';
+    try {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch (_) {
+        return '';
+    }
+}
+
 function renderFolderTreeSidebar() {
     const container = document.getElementById('forms-folder-tree');
     if (!container) return;
     container.innerHTML = '';
 
     const db = window._formsDbCache || {};
-    const expanded = readSidebarExpandedSet();
+    const hideArch = formsSidebarHideArchived();
 
     const childrenOf = (parentKey) =>
         builderFolders
@@ -5768,18 +5848,21 @@ function renderFolderTreeSidebar() {
                     String(a.name).localeCompare(String(b.name))
             );
 
-    const formsInFolder = (folderKey) =>
-        Object.values(db)
+    const formsInFolder = (folderKey) => {
+        let list = Object.values(db)
             .filter((form) => (form.folderId || null) === folderKey)
             .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+        if (hideArch) list = list.filter((form) => form.isActive !== false);
+        return list;
+    };
 
     const countFormsDirect = (folderId) =>
-        Object.values(db).filter((form) => (form.folderId || null) === folderId).length;
+        Object.values(db).filter(
+            (form) =>
+                (form.folderId || null) === folderId && (!hideArch || form.isActive !== false)
+        ).length;
 
-    const branchHasContent = (folderKey) =>
-        childrenOf(folderKey).length > 0 || formsInFolder(folderKey).length > 0;
-
-    const attachFolderDropHandlers = (row, isActive, targetFolderId) => {
+    const attachFolderDropHandlers = (row, isSelected, targetFolderId) => {
         row.setAttribute('data-folder-drop-target', targetFolderId == null ? 'root' : String(targetFolderId));
         row.ondragover = function (e) {
             e.preventDefault();
@@ -5788,14 +5871,14 @@ function renderFolderTreeSidebar() {
             row.style.transform = 'translateX(2px)';
         };
         row.ondragleave = function () {
-            row.style.borderColor = isActive ? 'var(--accent)' : 'var(--color-border)';
-            row.style.background = isActive ? 'rgba(59,130,246,0.10)' : 'white';
+            row.style.borderColor = isSelected ? 'var(--accent)' : '#e2e8f0';
+            row.style.background = isSelected ? 'rgba(59,130,246,0.18)' : '#fafafa';
             row.style.transform = 'translateX(0)';
         };
         row.ondrop = function (e) {
             e.preventDefault();
-            row.style.borderColor = isActive ? 'var(--accent)' : 'var(--color-border)';
-            row.style.background = isActive ? 'rgba(59,130,246,0.10)' : 'white';
+            row.style.borderColor = isSelected ? 'var(--accent)' : '#e2e8f0';
+            row.style.background = isSelected ? 'rgba(59,130,246,0.18)' : '#fafafa';
             row.style.transform = 'translateX(0)';
             const draggedId =
                 (e.dataTransfer && e.dataTransfer.getData('text/plain')) ||
@@ -5805,134 +5888,113 @@ function renderFolderTreeSidebar() {
         };
     };
 
-    const mkExpandToggle = (expandKey, isExpanded, hasKids) => {
-        const wrap = document.createElement('span');
-        wrap.style.cssText =
-            'width:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;';
-        if (!hasKids) {
-            wrap.innerHTML = '<span style="display:inline-block;width:10px"></span>';
-            return wrap;
-        }
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
-        btn.setAttribute('aria-label', isExpanded ? 'Recolher' : 'Expandir');
-        btn.title = isExpanded ? 'Recolher' : 'Expandir';
-        btn.textContent = isExpanded ? '▾' : '▸';
-        btn.style.cssText =
-            'border:none;background:transparent;padding:0;margin:0;width:22px;height:22px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--color-text-light);line-height:1;display:flex;align-items:center;justify-content:center;';
-        btn.onclick = function (e) {
+    const mkTreeFolderRow = (folder, depth, hasContent) => {
+        const selected = builderBrowseFolderId === folder.id;
+        const expanded = hasContent && isFormsTreeFolderExpanded(folder.id);
+        const row = document.createElement('div');
+        row.className = 'fb-sidebar-folder-row fb-tree-folder-row';
+        row.setAttribute('data-folder-id', folder.id);
+        row.setAttribute('data-title', String(folder.name || ''));
+        const padLeft = 6 + depth * 14;
+        row.style.cssText =
+            'display:flex;align-items:center;gap:4px;padding:4px 8px 4px ' +
+            padLeft +
+            'px;margin:0;border-bottom:1px solid #e8e8e8;background:' +
+            (selected ? 'rgba(59,130,246,0.16)' : '#fafafa') +
+            ';cursor:pointer;font-size:12px;color:var(--color-text);min-height:30px;box-sizing:border-box;';
+        attachFolderDropHandlers(row, selected, folder.id);
+
+        const chevBtn = document.createElement('button');
+        chevBtn.type = 'button';
+        chevBtn.title = expanded ? 'Recolher' : 'Expandir';
+        chevBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        chevBtn.innerHTML = hasContent
+            ? '<ion-icon name="' +
+              (expanded ? 'chevron-down-outline' : 'chevron-forward-outline') +
+              '" style="font-size:14px;color:#64748b"></ion-icon>'
+            : '<span style="display:inline-block;width:14px"></span>';
+        chevBtn.style.cssText =
+            'border:none;background:transparent;padding:0;width:18px;height:22px;flex-shrink:0;cursor:' +
+            (hasContent ? 'pointer' : 'default') +
+            ';display:flex;align-items:center;justify-content:center;';
+        chevBtn.onclick = function (e) {
             e.preventDefault();
             e.stopPropagation();
-            const s = readSidebarExpandedSet();
-            if (isExpanded) s.delete(expandKey);
-            else s.add(expandKey);
-            writeSidebarExpandedSet(s);
-            renderFolderTreeSidebar();
-        };
-        wrap.appendChild(btn);
-        return wrap;
-    };
-
-    const mkFolderRow = (folder, depth, isRoot) => {
-        const isActive = isRoot ? builderBrowseFolderId === null : builderBrowseFolderId === folder.id;
-        const targetFolderId = isRoot ? null : folder.id;
-        const expandKey = isRoot ? '__root' : folder.id;
-        const isExpanded = expanded.has(expandKey);
-        const hasKids = isRoot ? branchHasContent(null) : branchHasContent(folder.id);
-
-        const row = document.createElement('div');
-        row.className = 'fb-sidebar-folder-row';
-        row.setAttribute('data-title', isRoot ? 'início raiz favoritos' : String(folder.name || ''));
-        row.style.cssText =
-            'display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:8px 10px;margin-bottom:4px;border-radius:10px;border:1px solid ' +
-            (isActive ? 'var(--accent)' : 'var(--color-border)') +
-            ';background:' +
-            (isActive ? 'rgba(59,130,246,0.10)' : 'white') +
-            ';cursor:pointer;font-size:13px;color:var(--color-text);margin-left:' +
-            String(depth * 12) +
-            'px;transition:background 0.18s,border-color 0.18s,transform 0.18s;';
-        attachFolderDropHandlers(row, isActive, targetFolderId);
-        row.onclick = function (e) {
-            if (e.target && e.target.closest && e.target.closest('button[aria-expanded]')) return;
-            builderBrowseFolderId = targetFolderId;
+            if (!hasContent) return;
+            setFormsTreeFolderExpanded(folder.id, !isFormsTreeFolderExpanded(folder.id));
             window.renderFormsGridFromLocal(window._formsDbCache || {});
         };
-        row.onmouseover = function () {
-            if (!isActive) row.style.background = 'var(--color-bg)';
-        };
-        row.onmouseout = function () {
-            row.style.background = isActive ? 'rgba(59,130,246,0.10)' : 'white';
-        };
-
-        row.appendChild(mkExpandToggle(expandKey, isExpanded, hasKids));
 
         const icon = document.createElement('span');
-        icon.textContent = isRoot ? '⌂' : '📁';
-        icon.style.cssText = 'font-size:15px;flex-shrink:0;width:22px;text-align:center;';
-        row.appendChild(icon);
+        icon.innerHTML =
+            '<ion-icon name="folder-outline" style="font-size:16px;color:#64748b;vertical-align:middle"></ion-icon>';
+        icon.style.cssText = 'flex-shrink:0;width:18px;display:flex;align-items:center;justify-content:center;';
 
-        const labelWrap = document.createElement('span');
-        labelWrap.style.cssText = 'flex:1;min-width:0;display:flex;align-items:baseline;gap:6px;';
-        const homeLbl = document.createElement('span');
-        homeLbl.textContent = isRoot ? 'Favoritos' : '';
-        if (isRoot) {
-            homeLbl.style.cssText = 'font-size:11px;font-weight:800;color:var(--color-text-light);flex-shrink:0;';
-            labelWrap.appendChild(homeLbl);
-        }
         const label = document.createElement('span');
-        label.textContent = isRoot ? 'Início (raiz)' : folder.name;
-        label.style.cssText = 'flex:1;min-width:0;font-weight:' + (isActive ? '800' : '600') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-        labelWrap.appendChild(label);
-        row.appendChild(labelWrap);
+        label.textContent = folder.name;
+        label.style.cssText =
+            'flex:1;min-width:0;font-weight:' +
+            (selected ? '800' : '600') +
+            ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;';
 
-        if (!isRoot) {
-            const count = countFormsDirect(folder.id);
-            const badge = document.createElement('span');
-            badge.textContent = String(count);
-            badge.style.cssText =
-                'font-size:11px;font-weight:700;color:var(--color-text-light);background:var(--color-bg);border-radius:999px;padding:3px 7px;flex-shrink:0;';
-            row.appendChild(badge);
+        const cnt = countFormsDirect(folder.id);
+        const badge = document.createElement('span');
+        badge.textContent = String(cnt);
+        badge.style.cssText =
+            'font-size:9px;font-weight:700;color:var(--color-text-light);background:#e2e8f0;border-radius:999px;padding:1px 5px;flex-shrink:0;';
 
-            const act = document.createElement('span');
-            act.style.cssText = 'display:inline-flex;gap:2px;flex-shrink:0;margin-left:auto;';
-            const mkFolderAct = function (title, iconName, onClick) {
-                const b = document.createElement('button');
-                b.type = 'button';
-                b.title = title;
-                b.setAttribute('aria-label', title);
-                b.innerHTML = '<ion-icon name="' + iconName + '" style="font-size:17px"></ion-icon>';
-                b.style.cssText =
-                    'border:none;background:var(--color-bg);border-radius:8px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--color-text);padding:0;';
-                b.onclick = function (e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onClick();
-                };
-                return b;
+        const act = document.createElement('span');
+        act.style.cssText = 'display:inline-flex;gap:0;flex-shrink:0;';
+        const mkFolderAct = function (title, iconName, onClick) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.title = title;
+            b.setAttribute('aria-label', title);
+            b.innerHTML = '<ion-icon name="' + iconName + '" style="font-size:14px"></ion-icon>';
+            b.style.cssText =
+                'border:none;background:transparent;border-radius:4px;width:24px;height:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--color-text);padding:0;';
+            b.onclick = function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                onClick();
             };
-            act.appendChild(
-                mkFolderAct('Renomear pasta', 'create-outline', function () {
-                    window.promptRenameTemplateFolder(folder.id);
-                })
-            );
-            act.appendChild(
-                mkFolderAct('Excluir pasta', 'trash-outline', function () {
-                    window.promptDeleteTemplateFolder(folder.id);
-                })
-            );
-            row.appendChild(act);
-        }
+            return b;
+        };
+        act.appendChild(
+            mkFolderAct('Renomear pasta', 'create-outline', function () {
+                window.promptRenameTemplateFolder(folder.id);
+            })
+        );
+        act.appendChild(
+            mkFolderAct('Excluir pasta', 'trash-outline', function () {
+                window.promptDeleteTemplateFolder(folder.id);
+            })
+        );
+
+        row.onclick = function (e) {
+            if (e.target && e.target.closest && e.target.closest('button')) return;
+            window.enterBrowseFolder(folder.id);
+            if (hasContent) setFormsTreeFolderExpanded(folder.id, true);
+        };
+
+        row.appendChild(chevBtn);
+        row.appendChild(icon);
+        row.appendChild(label);
+        row.appendChild(badge);
+        row.appendChild(act);
         return row;
     };
 
-    const appendFormRow = (form, depth) => {
+    const appendFormRowCompactToTree = (form, scrollEl, depth) => {
         const fid = String(form.id || '');
         const archived = form.isActive === false;
+        const padLeft = 10 + depth * 14;
 
         const wrap = document.createElement('div');
-        wrap.className = 'fb-sidebar-form-row';
-        wrap.setAttribute('data-title', form.title || '');
+        wrap.className = 'fb-sidebar-form-row fb-tree-form-row';
+        const searchTitle = [form.title || '', fid, shortTemplateIdForUi(fid)].join(' ').trim();
+        wrap.setAttribute('data-title', searchTitle);
+        wrap.setAttribute('data-archived', archived ? '1' : '0');
         wrap.draggable = true;
         wrap.ondragstart = function (e) {
             window.__formsDragTemplateId = fid;
@@ -5942,51 +6004,45 @@ function renderFolderTreeSidebar() {
             } catch (_) {}
         };
 
-        const marginLeft = String(depth * 12);
         wrap.style.cssText =
-            'display:flex;flex-direction:column;gap:6px;padding:8px 8px;margin-bottom:8px;border-radius:10px;border:1px solid var(--color-border);background:white;margin-left:' +
-            marginLeft +
-            'px;font-size:12px;color:var(--color-text);transition:box-shadow 0.15s,border-color 0.15s;';
-        if (archived) wrap.style.opacity = '0.9';
-
-        wrap.onmouseover = function () {
-            wrap.style.boxShadow = '0 2px 8px rgba(15,23,42,0.08)';
-            wrap.style.borderColor = '#cbd5e1';
-        };
-        wrap.onmouseout = function () {
-            wrap.style.boxShadow = 'none';
-            wrap.style.borderColor = 'var(--color-border)';
-        };
+            'display:flex;flex-direction:column;gap:0;padding:0;margin:0;border-bottom:1px solid #e8e8e8;background:white;font-size:12px;color:var(--color-text);';
+        if (archived) wrap.style.opacity = '0.88';
 
         const mainRow = document.createElement('div');
         mainRow.style.cssText =
-            'display:flex;align-items:flex-start;gap:8px;width:100%;min-width:0;';
+            'display:flex;align-items:center;gap:6px;width:100%;min-width:0;padding:5px 8px 5px ' +
+            padLeft +
+            'px;min-height:34px;box-sizing:border-box;';
 
         const iconBox = document.createElement('div');
         iconBox.style.cssText =
-            'width:32px;height:32px;border-radius:8px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;color:#64748b;overflow:hidden;';
+            'width:22px;height:22px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;';
         if (form.metadata?.icon && typeof window.renderWebIcon === 'function') {
             iconBox.innerHTML = window.renderWebIcon(
                 form.metadata.iconLibrary || 'Ionicons',
                 form.metadata.icon,
                 '#64748b',
-                20,
+                16,
                 true
             );
         } else if (form.metadata?.icon) {
             iconBox.innerHTML =
-                '<ion-icon name="' + escapeHtmlAttr(String(form.metadata.icon)) + '"></ion-icon>';
+                '<ion-icon name="' +
+                escapeHtmlAttr(String(form.metadata.icon)) +
+                '" style="font-size:15px;color:#64748b"></ion-icon>';
         } else {
-            iconBox.textContent = '📋';
+            iconBox.innerHTML =
+                '<ion-icon name="document-text-outline" style="font-size:15px;color:#64748b"></ion-icon>';
         }
 
         const mid = document.createElement('div');
-        mid.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;';
+        mid.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;';
 
         const titleClick = document.createElement('span');
         titleClick.textContent = form.title || 'Sem título';
+        titleClick.title = (form.title || 'Sem título') + ' · id ' + fid;
         titleClick.style.cssText =
-            'cursor:pointer;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            'cursor:pointer;font-weight:700;font-size:12px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         titleClick.onclick = function (e) {
             e.preventDefault();
             e.stopPropagation();
@@ -5995,31 +6051,48 @@ function renderFolderTreeSidebar() {
 
         const metaRow = document.createElement('div');
         metaRow.style.cssText =
-            'display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;';
-        const nFields = Array.isArray(form.schema) ? form.schema.length : 0;
+            'display:flex;align-items:center;gap:5px;flex-wrap:nowrap;min-width:0;overflow:hidden;';
+        const sch = Array.isArray(form.schema)
+            ? form.schema
+            : Array.isArray(form.schemaData)
+              ? form.schemaData
+              : [];
+        const nFields = sch.length;
         const fieldsSpan = document.createElement('span');
         fieldsSpan.textContent = nFields === 1 ? '1 campo' : String(nFields) + ' campos';
-        fieldsSpan.style.cssText =
-            'font-size:10px;font-weight:700;color:var(--color-text-light);flex-shrink:0;';
+        fieldsSpan.style.cssText = 'font-size:9px;font-weight:700;color:var(--color-text-light);flex-shrink:0;';
+        const idSpan = document.createElement('span');
+        idSpan.textContent = '#' + shortTemplateIdForUi(fid);
+        idSpan.title = 'Id interno';
+        idSpan.style.cssText =
+            'font-size:9px;font-weight:700;color:#94a3b8;font-family:ui-monospace,monospace;flex-shrink:0;';
+        const dt = formatFormUpdatedShort(form.updatedAt);
+        if (dt) {
+            const dateSpan = document.createElement('span');
+            dateSpan.textContent = dt;
+            dateSpan.title = 'Atualizado';
+            dateSpan.style.cssText = 'font-size:9px;color:#94a3b8;flex-shrink:0;margin-left:2px;';
+            metaRow.appendChild(dateSpan);
+        }
         const badgeWrap = document.createElement('span');
         badgeWrap.innerHTML = checklistVersionBadgeHtml(form);
         badgeWrap.style.flexShrink = '0';
-        metaRow.appendChild(fieldsSpan);
+        metaRow.insertBefore(fieldsSpan, metaRow.firstChild);
+        metaRow.appendChild(idSpan);
         metaRow.appendChild(badgeWrap);
 
         mid.appendChild(titleClick);
         mid.appendChild(metaRow);
 
         const btnBase =
-            'border:none;background:var(--color-bg);border-radius:8px;width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--color-text-light);padding:0;flex-shrink:0;';
+            'border:none;background:transparent;border-radius:6px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--color-text-light);padding:0;flex-shrink:0;';
         const actions = document.createElement('div');
-        actions.style.cssText =
-            'display:flex;flex-direction:row;flex-wrap:wrap;gap:2px;flex-shrink:0;align-items:flex-start;justify-content:flex-end;max-width:104px;';
+        actions.style.cssText = 'display:flex;flex-direction:row;gap:0;flex-shrink:0;align-items:center;';
 
         const bh = document.createElement('button');
         bh.type = 'button';
         bh.title = 'Ver histórico de versões';
-        bh.innerHTML = '<ion-icon name="time-outline" style="font-size:18px"></ion-icon>';
+        bh.innerHTML = '<ion-icon name="time-outline" style="font-size:16px"></ion-icon>';
         bh.style.cssText = btnBase;
         bh.onclick = function (e) {
             e.preventDefault();
@@ -6030,7 +6103,7 @@ function renderFolderTreeSidebar() {
         const bd = document.createElement('button');
         bd.type = 'button';
         bd.title = 'Duplicar formulário';
-        bd.innerHTML = '<ion-icon name="copy-outline" style="font-size:18px"></ion-icon>';
+        bd.innerHTML = '<ion-icon name="copy-outline" style="font-size:16px"></ion-icon>';
         bd.style.cssText = btnBase;
         bd.onclick = function (e) {
             e.preventDefault();
@@ -6042,7 +6115,7 @@ function renderFolderTreeSidebar() {
         ba.type = 'button';
         ba.title = archived ? 'Restaurar formulário arquivado' : 'Arquivar formulário';
         ba.innerHTML =
-            '<ion-icon name="' + (archived ? 'refresh-outline' : 'archive-outline') + '" style="font-size:18px"></ion-icon>';
+            '<ion-icon name="' + (archived ? 'refresh-outline' : 'archive-outline') + '" style="font-size:16px"></ion-icon>';
         ba.style.cssText = btnBase;
         ba.onclick = function (e) {
             e.preventDefault();
@@ -6059,52 +6132,82 @@ function renderFolderTreeSidebar() {
         mainRow.appendChild(mid);
         mainRow.appendChild(actions);
 
-        const toolRow = document.createElement('div');
+        const toolRow = document.createElement('details');
+        toolRow.className = 'fb-form-move-details';
         toolRow.style.cssText =
-            'display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding-top:6px;border-top:1px solid #f1f5f9;';
+            'width:100%;margin:0;padding:0 8px 4px ' + padLeft + 'px;border:none;font-size:11px;color:var(--color-text-light);';
+        const sum = document.createElement('summary');
+        sum.textContent = 'Mover para outra pasta…';
+        sum.style.cssText =
+            'cursor:pointer;font-weight:600;color:#64748b;list-style:none;padding:2px 0;font-size:10px;user-select:none;';
+        sum.onclick = function (e) {
+            e.stopPropagation();
+        };
+        const moveInner = document.createElement('div');
+        moveInner.style.cssText =
+            'display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding:4px 0 2px 0;';
         const lbl = document.createElement('span');
-        lbl.textContent = 'Mover para';
+        lbl.textContent = 'Pasta';
         lbl.style.cssText =
-            'font-size:11px;font-weight:700;color:var(--color-text-light);white-space:nowrap;flex-shrink:0;';
+            'font-size:10px;font-weight:700;color:var(--color-text-light);white-space:nowrap;flex-shrink:0;';
         const sel = document.createElement('select');
         sel.className = 'prop-input';
         sel.id = 'sidebar-move-' + fid.replace(/[^a-zA-Z0-9_-]/g, '_');
         sel.innerHTML = buildMoveFolderOptionsHtml(form.folderId || null);
-        sel.style.cssText = 'flex:1;min-width:0;font-size:11px;padding:5px 8px;margin:0;';
+        sel.style.cssText = 'flex:1;min-width:0;font-size:11px;padding:4px 6px;margin:0;';
         sel.onclick = function (e) {
             e.stopPropagation();
         };
         sel.onchange = function () {
             void window.onMoveFormFolderChange(fid, sel);
         };
-        toolRow.appendChild(lbl);
-        toolRow.appendChild(sel);
+        moveInner.appendChild(lbl);
+        moveInner.appendChild(sel);
+        toolRow.appendChild(sum);
+        toolRow.appendChild(moveInner);
 
         wrap.appendChild(mainRow);
         wrap.appendChild(toolRow);
-        container.appendChild(wrap);
+        scrollEl.appendChild(wrap);
     };
 
-    const appendFolderBranch = (folder, depth) => {
-        container.appendChild(mkFolderRow(folder, depth, false));
-        if (!expanded.has(folder.id)) return;
-        for (const sub of childrenOf(folder.id)) {
-            appendFolderBranch(sub, depth + 1);
-        }
-        for (const f of formsInFolder(folder.id)) {
-            appendFormRow(f, depth + 1);
-        }
+    const scroll = document.createElement('div');
+    scroll.className = 'fb-forms-tree-scroll';
+    scroll.style.cssText =
+        'flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;background:#fafafa;';
+
+    const folderHasTreeChildren = (folderId) =>
+        childrenOf(folderId).length > 0 || formsInFolder(folderId).length > 0;
+
+    const renderAt = (parentId, depth) => {
+        const folders = childrenOf(parentId);
+        const forms = formsInFolder(parentId);
+        folders.forEach((folder) => {
+            const hasKids = folderHasTreeChildren(folder.id);
+            scroll.appendChild(mkTreeFolderRow(folder, depth, hasKids));
+            if (hasKids && isFormsTreeFolderExpanded(folder.id)) {
+                renderAt(folder.id, depth + 1);
+            }
+        });
+        forms.forEach((form) => {
+            appendFormRowCompactToTree(form, scroll, depth);
+        });
     };
 
-    container.appendChild(mkFolderRow(null, 0, true));
-    if (expanded.has('__root')) {
-        for (const sub of childrenOf(null)) {
-            appendFolderBranch(sub, 0);
-        }
-        for (const f of formsInFolder(null)) {
-            appendFormRow(f, 0);
-        }
+    renderAt(null, 0);
+
+    if (!scroll.children.length) {
+        const empty = document.createElement('div');
+        empty.className = 'fb-finder-empty';
+        empty.style.cssText =
+            'padding:28px 16px;font-size:13px;color:var(--color-text-light);text-align:center;line-height:1.45;';
+        empty.textContent = 'Nenhum formulário ou pasta.';
+        scroll.appendChild(empty);
     }
+
+    container.style.cssText =
+        'flex:1 1 0%;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:#e5e7eb;';
+    container.appendChild(scroll);
 }
 
 function renderFolderBreadcrumb() {
@@ -6130,7 +6233,14 @@ function renderFolderBreadcrumb() {
 }
 
 window.enterBrowseFolder = function (id) {
-    builderBrowseFolderId = id || null;
+    if (!id) {
+        window.formsFinderPathIds = [];
+    } else {
+        const chain = folderPathChain(id);
+        window.formsFinderPathIds = chain.map((f) => f.id);
+        chain.forEach((f) => setFormsTreeFolderExpanded(f.id, true));
+    }
+    syncBuilderBrowseFromFinderPath();
     window.renderFormsGridFromLocal(window._formsDbCache || {});
 };
 
@@ -6262,6 +6372,10 @@ window.promptDeleteTemplateFolder = async function (folderId) {
         if (builderBrowseFolderId === folderId) {
             builderBrowseFolderId = f.parentId || null;
         }
+        const fp = window.formsFinderPathIds || [];
+        const ix = fp.indexOf(folderId);
+        if (ix >= 0) window.formsFinderPathIds = fp.slice(0, ix);
+        syncBuilderBrowseFromFinderPath();
         await refreshTemplateFolders();
         await window.loadSavedFormsList();
     } catch (e) {
@@ -6280,6 +6394,19 @@ window.createNewChecklistInBrowseFolder = function () {
     window.__newFormFolderId = builderBrowseFolderId;
     window.createNewChecklist(true);
 };
+
+function folderDisplayNameForForm(folderId) {
+    if (folderId == null || folderId === '') return 'Raiz';
+    const f = builderFolders.find((x) => x.id === folderId);
+    return f && f.name ? String(f.name) : 'Pasta';
+}
+
+/** Sufixo curto do id para distinguir formulários com o mesmo título (ex.: últimos 6 do UUID). */
+function shortTemplateIdForUi(fullId) {
+    const s = String(fullId || '').replace(/-/g, '');
+    if (s.length <= 8) return s;
+    return s.slice(-6);
+}
 
 function buildMoveFolderOptionsHtml(currentFolderId) {
     const byId = new Map(builderFolders.map((x) => [x.id, x]));
@@ -6361,7 +6488,15 @@ window.onMoveFormFolderChange = async function (formId, selectEl) {
 };
 
 window.openFormsModal = function () {
+    window.formsFinderPathIds = [];
     builderBrowseFolderId = null;
+    try {
+        const chk = document.getElementById('forms-filter-hide-archived');
+        if (chk) {
+            const v = localStorage.getItem('brspark_forms_list_hide_archived');
+            chk.checked = v !== '0';
+        }
+    } catch (_) {}
     window.loadSavedFormsList();
     document.getElementById('forms-list-modal').style.display = 'flex';
 };
@@ -6369,11 +6504,21 @@ window.openFormsModal = function () {
 window.filterFormsList = function () {
     const inp = document.getElementById('form-search');
     const q = (inp && inp.value ? inp.value : '').toLowerCase();
+    const hideArch =
+        document.getElementById('forms-filter-hide-archived') &&
+        document.getElementById('forms-filter-hide-archived').checked;
     const cards = document.querySelectorAll(
         '#forms-folder-tree .fb-sidebar-form-row, #forms-folder-tree .fb-sidebar-folder-row'
     );
     cards.forEach((card) => {
         const title = (card.getAttribute('data-title') || '').toLowerCase();
+        const archived =
+            card.classList.contains('fb-sidebar-form-row') &&
+            card.getAttribute('data-archived') === '1';
+        if (hideArch && archived) {
+            card.style.display = 'none';
+            return;
+        }
         if (title.includes(q)) {
             card.style.display = 'flex';
         } else {
@@ -6904,7 +7049,11 @@ function renderMobilePreview() {
             if (f.type === 'vision_ai_analysis') {
                 inputMock = `<div style="background:#fef2f2; border:2px dashed #dc2626; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#991b1b; text-align:center; padding:10px;"><ion-icon name="sparkles" style="font-size:28px; margin-bottom:4px;color:#dc2626"></ion-icon> <b style="color:#dc2626">Visão IA Análise</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · Gemini · ${f.visionRating0To10Enabled ? 'com nota 0–10' : 'resposta + confiança'}.</span></div>`;
             } else {
-                inputMock = `<div style="background:#f0f9ff; border:2px dashed #0284c7; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#0369a1; text-align:center; padding:10px;"><ion-icon name="videocam" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Visão de IA Detecção</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · sim/não · servidor.</span></div>`;
+                const _grid =
+                    f.visionAnalysisGrid === '2x2' || f.vision_analysis_grid === '2x2'
+                        ? 'grelha 2×2'
+                        : '1×1';
+                inputMock = `<div style="background:#f0f9ff; border:2px dashed #0284c7; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#0369a1; text-align:center; padding:10px;"><ion-icon name="videocam" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Visão de IA Detecção</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · ${_grid} · Moondream/YOLO · ${f.visionRating0To10Enabled ? 'com nota 0–10' : 'resposta + confiança'}.</span></div>`;
             }
         }
         
@@ -7278,7 +7427,7 @@ function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
 
     const visionRatingHint =
         fld &&
-        fld.type === 'vision_ai_analysis' &&
+        (fld.type === 'vision_ai_analysis' || fld.type === 'vision_checklist') &&
         fld.visionRating0To10Enabled &&
         !isFormClock &&
         !isSection
@@ -8880,7 +9029,13 @@ function brsparkCopilotRehydrateFieldForTypeChange(oldField, newType, st) {
     var nt = String(newType || '').trim();
     if (!nt || !COPILOT_PREVIEW_ALLOWED_TYPES[nt]) return brsparkCopilotDeepClone(oldField);
     var lab = oldField.label != null ? String(oldField.label) : 'Campo';
-    var nf = createNewFieldFromToolboxType(nt, lab);
+    var nTransit =
+        nt === 'transit_start'
+            ? fields.filter(function (x) {
+                  return x && x.type === 'transit_start';
+              }).length
+            : 0;
+    var nf = createNewFieldFromToolboxType(nt, lab, nTransit);
     nf.id = String(oldField.id);
     if (st && st.description !== undefined && st.description !== null) {
         nf.description = String(st.description).trim().slice(0, 500);
@@ -8993,14 +9148,12 @@ function brsparkCopilotBuildDefaultPreviewAiNote(row) {
     if (description) {
         parts.push('Leve em conta também a descrição proposta: "' + description.slice(0, 220) + '".');
     }
-    if (type === 'vision_ai_analysis') {
+    if (type === 'vision_ai_analysis' || type === 'vision_checklist') {
         if (blob.indexOf('epi') >= 0 || blob.indexOf('equipamento de protecao') >= 0) {
             parts.push('Deixe explícito que a IA deve avaliar presença, uso correto e condição visual dos EPIs esperados.');
         } else {
             parts.push('Detalhe o que a IA deve observar na imagem e quais evidências caracterizam conformidade ou não conformidade.');
         }
-    } else if (type === 'vision_checklist') {
-        parts.push('Transforme a intenção da entrevista em critérios visuais objetivos e verificáveis pela câmera.');
     } else if (type === 'photo' || type === 'photo_stamped' || type === 'image_annotation') {
         parts.push('Se este campo pedir evidência visual, alinhe a captura aos itens e sinais citados na entrevista.');
     }

@@ -1,5 +1,5 @@
 /**
- * Páginas do menu admin sem módulo próprio — pt-BR / en-US (es-ES via fallback adminResolve).
+ * Páginas do menu admin sem módulo próprio, pt-BR / en-US (es-ES via fallback adminResolve).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
@@ -17,7 +17,7 @@ const M = {
     common_breadcrumb_trail: 'Trilha',
 
     /* Tenants */
-    ten_pageTitle: 'BrSpark Admin — Tenants',
+    ten_pageTitle: 'BrSpark Admin, Tenants',
     ten_bc_here: 'Tenants',
     ten_hero_title: 'Gestão de tenants',
     ten_hero_sub:
@@ -68,7 +68,7 @@ const M = {
     ten_plan_per_mo: '/mês',
 
     /* Subscriptions */
-    sub_pageTitle: 'BrSpark Admin — Assinaturas',
+    sub_pageTitle: 'BrSpark Admin, Assinaturas',
     sub_bc_here: 'Assinaturas',
     sub_hero_title: 'Planos e assinaturas',
     sub_hero_sub:
@@ -94,12 +94,12 @@ const M = {
     sub_cycle_MONTHLY: 'Mensal',
     sub_cycle_YEARLY: 'Anual (10% desconto)',
     sub_cycle_YEARLY_short: 'Anual',
-    sub_facial_modal_title: 'Biometria facial — API por plano',
+    sub_facial_modal_title: 'Biometria facial, API por plano',
     sub_facial_intro: 'Plano:',
     sub_facial_body_html:
-      'Define qual integração de visão (em <strong>Integrações</strong>) este plano pode usar no reconhecimento facial na app. O formulário já não escolhe o provedor — só o plano do tenant.',
+      'Define qual integração de visão (em <strong>Integrações</strong>) este plano pode usar no reconhecimento facial na app. O formulário já não escolhe o provedor, só o plano do tenant.',
     sub_facial_lbl: 'Motor de reconhecimento facial',
-    sub_facial_opt_fm: 'FaceMatch (local) — padrão',
+    sub_facial_opt_fm: 'FaceMatch (local), padrão',
     sub_facial_opt_auto: 'Automático (prefere FaceMatch, senão AWS se configurado)',
     sub_facial_opt_aws: 'AWS Rekognition (custo API; ainda limitado no servidor)',
     sub_facial_hint: 'Valor gravado em plan.features.facialVisionProvider. Tenants sem assinatura usam FaceMatch.',
@@ -138,11 +138,11 @@ const M = {
     sub_tmpl_count_many: '{n} templates',
 
     /* Plans */
-    pln_pageTitle: 'BrSpark Admin — Planos (pacotes)',
+    pln_pageTitle: 'BrSpark Admin, Planos (pacotes)',
     pln_bc_here: 'Planos (pacotes)',
     pln_hero_title: 'Catálogo de planos',
     pln_hero_sub_html:
-      'Defina preços, limites e cotas mensais (IA, <strong>APIs Google</strong> — Maps rotas e visão IA análise Gemini, OS de campo, rotina, formulários). Os tenants herdam estes valores pela <a href="subscriptions.html" style="color:var(--accent);font-weight:700">assinatura</a>. <span style="color:var(--text3)">−1 = ilimitado</span> onde aplicável.',
+      'Defina preços, limites e cotas mensais (IA, <strong>APIs Google</strong>, Maps rotas e visão IA análise Gemini, OS de campo, rotina, formulários). Os tenants herdam estes valores pela <a href="subscriptions.html" style="color:var(--accent);font-weight:700">assinatura</a>. <span style="color:var(--text3)">−1 = ilimitado</span> onde aplicável.',
     pln_link_subs: 'Assinaturas',
     pln_link_billing: 'Billing e MRR',
     pln_btn_new: 'Novo plano',
@@ -172,17 +172,17 @@ const M = {
     pln_quotas_hint:
       'Técnicos = equipe em campo que usa o app no terreno. <strong>−1</strong> = ilimitado. <strong>0</strong> nas cotas Google (Mapas ou visão para análise) bloqueia o uso nesse plano.',
     pln_lbl_max_tech: 'Máx. técnicos',
-    pln_lbl_ai_face: 'IA — facial / mês',
-    pln_lbl_ai_vis_det: 'IA — visão detecção / mês',
-    pln_lbl_ai_vis_an: 'Visão IA — análise (Google Gemini, checklist) / mês',
+    pln_lbl_ai_face: 'IA, facial / mês',
+    pln_lbl_ai_vis_det: 'IA, visão detecção / mês',
+    pln_lbl_ai_vis_an: 'Visão IA, análise (Google Gemini, checklist) / mês',
     pln_api_section_title: 'APIs Google (por tenant / mês)',
-    pln_lbl_google_maps: 'Google Maps — rotas (ETA, computeRoutes) / mês',
+    pln_lbl_google_maps: 'Google Maps, rotas (ETA, computeRoutes) / mês',
     pln_lbl_ft: 'OS campo (FT) / mês',
     pln_lbl_rt: 'Rotina (RT) / mês',
     pln_lbl_max_tpl: 'Máx. formulários (tenantId no modelo)',
     pln_features_title: 'Recursos do pacote',
     pln_features_intro:
-      'Ative ou desative módulos do produto para quem assinar este plano. Limites numéricos (IA, Mapas, OS de campo) ficam na secção «Cotas» acima — não são alterados aqui.',
+      'Ative ou desative módulos do produto para quem assinar este plano. Limites numéricos (IA, Mapas, OS de campo) ficam na secção «Cotas» acima, não são alterados aqui.',
     pln_feat_stock: 'Estoque',
     pln_feat_stock_hint: 'Controle de inventário e bens.',
     pln_feat_vault: 'Cofre',
@@ -202,10 +202,10 @@ const M = {
     pln_facial_compreface: 'Compreface (recomendado)',
     pln_facial_aws: 'Amazon Rekognition',
     pln_facial_auto: 'Automático (usa a integração ativa disponível)',
-    pln_features_adv_summary: 'Avançado — JSON extra (só suporte técnico)',
+    pln_features_adv_summary: 'Avançado, JSON extra (só suporte técnico)',
     pln_lbl_features_adv: 'Chaves extras (JSON)',
     pln_features_adv_hint:
-      'Deixe vazio na maior parte dos casos. Só preencha se a equipa técnica pedir chaves adicionais em «features».',
+      'Deixe vazio na maior parte dos casos. Só preencha se a equipe técnica pedir chaves adicionais em «features».',
     pln_lbl_features: 'Recursos (legado)',
     pln_btn_save_plan: 'Salvar plano',
     pln_empty_title: 'Nenhum plano cadastrado',
@@ -218,7 +218,7 @@ const M = {
     pln_dup_suffix: ' (cópia)',
     pln_dup_suffix_n: ' (cópia {n})',
     pln_dup_base: 'Plano',
-    pln_alert_dup_ok: 'Plano duplicado. Fica inativo por padrão — edite e ative quando quiser.',
+    pln_alert_dup_ok: 'Plano duplicado. Fica inativo por padrão, edite e ative quando quiser.',
     pln_alert_dup_err: 'Falha ao duplicar.',
     pln_save_fail: 'Falha ao salvar.',
     pln_alert_json: 'JSON de features inválido.',
@@ -227,7 +227,7 @@ const M = {
     pln_alert_save_err: 'Erro: {detail}',
 
     /* System */
-    sys_pageTitle: 'BrSpark Admin — Sistema',
+    sys_pageTitle: 'BrSpark Admin, Sistema',
     sys_bc_here: 'Sistema',
     sys_hero_title: 'Configurações do sistema',
     sys_hero_sub:
@@ -243,7 +243,7 @@ const M = {
     sys_lbl_retention: 'Retenção de logs (dias)',
     sys_lbl_trial: 'Período de trial (dias)',
     sys_db_checking: 'PostgreSQL (verificando…)',
-    sys_db_ok: 'PostgreSQL — conectado',
+    sys_db_ok: 'PostgreSQL, conectado',
     sys_api_checking: 'Verificando',
     sys_api_online: 'Online',
     sys_api_offline: 'Offline',
@@ -251,7 +251,7 @@ const M = {
     sys_alert_saved: 'Configurações salvas (persistência em desenvolvimento).',
 
     /* API docs */
-    apidoc_pageTitle: 'BrSpark Admin — API Docs',
+    apidoc_pageTitle: 'BrSpark Admin, API Docs',
     apidoc_bc_here: 'Documentação da API',
     apidoc_hero_title: 'Documentação da API',
     apidoc_hero_sub:
@@ -259,10 +259,10 @@ const M = {
     apidoc_btn_dl: 'Baixar OpenAPI (JSON)',
     apidoc_btn_open: 'Abrir JSON',
     apidoc_intro_1_html:
-      'Esta página reflete as rotas expostas pelo backend em <code>admin-panel/backend/src/index.js</code> e pelos routers em <code>routes/</code>. A especificação OpenAPI é gerada por <code>admin-panel/scripts/build-openapi.js</code> — após alterar rotas, execute <code>npm run openapi</code> na pasta <code>admin-panel/backend</code>.',
+      'Esta página reflete as rotas expostas pelo backend em <code>admin-panel/backend/src/index.js</code> e pelos routers em <code>routes/</code>. A especificação OpenAPI é gerada por <code>admin-panel/scripts/build-openapi.js</code>, após alterar rotas, execute <code>npm run openapi</code> na pasta <code>admin-panel/backend</code>.',
     apidoc_intro_2_html:
       '<strong>Admin:</strong> obtenha JWT com <code>POST /api/auth/login</code> e use <em>Authorize → bearerAdmin</em>.<br /><strong>App:</strong> <code>POST /api/login</code> ou <code>POST /api/register</code> → <em>bearerApp</em>. Rotas públicas não exigem cabeçalho <code>Authorization</code>.',
-    apidoc_fbapi_title: 'Form Builder — Campos alimentados por API',
+    apidoc_fbapi_title: 'Form Builder, Campos alimentados por API',
     apidoc_fbapi_sub:
       'Resumo prático para configurar integrações no app móvel sem quebrar comportamento offline.',
     apidoc_fbapi_item_1_html:
@@ -363,7 +363,7 @@ const M = {
     apidoc_err_swagger: 'Não foi possível carregar o Swagger UI (rede ou CDN).',
 
     /* Notifications */
-    notif_pageTitle: 'BrSpark Admin — Notificações',
+    notif_pageTitle: 'BrSpark Admin, Notificações',
     notif_bc_here: 'Notificações',
     notif_hero_title: 'Notificações',
     notif_hero_sub:
@@ -399,7 +399,7 @@ const M = {
     notif_tmpl_count_many: '{n} templates',
 
     /* Locations */
-    loc_pageTitle: 'BrSpark Admin — Multi-location (países e idiomas)',
+    loc_pageTitle: 'BrSpark Admin, Multi-location (países e idiomas)',
     loc_bc_here: 'Multi-location',
     loc_hero_title: 'Países, regiões e idiomas',
     loc_hero_sub:
@@ -434,7 +434,7 @@ const M = {
     loc_alert_country_stub: 'País «{name}» ({code}) será adicionado. Implemente a rota /api/regions para persistência.',
 
     /* Compliance */
-    cmp_pageTitle: 'BrSpark Admin — Compliance LGPD',
+    cmp_pageTitle: 'BrSpark Admin, Compliance LGPD',
     cmp_bc_here: 'Compliance',
     cmp_hero_title: 'Compliance e LGPD',
     cmp_hero_sub:
@@ -458,13 +458,13 @@ const M = {
     cmp_ph_content: '# Título\n\nEscreva o conteúdo em Markdown...',
     cmp_type_TERMS: 'Termos de Uso',
     cmp_type_PRIVACY: 'Política de Privacidade',
-    cmp_type_DPA: 'DPA — LGPD',
+    cmp_type_DPA: 'DPA, LGPD',
     cmp_type_COOKIE: 'Política de Cookies',
     cmp_alert_err: 'Erro: {detail}',
     cmp_editor_editing: 'Editando: {title}',
 
     /* Metatags */
-    mt_pageTitle: 'BrSpark Admin — Metatags & Categorias',
+    mt_pageTitle: 'BrSpark Admin, Metatags & Categorias',
     mt_bc_here: 'Metatags',
     mt_hero_title: 'Metatags e categorias',
     mt_hero_sub:
@@ -503,7 +503,7 @@ const M = {
     mt_alert_save_err: 'Erro: {detail}',
 
     /* i18n admin page */
-    trl_pageTitle: 'BrSpark Admin — Traduções e regionais',
+    trl_pageTitle: 'BrSpark Admin, Traduções e regionais',
     trl_bc_here: 'Traduções e regionais',
     trl_hero_title: 'Traduções e configurações regionais',
     trl_hero_sub:
@@ -538,8 +538,8 @@ const M = {
     trl_alert_no_val: 'Nenhum valor para traduzir nesta linha.',
     trl_alert_no_empty: 'Nenhum campo vazio encontrado nos resultados visíveis.',
 
-    /* Work time — chrome */
-    wt_pageTitle: 'BrSpark Admin — Registro de horas',
+    /* Work time, chrome */
+    wt_pageTitle: 'BrSpark Admin, Registro de horas',
     wt_bc_here: 'Registro de horas',
     wt_hero_title: 'Registro de horas trabalhadas',
     wt_hero_sub:
@@ -549,7 +549,7 @@ const M = {
     wt_alert_saved: 'Configurações guardadas.',
 
     /* Telemetry */
-    tel_pageTitle: 'BrSpark Admin — Monitoramento de Telemetria',
+    tel_pageTitle: 'BrSpark Admin, Monitoramento de Telemetria',
     tel_bc_here: 'Telemetria',
     tel_hero_title: 'Rastreamento de telemetria',
     tel_hero_sub:
@@ -581,7 +581,7 @@ const M = {
     tel_det_ts_srv: 'Hora de recebimento (servidor)',
 
     /* Data collection */
-    dc_pageTitle: 'BrSpark Admin — Coleta de Dados',
+    dc_pageTitle: 'BrSpark Admin, Coleta de Dados',
     dc_bc_here: 'Coleta de Dados',
     dc_hero_title: 'Coleta de dados e privacidade',
     dc_hero_sub:
@@ -593,11 +593,11 @@ const M = {
     dc_btn_save: 'Salvar',
 
     /* Tracking chat moderation */
-    tcm_pageTitle: 'BrSpark Admin — Segurança do chat (visita)',
+    tcm_pageTitle: 'BrSpark Admin, Segurança do chat (visita)',
     tcm_bc_here: 'Chat de acompanhamento',
     tcm_hero_title: 'Segurança do chat de acompanhamento',
     tcm_hero_sub_html:
-      'Defina o quanto o sistema <strong>analisa e pode intervir</strong> nas mensagens entre <strong>cliente</strong> e <strong>técnico</strong> no link da visita — reduzindo ofensas e abusos <strong>sem travar a operação</strong>.',
+      'Defina o quanto o sistema <strong>analisa e pode intervir</strong> nas mensagens entre <strong>cliente</strong> e <strong>técnico</strong> no link da visita, reduzindo ofensas e abusos <strong>sem travar a operação</strong>.',
     tcm_btn_refresh: 'Atualizar resumo',
   },
   'en-US': {},
@@ -616,7 +616,7 @@ M['en-US'] = {
   common_unlimited: 'Unlimited',
   common_breadcrumb_trail: 'Breadcrumb',
 
-  ten_pageTitle: 'BrSpark Admin — Tenants',
+  ten_pageTitle: 'BrSpark Admin, Tenants',
   ten_bc_here: 'Tenants',
   ten_hero_title: 'Tenant management',
   ten_hero_sub:
@@ -666,7 +666,7 @@ M['en-US'] = {
   ten_alert_required: 'Required fields: Name, E-mail and Region.',
   ten_plan_per_mo: '/mo',
 
-  sub_pageTitle: 'BrSpark Admin — Subscriptions',
+  sub_pageTitle: 'BrSpark Admin, Subscriptions',
   sub_bc_here: 'Subscriptions',
   sub_hero_title: 'Plans and subscriptions',
   sub_hero_sub:
@@ -692,12 +692,12 @@ M['en-US'] = {
   sub_cycle_MONTHLY: 'Monthly',
   sub_cycle_YEARLY: 'Yearly (10% off)',
   sub_cycle_YEARLY_short: 'Yearly',
-  sub_facial_modal_title: 'Facial biometrics — API per plan',
+  sub_facial_modal_title: 'Facial biometrics, API per plan',
     sub_facial_intro: 'Plan:',
   sub_facial_body_html:
-    'Defines which vision integration (under <strong>Integrations</strong>) this plan may use for in-app facial recognition. The form no longer picks the provider — only the tenant plan.',
+    'Defines which vision integration (under <strong>Integrations</strong>) this plan may use for in-app facial recognition. The form no longer picks the provider, only the tenant plan.',
   sub_facial_lbl: 'Facial recognition engine',
-  sub_facial_opt_fm: 'FaceMatch (local) — default',
+  sub_facial_opt_fm: 'FaceMatch (local), default',
   sub_facial_opt_auto: 'Automatic (prefer FaceMatch, else AWS if configured)',
   sub_facial_opt_aws: 'AWS Rekognition (API cost; still limited on server)',
   sub_facial_hint: 'Stored in plan.features.facialVisionProvider. Tenants without a subscription use FaceMatch.',
@@ -735,11 +735,11 @@ M['en-US'] = {
   sub_tmpl_count_one: '1 template',
   sub_tmpl_count_many: '{n} templates',
 
-  pln_pageTitle: 'BrSpark Admin — Plans (packages)',
+  pln_pageTitle: 'BrSpark Admin, Plans (packages)',
   pln_bc_here: 'Plans (packages)',
   pln_hero_title: 'Plan catalog',
   pln_hero_sub_html:
-    'Set prices, limits and monthly quotas (AI, <strong>Google APIs</strong> — Maps routes and Gemini vision analysis, field OS, routine, forms). Tenants inherit these via <a href="subscriptions.html" style="color:var(--accent);font-weight:700">subscription</a>. <span style="color:var(--text3)">−1 = unlimited</span> where applicable.',
+    'Set prices, limits and monthly quotas (AI, <strong>Google APIs</strong>, Maps routes and Gemini vision analysis, field OS, routine, forms). Tenants inherit these via <a href="subscriptions.html" style="color:var(--accent);font-weight:700">subscription</a>. <span style="color:var(--text3)">−1 = unlimited</span> where applicable.',
   pln_link_subs: 'Subscriptions',
   pln_link_billing: 'Billing & MRR',
   pln_btn_new: 'New plan',
@@ -769,17 +769,17 @@ M['en-US'] = {
     pln_quotas_hint:
       'Technicians = field team using the app on the ground. <strong>−1</strong> = unlimited. <strong>0</strong> on Google quotas (Maps or vision analysis) blocks use on this plan.',
   pln_lbl_max_tech: 'Max technicians',
-  pln_lbl_ai_face: 'AI — facial / month',
-  pln_lbl_ai_vis_det: 'AI — vision detection / month',
-  pln_lbl_ai_vis_an: 'Vision AI — analysis (Google Gemini, checklists) / month',
+  pln_lbl_ai_face: 'AI, facial / month',
+  pln_lbl_ai_vis_det: 'AI, vision detection / month',
+  pln_lbl_ai_vis_an: 'Vision AI, analysis (Google Gemini, checklists) / month',
   pln_api_section_title: 'Google APIs (per tenant / month)',
-  pln_lbl_google_maps: 'Google Maps — routes (ETA, computeRoutes) / month',
+  pln_lbl_google_maps: 'Google Maps, routes (ETA, computeRoutes) / month',
   pln_lbl_ft: 'Field tasks (FT) / month',
   pln_lbl_rt: 'Routine (RT) / month',
     pln_lbl_max_tpl: 'Max forms (tenantId on model)',
     pln_features_title: 'Package features',
     pln_features_intro:
-      'Turn product modules on or off for subscribers on this plan. Numeric limits (AI, Maps, field tasks) stay in the «Quotas» section above — they are not changed here.',
+      'Turn product modules on or off for subscribers on this plan. Numeric limits (AI, Maps, field tasks) stay in the «Quotas» section above, they are not changed here.',
     pln_feat_stock: 'Stock / inventory',
     pln_feat_stock_hint: 'Inventory and asset control.',
     pln_feat_vault: 'Vault',
@@ -799,7 +799,7 @@ M['en-US'] = {
     pln_facial_compreface: 'Compreface (recommended)',
     pln_facial_aws: 'Amazon Rekognition',
     pln_facial_auto: 'Automatic (uses whichever active integration is available)',
-    pln_features_adv_summary: 'Advanced — extra JSON (technical support only)',
+    pln_features_adv_summary: 'Advanced, extra JSON (technical support only)',
     pln_lbl_features_adv: 'Extra keys (JSON)',
     pln_features_adv_hint: 'Leave empty in most cases. Only fill in if engineering asks for extra «features» keys.',
     pln_lbl_features: 'Features (legacy)',
@@ -814,7 +814,7 @@ M['en-US'] = {
   pln_dup_suffix: ' (copy)',
   pln_dup_suffix_n: ' (copy {n})',
   pln_dup_base: 'Plan',
-  pln_alert_dup_ok: 'Plan duplicated. It stays inactive by default — edit and enable when ready.',
+  pln_alert_dup_ok: 'Plan duplicated. It stays inactive by default, edit and enable when ready.',
   pln_alert_dup_err: 'Could not duplicate.',
   pln_save_fail: 'Could not save.',
     pln_alert_json: 'Invalid features JSON.',
@@ -822,7 +822,7 @@ M['en-US'] = {
   pln_alert_name: 'Name is required.',
   pln_alert_save_err: 'Error: {detail}',
 
-  sys_pageTitle: 'BrSpark Admin — System',
+  sys_pageTitle: 'BrSpark Admin, System',
   sys_bc_here: 'System',
   sys_hero_title: 'System settings',
   sys_hero_sub:
@@ -838,14 +838,14 @@ M['en-US'] = {
   sys_lbl_retention: 'Log retention (days)',
   sys_lbl_trial: 'Trial period (days)',
   sys_db_checking: 'PostgreSQL (checking…)',
-  sys_db_ok: 'PostgreSQL — connected',
+  sys_db_ok: 'PostgreSQL, connected',
   sys_api_checking: 'Checking',
   sys_api_online: 'Online',
   sys_api_offline: 'Offline',
   sys_flags_count: '{n} flags',
   sys_alert_saved: 'Settings saved (persistence in development).',
 
-  apidoc_pageTitle: 'BrSpark Admin — API Docs',
+  apidoc_pageTitle: 'BrSpark Admin, API Docs',
   apidoc_bc_here: 'API documentation',
   apidoc_hero_title: 'API documentation',
   apidoc_hero_sub:
@@ -853,10 +853,10 @@ M['en-US'] = {
   apidoc_btn_dl: 'Download OpenAPI (JSON)',
   apidoc_btn_open: 'Open JSON',
   apidoc_intro_1_html:
-    'This page reflects routes exposed by the backend in <code>admin-panel/backend/src/index.js</code> and <code>routes/</code>. OpenAPI is built with <code>admin-panel/scripts/build-openapi.js</code> — after route changes, run <code>npm run openapi</code> in <code>admin-panel/backend</code>.',
+    'This page reflects routes exposed by the backend in <code>admin-panel/backend/src/index.js</code> and <code>routes/</code>. OpenAPI is built with <code>admin-panel/scripts/build-openapi.js</code>, after route changes, run <code>npm run openapi</code> in <code>admin-panel/backend</code>.',
   apidoc_intro_2_html:
     '<strong>Admin:</strong> obtain JWT with <code>POST /api/auth/login</code> and use <em>Authorize → bearerAdmin</em>.<br /><strong>App:</strong> <code>POST /api/login</code> or <code>POST /api/register</code> → <em>bearerApp</em>. Public routes do not require <code>Authorization</code>.',
-  apidoc_fbapi_title: 'Form Builder — API-fed Fields',
+  apidoc_fbapi_title: 'Form Builder, API-fed Fields',
   apidoc_fbapi_sub:
     'Practical summary to configure mobile integrations without breaking offline behavior.',
   apidoc_fbapi_item_1_html:
@@ -956,7 +956,7 @@ M['en-US'] = {
   apidoc_err_load: 'Failed to load: {src}',
   apidoc_err_swagger: 'Could not load Swagger UI (network or CDN).',
 
-  notif_pageTitle: 'BrSpark Admin — Notifications',
+  notif_pageTitle: 'BrSpark Admin, Notifications',
   notif_bc_here: 'Notifications',
   notif_hero_title: 'Notifications',
   notif_hero_sub:
@@ -991,7 +991,7 @@ M['en-US'] = {
   notif_tmpl_count_one: '1 template',
   notif_tmpl_count_many: '{n} templates',
 
-  loc_pageTitle: 'BrSpark Admin — Multi-location',
+  loc_pageTitle: 'BrSpark Admin, Multi-location',
   loc_bc_here: 'Multi-location',
   loc_hero_title: 'Countries, regions and languages',
   loc_hero_sub:
@@ -1025,7 +1025,7 @@ M['en-US'] = {
   loc_alert_country_required: 'Country name and code are required.',
   loc_alert_country_stub: 'Country «{name}» ({code}) will be added. Implement /api/regions for persistence.',
 
-  cmp_pageTitle: 'BrSpark Admin — LGPD & Compliance',
+  cmp_pageTitle: 'BrSpark Admin, LGPD & Compliance',
   cmp_bc_here: 'Compliance',
   cmp_hero_title: 'Compliance & LGPD',
   cmp_hero_sub:
@@ -1049,12 +1049,12 @@ M['en-US'] = {
   cmp_ph_content: '# Title\n\nWrite content in Markdown...',
   cmp_type_TERMS: 'Terms of use',
   cmp_type_PRIVACY: 'Privacy policy',
-  cmp_type_DPA: 'DPA — LGPD',
+  cmp_type_DPA: 'DPA, LGPD',
   cmp_type_COOKIE: 'Cookie policy',
   cmp_alert_err: 'Error: {detail}',
   cmp_editor_editing: 'Editing: {title}',
 
-  mt_pageTitle: 'BrSpark Admin — Metatags & categories',
+  mt_pageTitle: 'BrSpark Admin, Metatags & categories',
   mt_bc_here: 'Metatags',
   mt_hero_title: 'Metatags and categories',
   mt_hero_sub:
@@ -1092,7 +1092,7 @@ M['en-US'] = {
   mt_alert_key_pt: 'Key and pt-BR name are required.',
   mt_alert_save_err: 'Error: {detail}',
 
-  trl_pageTitle: 'BrSpark Admin — Translations & locale',
+  trl_pageTitle: 'BrSpark Admin, Translations & locale',
   trl_bc_here: 'Translations & locale',
   trl_hero_title: 'Translations and regional settings',
   trl_hero_sub:
@@ -1127,7 +1127,7 @@ M['en-US'] = {
   trl_alert_no_val: 'Nothing to translate on this row.',
   trl_alert_no_empty: 'No empty fields in the visible results.',
 
-  wt_pageTitle: 'BrSpark Admin — Work time',
+  wt_pageTitle: 'BrSpark Admin, Work time',
   wt_bc_here: 'Work time',
   wt_hero_title: 'Work time tracking',
   wt_hero_sub:
@@ -1136,7 +1136,7 @@ M['en-US'] = {
   wt_alert_pick_tenant: 'Select the organization.',
   wt_alert_saved: 'Settings saved.',
 
-  tel_pageTitle: 'BrSpark Admin — Telemetry',
+  tel_pageTitle: 'BrSpark Admin, Telemetry',
   tel_bc_here: 'Telemetry',
   tel_hero_title: 'Telemetry tracking',
   tel_hero_sub:
@@ -1167,7 +1167,7 @@ M['en-US'] = {
   tel_det_ts_dev: 'Collection time (device)',
   tel_det_ts_srv: 'Received time (server)',
 
-  dc_pageTitle: 'BrSpark Admin — Data collection',
+  dc_pageTitle: 'BrSpark Admin, Data collection',
   dc_bc_here: 'Data collection',
   dc_hero_title: 'Data collection and privacy',
   dc_hero_sub:
@@ -1178,11 +1178,11 @@ M['en-US'] = {
   dc_tab_retention: 'Data retention',
   dc_btn_save: 'Save',
 
-  tcm_pageTitle: 'BrSpark Admin — Visit chat safety',
+  tcm_pageTitle: 'BrSpark Admin, Visit chat safety',
   tcm_bc_here: 'Visit chat',
   tcm_hero_title: 'Visit tracking chat safety',
   tcm_hero_sub_html:
-    'Define how much the system <strong>analyses and may intervene</strong> in messages between <strong>client</strong> and <strong>technician</strong> on the visit link — reducing abuse <strong>without blocking operations</strong>.',
+    'Define how much the system <strong>analyses and may intervene</strong> in messages between <strong>client</strong> and <strong>technician</strong> on the visit link, reducing abuse <strong>without blocking operations</strong>.',
   tcm_btn_refresh: 'Refresh summary',
 };
 

@@ -56,7 +56,7 @@ function consentLabelForRole(
   if (consentType === 'LOCATION_FOREGROUND' && !isTechnician) {
     return {
       ...base,
-      desc: 'Mapa de ativos e GPS ao cadastrar bens — só com o app aberto.',
+      desc: 'Mapa de ativos e GPS ao cadastrar bens, só com o app aberto.',
     };
   }
   return base;

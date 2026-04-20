@@ -58,10 +58,18 @@ export function tabBarOuterHeight(insetsBottom: number): number {
 }
 
 const PROVIDER_MENU_ITEMS = [
-  { id: 'mobile_stock', label: 'Estoque técnico', icon: 'cube-outline', color: '#0369a1', route: '/stock/mobile' },
+  {
+    id: 'mobile_stock',
+    labelKey: 'radialMenu.providerTechnicalStock',
+    labelDefault: 'Estoque técnico',
+    icon: 'cube-outline',
+    color: '#0369a1',
+    route: '/stock/mobile',
+  },
   {
     id: 'tech_finance',
-    label: 'Financeiro',
+    labelKey: 'tabs.costs',
+    labelDefault: 'Financeiro',
     icon: 'cash-outline',
     color: '#0f766e',
     route: '/finance/mobile',
@@ -74,21 +82,12 @@ const PROVIDER_MENU_ITEMS = [
     color: '#7c3aed',
     route: '/productivity',
   },
-];
+] as const;
 
-type ProviderMenuItem =
-  | { id: string; label: string; icon: string; color: string; route: string }
-  | {
-      id: string;
-      labelKey: string;
-      labelDefault: string;
-      icon: string;
-      color: string;
-      route: string;
-    };
+type ProviderMenuItem = (typeof PROVIDER_MENU_ITEMS)[number];
 
 function providerItemLabel(item: ProviderMenuItem, t: (k: string, o?: { defaultValue?: string }) => string) {
-  return 'labelKey' in item ? t(item.labelKey, { defaultValue: item.labelDefault }) : item.label;
+  return t(item.labelKey, { defaultValue: item.labelDefault });
 }
 
 /** Arco do leque (radial) — itens distribuídos acima do botão + */
@@ -356,8 +355,8 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
                   <Ionicons name="flash-outline" size={22} color="#fff" />
                 </View>
                 <View style={listStyles.headerTextCol}>
-                  <Text style={listStyles.headerTitle}>Ações rápidas</Text>
-                  <Text style={listStyles.headerLead}>Toque em uma opção para abrir a respectiva área do aplicativo.</Text>
+                  <Text style={listStyles.headerTitle}>{t('radialMenu.providerQuickActionsTitle')}</Text>
+                  <Text style={listStyles.headerLead}>{t('radialMenu.providerQuickActionsLead')}</Text>
                 </View>
                 <TouchableOpacity onPress={closeMenu} style={listStyles.headerClose}>
                   <Ionicons name="close" size={24} color="#fff" />

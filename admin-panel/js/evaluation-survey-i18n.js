@@ -1,5 +1,5 @@
 /**
- * Formulário público de avaliação — pt-BR e en-US.
+ * Formulário público de avaliação, pt-BR e en-US.
  * Locale: parâmetro URL `lang` (pt-BR | en-US), senão localStorage do painel, senão navegador.
  */
 const LS = 'brspark_admin_ui_locale';
@@ -22,7 +22,7 @@ export function getSurveyUiLocale() {
 
 const M = {
   'pt-BR': {
-    esv_pageTitle: 'Avaliação de serviço — BrSpark',
+    esv_pageTitle: 'Avaliação de serviço, BrSpark',
     esv_title: 'Avaliação de serviço',
     esv_loading: 'Carregando…',
     esv_invalid_link: 'Link inválido (sem token).',
@@ -47,7 +47,7 @@ const M = {
     esv_preview_badge: '(pré-visualização)',
   },
   'en-US': {
-    esv_pageTitle: 'Service evaluation — BrSpark',
+    esv_pageTitle: 'Service evaluation, BrSpark',
     esv_title: 'Service evaluation',
     esv_loading: 'Loading…',
     esv_invalid_link: 'Invalid link (missing token).',

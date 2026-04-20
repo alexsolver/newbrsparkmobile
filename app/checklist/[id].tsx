@@ -37,10 +37,19 @@ import { Ionicons, AntDesign, Entypo, Feather, FontAwesome, FontAwesome5, Founda
 import { apiFetch, getToken, handleUnauthorizedMaybeSessionInvalidated } from '../../src/services/auth';
 import { fetchDrivingLegEtaMinutes, fetchDrivingLegMetrics } from '../../src/services/osrmClient';
 import { fetchGoogleDrivingLegMetricsOrNull } from '../../src/services/googleMapsRoutesClient';
+import {
+  TRANSIT_ETA_GOOGLE_REFRESH_MS,
+  TRANSIT_ETA_GOOGLE_MAX_CALLS_PER_TRIP,
+  TRANSIT_ETA_TICK_MS,
+  computeTickingEtaMinutes,
+} from '../../src/services/transitEtaPolicy';
 import { haversineMeters, polylineLengthMeters } from '../../src/utils/polylineMetrics';
 import { LinearGradient } from 'expo-linear-gradient';
 import GeofenceStatusBar from './GeofenceStatusBar';
 import GeofenceMapScreen from './GeofenceMapScreen';
+import GlobalGeofenceConsultMap from './GlobalGeofenceConsultMap';
+import { resolveGlobalFenceDestinationCoords, taskHasGeometryForGlobalGate } from './globalGeofenceCombined';
+import SegmentDestinationPickerModal from './SegmentDestinationPickerModal';
 import RouteProgressBar from './RouteProgressBar';
 import LiveRouteMapCard, { pickDestinationForOsrm } from './LiveRouteMapCard';
 import { TransitCompletedSummaryMap, transitActualMetricsLabels } from './TransitCompletedSummaryMap';
@@ -78,6 +87,7 @@ import {
   checklistOutboxIdentityKey,
   clearExecutionStatusOutboxForTask,
 } from '../../src/services/syncService';
+import { metadataIndicatesAdminRevisionCycle } from '../../src/services/syncPolicy';
 import {
   appendUniqueStringToStoredArray,
   updateStoredJsonArray,
@@ -500,6 +510,19 @@ function executionIsViewOnly(exec: unknown): boolean {
   return EXEC_VIEW_ONLY_STATUSES.has(st);
 }
 
+/**
+ * GET `/executions/:id` pode ainda devolver IN_PROGRESS/PENDING enquanto o POST de conclusão não
+ * sincronizou — alinhado a `effectiveProviderTaskStatus` e `shouldRemoveExecutedCacheForRemoteTask`.
+ * Só desbloquear edição com ciclo explícito de revisão no painel (`syncPolicy.metadataIndicatesAdminRevisionCycle`).
+ */
+function remoteExecAllowsEditAfterLocalCompletion(remoteExec: unknown): boolean {
+  return metadataIndicatesAdminRevisionCycle(
+    remoteExec && typeof remoteExec === 'object'
+      ? (remoteExec as Record<string, unknown>).metadata
+      : undefined
+  );
+}
+
 /** Só anular assinatura e início/fim de deslocamento; manter o resto do preenchimento. */
 const REVISION_SESSION_FIELD_TYPES = new Set([
   'signature',
@@ -577,6 +600,18 @@ function stripFormProductivityTimerFields(res: Record<string, any>, schemaData: 
   }
 }
 
+/**
+ * OS recém-recebida deve abrir sem progresso fantasma de UI.
+ * Mantém respostas de negócio e remove só metadados de avanço/timers.
+ */
+function stripFreshTaskProgressMeta(res: Record<string, any>, schemaData: any[] | undefined): void {
+  if (!res || typeof res !== 'object') return;
+  stripFormProductivityTimerFields(res, schemaData);
+  for (const k of Object.keys(res)) {
+    if (k.startsWith('__time_')) delete res[k];
+  }
+}
+
 function newSubmissionId(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
@@ -615,7 +650,7 @@ function getOpenPauseSummaryFromResponses(prev: Record<string, any>): string {
   const hist = parsePauseHistory(prev);
   for (let i = hist.length - 1; i >= 0; i--) {
     if (hist[i]?.endedAt == null && hist[i]?.startedAt) {
-      return [hist[i].categoryLabel, hist[i].subLabel, hist[i].detail].filter(Boolean).join(' — ');
+      return [hist[i].categoryLabel, hist[i].subLabel, hist[i].detail].filter(Boolean).join(', ');
     }
   }
   return '';
@@ -831,9 +866,10 @@ function formatVisionIaAnswerLabel(raw: unknown): string {
   return s || 'Indefinido';
 }
 
-/** Visão IA Análise: mostrar texto/confiança/nota no formulário (padrão: sim). */
+/** Visão IA (análise e detecção): mostrar texto/confiança/nota no formulário (padrão: sim). */
 function visionAiShowsResponseInForm(field: any): boolean {
-  if (effectiveSchemaFieldType(field) !== 'vision_ai_analysis') return true;
+  const ft = effectiveSchemaFieldType(field);
+  if (ft !== 'vision_ai_analysis' && ft !== 'vision_checklist') return true;
   return field?.visionShowAiResponseInForm !== false;
 }
 
@@ -1026,9 +1062,10 @@ function normalizeVisionAnalysisGridKey(raw: unknown): VisionAnalysisGridKey {
   return '1x1';
 }
 
-/** Grelha só para `vision_ai_analysis` (Gemini): 1 foto ou 2×2 (4 fotos). */
+/** Grelha 1×1 ou 2×2 para `vision_ai_analysis` e `vision_checklist` (composição única antes do envio à API). */
 function getVisionAnalysisGridLayout(field: any): { key: VisionAnalysisGridKey; cols: number; rows: number; count: number } {
-  if (effectiveSchemaFieldType(field) !== 'vision_ai_analysis') {
+  const ft = effectiveSchemaFieldType(field);
+  if (ft !== 'vision_ai_analysis' && ft !== 'vision_checklist') {
     return { key: '1x1', cols: 1, rows: 1, count: 1 };
   }
   const key = normalizeVisionAnalysisGridKey(field?.visionAnalysisGrid ?? field?.vision_analysis_grid);
@@ -1201,6 +1238,8 @@ type ActiveTransitLegInfo = {
   startField: any;
   endField: any;
   reimbursement: boolean;
+  /** Patrulhamento: mapa segue KML/geometria da OS (`buildRouteCoordsFromTask`). */
+  patrol?: boolean;
 };
 
 /**
@@ -1211,7 +1250,7 @@ function getActiveTransitLegInfo(
   responses: Record<string, unknown>
 ): ActiveTransitLegInfo | null {
   if (!Array.isArray(schemaData) || !responses || typeof responses !== 'object') return null;
-  let pendingStart: { field: any; reimbursement: boolean } | null = null;
+  let pendingStart: { field: any; reimbursement: boolean; patrol: boolean } | null = null;
   for (const f of schemaData) {
     if (!f || typeof f !== 'object') continue;
     if (f.type === 'transit_start') {
@@ -1220,6 +1259,7 @@ function getActiveTransitLegInfo(
         pendingStart = {
           field: f,
           reimbursement: f.transitPurpose === 'reimbursement',
+          patrol: f.transitPurpose === 'patrol',
         };
       } else {
         pendingStart = null;
@@ -1232,6 +1272,7 @@ function getActiveTransitLegInfo(
           startField: pendingStart.field,
           endField: f,
           reimbursement: pendingStart.reimbursement,
+          patrol: pendingStart.patrol,
         };
       }
       if (v != null && String(v).trim() !== '') {
@@ -1240,6 +1281,40 @@ function getActiveTransitLegInfo(
     }
   }
   return null;
+}
+
+/**
+ * Após um trecho operacional ou de patrulha estar encerrado (`transit_end` com evidência),
+ * não permitir novo «Iniciar deslocamento» **operacional** (sem `transitPurpose` especial).
+ * O segundo trecho previsto no produto é só `reimbursement` ou `patrol` (novo par no schema).
+ */
+function shouldBlockTransitStartAfterOperationalDisplacementFinished(
+  schemaData: any[] | undefined,
+  startField: any,
+  responses: Record<string, unknown>,
+  scope: SectionRepeatScope | null | undefined
+): boolean {
+  if (!startField || startField.type !== 'transit_start') return false;
+  const purpose = startField.transitPurpose;
+  if (purpose === 'reimbursement' || purpose === 'patrol') return false;
+  if (!Array.isArray(schemaData)) return false;
+  let sawFinishedNonReimbursementLeg = false;
+  for (const f of schemaData) {
+    if (!f || typeof f !== 'object') continue;
+    if (f.id === startField.id && f.type === 'transit_start') {
+      return sawFinishedNonReimbursementLeg;
+    }
+    if (f.type === 'transit_end') {
+      const st = findPreviousTransitStartForEnd(schemaData, f.id);
+      const endVal = getScopedFieldValue(responses, scope ?? null, f.id);
+      const prevPurpose = st?.transitPurpose;
+      const isReimbursementOnlyLeg = prevPurpose === 'reimbursement';
+      if (isTransitEvidenceNonempty(endVal) && st && !isReimbursementOnlyLeg) {
+        sawFinishedNonReimbursementLeg = true;
+      }
+    }
+  }
+  return false;
 }
 
 /** Reembolso / «apenas registo»: `transitPurpose` no início; o fim herda do início anterior no schema. */
@@ -1251,6 +1326,19 @@ function isReimbursementTransitField(schemaData: any[] | undefined, fieldId: str
   if (fd.type === 'transit_end') {
     const st = findPreviousTransitStartForEnd(schemaData, fieldId);
     return st?.transitPurpose === 'reimbursement';
+  }
+  return false;
+}
+
+/** Patrulhamento: mapa com geometria/KML da OS (`transitPurpose === 'patrol'`). */
+function isPatrolTransitField(schemaData: any[] | undefined, fieldId: string): boolean {
+  if (!fieldId || !Array.isArray(schemaData)) return false;
+  const fd = schemaData.find((f: any) => f && f.id === fieldId);
+  if (!fd) return false;
+  if (fd.type === 'transit_start') return fd.transitPurpose === 'patrol';
+  if (fd.type === 'transit_end') {
+    const st = findPreviousTransitStartForEnd(schemaData, fieldId);
+    return st?.transitPurpose === 'patrol';
   }
   return false;
 }
@@ -1449,7 +1537,7 @@ function formatFileUploadForSignatureSummary(raw: unknown): string {
       return `${name}\n${shortUrl}`;
     }
     if (uri.startsWith('file://')) {
-      return `${name}\n(arquivo local — envie para sincronizar e ver o link no relatório)`;
+      return `${name}\n(arquivo local, envie para sincronizar e ver o link no relatório)`;
     }
     return name || shortUrl;
   });
@@ -1507,7 +1595,7 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
     const o = parseVisionChecklistStored(raw);
     if (!o) return '—';
     if (isVisionPendingAnalysisRecord(o) && visionStoredHasRunnableMedia(fieldDef, o)) {
-      return 'Mídia registada — análise IA pendente (envio automático com rede)';
+      return 'Mídia registada, análise IA pendente (envio automático com rede)';
     }
     if (o.status !== 'completed' || !Array.isArray(o.answers)) return '—';
     const parts = o.answers.map((a: any) => {
@@ -1580,12 +1668,12 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
           const title = String(l.name || '').trim() || 'Item';
           const sku = String(l.sku || '').trim() || '—';
           const base = `${title} (SKU ${sku}): ${l.qty}`;
-          if (l.decision === 'accepted') return `${base} — Aceito`;
+          if (l.decision === 'accepted') return `${base}, Aceito`;
           if (l.decision === 'rejected') {
             const j = String(l.rejectReason || '').trim();
-            return j ? `${base} — Recusado: ${j}` : `${base} — Recusado`;
+            return j ? `${base}, Recusado: ${j}` : `${base}, Recusado`;
           }
-          return `${base} — Pendente`;
+          return `${base}, Pendente`;
         })
         .join('\n');
     }
@@ -1614,8 +1702,8 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
         const amt = cur.format(l.amount);
         const desc = String(l.description || '').trim();
         const fts = l.originFts.length ? ` · FTs: ${l.originFts.join(', ')}` : '';
-        const pending = l.decision === 'accepted' ? '' : ' — pendente';
-        return desc ? `Receita ${amt} — ${desc}${fts}${pending}` : `Receita ${amt}${fts}${pending}`;
+        const pending = l.decision === 'accepted' ? '' : ', pendente';
+        return desc ? `Receita ${amt}, ${desc}${fts}${pending}` : `Receita ${amt}${fts}${pending}`;
       })
       .join('\n');
   }
@@ -1628,7 +1716,7 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
       .map((l) => {
         const amt = cur.format(l.amount);
         const desc = String(l.description || '').trim();
-        return desc ? `Despesa ${amt} — ${desc}` : `Despesa ${amt}`;
+        return desc ? `Despesa ${amt}, ${desc}` : `Despesa ${amt}`;
       })
       .join('\n');
   }
@@ -1637,7 +1725,7 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
     const tr = String(p.transcript || '').trim();
     if (tr) return tr;
     if (voiceNoteHasPendingTranscription(raw)) {
-      return 'Nota de voz registada — transcrição pendente (envio automático com rede)';
+      return 'Nota de voz registada, transcrição pendente (envio automático com rede)';
     }
     if (typeof raw === 'string') return raw.trim() || '—';
     return '—';
@@ -2230,10 +2318,10 @@ function FacialRecognitionPhotoFrame(props: {
   const cleanUri = String(props.oneUri).split('?')[0];
 
   const stampTitle = props.success
-    ? 'RECONHECIMENTO FACIAL — VÁLIDO'
+    ? 'RECONHECIMENTO FACIAL, VÁLIDO'
     : pending
-      ? 'RECONHECIMENTO FACIAL — PENDENTE'
-      : 'RECONHECIMENTO FACIAL — NÃO VALIDADO';
+      ? 'RECONHECIMENTO FACIAL, PENDENTE'
+      : 'RECONHECIMENTO FACIAL, NÃO VALIDADO';
 
   return (
     <View
@@ -2596,8 +2684,10 @@ function isFieldAnswerFilled(field: any, raw: any): boolean {
         const j = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw;
         const inside = !!(j && (j.insideZone === true || j.geofence?.insideZone === true));
         if (inside) return true;
-        const mode = String(field?.geofenceFailMode || 'block').toLowerCase();
-        if (mode === 'warn' && j?.geofence?.validated === true) return true;
+        const mode = normalizeGeofenceFailMode(field?.geofenceFailMode);
+        if (j?.geofence?.validated === true) {
+          if (mode === 'allow_warn' || mode === 'record_only') return true;
+        }
         return false;
       } catch {
         return false;
@@ -2664,9 +2754,67 @@ function normalizePolygonPairToLatLng(a: number, b: number): [number, number] {
   return [a, b];
 }
 
+/** Normaliza modos de falha da cerca (legacy `warn` → allow_warn). */
+function normalizeGeofenceFailMode(raw: unknown): 'block' | 'allow_warn' | 'record_only' {
+  const s = String(raw || 'block').toLowerCase();
+  if (s === 'warn' || s === 'allow_warn') return 'allow_warn';
+  if (s === 'record_only') return 'record_only';
+  return 'block';
+}
+
 /** Destino para OSRM: raiz da execução ou primeiro ponto do polígono/rota */
 function getDestFromTaskLike(task: any): { lat: number; lng: number } | null {
   if (!task || typeof task !== 'object') return null;
+  const zt = String(task.locationZoneType || '').toLowerCase();
+  const meta =
+    task.metadata && typeof task.metadata === 'object' && !Array.isArray(task.metadata)
+      ? task.metadata
+      : {};
+  /** Despacho: destino de navegação explícito (ponto separado do KML de validação). */
+  const navDest = (meta as { navigationDestination?: { kind?: string; lat?: unknown; lng?: unknown } })
+    .navigationDestination;
+  if (navDest?.kind === 'point') {
+    const la = parseFloat(String(navDest.lat ?? '').replace(',', '.'));
+    const ln = parseFloat(String(navDest.lng ?? '').replace(',', '.'));
+    if (
+      Number.isFinite(la) &&
+      Number.isFinite(ln) &&
+      la >= -90 &&
+      la <= 90 &&
+      ln >= -180 &&
+      ln <= 180
+    ) {
+      return { lat: la, lng: ln };
+    }
+  }
+  if (zt === 'segment' && (meta.transitSegmentDestination === 'A' || meta.transitSegmentDestination === 'B')) {
+    let poly: any = task.locationPolygon ?? meta.locationPolygon;
+    if (typeof poly === 'string') {
+      try {
+        poly = JSON.parse(poly);
+      } catch {
+        poly = null;
+      }
+    }
+    if (Array.isArray(poly) && poly.length >= 2) {
+      const idx = meta.transitSegmentDestination === 'B' ? 1 : 0;
+      const p0 = poly[idx];
+      let la: number;
+      let ln: number;
+      if (Array.isArray(p0)) {
+        la = parseFloat(String(p0[0]));
+        ln = parseFloat(String(p0[1]));
+        [la, ln] = normalizePolygonPairToLatLng(la, ln);
+      } else if (p0 && typeof p0 === 'object') {
+        la = parseFloat(String((p0 as any).lat));
+        ln = parseFloat(String((p0 as any).lng ?? (p0 as any).lon));
+      } else {
+        la = NaN;
+        ln = NaN;
+      }
+      if (Number.isFinite(la) && Number.isFinite(ln)) return { lat: la, lng: ln };
+    }
+  }
   const lat0 = task.locationLat ?? task.metadata?.locationLat;
   const lng0 = task.locationLng ?? task.metadata?.locationLng;
   const latN = typeof lat0 === 'number' && Number.isFinite(lat0) ? lat0 : parseFloat(String(lat0 ?? '').trim().replace(',', '.'));
@@ -2822,31 +2970,18 @@ function clampGlobalGeofenceRadiusMeters(raw: unknown): number {
   return Math.min(Math.floor(n), 50000);
 }
 
-/** Geometria na OS suficiente para o mapa de cerca global (ponto, polígono, trecho ou rota). */
+/** Destino OU geometria na OS — necessário para validar cerca global (OR). */
 function taskHasServiceLocationForGlobalGate(t: any): boolean {
-  if (!t || typeof t !== 'object') return false;
-  const lat = t.locationLat;
-  const lng = t.locationLng;
-  if (lat != null && lng != null && Number.isFinite(Number(lat)) && Number.isFinite(Number(lng))) {
-    return true;
-  }
-  if (t.locationPolygon == null) return false;
-  try {
-    const parsed =
-      typeof t.locationPolygon === 'string' ? JSON.parse(t.locationPolygon) : t.locationPolygon;
-    return Array.isArray(parsed) && parsed.length >= 2;
-  } catch {
-    return false;
-  }
+  return !!resolveGlobalFenceDestinationCoords(t) || taskHasGeometryForGlobalGate(t);
 }
 
 /**
- * Clona a OS para o GeofenceMapScreen com `locationRadius` = raio global (tolerância única da cerca global).
- * Rota/trecho: o ecrã de mapa não bloqueia fora da linha em modo `route`; para a cerca global usamos disco
- * no ponto de referência (início da rota ou meio do trecho) para o bloqueio fazer efeito.
+ * OS + cerca global: `locationZoneType` = combined; destino (metadata.navigationDestination ou lat/lng)
+ * e geometria (se existir) em `metadata.globalGeofence`. Validação: dentro do raio do destino OU dentro da geometria.
  */
 function buildGlobalGeofenceMapTask(task: any, globalRadiusMeters: number): any {
   const r = clampGlobalGeofenceRadiusMeters(globalRadiusMeters);
+  const dest = resolveGlobalFenceDestinationCoords(task);
   let poly: any = null;
   try {
     if (task?.locationPolygon != null) {
@@ -2865,42 +3000,55 @@ function buildGlobalGeofenceMapTask(task: any, globalRadiusMeters: number): any 
     else zone = 'radius';
   }
 
-  if (zone === 'route' && Array.isArray(poly) && poly.length >= 1) {
-    const lat0 = Number(poly[0][0]);
-    const lng0 = Number(poly[0][1]);
-    if (Number.isFinite(lat0) && Number.isFinite(lng0)) {
-      return {
-        ...task,
-        locationLat: lat0,
-        locationLng: lng0,
-        locationZoneType: 'radius',
-        locationRadius: r,
-        locationPolygon: null,
-      };
-    }
-  }
-  if (zone === 'segment' && Array.isArray(poly) && poly.length >= 2) {
-    const a0 = Number(poly[0][0]);
-    const a1 = Number(poly[0][1]);
-    const b0 = Number(poly[1][0]);
-    const b1 = Number(poly[1][1]);
-    if ([a0, a1, b0, b1].every((x) => Number.isFinite(x))) {
-      return {
-        ...task,
-        locationLat: (a0 + b0) / 2,
-        locationLng: (a1 + b1) / 2,
-        locationZoneType: 'radius',
-        locationRadius: r,
-        locationPolygon: null,
-      };
-    }
-  }
+  const hasGeom =
+    Array.isArray(poly) &&
+    ((zone === 'polygon' && poly.length >= 3) ||
+      (zone === 'route' && poly.length >= 2) ||
+      (zone === 'segment' && poly.length >= 2));
 
-  if (zone === 'polygon' && Array.isArray(poly) && poly.length >= 3) {
-    return { ...task, locationRadius: r, locationZoneType: 'polygon' };
-  }
+  const geometry = hasGeom
+    ? {
+        zoneType: zone,
+        locationLat: task.locationLat,
+        locationLng: task.locationLng,
+        locationRadius:
+          task.locationRadius != null && Number.isFinite(Number(task.locationRadius))
+            ? Number(task.locationRadius)
+            : r,
+        locationPolygon: poly,
+      }
+    : null;
 
-  return { ...task, locationRadius: r, locationZoneType: 'radius' };
+  const centerLat =
+    dest?.lat ??
+    (task?.locationLat != null && Number.isFinite(Number(task.locationLat))
+      ? Number(task.locationLat)
+      : poly?.[0]?.[0] != null
+        ? Number(poly[0][0])
+        : null);
+  const centerLng =
+    dest?.lng ??
+    (task?.locationLng != null && Number.isFinite(Number(task.locationLng))
+      ? Number(task.locationLng)
+      : poly?.[0]?.[1] != null
+        ? Number(poly[0][1])
+        : null);
+
+  return {
+    ...task,
+    locationZoneType: 'combined',
+    locationLat: centerLat,
+    locationLng: centerLng,
+    locationRadius: r,
+    metadata: {
+      ...(typeof task.metadata === 'object' && task.metadata ? task.metadata : {}),
+      globalGeofence: {
+        destination: dest,
+        destinationRadiusM: r,
+        geometry,
+      },
+    },
+  };
 }
 
 /**
@@ -2993,10 +3141,27 @@ export default function ChecklistEngine() {
   const [currentTask, setCurrentTask]       = useState<any>(null);
   /** ETA mostrado no mapa — independente de currentTask, para não ficar preso a `if (!prev) return prev` */
   const [mapEtaMinutes, setMapEtaMinutes]   = useState<number | null>(null);
+  /** Deslocamento operacional: até N invocações Google (proxy) por trecho; snapshot para contagem no relógio. */
+  const transitEtaLegKeyRef = useRef('');
+  const transitEtaGoogleInvocationsRef = useRef(0);
+  const transitEtaSnapshotRef = useRef<{ atMs: number; remainingMin: number } | null>(null);
   const currentTaskRef = useRef<any>(null);
   const [geoMapChecked, setGeoMapChecked]   = useState(false);
-  const [geofenceFailMode, setGeofenceFailMode] = useState<'block'|'warn'>('warn');
-  
+  const [geofenceFailMode, setGeofenceFailMode] = useState<'block' | 'warn'>('warn');
+  /** Último estado dentro/fora da zona por campo (transições → telemetria). */
+  const geofencePrevInsideRef = useRef<Record<string, boolean>>({});
+  /** Revalidação automática após bloqueio com «voltar à zona». */
+  const [geofenceUnblockCtx, setGeofenceUnblockCtx] = useState<{
+    fieldId: string;
+    scope: SectionRepeatScope | null;
+  } | null>(null);
+  const [segmentDestModal, setSegmentDestModal] = useState<{
+    fieldId: string;
+    scope: SectionRepeatScope | null;
+    pointA: { lat: number; lng: number };
+    pointB: { lat: number; lng: number };
+  } | null>(null);
+
   /** Leitor de código de barras / QR no campo `barcode_scan` (expo-camera). */
   const [checklistBarcodeModalOpen, setChecklistBarcodeModalOpen] = useState(false);
   const checklistBarcodeTargetRef = useRef<{
@@ -3046,6 +3211,23 @@ export default function ChecklistEngine() {
   const routineTaskFlag =
     String(Array.isArray(routineTask) ? routineTask[0] : routineTask || '') === '1';
   const isRoutineTaskFlow = routineTaskFlag && !!resolvedTaskId;
+
+  /** Mapa consultivo: mesma construção que o gate de cerca global (destino ∪ geometria). */
+  const globalFenceConsultTask = useMemo(() => {
+    if (!template?.settings?.requireGlobalGeofence || !currentTask || isReadOnly || isRoutineTaskFlow) {
+      return null;
+    }
+    return buildGlobalGeofenceMapTask(
+      currentTask,
+      clampGlobalGeofenceRadiusMeters(template.settings.globalGeofenceRadius),
+    );
+  }, [
+    template?.settings?.requireGlobalGeofence,
+    template?.settings?.globalGeofenceRadius,
+    currentTask,
+    isReadOnly,
+    isRoutineTaskFlow,
+  ]);
 
   /** `runVisionChecklistAnalyze` usa `[]` em deps — refs para PATCH pós-análise em modo só leitura. */
   const visionPatchAfterAnalyzeRef = useRef({ isReadOnly: false, taskId: '' as string });
@@ -3522,6 +3704,99 @@ export default function ChecklistEngine() {
     return inside;
   };
 
+  /** Distância mínima (m) do ponto à polilinha da rota (projeção por segmento). */
+  const nearestDistanceToRouteM = (lat: number, lng: number, route: number[][]): number => {
+    let min = Infinity;
+    for (let i = 0; i < route.length - 1; i++) {
+      const [aL, aG] = route[i];
+      const [bL, bG] = route[i + 1];
+      const dx = bG - aG;
+      const dy = bL - aL;
+      const len2 = dx * dx + dy * dy;
+      let t = len2 > 0 ? ((lng - aG) * dx + (lat - aL) * dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const d = haversineDistance(lat, lng, aL + t * dy, aG + t * dx);
+      if (d < min) min = d;
+    }
+    return min;
+  };
+
+  /**
+   * Validação do campo geofence_check: modo «destino» (raio ao ponto da OS) vs «geometria» (polígono/rota/trecho do despacho).
+   */
+  const computeGeofenceCheckInside = (
+    lat: number,
+    lng: number,
+    geoField: any,
+    taskLocation: any,
+  ): { insideZone: boolean; distanceMeters: number | null; requiredMeters: number | null } => {
+    const fieldMode = geoField?.geofenceType || 'radius';
+    const fieldRadius = parseInt(String(geoField?.geofenceRadius), 10) || 150;
+    const geomTol = parseInt(String(geoField?.geofenceGeometryToleranceM), 10) || fieldRadius;
+    const segBuf = parseInt(String(geoField?.geofenceSegmentBufferM), 10) || geomTol;
+
+    const polyRaw = taskLocation?.locationPolygon;
+    let polygon: number[][] = [];
+    if (polyRaw) {
+      try {
+        const p = typeof polyRaw === 'string' ? JSON.parse(polyRaw) : polyRaw;
+        polygon = Array.isArray(p) ? p : [];
+      } catch {
+        polygon = [];
+      }
+    }
+    const taskZt = String(taskLocation?.locationZoneType || '').toLowerCase();
+    const taskDestLat = Number(taskLocation?.locationLat);
+    const taskDestLng = Number(taskLocation?.locationLng);
+    const hasTaskPoint = Number.isFinite(taskDestLat) && Number.isFinite(taskDestLng);
+    const taskTolRaw = Number(taskLocation?.locationRadius);
+    const taskTol = Number.isFinite(taskTolRaw) && taskTolRaw > 0 ? taskTolRaw : NaN;
+
+    if (fieldMode === 'radius') {
+      if (!hasTaskPoint) return { insideZone: false, distanceMeters: null, requiredMeters: null };
+      const effectiveRadius = Number.isFinite(taskTol) ? taskTol : fieldRadius;
+      const d = Math.round(haversineDistance(lat, lng, taskDestLat, taskDestLng));
+      return { insideZone: d <= effectiveRadius, distanceMeters: d, requiredMeters: effectiveRadius };
+    }
+
+    if (!polygon.length) {
+      if (hasTaskPoint) {
+        const effectiveRadius = Number.isFinite(taskTol) ? taskTol : geomTol;
+        const d = Math.round(haversineDistance(lat, lng, taskDestLat, taskDestLng));
+        return { insideZone: d <= effectiveRadius, distanceMeters: d, requiredMeters: effectiveRadius };
+      }
+      return { insideZone: false, distanceMeters: null, requiredMeters: null };
+    }
+
+    if (taskZt === 'polygon' && polygon.length >= 3) {
+      const inside = pointInPolygon(lat, lng, polygon);
+      return { insideZone: inside, distanceMeters: null, requiredMeters: null };
+    }
+    if (taskZt === 'route' && polygon.length >= 2) {
+      const effTol = Number.isFinite(taskTol) ? taskTol : geomTol;
+      const dist = nearestDistanceToRouteM(lat, lng, polygon);
+      const d = Math.round(dist);
+      return { insideZone: d <= effTol, distanceMeters: d, requiredMeters: effTol };
+    }
+    if (taskZt === 'segment' && polygon.length >= 2) {
+      const effTol = Number.isFinite(taskTol) ? taskTol : segBuf;
+      const dA = haversineDistance(lat, lng, polygon[0][0], polygon[0][1]);
+      const dB = haversineDistance(lat, lng, polygon[1][0], polygon[1][1]);
+      const d = Math.round(Math.min(dA, dB));
+      return { insideZone: d <= effTol, distanceMeters: d, requiredMeters: effTol };
+    }
+    if (polygon.length >= 3) {
+      const inside = pointInPolygon(lat, lng, polygon);
+      return { insideZone: inside, distanceMeters: null, requiredMeters: null };
+    }
+    if (hasTaskPoint) {
+      const effectiveRadius = Number.isFinite(taskTol) ? taskTol : geomTol;
+      const d = Math.round(haversineDistance(lat, lng, taskDestLat, taskDestLng));
+      return { insideZone: d <= effectiveRadius, distanceMeters: d, requiredMeters: effectiveRadius };
+    }
+    return { insideZone: false, distanceMeters: null, requiredMeters: null };
+  };
+
   // --- Location handler (Transit + Geofence) ---
   // --- Tracking Link ──────────────────────────────────────────────
   const generateTrackingLink = async () => {
@@ -3557,11 +3832,31 @@ export default function ChecklistEngine() {
     traversedPath?: number[][],
     scope?: SectionRepeatScope | null
   ) => {
+    if (isReadOnly) return;
     if (serverPausedExecution || responses.__form_paused_since) {
       Alert.alert(t('common.attention'), t('pause.pausedTitle'));
       return;
     }
     if (gpsCaptureLockRef.current) return;
+
+    if (label === 'SAIDA') {
+      const startFd = template?.schemaData?.find((x: any) => x && x.id === fieldId);
+      if (
+        startFd &&
+        shouldBlockTransitStartAfterOperationalDisplacementFinished(
+          template?.schemaData,
+          startFd,
+          responses as Record<string, unknown>,
+          scope ?? null
+        )
+      ) {
+        Alert.alert(
+          'Atenção',
+          'Este deslocamento já foi concluído. Não é possível iniciar um novo deslocamento operacional no mesmo formulário.'
+        );
+        return;
+      }
+    }
 
     const existingFieldVal = getScopedFieldValue(responses, scope ?? null, fieldId);
     if (isTransitEvidenceNonempty(existingFieldVal)) {
@@ -3631,17 +3926,15 @@ export default function ChecklistEngine() {
 
       // ── Geofencing Validation Engine ──────────────────────────
       if (isGeofenceCheck && lat !== 0 && lng !== 0) {
-        // Resolve the field config for fail mode / error message / radius override
         const geoField = template?.schemaData?.find((f: any) => f.id === fieldId);
-        const failMode: string = geoField?.geofenceFailMode || 'block';
+        const effMode = normalizeGeofenceFailMode(geoField?.geofenceFailMode);
         const customMsg: string = geoField?.geofenceErrorMsg || '';
-        const fieldRadius: number = parseInt(geoField?.geofenceRadius) || 150;
         const zoneType: string = geoField?.geofenceType || 'radius';
+        const unblockOnReentry = geoField?.geofenceUnblockOnReentry === true;
 
-        // Load task location from cloudTasks cache
         let taskLocation: any = null;
         try {
-          const thisTask = await findCloudTaskById(String(taskId));
+          const thisTask = await findCloudTaskById(String(resolvedTaskId || ''));
           if (thisTask) taskLocation = thisTask;
         } catch (e) {}
 
@@ -3651,31 +3944,30 @@ export default function ChecklistEngine() {
         const hasTaskPoint = Number.isFinite(taskDestLat) && Number.isFinite(taskDestLng);
 
         if (!taskLocation || (!hasTaskPoint && !hasTaskPolygon)) {
-          // No location on task — just record GPS evidence, do NOT block
           const payload = { action: label, timestamp: new Date().toISOString(), coordinates: { lat, lng }, address, geofence: { validated: false, reason: 'NO_TASK_LOCATION' } };
           handleInput(fieldId, JSON.stringify(payload), scope);
-          Alert.alert("⚠️ Localização Registrada", `GPS capturado com sucesso.\n\n📍 ${address}\n\nEsta OS não possui zona de geofencing definida — nenhuma validação aplicada.`);
+          Alert.alert("⚠️ Localização Registrada", `GPS capturado com sucesso.\n\n📍 ${address}\n\nEsta OS não possui zona de geofencing definida, nenhuma validação aplicada.`);
           return;
         }
 
-        let insideZone = false;
-        let distanceMeters: number | null = null;
-        let requiredMeters: number | null = null;
+        const gf = computeGeofenceCheckInside(lat, lng, geoField, taskLocation);
+        const insideZone = gf.insideZone;
+        const distanceMeters = gf.distanceMeters;
+        const requiredMeters = gf.requiredMeters;
 
-        if (zoneType === 'polygon' && taskLocation.locationPolygon) {
-          // Ray-casting para polígono
-          const polygon: number[][] = typeof taskLocation.locationPolygon === 'string'
-            ? JSON.parse(taskLocation.locationPolygon)
-            : taskLocation.locationPolygon;
-          insideZone = pointInPolygon(lat, lng, polygon);
-        } else if (hasTaskPoint) {
-          // Haversine para ponto + raio
-          const effectiveRadiusRaw = Number(taskLocation.locationRadius);
-          const effectiveRadius = Number.isFinite(effectiveRadiusRaw) && effectiveRadiusRaw > 0 ? effectiveRadiusRaw : fieldRadius;
-          distanceMeters = Math.round(haversineDistance(lat, lng, taskDestLat, taskDestLng));
-          requiredMeters = effectiveRadius;
-          insideZone = distanceMeters <= effectiveRadius;
+        const prevInside = geofencePrevInsideRef.current[fieldId];
+        if (prevInside !== undefined && prevInside !== insideZone) {
+          void dataCollectionService.recordEvent('GEOFENCE_FIELD_AUDIT', {
+            lat,
+            lng,
+            accuracy: accuracyMeters,
+            fieldId,
+            transition: insideZone ? 'ENTER_SERVICE_ZONE' : 'EXIT_SERVICE_ZONE',
+            wasInside: prevInside,
+            nowInside: insideZone,
+          });
         }
+        geofencePrevInsideRef.current[fieldId] = insideZone;
 
         const evidencePayload: any = {
           action: label,
@@ -3684,7 +3976,7 @@ export default function ChecklistEngine() {
           address,
           geofence: {
             validated: true,
-            mode: failMode,
+            mode: effMode,
             insideZone,
             distanceMeters,
             requiredMeters,
@@ -3695,6 +3987,7 @@ export default function ChecklistEngine() {
         handleInput(fieldId, JSON.stringify(evidencePayload), scope);
 
         if (insideZone) {
+          setGeofenceUnblockCtx(null);
           const distMsg = distanceMeters !== null ? `\n📏 Distância: ${distanceMeters}m (raio: ${requiredMeters}m)` : '';
           Alert.alert("✅ Cerca Eletrônica: APROVADO", `Você está dentro da zona de serviço autorizada.${distMsg}\n\n📍 ${address}`);
         } else {
@@ -3703,12 +3996,15 @@ export default function ChecklistEngine() {
             : '\nVocê está fora do polígono de serviço.';
           const errorMsg = customMsg || `Acesso negado: fora da área de serviço autorizada.${distMsg}`;
 
-          if (failMode === 'block') {
-            // Remove a resposta para bloquear o avanço
+          if (effMode === 'block') {
             handleInput(fieldId, '', scope);
             Alert.alert("🚫 Cerca Eletrônica: BLOQUEADO", `${errorMsg}\n\n📍 Sua posição: ${address}`);
+            if (unblockOnReentry) {
+              setGeofenceUnblockCtx({ fieldId, scope: scope ?? null });
+            }
+          } else if (effMode === 'record_only') {
+            Alert.alert("📋 Cerca — registo", `${errorMsg}\n\nA posição foi registada para auditoria.\n\n📍 ${address}`);
           } else {
-            // Modo warn: registra desvio mas permite continuar
             Alert.alert("⚠️ Cerca Eletrônica: ALERTA", `${errorMsg}\n\nO desvio foi registrado como evidência. Você pode continuar.`);
           }
         }
@@ -3729,6 +4025,11 @@ export default function ChecklistEngine() {
       }
       if (isReimbursementTransit) {
         payload.transitPurpose = 'reimbursement';
+      } else if (label === 'SAIDA') {
+        const meta = currentTaskRef.current?.metadata;
+        if (meta?.transitSegmentDestination === 'A' || meta?.transitSegmentDestination === 'B') {
+          payload.segmentDestination = meta.transitSegmentDestination;
+        }
       }
 
       /** Métricas de rota (OSRM) e morada exacta: em segundo plano após gravar o GPS (ver IIFE no fim). */
@@ -3829,7 +4130,7 @@ export default function ChecklistEngine() {
         } else {
           Alert.alert(
             'Deslocamento finalizado',
-            `O trecho de deslocamento foi encerrado e o registro foi guardado (início → fim no mapa).\n\nIsto não substitui, por si só, outros passos do formulário que sirvam como prova formal de chegada ao local de serviço — por exemplo, quando existir validação em cerca eletrônica ou campo próprio de confirmação.${tailMoradaAsync}`
+            `O trecho de deslocamento foi encerrado e o registro foi guardado (início → fim no mapa).\n\nIsto não substitui, por si só, outros passos do formulário que sirvam como prova formal de chegada ao local de serviço, por exemplo, quando existir validação em cerca eletrônica ou campo próprio de confirmação.${tailMoradaAsync}`
           );
         }
       } else if (label === 'SAIDA') {
@@ -3959,62 +4260,151 @@ export default function ChecklistEngine() {
     }
   };
 
+  /** Após bloqueio de cerca com «libertar ao voltar à zona»: observa GPS até entrada válida e preenche o campo. */
+  useEffect(() => {
+    if (!geofenceUnblockCtx || !resolvedTaskId) return;
+    const { fieldId, scope } = geofenceUnblockCtx;
+    const geoField = template?.schemaData?.find((f: any) => f.id === fieldId);
+    if (!geoField || geoField.type !== 'geofence_check') {
+      setGeofenceUnblockCtx(null);
+      return;
+    }
+    const zoneType: string = geoField?.geofenceType || 'radius';
+    const subRef = { current: null as Location.LocationSubscription | null };
+    let cancelled = false;
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted' || cancelled) return;
+      subRef.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 12000,
+          distanceInterval: 20,
+        },
+        async (loc) => {
+          if (cancelled) return;
+          const la = loc.coords.latitude;
+          const ln = loc.coords.longitude;
+          let taskLocation: any = null;
+          try {
+            taskLocation = await findCloudTaskById(String(resolvedTaskId));
+          } catch {
+            return;
+          }
+          if (!taskLocation) return;
+          const gf = computeGeofenceCheckInside(la, ln, geoField, taskLocation);
+          const { insideZone, distanceMeters, requiredMeters } = gf;
+          if (!insideZone) return;
+          let address = 'Localização não capturada';
+          try {
+            const rev = await Location.reverseGeocodeAsync({ latitude: la, longitude: ln });
+            if (rev && rev.length > 0) {
+              const p = rev[0];
+              address = `${p.street || p.name || ''}, ${p.streetNumber || ''} - ${p.district || p.subregion || ''}, ${p.city || ''} - ${p.region || ''}`;
+            }
+          } catch {
+            /* ignore */
+          }
+          const hi = handleInputRef.current;
+          if (typeof hi !== 'function') return;
+          const evidencePayload = {
+            action: 'VALIDACAO_CERCA',
+            timestamp: new Date().toISOString(),
+            coordinates: { lat: la, lng: ln },
+            address,
+            geofence: {
+              validated: true,
+              mode: normalizeGeofenceFailMode(geoField?.geofenceFailMode),
+              insideZone: true,
+              distanceMeters,
+              requiredMeters,
+              zoneType,
+              autoReentry: true,
+            },
+          };
+          hi(fieldId, JSON.stringify(evidencePayload), scope);
+          setGeofenceUnblockCtx(null);
+          try {
+            subRef.current?.remove();
+            subRef.current = null;
+          } catch {
+            /* ignore */
+          }
+          Alert.alert(
+            '✅ Cerca Eletrônica',
+            'Voltou à zona permitida. Validação registada automaticamente.'
+          );
+        }
+      );
+    })();
+    return () => {
+      cancelled = true;
+      try {
+        subRef.current?.remove();
+        subRef.current = null;
+      } catch {
+        /* ignore */
+      }
+    };
+  }, [geofenceUnblockCtx, resolvedTaskId, template]);
+
 
 
     // Sincronização passiva do Kanban (Ping)
   const notifyKanbanStatus = async (status: 'ACCEPTED' | 'IN_PROGRESS') => {
-      if (!taskId) return;
+      const tid = String(resolvedTaskId || '').trim();
+      if (!tid) return;
       try {
-          const key = `@brspark_notified_${taskId}_${status}`;
+          const key = `@brspark_notified_${tid}_${status}`;
           if (await AsyncStorage.getItem(key)) return;
           
           const ts = new Date().toISOString();
           
           // Gravação local forte para garantir que vai no payload final caso o ping falhe
           try {
-            await patchCloudTaskById(String(taskId), (row) => {
+            await patchCloudTaskById(tid, (row) => {
               const meta = { ...(row.metadata || {}), ...(status === 'ACCEPTED' ? { acceptedAt: ts } : {}) };
               return { ...row, metadata: meta };
             });
           } catch (err) {}
 
-          await enqueueExecutionStatusPatch(String(taskId), { status, timestamp: ts });
+          await enqueueExecutionStatusPatch(tid, { status, timestamp: ts });
           await AsyncStorage.setItem(key, 'true');
       } catch(e) {}
   };
 
   useEffect(() => {
-      if (taskId && !isReadOnly) {
+      if (resolvedTaskId && !isReadOnly) {
          notifyKanbanStatus('ACCEPTED');
          // Técnico aceitou a OS — GPS no modo leve (aguardando saída)
          AsyncStorage.getItem('@brspark_email').then(email => {
            dataCollectionService.setState('DISPATCHED', {
-             executionId: String(taskId),
+             executionId: String(resolvedTaskId),
              ownerEmail: email || 'unknown',
            }).catch(() => {});
          });
       }
-  }, [taskId, isReadOnly]);
+  }, [resolvedTaskId, isReadOnly]);
 
   // Ao focar a OS, reassocia executionId aos heartbeats (link público usa telemetria por OS).
   useFocusEffect(
     useCallback(() => {
-      if (!taskId || isReadOnly) return undefined;
+      if (!resolvedTaskId || isReadOnly) return undefined;
       let cancelled = false;
       AsyncStorage.getItem('@brspark_email').then((email) => {
         if (!cancelled) {
-          dataCollectionService.syncExecutionContext(String(taskId), email || undefined);
+          dataCollectionService.syncExecutionContext(String(resolvedTaskId), email || undefined);
         }
       });
       return () => {
         cancelled = true;
       };
-    }, [taskId, isReadOnly])
+    }, [resolvedTaskId, isReadOnly])
   );
 
   // Sincronização em tempo real das respostas (Debounced)
   useEffect(() => {
-     if (isReadOnly || !taskId || Object.keys(responses).length === 0) return;
+     if (isReadOnly || !resolvedTaskId || Object.keys(responses).length === 0) return;
      
      const timeoutId = setTimeout(() => {
          const body: Record<string, unknown> = { responses };
@@ -4027,114 +4417,11 @@ export default function ChecklistEngine() {
              lastPauseAt: responses.__form_paused_since,
            };
          }
-         void enqueueExecutionStatusPatch(String(taskId), body);
+         void enqueueExecutionStatusPatch(String(resolvedTaskId), body);
      }, 2000); // 2 second debounce
      
      return () => clearTimeout(timeoutId);
-  }, [responses, taskId, isReadOnly]);
-
-
-  // Poller to update ETA em tempo real + estado dedicado (mapEtaMinutes) para o badge não depender só de currentTask
-  useEffect(() => {
-    if (!resolvedTaskId || isReadOnly) return;
-
-    const fetchLocalOsrmEtaMinutes = async (
-      destLat: number,
-      destLng: number
-    ): Promise<number | null> => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') return null;
-        const pos = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        const oLng = pos.coords.longitude;
-        const oLat = pos.coords.latitude;
-        const res = await fetchDrivingLegEtaMinutes(oLat, oLng, destLat, destLng);
-        return res.ok && res.minutes != null ? res.minutes : null;
-      } catch {
-        return null;
-      }
-    };
-
-    const persistEta = async (cloudTasks: any[], minutes: number) => {
-      const updatedTasks = cloudTasks.map((t: any) =>
-        String(t.id) === String(resolvedTaskId) ? { ...t, etaMinutes: minutes } : t
-      );
-      await savePartitionedFromUnifiedList(updatedTasks);
-    };
-
-    const fetchEta = async () => {
-      try {
-        let cloudTasks: any[] = [];
-        try {
-          cloudTasks = await loadAllCloudTasksForExecutionLookup();
-        } catch {
-          cloudTasks = [];
-        }
-
-        const cachedTask = cloudTasks.find((t: any) => String(t.id) === String(resolvedTaskId));
-        const cachedNorm = normalizeEtaMinutes(cachedTask?.etaMinutes);
-        if (cachedNorm !== null) {
-          setMapEtaMinutes(cachedNorm);
-          setCurrentTask((prev: any) => {
-            if (!prev || prev.etaMinutes === cachedNorm) return prev;
-            return { ...prev, etaMinutes: cachedNorm };
-          });
-        }
-
-        const destFallback =
-          getDestFromTaskLike(cachedTask || {}) ||
-          getDestFromTaskLike(currentTaskRef.current || {});
-
-        const res = await apiFetch(`/api/checklists/executions/${resolvedTaskId}`);
-        if (!res.ok) {
-          if (destFallback) {
-            const localEta = await fetchLocalOsrmEtaMinutes(destFallback.lat, destFallback.lng);
-            const n = normalizeEtaMinutes(localEta);
-            if (n !== null) {
-              setMapEtaMinutes(n);
-              await persistEta(cloudTasks, n);
-            }
-          }
-          return;
-        }
-
-        const data: any = await res.json();
-
-        const tUrl =
-          data?.trackingUrl ??
-          (data?.metadata && typeof data.metadata === 'object' ? data.metadata.trackingUrl : null);
-        if (tUrl) setTrackingUrl(String(tUrl));
-
-        let finalEta = normalizeEtaMinutes(data?.etaMinutes);
-        const dest =
-          getDestFromTaskLike(data) || destFallback || getDestFromTaskLike(currentTaskRef.current || {});
-
-        if (finalEta === null && dest) {
-          const localEta = await fetchLocalOsrmEtaMinutes(dest.lat, dest.lng);
-          finalEta = normalizeEtaMinutes(localEta);
-        }
-
-        if (finalEta !== null) {
-          await persistEta(cloudTasks, finalEta);
-          setMapEtaMinutes(finalEta);
-          setCurrentTask((prev: any) => (prev ? { ...prev, etaMinutes: finalEta } : prev));
-        }
-      } catch {
-        const dest = getDestFromTaskLike(currentTaskRef.current || {});
-        if (dest) {
-          const localEta = await fetchLocalOsrmEtaMinutes(dest.lat, dest.lng);
-          const n = normalizeEtaMinutes(localEta);
-          if (n !== null) setMapEtaMinutes(n);
-        }
-      }
-    };
-
-    fetchEta();
-    const interval = setInterval(fetchEta, 15000);
-    return () => clearInterval(interval);
-  }, [resolvedTaskId, isReadOnly]);
+  }, [responses, resolvedTaskId, isReadOnly]);
 
 
   useEffect(() => {
@@ -4145,6 +4432,8 @@ export default function ChecklistEngine() {
 
   const loadTemplate = async () => {
     try {
+      const taskIdNorm = String(resolvedTaskId || '').trim();
+      const hasTaskId = taskIdNorm.length > 0;
       setShowGlobalGeofenceMap(false);
       setGlobalGeofenceMapTask(null);
       pendingGlobalGeofenceAfterRouteRef.current = false;
@@ -4155,7 +4444,9 @@ export default function ChecklistEngine() {
       if (!Array.isArray(execs)) execs = [];
 
       /** Cache da execução (GET) — inclui `status`; não depender só da lista de concluídas (pode expirar aos 30 dias). */
-      const execStrEarly = taskId ? await AsyncStorage.getItem(`@brspark_execution_${taskId}`) : null;
+      const execStrEarly = hasTaskId
+        ? await AsyncStorage.getItem(`@brspark_execution_${taskIdNorm}`)
+        : null;
       let snapshotIsTerminal = false;
       if (execStrEarly) {
         try {
@@ -4167,18 +4458,18 @@ export default function ChecklistEngine() {
       }
 
       const inExecutedList = Boolean(
-        taskId && execs.some((e) => (typeof e === 'string' ? e : e.id) === String(taskId)),
+        hasTaskId && execs.some((e) => (typeof e === 'string' ? e : e.id) === taskIdNorm),
       );
       let cloudTaskTerminal = false;
-      if (taskId) {
+      if (hasTaskId) {
         try {
-          const ct = await findCloudTaskById(String(taskId));
+          const ct = await findCloudTaskById(taskIdNorm);
           if (ct && executionIsViewOnly(ct)) cloudTaskTerminal = true;
         } catch {
           /* ignore */
         }
       }
-      const isCompleted = Boolean(taskId && (inExecutedList || snapshotIsTerminal || cloudTaskTerminal));
+      const isCompleted = Boolean(hasTaskId && (inExecutedList || snapshotIsTerminal || cloudTaskTerminal));
       /** Só leitura: lista de concluídas, snapshot local COMPLETED/SYNCED, ou estado terminal na API (sem revisão). */
       let readOnlyMode = Boolean(isCompleted);
       let lastSubmittedRevForNext = 0;
@@ -4194,6 +4485,7 @@ export default function ChecklistEngine() {
       let realTemplateId = resolvedRouteTemplateId;
       let initialRes: any = {};
       let serverPausedFlag = false;
+      let shouldSanitizeFreshProgressMeta = false;
       let remotePausedMeta: { lastPauseAt?: string; lastPauseReasonSummary?: string } = {};
       let cloudPausedMeta: { lastPauseAt?: string; lastPauseReasonSummary?: string } = {};
       /** Só preenchidos no ramo editável; usados após o template para reset de cronômetros em revisão. */
@@ -4205,6 +4497,8 @@ export default function ChecklistEngine() {
       // Ao baixar a execução, extraímos o verdadeiro templateId dela!
       if (isCompleted) {
         const execStr = execStrEarly;
+        /** Respostas lidas de `@brspark_execution_*` antes de qualquer GET — evita apagar deslocamento ao fundir com snapshot do servidor atrasado. */
+        let cachedResponsesBeforeFetch: Record<string, unknown> = {};
         let cacheStale = !execStr;
         if (execStr) {
           try {
@@ -4246,7 +4540,7 @@ export default function ChecklistEngine() {
           outbox = [];
         }
         if (!Array.isArray(outbox)) outbox = [];
-        const outboxMatch = outbox.find((o: any) => String(o.taskId) === String(taskId));
+        const outboxMatch = outbox.find((o: any) => String(o.taskId) === taskIdNorm);
 
         if (outboxMatch) {
           initialRes = outboxMatch.responses || {};
@@ -4254,12 +4548,21 @@ export default function ChecklistEngine() {
         } else {
           if (execStr) {
             applyLocalExecutionCache(execStr);
+            try {
+              const co = JSON.parse(execStr);
+              const wr = co?.responses;
+              if (wr && typeof wr === 'object' && !Array.isArray(wr)) {
+                cachedResponsesBeforeFetch = wr as Record<string, unknown>;
+              }
+            } catch {
+              /* ignore */
+            }
           }
 
           let blockedWithoutCache = false;
           if (cacheStale) {
             try {
-              const res = await apiFetch(`/api/checklists/executions/${taskId}`);
+              const res = await apiFetch(`/api/checklists/executions/${taskIdNorm}`);
               if (res.ok) {
                 const remoteExec = await res.json();
                 const serverOnlyRes =
@@ -4269,43 +4572,59 @@ export default function ChecklistEngine() {
                     ? remoteExec.responses
                     : {};
                 if (remoteExec.templateId) realTemplateId = String(remoteExec.templateId);
+                const remoteStatus = String(remoteExec?.status || '').toUpperCase();
+                const remoteLastRev = Number(remoteExec?.lastSubmittedRevision) || 0;
+                const hasServerAnswers = Object.keys(serverOnlyRes).some((k) => !k.startsWith('__'));
+                if (
+                  (remoteStatus === 'PENDING' || remoteStatus === 'RECEIVED' || remoteStatus === 'ACCEPTED') &&
+                  remoteLastRev === 0 &&
+                  !hasServerAnswers
+                ) {
+                  shouldSanitizeFreshProgressMeta = true;
+                }
                 lastSubmittedRevForNext = Math.max(
                   lastSubmittedRevForNext,
                   Number(remoteExec.lastSubmittedRevision) || 0
                 );
-                initialRes = serverOnlyRes;
+                initialRes = mergeResponsesDraftOverServerPreserveTransitDisplacement(
+                  serverOnlyRes as Record<string, unknown>,
+                  cachedResponsesBeforeFetch
+                );
                 if (!executionIsViewOnly(remoteExec)) {
-                  readOnlyMode = false;
-                  const rm = remoteExec.metadata;
-                  if (rm && typeof rm === 'object') {
-                    if (metaRevisionVisitContext(rm)) reopenRevisionPending = true;
-                    if (rm.lastPauseAt) remotePausedMeta.lastPauseAt = String(rm.lastPauseAt);
-                    if (rm.lastPauseReasonSummary)
-                      remotePausedMeta.lastPauseReasonSummary = String(rm.lastPauseReasonSummary);
+                  const allowEdit = remoteExecAllowsEditAfterLocalCompletion(remoteExec);
+                  readOnlyMode = !allowEdit;
+                  if (allowEdit) {
+                    const rm = remoteExec.metadata;
+                    if (rm && typeof rm === 'object') {
+                      if (metaRevisionVisitContext(rm)) reopenRevisionPending = true;
+                      if (rm.lastPauseAt) remotePausedMeta.lastPauseAt = String(rm.lastPauseAt);
+                      if (rm.lastPauseReasonSummary)
+                        remotePausedMeta.lastPauseReasonSummary = String(rm.lastPauseReasonSummary);
+                    }
+                    if (remoteExec.status === 'PAUSED') serverPausedFlag = true;
+                    const draftKeyRv = `@draft_tsk_${taskIdNorm}`;
+                    const dstrRv = await AsyncStorage.getItem(draftKeyRv);
+                    let dmergeRv: Record<string, unknown> = {};
+                    try {
+                      dmergeRv = dstrRv ? JSON.parse(dstrRv) : {};
+                      if (!dmergeRv || typeof dmergeRv !== 'object' || Array.isArray(dmergeRv)) dmergeRv = {};
+                    } catch {
+                      dmergeRv = {};
+                    }
+                    initialRes = mergeResponsesDraftOverServerPreserveTransitDisplacement(
+                      initialRes as Record<string, unknown>,
+                      dmergeRv as Record<string, unknown>
+                    );
                   }
-                  if (remoteExec.status === 'PAUSED') serverPausedFlag = true;
-                  const draftKeyRv = `@draft_tsk_${taskId}`;
-                  const dstrRv = await AsyncStorage.getItem(draftKeyRv);
-                  let dmergeRv: Record<string, unknown> = {};
-                  try {
-                    dmergeRv = dstrRv ? JSON.parse(dstrRv) : {};
-                    if (!dmergeRv || typeof dmergeRv !== 'object' || Array.isArray(dmergeRv)) dmergeRv = {};
-                  } catch {
-                    dmergeRv = {};
-                  }
-                  initialRes = mergeResponsesDraftOverServerPreserveTransitDisplacement(
-                    serverOnlyRes as Record<string, unknown>,
-                    dmergeRv as Record<string, unknown>
-                  );
                 }
                 const ts = Date.now();
                 const cachePayload = {
                   ...remoteExec,
-                  responses: serverOnlyRes,
+                  responses: initialRes,
                   _cacheTime: ts,
                   _technicianViewDownloadAt: ts,
                 };
-                await AsyncStorage.setItem(`@brspark_execution_${taskId}`, JSON.stringify(cachePayload));
+                await AsyncStorage.setItem(`@brspark_execution_${taskIdNorm}`, JSON.stringify(cachePayload));
               } else if (res.status === 404) {
                 if (!execStr) {
                   initialRes = {};
@@ -4331,9 +4650,9 @@ export default function ChecklistEngine() {
         }
 
         // Lista/cache local ainda marcam a OS como "concluída", mas o painel pode tê-la reaberto (revisão → PENDING).
-        if (taskId && !outboxMatch && readOnlyMode) {
+        if (hasTaskId && !outboxMatch && readOnlyMode) {
           try {
-            const resRv = await apiFetch(`/api/checklists/executions/${taskId}`);
+            const resRv = await apiFetch(`/api/checklists/executions/${taskIdNorm}`);
             if (resRv.ok) {
               const remoteExec = await resRv.json();
               const serverOnlyRes =
@@ -4343,42 +4662,57 @@ export default function ChecklistEngine() {
                   ? remoteExec.responses
                   : {};
               if (remoteExec.templateId) realTemplateId = String(remoteExec.templateId);
+              const remoteStatusRv = String(remoteExec?.status || '').toUpperCase();
+              const remoteLastRevRv = Number(remoteExec?.lastSubmittedRevision) || 0;
+              const hasServerAnswersRv = Object.keys(serverOnlyRes).some((k) => !k.startsWith('__'));
+              if (
+                (remoteStatusRv === 'PENDING' || remoteStatusRv === 'RECEIVED' || remoteStatusRv === 'ACCEPTED') &&
+                remoteLastRevRv === 0 &&
+                !hasServerAnswersRv
+              ) {
+                shouldSanitizeFreshProgressMeta = true;
+              }
               lastSubmittedRevForNext = Math.max(
                 lastSubmittedRevForNext,
                 Number(remoteExec.lastSubmittedRevision) || 0
               );
+              initialRes = mergeResponsesDraftOverServerPreserveTransitDisplacement(
+                serverOnlyRes as Record<string, unknown>,
+                cachedResponsesBeforeFetch
+              );
               if (!executionIsViewOnly(remoteExec)) {
-                readOnlyMode = false;
-                const rm = remoteExec.metadata;
-                if (rm && typeof rm === 'object') {
-                  if (metaRevisionVisitContext(rm)) reopenRevisionPending = true;
-                  if (rm.lastPauseAt) remotePausedMeta.lastPauseAt = String(rm.lastPauseAt);
-                  if (rm.lastPauseReasonSummary)
-                    remotePausedMeta.lastPauseReasonSummary = String(rm.lastPauseReasonSummary);
+                const allowEdit = remoteExecAllowsEditAfterLocalCompletion(remoteExec);
+                readOnlyMode = !allowEdit;
+                if (allowEdit) {
+                  const rm = remoteExec.metadata;
+                  if (rm && typeof rm === 'object') {
+                    if (metaRevisionVisitContext(rm)) reopenRevisionPending = true;
+                    if (rm.lastPauseAt) remotePausedMeta.lastPauseAt = String(rm.lastPauseAt);
+                    if (rm.lastPauseReasonSummary)
+                      remotePausedMeta.lastPauseReasonSummary = String(rm.lastPauseReasonSummary);
+                  }
+                  if (remoteExec.status === 'PAUSED') serverPausedFlag = true;
+                  const draftKeyRv = `@draft_tsk_${taskIdNorm}`;
+                  const dstrRv = await AsyncStorage.getItem(draftKeyRv);
+                  let dmergeRv: Record<string, unknown> = {};
+                  try {
+                    dmergeRv = dstrRv ? JSON.parse(dstrRv) : {};
+                    if (!dmergeRv || typeof dmergeRv !== 'object' || Array.isArray(dmergeRv)) dmergeRv = {};
+                  } catch {
+                    dmergeRv = {};
+                  }
+                  initialRes = mergeResponsesDraftOverServerPreserveTransitDisplacement(
+                    initialRes as Record<string, unknown>,
+                    dmergeRv as Record<string, unknown>
+                  );
                 }
-                if (remoteExec.status === 'PAUSED') serverPausedFlag = true;
-                const draftKeyRv = `@draft_tsk_${taskId}`;
-                const dstrRv = await AsyncStorage.getItem(draftKeyRv);
-                let dmergeRv: Record<string, unknown> = {};
-                try {
-                  dmergeRv = dstrRv ? JSON.parse(dstrRv) : {};
-                  if (!dmergeRv || typeof dmergeRv !== 'object' || Array.isArray(dmergeRv)) dmergeRv = {};
-                } catch {
-                  dmergeRv = {};
-                }
-                initialRes = mergeResponsesDraftOverServerPreserveTransitDisplacement(
-                  serverOnlyRes as Record<string, unknown>,
-                  dmergeRv as Record<string, unknown>
-                );
-              } else {
-                initialRes = serverOnlyRes;
               }
               const tsRv = Date.now();
               await AsyncStorage.setItem(
-                `@brspark_execution_${taskId}`,
+                `@brspark_execution_${taskIdNorm}`,
                 JSON.stringify({
                   ...remoteExec,
-                  responses: serverOnlyRes,
+                  responses: initialRes,
                   _cacheTime: tsRv,
                   _technicianViewDownloadAt: tsRv,
                 })
@@ -4392,7 +4726,7 @@ export default function ChecklistEngine() {
          serverR = {};
          reopenRevisionPending = false;
 
-         const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+         const draftKey = hasTaskId ? `@draft_tsk_${taskIdNorm}` : `@draft_chk_${id}`;
          const draftStr = await AsyncStorage.getItem(draftKey);
          draftRes = {};
          try {
@@ -4404,12 +4738,12 @@ export default function ChecklistEngine() {
 
          // OS em nuvem: servidor tem estado IN_PROGRESS + respostas (debounce PATCH); outro celular
          // não tinha @draft_tsk_* — precisamos puxar GET para continuar a mesma atividade.
-         if (taskId) {
+         if (hasTaskId) {
            let ctEarly: any = null;
            try {
              try {
                const allEarly = await loadAllCloudTasksForExecutionLookup();
-               ctEarly = allEarly.find((t: any) => String(t.id) === String(taskId));
+               ctEarly = allEarly.find((t: any) => String(t.id) === taskIdNorm);
              } catch {
                ctEarly = undefined;
              }
@@ -4429,7 +4763,7 @@ export default function ChecklistEngine() {
            } catch {}
 
            try {
-             const res = await apiFetch(`/api/checklists/executions/${taskId}`);
+             const res = await apiFetch(`/api/checklists/executions/${taskIdNorm}`);
              if (res.ok) {
                const remoteExec = await res.json();
                if (executionIsViewOnly(remoteExec)) {
@@ -4441,6 +4775,16 @@ export default function ChecklistEngine() {
                      : {};
                  initialRes = { ...serverR };
                } else {
+                 const remoteStatusEdit = String(remoteExec?.status || '').toUpperCase();
+                 const remoteLastRevEdit = Number(remoteExec?.lastSubmittedRevision) || 0;
+                 const hasServerAnswersEdit = Object.keys(serverR).some((k) => !k.startsWith('__'));
+                 if (
+                   (remoteStatusEdit === 'PENDING' || remoteStatusEdit === 'RECEIVED' || remoteStatusEdit === 'ACCEPTED') &&
+                   remoteLastRevEdit === 0 &&
+                   !hasServerAnswersEdit
+                 ) {
+                   shouldSanitizeFreshProgressMeta = true;
+                 }
                  if (remoteExec.status === 'PAUSED') serverPausedFlag = true;
                  const rm = remoteExec.metadata;
                  if (rm && typeof rm === 'object') {
@@ -4475,7 +4819,7 @@ export default function ChecklistEngine() {
                readOnlyMode = true;
                reopenRevisionPending = false;
                try {
-                 const execStr = await AsyncStorage.getItem(`@brspark_execution_${taskId}`);
+                 const execStr = await AsyncStorage.getItem(`@brspark_execution_${taskIdNorm}`);
                  if (execStr) {
                    const c = JSON.parse(execStr);
                    if (c.responses && typeof c.responses === 'object' && !Array.isArray(c.responses)) {
@@ -4488,9 +4832,9 @@ export default function ChecklistEngine() {
                }
            }
 
-           if (lastSubmittedRevForNext === 0 && taskId) {
+           if (lastSubmittedRevForNext === 0 && hasTaskId) {
              try {
-               const execStr = await AsyncStorage.getItem(`@brspark_execution_${taskId}`);
+               const execStr = await AsyncStorage.getItem(`@brspark_execution_${taskIdNorm}`);
                if (execStr) {
                  const c = JSON.parse(execStr);
                  lastSubmittedRevForNext = Math.max(
@@ -4537,6 +4881,10 @@ export default function ChecklistEngine() {
       
       setTemplate(tmpl);
 
+      if (!readOnlyMode && shouldSanitizeFreshProgressMeta) {
+        stripFreshTaskProgressMeta(initialRes, tmpl.schemaData);
+      }
+
       // Rascunho local guardava o texto aplicado por «Definir valor» na Leitura — reaparecia ao abrir antes do gatilho.
       if (!readOnlyMode && Array.isArray(tmpl.schemaData)) {
         const { out: resSemLeitura, changed: leituraDraftSanitized } = stripLeituraKeysFromResponsesCopy(
@@ -4545,7 +4893,7 @@ export default function ChecklistEngine() {
         );
         if (leituraDraftSanitized) {
           initialRes = resSemLeitura;
-          const draftKeySan = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+          const draftKeySan = hasTaskId ? `@draft_tsk_${taskIdNorm}` : `@draft_chk_${id}`;
           try {
             await AsyncStorage.setItem(draftKeySan, JSON.stringify(initialRes));
           } catch {
@@ -4556,8 +4904,8 @@ export default function ChecklistEngine() {
 
       // Revisão (metadata): produtividade/timers limpos; assinaturas e deslocamento início/fim anulados; resto do formulário herda a última entrega.
       // NÃO usar "rascunho vazio + rev≥1 + marcadores no servidor" para apagar campos fora do strip de revisão.
-      if (taskId && !readOnlyMode && reopenRevisionPending) {
-        const resetToken = buildRevisionTimerResetToken(taskId, lastSubmittedRevForNext);
+      if (hasTaskId && !readOnlyMode && reopenRevisionPending) {
+        const resetToken = buildRevisionTimerResetToken(taskIdNorm, lastSubmittedRevForNext);
         const alreadyResetForThisCycle =
           String(initialRes?.[REVISION_TIMER_RESET_TOKEN_KEY] || '').trim() === resetToken;
         if (!alreadyResetForThisCycle) {
@@ -4566,7 +4914,7 @@ export default function ChecklistEngine() {
           initialRes[REVISION_TIMER_RESET_TOKEN_KEY] = resetToken;
           void routeTracker.stop().catch(() => {});
           try {
-            await AsyncStorage.setItem(`@draft_tsk_${taskId}`, JSON.stringify(initialRes));
+            await AsyncStorage.setItem(`@draft_tsk_${taskIdNorm}`, JSON.stringify(initialRes));
           } catch {}
         }
       }
@@ -4617,7 +4965,7 @@ export default function ChecklistEngine() {
         }
       }
 
-      if (taskId && !readOnlyMode) {
+      if (hasTaskId && !readOnlyMode) {
         let nextRev = lastSubmittedRevForNext + 1;
         try {
           const outboxStr = await AsyncStorage.getItem('@brspark_outbox') || '[]';
@@ -4628,18 +4976,18 @@ export default function ChecklistEngine() {
             outbox = [];
           }
           if (!Array.isArray(outbox)) outbox = [];
-          const match = outbox.find((o: any) => o.taskId === taskId);
+          const match = outbox.find((o: any) => String(o.taskId) === taskIdNorm);
           const obRev = match?.metadata?.submissionRevision;
           if (Number.isFinite(Number(obRev)) && Number(obRev) > 0) {
             nextRev = Number(obRev);
           }
         } catch {}
         nextSubmissionRevisionRef.current = nextRev;
-      } else if (!taskId) {
+      } else if (!hasTaskId) {
         nextSubmissionRevisionRef.current = 1;
       }
 
-      if (taskId && !readOnlyMode && serverPausedFlag && !initialRes.__form_paused_since) {
+      if (hasTaskId && !readOnlyMode && serverPausedFlag && !initialRes.__form_paused_since) {
         const pauseAt =
           remotePausedMeta.lastPauseAt || cloudPausedMeta.lastPauseAt || new Date().toISOString();
         const summary =
@@ -4667,7 +5015,7 @@ export default function ChecklistEngine() {
 
       setIsReadOnly(readOnlyMode);
       setResponses(initialRes);
-      setServerPausedExecution(!readOnlyMode && !!taskId && serverPausedFlag);
+      setServerPausedExecution(!readOnlyMode && hasTaskId && serverPausedFlag);
       if (initialRes.__form_started_at) {
         setStartTime(new Date(initialRes.__form_started_at).getTime());
       } else {
@@ -4676,13 +5024,13 @@ export default function ChecklistEngine() {
 
       // ── Opção B: mapa rota/trecho + cerca global do template (raio em settings) ──────
       const wantGlobalFence =
-        !!tmpl?.settings?.requireGlobalGeofence && !!taskId && !readOnlyMode && !isRoutineTaskFlow;
+        !!tmpl?.settings?.requireGlobalGeofence && hasTaskId && !readOnlyMode && !isRoutineTaskFlow;
       const globalRad = clampGlobalGeofenceRadiusMeters(tmpl?.settings?.globalGeofenceRadius);
       globalGeofenceRadiusForNextGateRef.current = globalRad;
 
-      if (taskId && !readOnlyMode) {
+      if (hasTaskId && !readOnlyMode) {
         try {
-          let thisTask = await findCloudTaskById(String(taskId));
+          let thisTask = await findCloudTaskById(taskIdNorm);
           if (!thisTask && isRoutineTaskFlow && resolvedTaskId) {
             const rtNum = resolvedRtNumber?.trim() || '';
             thisTask = {
@@ -4699,12 +5047,12 @@ export default function ChecklistEngine() {
               locationAddress: null,
             };
           }
-          console.log('[GeoMap] taskId=', taskId, '| task found=', !!thisTask, '| locationZoneType=', thisTask?.locationZoneType);
+          console.log('[GeoMap] taskId=', taskIdNorm, '| task found=', !!thisTask, '| locationZoneType=', thisTask?.locationZoneType);
           if (thisTask) {
             setCurrentTask(thisTask);
             const geoField = tmpl.schemaData?.find((f: any) => f.type === 'geofence_check');
-            const fm = geoField?.geofenceFailMode || 'warn';
-            setGeofenceFailMode(fm as 'block' | 'warn');
+            const fm = normalizeGeofenceFailMode(geoField?.geofenceFailMode);
+            setGeofenceFailMode(fm === 'block' ? 'block' : 'warn');
 
             if (wantGlobalFence && !taskHasServiceLocationForGlobalGate(thisTask)) {
               Alert.alert(
@@ -4751,7 +5099,7 @@ export default function ChecklistEngine() {
           console.error('[GeoMap] erro:', e);
         }
       } else {
-        console.log('[GeoMap] sem taskId ou readOnly — taskId=', taskId, 'readOnlyMode=', readOnlyMode);
+        console.log('[GeoMap] sem taskId ou readOnly — taskId=', taskIdNorm, 'readOnlyMode=', readOnlyMode);
       }
 
       // Dashboard: aba "Em andamento" usa @brspark_inprogress_tasks. Só gravávamos no 1.º handleInput
@@ -5027,7 +5375,7 @@ export default function ChecklistEngine() {
   }, [promptPauseExit, applyPauseExitAndThen, router]);
 
   useEffect(() => {
-    if (!taskId || isReadOnly) return undefined;
+    if (!resolvedTaskId || isReadOnly) return undefined;
     const sub = navigation.addListener('beforeRemove', (e: { preventDefault: () => void; data?: { action: unknown } }) => {
       if (Date.now() < pauseExitBypassBeforeRemoveUntilRef.current) {
         return;
@@ -5048,7 +5396,7 @@ export default function ChecklistEngine() {
     return sub;
   }, [
     navigation,
-    taskId,
+    resolvedTaskId,
     isReadOnly,
     responses.__form_paused_since,
     applyPauseExitAndThen,
@@ -5100,6 +5448,17 @@ export default function ChecklistEngine() {
             : responses[endF.id]
           : undefined;
         if (isTransitEvidenceNonempty(endVal)) return;
+        if (
+          !clearing &&
+          shouldBlockTransitStartAfterOperationalDisplacementFinished(
+            template?.schemaData,
+            fieldDef,
+            responses as Record<string, unknown>,
+            scope ?? null
+          )
+        ) {
+          return;
+        }
       }
     }
 
@@ -5108,7 +5467,7 @@ export default function ChecklistEngine() {
       stored = [];
     }
 
-    const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+    const draftKey = resolvedTaskId ? `@draft_tsk_${resolvedTaskId}` : `@draft_chk_${id}`;
 
     setResponses((prev: any) => {
       if (Object.keys(prev).length === 0) {
@@ -5309,10 +5668,15 @@ export default function ChecklistEngine() {
         const form = new FormData();
         form.append(
           'engine',
-          field.type === 'vision_ai_analysis' ? 'google_ai_studio' : 'yolo',
+          field.type === 'vision_ai_analysis'
+            ? 'google_ai_studio'
+            : user?.tenant?.visionDetectionEngine === 'moondream'
+              ? 'moondream'
+              : 'yolo',
         );
         if (
-          effectiveSchemaFieldType(field) === 'vision_ai_analysis' &&
+          (effectiveSchemaFieldType(field) === 'vision_ai_analysis' ||
+            effectiveSchemaFieldType(field) === 'vision_checklist') &&
           field.visionRating0To10Enabled === true
         ) {
           form.append('visionRating0To10', '1');
@@ -5337,7 +5701,7 @@ export default function ChecklistEngine() {
         } catch {
           throw new Error(
             res.status >= 500
-              ? 'O servidor devolveu uma resposta inválida (não é JSON). O serviço de visão pode estar em erro — tente mais tarde ou contacte o suporte.'
+              ? 'O servidor devolveu uma resposta inválida (não é JSON). O serviço de visão pode estar em erro, tente mais tarde ou contacte o suporte.'
               : text.slice(0, 280),
           );
         }
@@ -5358,7 +5722,7 @@ export default function ChecklistEngine() {
           throw new Error(
             field.type === 'vision_ai_analysis'
               ? 'A resposta do servidor não contém a lista de respostas esperada. Verifique a integração «Google AI Studio» e o modelo configurado.'
-              : 'A resposta do servidor não contém a lista de respostas esperada. Verifique o serviço de visão (integração «Visão IA - YOLO»).',
+              : 'A resposta do servidor não contém a lista de respostas esperada. Verifique o serviço de visão (integrações «Visão IA - YOLO» ou «Visão IA - Moondream» no painel).',
           );
         }
         const hi = handleInputRef.current;
@@ -5411,7 +5775,7 @@ export default function ChecklistEngine() {
           persistPendingVision();
           msg =
             e?.name === 'AbortError'
-              ? 'Tempo esgotado ao enviar. A mídia foi guardada — a análise será tentada de novo automaticamente com rede.'
+              ? 'Tempo esgotado ao enviar. A mídia foi guardada, a análise será tentada de novo automaticamente com rede.'
               : 'Sem ligação ou servidor inacessível. A mídia foi guardada para análise automática quando a rede voltar.';
         } else {
           msg = e?.message || 'Não foi possível analisar a mídia.';
@@ -5504,7 +5868,8 @@ export default function ChecklistEngine() {
       return;
     }
     const gridLayout = getVisionAnalysisGridLayout(field);
-    if (effectiveSchemaFieldType(field) === 'vision_ai_analysis' && gridLayout.count > 1) {
+    const vft = effectiveSchemaFieldType(field);
+    if ((vft === 'vision_ai_analysis' || vft === 'vision_checklist') && gridLayout.count > 1) {
       return;
     }
     void (async () => {
@@ -6058,7 +6423,7 @@ export default function ChecklistEngine() {
         if (netState.isConnected === false) {
           Alert.alert(
             'Visão IA pendente',
-            `O campo «${pendingVisionLabel}» exige análise no servidor antes de concluir. Está sem rede ou a análise ainda não terminou — conecte-se à internet e use «Tentar análise agora» no campo, ou aguarde o envio automático.`,
+            `O campo «${pendingVisionLabel}» exige análise no servidor antes de concluir. Está sem rede ou a análise ainda não terminou, conecte-se à internet e use «Tentar análise agora» no campo, ou aguarde o envio automático.`,
           );
         } else {
           Alert.alert(
@@ -6558,7 +6923,7 @@ export default function ChecklistEngine() {
      const rules = getAllRules();
      if (rules.length === 0) return;
 
-     const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+     const draftKey = resolvedTaskId ? `@draft_tsk_${resolvedTaskId}` : `@draft_chk_${id}`;
 
      setResponses((prev: any) => {
         if (Object.keys(prev).length === 0) return prev;
@@ -6644,7 +7009,7 @@ export default function ChecklistEngine() {
   /** Cerca com modo «bloquear»: exige validação com sucesso antes de avançar, mesmo se o campo não estiver marcado como obrigatório. */
   const geofenceCheckEnforcesProgressGate = (field: any) =>
     effectiveSchemaFieldType(field) === 'geofence_check' &&
-    String(field?.geofenceFailMode || 'block').toLowerCase() !== 'warn';
+    normalizeGeofenceFailMode(field?.geofenceFailMode) === 'block';
 
   const fieldMustAnswerForProgress = (field: any) =>
     isFieldRequired(field) || geofenceCheckEnforcesProgressGate(field);
@@ -6842,7 +7207,7 @@ export default function ChecklistEngine() {
     setCurrentPage(0);
     setWizardIndex(0);
     setHybridInnerWizardIndex(0);
-  }, [id, taskId, template?.id]);
+  }, [id, resolvedTaskId, template?.id]);
 
   useEffect(() => {
     if (!useSectionHub) {
@@ -6850,7 +7215,7 @@ export default function ChecklistEngine() {
       return;
     }
     setHubPicking(hubStageMenuHasSteps);
-  }, [useSectionHub, hubStageMenuHasSteps, id, taskId, template?.id]);
+  }, [useSectionHub, hubStageMenuHasSteps, id, resolvedTaskId, template?.id]);
 
   useEffect(() => {
     if (effectiveFillMode !== 'wizard') return;
@@ -7064,8 +7429,8 @@ export default function ChecklistEngine() {
   };
 
   /**
-   * Etapa «concluída» no menu do hub (verde): validação OK e, se não há exigências duras
-   * (só opcionais / mínimo 0), só fica verde após haver preenchimento ou cronómetro de secção.
+   * Legado / só leitura: «concluída» por validação de campos (execuções antigas sem `__section_end_*`).
+   * Em edição, o menu do hub usa só marcadores de tempo — ver `sectionTimingFlagsForPage`.
    */
   const hubSectionSatisfied = (pageIdx: number) => {
     if (isRevisionVisitUi) {
@@ -7082,10 +7447,12 @@ export default function ChecklistEngine() {
     return true;
   };
 
+  /** Ordem sequencial: só desbloqueia após «Concluir etapa» na anterior (`__section_end_*`). */
   const hubSectionUnlocked = (pageIdx: number) => {
+    if (isReadOnly) return true;
     if (appHubSectionOrder !== 'sequential') return true;
     for (let j = 0; j < pageIdx; j++) {
-      if (!hubSectionValidationComplete(j)) return false;
+      if (!sectionTimingFlagsForPage(j).ended) return false;
     }
     return true;
   };
@@ -7252,7 +7619,7 @@ export default function ChecklistEngine() {
 
   // Focus Section Tracking + cronômetro exclusivo por etapa (sem contagem simultânea)
   useEffect(() => {
-    const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+    const draftKey = resolvedTaskId ? `@draft_tsk_${resolvedTaskId}` : `@draft_chk_${id}`;
     const nowIso = new Date().toISOString();
     const nowMs = Date.parse(nowIso);
 
@@ -7330,7 +7697,7 @@ export default function ChecklistEngine() {
       void AsyncStorage.setItem(draftKey, JSON.stringify(next));
       return next;
     });
-  }, [effectiveFillMode, useSectionHub, hubPicking, displayPages, currentPage, isReadOnly, taskId, id]);
+  }, [effectiveFillMode, useSectionHub, hubPicking, displayPages, currentPage, isReadOnly, resolvedTaskId, id]);
 
   /** Referência estável — deve rodar em todo render (não pode ficar após return loading/geo). */
   const liveRouteCoordsForMap = useMemo(
@@ -7342,6 +7709,172 @@ export default function ChecklistEngine() {
     () => getActiveTransitLegInfo(template?.schemaData, responses as Record<string, unknown>),
     [template?.schemaData, responses],
   );
+
+  /** Sincronização leve: link de tracking + ETA do servidor quando não há deslocamento operacional ativo (sem disputar o relógio local). */
+  useEffect(() => {
+    if (!resolvedTaskId || isReadOnly) return;
+
+    const persistEta = async (cloudTasks: any[], minutes: number) => {
+      const updatedTasks = cloudTasks.map((t: any) =>
+        String(t.id) === String(resolvedTaskId) ? { ...t, etaMinutes: minutes } : t
+      );
+      await savePartitionedFromUnifiedList(updatedTasks);
+    };
+
+    const run = async () => {
+      try {
+        let cloudTasks: any[] = [];
+        try {
+          cloudTasks = await loadAllCloudTasksForExecutionLookup();
+        } catch {
+          cloudTasks = [];
+        }
+
+        const cachedTask = cloudTasks.find((t: any) => String(t.id) === String(resolvedTaskId));
+        const cachedNorm = normalizeEtaMinutes(cachedTask?.etaMinutes);
+        const inOpTransit = activeTransitLeg && !activeTransitLeg.reimbursement;
+
+        if (cachedNorm !== null && !inOpTransit) {
+          setMapEtaMinutes(cachedNorm);
+          setCurrentTask((prev: any) => {
+            if (!prev || prev.etaMinutes === cachedNorm) return prev;
+            return { ...prev, etaMinutes: cachedNorm };
+          });
+        }
+
+        const res = await apiFetch(`/api/checklists/executions/${resolvedTaskId}`);
+        if (!res.ok) return;
+        const data: any = await res.json();
+
+        const tUrl =
+          data?.trackingUrl ??
+          (data?.metadata && typeof data.metadata === 'object' ? data.metadata.trackingUrl : null);
+        if (tUrl) setTrackingUrl(String(tUrl));
+
+        const finalEta = normalizeEtaMinutes(data?.etaMinutes);
+        if (finalEta !== null && !inOpTransit) {
+          await persistEta(cloudTasks, finalEta);
+          setMapEtaMinutes(finalEta);
+          setCurrentTask((prev: any) => (prev ? { ...prev, etaMinutes: finalEta } : prev));
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    void run();
+    const interval = setInterval(run, 120000);
+    return () => clearInterval(interval);
+  }, [resolvedTaskId, isReadOnly, activeTransitLeg, responses, template?.schemaData]);
+
+  /**
+   * Deslocamento operacional: ETA com Google (máx. 5 chamadas ao proxy por trecho), refresco a cada 7 min;
+   * entre chamadas o valor desce com o relógio.
+   */
+  useEffect(() => {
+    if (!resolvedTaskId || isReadOnly) return;
+
+    const op = activeTransitLeg && !activeTransitLeg.reimbursement;
+
+    if (!op || !activeTransitLeg) {
+      transitEtaLegKeyRef.current = '';
+      transitEtaSnapshotRef.current = null;
+      return;
+    }
+
+    const schema = template?.schemaData || [];
+    const startId = activeTransitLeg.startField.id;
+    const rawStart = findFieldValueInResponses(responses as Record<string, unknown>, startId, schema);
+    let startTs = '';
+    try {
+      const o = typeof rawStart === 'string' ? JSON.parse(rawStart) : rawStart;
+      startTs = String(o?.timestamp || '');
+    } catch {
+      startTs = '';
+    }
+    const legKey = `${startId}:${startTs}`;
+    if (legKey !== transitEtaLegKeyRef.current) {
+      transitEtaLegKeyRef.current = legKey;
+      transitEtaGoogleInvocationsRef.current = 0;
+      transitEtaSnapshotRef.current = null;
+    }
+
+    const task = currentTaskRef.current || {};
+    const tl = getDestFromTaskLike(task);
+    const routeCoords = buildRouteCoordsFromTask(task);
+    const destPt = pickDestinationForOsrm(tl ? { lat: tl.lat, lng: tl.lng } : {}, routeCoords);
+    if (!destPt) return;
+
+    const applySnapshot = (remainingMin: number) => {
+      const rm = Math.max(1, Math.round(remainingMin));
+      transitEtaSnapshotRef.current = { atMs: Date.now(), remainingMin: rm };
+      setMapEtaMinutes(rm);
+    };
+
+    const persistEta = async (minutes: number) => {
+      let cloudTasks: any[] = [];
+      try {
+        cloudTasks = await loadAllCloudTasksForExecutionLookup();
+      } catch {
+        cloudTasks = [];
+      }
+      const updatedTasks = cloudTasks.map((t: any) =>
+        String(t.id) === String(resolvedTaskId) ? { ...t, etaMinutes: minutes } : t
+      );
+      await savePartitionedFromUnifiedList(updatedTasks);
+      setCurrentTask((prev: any) => (prev ? { ...prev, etaMinutes: minutes } : prev));
+    };
+
+    const fetchRouteEtaSnapshot = async () => {
+      if (transitEtaGoogleInvocationsRef.current >= TRANSIT_ETA_GOOGLE_MAX_CALLS_PER_TRIP) {
+        return;
+      }
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const oLat = pos.coords.latitude;
+        const oLng = pos.coords.longitude;
+
+        transitEtaGoogleInvocationsRef.current += 1;
+        let minutes: number | null = null;
+        const google = await fetchGoogleDrivingLegMetricsOrNull(oLat, oLng, destPt.lat, destPt.lng);
+        if (google?.ok && google.durationSeconds != null) {
+          minutes = Math.max(1, Math.round(google.durationSeconds / 60));
+        } else {
+          const osrm = await fetchDrivingLegEtaMinutes(oLat, oLng, destPt.lat, destPt.lng);
+          if (osrm.ok && osrm.minutes != null) minutes = osrm.minutes;
+        }
+
+        if (minutes == null) return;
+        applySnapshot(minutes);
+        await persistEta(minutes);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    void fetchRouteEtaSnapshot();
+
+    const refreshIv = setInterval(() => {
+      void fetchRouteEtaSnapshot();
+    }, TRANSIT_ETA_GOOGLE_REFRESH_MS);
+
+    const tickIv = setInterval(() => {
+      const snap = transitEtaSnapshotRef.current;
+      if (!snap) return;
+      const m = computeTickingEtaMinutes(snap.atMs, snap.remainingMin, Date.now());
+      setMapEtaMinutes(m);
+    }, TRANSIT_ETA_TICK_MS);
+
+    return () => {
+      clearInterval(refreshIv);
+      clearInterval(tickIv);
+    };
+  }, [resolvedTaskId, isReadOnly, activeTransitLeg, responses, template?.schemaData]);
 
   /** Deve rodar antes de qualquer return antecipado (loading / mapa), senão viola as regras dos hooks. */
   const sessionPauseOpenEvent = useMemo(() => {
@@ -7376,7 +7909,7 @@ export default function ChecklistEngine() {
   const closeCurrentSectionAsCompleted = (pageData: any) => {
     if (!pageData || !pageData.id || pageData.id === '__full__' || isReadOnly) return;
     const endKey = `__section_end_${pageData.id}`;
-    const draftKey = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+    const draftKey = resolvedTaskId ? `@draft_tsk_${resolvedTaskId}` : `@draft_chk_${id}`;
     setResponses((prev: any) => {
       let newRes = { ...prev, [endKey]: new Date().toISOString() } as Record<string, any>;
       const openingId = String(pageData?.openingSectionId || '').trim();
@@ -7898,7 +8431,74 @@ export default function ChecklistEngine() {
       </LinearGradient>
       
       {/* Opção A: Status bar em tempo real */}
-      <GeofenceStatusBar task={currentTask} />
+      <GeofenceStatusBar task={globalFenceConsultTask ?? currentTask} />
+
+      {globalFenceConsultTask && !loading && !showGlobalGeofenceMap && !showGeoMap ? (
+        <GlobalGeofenceConsultMap task={globalFenceConsultTask} visible />
+      ) : null}
+
+      <SegmentDestinationPickerModal
+        visible={segmentDestModal != null}
+        pointA={segmentDestModal?.pointA ?? { lat: 0, lng: 0 }}
+        pointB={segmentDestModal?.pointB ?? { lat: 0, lng: 0 }}
+        onCancel={() => setSegmentDestModal(null)}
+        onSelect={async (which) => {
+          const pending = segmentDestModal;
+          setSegmentDestModal(null);
+          if (!pending) return;
+          const tid = String(resolvedTaskId || '').trim();
+          if (tid) {
+            try {
+              await enqueueExecutionStatusPatch(tid, {
+                metadata: { transitSegmentDestination: which },
+              });
+              await updateLocalCloudTaskFields(tid, {
+                metadata: { transitSegmentDestination: which },
+              });
+              setCurrentTask((prev: any) =>
+                prev && prev.id === tid
+                  ? {
+                      ...prev,
+                      metadata: { ...(prev.metadata || {}), transitSegmentDestination: which },
+                    }
+                  : prev
+              );
+              if (currentTaskRef.current?.id === tid) {
+                currentTaskRef.current = {
+                  ...currentTaskRef.current,
+                  metadata: {
+                    ...(currentTaskRef.current.metadata || {}),
+                    transitSegmentDestination: which,
+                  },
+                };
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          await handleTransit(pending.fieldId, 'SAIDA', undefined, pending.scope);
+          const email = await AsyncStorage.getItem('@brspark_email');
+          const schSel = template?.schemaData || [];
+          const reimbSel = isReimbursementTransitField(schSel, pending.fieldId);
+          lastTransitScopeRef.current = pending.scope ?? null;
+          dataCollectionService.setState('IN_TRANSIT', {
+            executionId: String(taskId || ''),
+            ownerEmail: email || 'unknown',
+          }).catch(() => {});
+          if (!reimbSel) {
+            await generateTrackingLink();
+          }
+          if (
+            reimbSel ||
+            isPatrolTransitField(schSel, pending.fieldId) ||
+            currentTask?.locationZoneType === 'route' ||
+            currentTask?.locationZoneType === 'segment' ||
+            currentTask?.locationZoneType === 'polygon'
+          ) {
+            setShowLiveMap(true);
+          }
+        }}
+      />
 
       {/* Opção D: Barra de progresso de rota (visível só para rotas ativas) */}
       <RouteProgressBar />
@@ -7921,6 +8521,7 @@ export default function ChecklistEngine() {
         const activeStartField = activeTransitLeg?.startField;
         const activeEndField = activeTransitLeg?.endField;
         const reimbursementMode = !!activeTransitLeg?.reimbursement;
+        const patrolMode = !!activeTransitLeg?.patrol;
 
         const startVal =
           activeStartField &&
@@ -7990,6 +8591,7 @@ export default function ChecklistEngine() {
                   zoneType={currentTask?.locationZoneType}
                   corridorToleranceM={corridorTol}
                   reimbursementMode={reimbursementMode}
+                  patrolMode={patrolMode}
                   targetLoc={
                     targetForMap
                       ? { lat: targetForMap.lat, lng: targetForMap.lng }
@@ -8133,12 +8735,14 @@ export default function ChecklistEngine() {
               <Text style={{ fontSize: 14, color: C.textLight, lineHeight: 20 }}>
                 {appHubSectionOrder === 'sequential'
                   ? 'Conclua cada etapa por ordem para desbloquear a seguinte.'
-                  : 'Toque na etapa que quiser preencher — em qualquer ordem.'}
+                  : 'Toque na etapa que quiser preencher, em qualquer ordem.'}
               </Text>
             </View>
             {pages.map((pg, idx) => {
               if (!hubPageShowsInStepMenu(pg)) return null;
-              const done = hubSectionSatisfied(idx);
+              const timing = sectionTimingFlagsForPage(idx);
+              /** Azul: nunca abriu · Amarelo: abriu (`__section_start_*`) e ainda não concluiu · Verde: botão concluir (`__section_end_*`). Só leitura: fallback por validação. */
+              const stageCompleted = isReadOnly ? hubSectionSatisfied(idx) : timing.ended;
               const unlocked = hubSectionUnlocked(idx);
               const repeatStats = hubRepeatRowStats(idx);
               const isRepeatSection = repeatStats.enabled;
@@ -8151,14 +8755,15 @@ export default function ChecklistEngine() {
                   return { rowIndex: ri, started, done: doneRow, row };
                 });
               const repeatMenuExpanded = !!hubRepeatCardsExpanded[repeatCardKey];
-              const stageCompleted = done;
-              /** Amarelo: etapa aberta (cronómetro), campos preenchidos ou instâncias repetíveis criadas. */
+              /** Amarelo (edição): entrou na etapa pelo menos uma vez e não clicou em concluir. */
               const stageInProgressActive =
                 !stageCompleted &&
                 unlocked &&
-                (hubSectionHasPartialProgress(idx) ||
-                  hubSectionStarted(idx) ||
-                  (isRepeatSection && repeatStats.rawRows.length > 0));
+                (isReadOnly
+                  ? hubSectionHasPartialProgress(idx) ||
+                    hubSectionStarted(idx) ||
+                    (isRepeatSection && repeatStats.rawRows.length > 0)
+                  : timing.started && !timing.ended);
               const hubCardStatus: 'completed' | 'in_progress' | 'not_started' = stageCompleted
                 ? 'completed'
                 : !unlocked
@@ -9298,7 +9903,7 @@ export default function ChecklistEngine() {
                     const thumbUri =
                       stored?.localUri != null ? String(stored.localUri).split('?')[0] : '';
                     const gridLayout = getVisionAnalysisGridLayout(field);
-                    const multiGeminiGrid = useGeminiAnalysis && gridLayout.count > 1;
+                    const multiVisionGrid = gridLayout.count > 1;
                     const analysisDone =
                       stored?.status === 'completed' && Array.isArray(stored?.answers) && stored.answers.length > 0;
                     const pendingAnalysis = Boolean(
@@ -9321,7 +9926,7 @@ export default function ChecklistEngine() {
                     const showVisionCaptureHero =
                       !thumbUri &&
                       !isReadOnly &&
-                      !(multiGeminiGrid && !analysisDone) &&
+                      !(multiVisionGrid && !analysisDone) &&
                       !pendingAnalysis;
 
                     return (
@@ -9488,7 +10093,7 @@ export default function ChecklistEngine() {
                             </LinearGradient>
                           </TouchableOpacity>
                         ) : null}
-                        {!isReadOnly && multiGeminiGrid && !analysisDone ? (
+                        {!isReadOnly && multiVisionGrid && !analysisDone ? (
                           <View style={{ marginTop: 10 }}>
                             {pendingAnalysis ? (
                               <View
@@ -9674,7 +10279,9 @@ export default function ChecklistEngine() {
                             )}
                             {stored.status === 'completed' && Array.isArray(stored.answers) ? (
                               <View style={{ padding: 12, backgroundColor: '#f8fafc' }}>
-                                {useGeminiAnalysis && !showAiResponseInForm ? (
+                                {(useGeminiAnalysis ||
+                                  effectiveSchemaFieldType(field) === 'vision_checklist') &&
+                                !showAiResponseInForm ? (
                                   <View>
                                     <Text style={{ fontSize: 13, color: '#334155', fontWeight: '800' }}>
                                       Análise concluída.
@@ -9685,9 +10292,9 @@ export default function ChecklistEngine() {
                                   </View>
                                 ) : (
                                   <>
-                                    {useGeminiAnalysis &&
-                                    effectiveSchemaFieldType(field) === 'vision_ai_analysis' &&
-                                    field.visionRating0To10Enabled === true ? (
+                                    {((useGeminiAnalysis ||
+                                      effectiveSchemaFieldType(field) === 'vision_checklist') &&
+                                      field.visionRating0To10Enabled === true) ? (
                                       <View
                                         style={{
                                           marginBottom: 12,
@@ -9751,7 +10358,19 @@ export default function ChecklistEngine() {
                                             >
                                               {String(a.rationale).slice(0, 400)}
                                             </Text>
-                                          ) : null}
+                                          ) : (
+                                            <Text
+                                              style={{
+                                                fontSize: 11,
+                                                color: '#94a3b8',
+                                                marginTop: 4,
+                                                fontStyle: 'italic',
+                                              }}
+                                            >
+                                              Sem texto explicativo da IA. Volte a analisar ou confira no modelo se «Mostrar
+                                              detalhes da resposta da IA» está ativo.
+                                            </Text>
+                                          )}
                                         </View>
                                       );
                                     })}
@@ -9765,7 +10384,7 @@ export default function ChecklistEngine() {
                                     ? 'Análise pendente: a mídia está no dispositivo e será enviada com rede (ou use o botão abaixo).'
                                     : 'Análise ainda não concluída ou incompleta.'}
                                 </Text>
-                                {pendingAnalysis && !isReadOnly && !multiGeminiGrid ? (
+                                {pendingAnalysis && !isReadOnly && !multiVisionGrid ? (
                                   <TouchableOpacity
                                     onPress={() => retryVisionPendingAnalysisField(field, scope)}
                                     disabled={busy}
@@ -10157,7 +10776,7 @@ export default function ChecklistEngine() {
                            ) : (
                              <TextInput
                                style={[styles.input, { minHeight: 44, paddingVertical: 8, textAlignVertical: 'top' }]}
-                               placeholder="Opcional — notas sobre este item…"
+                               placeholder="Opcional, notas sobre este item…"
                                value={getMediaCaptionAtScoped(field, responses, scope, midx)}
                                onChangeText={(t) => {
                                  const ck = mediaCaptionStorageKey(field.id);
@@ -10279,7 +10898,19 @@ export default function ChecklistEngine() {
                    field.type === 'transit_start' &&
                    !hasValue &&
                    activeTransitLeg != null;
+                 const startBlockedAfterDisplacementFinished =
+                   field.type === 'transit_start' &&
+                   !hasValue &&
+                   shouldBlockTransitStartAfterOperationalDisplacementFinished(
+                     template?.schemaData,
+                     field,
+                     responses as Record<string, unknown>,
+                     scope ?? null
+                   );
                  if (startBlockedAnotherLeg) {
+                   isBlocked = true;
+                 }
+                 if (startBlockedAfterDisplacementFinished) {
                    isBlocked = true;
                  }
                  let transitLegFinalizedLock = false;
@@ -10398,15 +11029,69 @@ export default function ChecklistEngine() {
                        if (isBlocked) {
                            Alert.alert(
                              'Atenção',
-                             startBlockedAnotherLeg
-                               ? 'Finalise o deslocamento em curso («Finalizar deslocamento») antes de iniciar outro trecho.'
-                               : "O Técnico deve primeiro 'Iniciar Deslocamento' antes de finalizá-lo."
+                             startBlockedAfterDisplacementFinished
+                               ? 'Este deslocamento já foi concluído. O registo é definitivo e não pode ser reiniciado.'
+                               : startBlockedAnotherLeg
+                                 ? 'Finalise o deslocamento em curso («Finalizar deslocamento») antes de iniciar outro trecho.'
+                                 : "O Técnico deve primeiro 'Iniciar Deslocamento' antes de finalizá-lo."
                            );
                            return;
                        }
                        if (hasValue) {
                            Alert.alert("Aviso", "Esta ação já foi registrada.");
                            return;
+                       }
+                       const sch = template?.schemaData || [];
+                       const reimbField = isReimbursementTransitField(sch, field.id);
+                       const patrolField = isPatrolTransitField(sch, field.id);
+                       if (field.type === 'transit_start' && !reimbField) {
+                         const ct = currentTaskRef.current;
+                         const zt = String(ct?.locationZoneType || '').toLowerCase();
+                         if (zt === 'segment') {
+                           let poly: any = ct?.locationPolygon;
+                           if (typeof poly === 'string') {
+                             try {
+                               poly = JSON.parse(poly);
+                             } catch {
+                               poly = null;
+                             }
+                           }
+                           const meta =
+                             ct?.metadata && typeof ct.metadata === 'object' && !Array.isArray(ct.metadata)
+                               ? ct.metadata
+                               : {};
+                           if (
+                             Array.isArray(poly) &&
+                             poly.length >= 2 &&
+                             !meta.transitSegmentDestination
+                           ) {
+                             const parseSegPt = (p: any): { lat: number; lng: number } | null => {
+                               if (Array.isArray(p) && p.length >= 2) {
+                                 const a = parseFloat(String(p[0]));
+                                 const b = parseFloat(String(p[1]));
+                                 const [la, ln] = normalizePolygonPairToLatLng(a, b);
+                                 if (Number.isFinite(la) && Number.isFinite(ln)) return { lat: la, lng: ln };
+                               }
+                               if (p && typeof p === 'object') {
+                                 const la = parseFloat(String((p as any).lat));
+                                 const ln = parseFloat(String((p as any).lng ?? (p as any).lon));
+                                 if (Number.isFinite(la) && Number.isFinite(ln)) return { lat: la, lng: ln };
+                               }
+                               return null;
+                             };
+                             const pointA = parseSegPt(poly[0]);
+                             const pointB = parseSegPt(poly[1]);
+                             if (pointA && pointB) {
+                               setSegmentDestModal({
+                                 fieldId: field.id,
+                                 scope: scope ?? null,
+                                 pointA,
+                                 pointB,
+                               });
+                               return;
+                             }
+                           }
+                         }
                        }
                        await handleTransit(
                          field.id,
@@ -10415,8 +11100,6 @@ export default function ChecklistEngine() {
                          scope
                        );
                        const email = await AsyncStorage.getItem('@brspark_email');
-                       const sch = template?.schemaData || [];
-                       const reimbField = isReimbursementTransitField(sch, field.id);
                        if (field.type === 'transit_start') {
                          lastTransitScopeRef.current = scope ?? null;
                          dataCollectionService.setState('IN_TRANSIT', {
@@ -10429,6 +11112,7 @@ export default function ChecklistEngine() {
                          // Mapa + routeTracker: o LiveRouteMapCard inicia o tracker ao ficar visível (evita corrida com start([]))
                          if (
                            reimbField ||
+                           patrolField ||
                            currentTask?.locationZoneType === 'route' ||
                            currentTask?.locationZoneType === 'segment' ||
                            currentTask?.locationZoneType === 'polygon'
@@ -10913,7 +11597,7 @@ export default function ChecklistEngine() {
               </Text>
             ) : null;
 
-          const draftKLocal = taskId ? `@draft_tsk_${taskId}` : `@draft_chk_${id}`;
+          const draftKLocal = resolvedTaskId ? `@draft_tsk_${resolvedTaskId}` : `@draft_chk_${id}`;
 
           if (paginatedSectionRepeatEnabled && openingSectionBreakField) {
             const sb = openingSectionBreakField;

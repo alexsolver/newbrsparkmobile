@@ -1,17 +1,17 @@
 /**
- * Integrações — textos do painel (pt-BR / en-US; es-ES via fallback em adminResolve).
+ * Integrações, textos do painel (pt-BR / en-US; es-ES via fallback em adminResolve).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang } from './admin-i18n-resolve.js';
 
 const M = {
   'pt-BR': {
-    integ_pageTitle: 'BrSpark Admin — Integrações',
+    integ_pageTitle: 'BrSpark Admin, Integrações',
     integ_bc_panel: 'Painel',
     integ_bc_here: 'Integrações',
     integ_hero_title: 'Integrações',
     integ_hero_sub:
-      'Chaves de API e serviços externos (IA, e-mail, mapas, FaceMatch, etc.). Campos sensíveis não são mostrados em claro após gravar — use «Testar» ou «Salvar» para validar.',
+      'Chaves de API e serviços externos (IA, e-mail, mapas, FaceMatch, etc.). Campos sensíveis não são mostrados em claro após gravar, use «Testar» ou «Salvar» para validar.',
     integ_active_count: '{n} ativas',
     integ_sec_ai: 'Inteligência Artificial / LLM',
     integ_sec_email: 'E-mail e notificações',
@@ -55,6 +55,9 @@ const M = {
     integ_toast_bio_saved: 'Integração de Biometria salva!',
     integ_toast_vision_yolo_updated: 'Integração «Visão IA - YOLO» atualizada!',
     integ_toast_vision_yolo_saved: 'Integração «Visão IA - YOLO» salva!',
+    integ_alert_moondream_key: 'Informe a API key Moondream.',
+    integ_toast_vision_moondream_updated: 'Integração «Visão IA - Moondream» atualizada!',
+    integ_toast_vision_moondream_saved: 'Integração «Visão IA - Moondream» salva!',
     integ_type_AI_LLM: 'IA / LLM',
     integ_type_EMAIL: 'E-mail',
     integ_type_STORAGE: 'Storage',
@@ -70,12 +73,12 @@ const M = {
     integ_toast_didit_saved: 'Integração Didit salva.',
   },
   'en-US': {
-    integ_pageTitle: 'BrSpark Admin — Integrations',
+    integ_pageTitle: 'BrSpark Admin, Integrations',
     integ_bc_panel: 'Home',
     integ_bc_here: 'Integrations',
     integ_hero_title: 'Integrations',
     integ_hero_sub:
-      'API keys and external services (AI, e-mail, maps, FaceMatch, etc.). Sensitive fields stay masked after saving — use «Test» or «Save» to validate.',
+      'API keys and external services (AI, e-mail, maps, FaceMatch, etc.). Sensitive fields stay masked after saving, use «Test» or «Save» to validate.',
     integ_active_count: '{n} active',
     integ_sec_ai: 'Artificial intelligence / LLM',
     integ_sec_email: 'E-mail and notifications',
@@ -119,6 +122,9 @@ const M = {
     integ_toast_bio_saved: 'Biometrics integration saved!',
     integ_toast_vision_yolo_updated: '«Vision AI - YOLO» integration updated!',
     integ_toast_vision_yolo_saved: '«Vision AI - YOLO» integration saved!',
+    integ_alert_moondream_key: 'Moondream API key is required.',
+    integ_toast_vision_moondream_updated: '«Vision AI - Moondream» integration updated!',
+    integ_toast_vision_moondream_saved: '«Vision AI - Moondream» integration saved!',
     integ_type_AI_LLM: 'AI / LLM',
     integ_type_EMAIL: 'E-mail',
     integ_type_STORAGE: 'Storage',

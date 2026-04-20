@@ -1,17 +1,17 @@
 /**
- * Qualidade & Avaliações (painel admin) — pt-BR e en-US.
+ * Qualidade & Avaliações (painel admin), pt-BR e en-US.
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { mpT } from './menu-pages-i18n.js';
 
 const M = {
   'pt-BR': {
-    ev_pageTitle: 'BrSpark Admin — Qualidade e avaliações',
+    ev_pageTitle: 'BrSpark Admin, Qualidade e avaliações',
     ev_bc_panel: 'Painel',
     ev_bc_page: 'Qualidade e avaliações',
     ev_hero_title: 'Avaliações',
     ev_hero_sub_html:
-      'Acompanhe o que os clientes responderam, resolva revisões e envie o link da pesquisa por e-mail ou notificação no telemóvel. O questionário é criado quando a OS é sincronizada; use <strong>Instâncias</strong> para convidar o cliente quando precisar.',
+      'Acompanhe o que os clientes responderam, resolva revisões e envie o link da pesquisa por e-mail ou notificação no celular. O questionário é criado quando a OS é sincronizada; use <strong>Instâncias</strong> para convidar o cliente quando precisar.',
     ev_ctx_eyebrow_scope: 'Onde estou',
     ev_ctx_eyebrow_kpis: 'Números do período',
     ev_ctx_eyebrow_focus: 'O que fazer aqui',
@@ -69,9 +69,9 @@ const M = {
     ev_dispute_state_lbl: 'Estado',
     ev_dispute_pending: 'Pendentes',
     ev_dispute_all: 'Todas',
-    ev_dispute_res_maintain: 'Resolvidas — manter',
-    ev_dispute_res_adjusted: 'Resolvidas — ajustadas',
-    ev_dispute_res_invalid: 'Resolvidas — invalidadas',
+    ev_dispute_res_maintain: 'Resolvidas, manter',
+    ev_dispute_res_adjusted: 'Resolvidas, ajustadas',
+    ev_dispute_res_invalid: 'Resolvidas, invalidadas',
     ev_disputes_panel_title: 'Revisões / disputas',
     ev_disputes_hint_html:
       'Use <strong>Ver conversa</strong> para listar mensagens do chat técnico–cliente na janela da OS (requer e-mail do cliente na metadata da execução e sala 1:1 existente). O acesso fica registado na auditoria.',
@@ -146,7 +146,7 @@ const M = {
     ev_add_question: '+ Pergunta',
     ev_cancel: 'Cancelar',
     ev_save: 'Salvar',
-    ev_chat_modal_title: 'Chat técnico — cliente (auditoria)',
+    ev_chat_modal_title: 'Chat técnico, cliente (auditoria)',
     ev_chat_close: 'Fechar',
     ev_chat_download_json: 'Baixar JSON',
     ev_dispute_modal_title: 'Resolver disputa',
@@ -155,7 +155,7 @@ const M = {
     ev_ph_resolution_note: 'Comentário interno',
     ev_dispute_confirm: 'Confirmar',
     ev_loading: 'Carregando…',
-    ev_ranking_need_resumo: 'Abra o separador Resumo para carregar dados.',
+    ev_ranking_need_resumo: 'Abra a aba Resumo para carregar dados.',
     ev_no_data_period: 'Sem dados no período.',
     ev_no_records: 'Nenhum registro.',
     ev_no_instances: 'Sem instâncias.',
@@ -180,7 +180,7 @@ const M = {
     ev_q_placeholder: 'Texto da pergunta',
     ev_q_weight_title: 'Peso',
     ev_q_required: 'obrig.',
-    ev_q_cat_placeholder: 'categoryKey (ex.: qualidade, prazo) — usado na média por categoria',
+    ev_q_cat_placeholder: 'categoryKey (ex.: qualidade, prazo), usado na média por categoria',
     ev_collect_default_q: 'Pergunta',
     ev_default_q1: 'Qualidade do serviço',
     ev_default_q2: 'Cumprimento de prazos',
@@ -207,7 +207,7 @@ const M = {
     ev_chat_media: '[arquivo] {url}',
   },
   'en-US': {
-    ev_pageTitle: 'BrSpark Admin — Quality & evaluations',
+    ev_pageTitle: 'BrSpark Admin, Quality & evaluations',
     ev_bc_panel: 'Home',
     ev_bc_page: 'Quality & evaluations',
     ev_hero_title: 'Evaluations',
@@ -270,9 +270,9 @@ const M = {
     ev_dispute_state_lbl: 'Status',
     ev_dispute_pending: 'Pending',
     ev_dispute_all: 'All',
-    ev_dispute_res_maintain: 'Resolved — keep',
-    ev_dispute_res_adjusted: 'Resolved — adjusted',
-    ev_dispute_res_invalid: 'Resolved — invalidated',
+    ev_dispute_res_maintain: 'Resolved, keep',
+    ev_dispute_res_adjusted: 'Resolved, adjusted',
+    ev_dispute_res_invalid: 'Resolved, invalidated',
     ev_disputes_panel_title: 'Reviews / disputes',
     ev_disputes_hint_html:
       'Use <strong>View conversation</strong> to list technician–client chat messages for the WO window (requires client email in execution metadata and an existing 1:1 room). Access is logged in audit.',
@@ -347,7 +347,7 @@ const M = {
     ev_add_question: '+ Question',
     ev_cancel: 'Cancel',
     ev_save: 'Save',
-    ev_chat_modal_title: 'Technician — client chat (audit)',
+    ev_chat_modal_title: 'Technician, client chat (audit)',
     ev_chat_close: 'Close',
     ev_chat_download_json: 'Download JSON',
     ev_dispute_modal_title: 'Resolve dispute',
@@ -381,7 +381,7 @@ const M = {
     ev_q_placeholder: 'Question text',
     ev_q_weight_title: 'Weight',
     ev_q_required: 'req.',
-    ev_q_cat_placeholder: 'categoryKey (e.g. quality, deadline) — used in per-category average',
+    ev_q_cat_placeholder: 'categoryKey (e.g. quality, deadline), used in per-category average',
     ev_collect_default_q: 'Question',
     ev_default_q1: 'Service quality',
     ev_default_q2: 'Deadline adherence',

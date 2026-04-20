@@ -1861,7 +1861,7 @@ export default function TechRegistrationScreen() {
             <Ionicons name="chevron-back" size={22} color={C.accent} />
             <Text style={{ color: C.accent, fontWeight: '700' }}>Voltar</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Passo 1 — Foto de perfil</Text>
+          <Text style={styles.title}>Passo 1, Foto de perfil</Text>
           <Text style={styles.sub}>Etapa obrigatória antes da biometria adicional e do formulário.</Text>
           <View style={styles.progressCard}>
             <Text style={{ fontSize: 12, color: C.textSecondary }}>
@@ -1920,7 +1920,7 @@ export default function TechRegistrationScreen() {
             <Ionicons name="chevron-back" size={22} color={C.accent} />
             <Text style={{ color: C.accent, fontWeight: '700' }}>Voltar</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Passo 2 — Biometria do tenant</Text>
+          <Text style={styles.title}>Passo 2, Biometria do tenant</Text>
           <Text style={styles.sub}>
             Envie pelo menos {MIN_FACE_ENROLLMENT_PHOTOS} fotos do mesmo rosto da foto de perfil (passo 1). Cada imagem é
             validada no servidor em relação à foto de perfil antes de ser guardada.
@@ -2002,7 +2002,7 @@ export default function TechRegistrationScreen() {
             <Ionicons name="chevron-back" size={22} color={C.accent} />
             <Text style={{ color: C.accent, fontWeight: '700' }}>Voltar</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Passo 3 — Documento com foto</Text>
+          <Text style={styles.title}>Passo 3, Documento com foto</Text>
           <Text style={styles.sub}>
             Envie uma imagem de um documento oficial com a sua fotografia. O sistema compara o rosto no documento com a
             foto de perfil do passo 1 e, em seguida, lê os dados para preencher o formulário (OpenAI no servidor).
@@ -2064,7 +2064,7 @@ export default function TechRegistrationScreen() {
               <Text style={styles.infoCalloutText}>
                 <Text style={{ fontWeight: '800', color: C.slate }}>Com convite: </Text>
                 O nome acima é a <Text style={{ fontWeight: '700' }}>empresa ou conta organizadora</Text> que criou o
-                convite no painel. O e-mail fixo abaixo é o que o gestor associou ao convite — tem de ser o mesmo da
+                convite no painel. O e-mail fixo abaixo é o que o gestor associou ao convite, tem de ser o mesmo da
                 sua conta BrSpark.
               </Text>
             </View>
@@ -2084,7 +2084,7 @@ export default function TechRegistrationScreen() {
         ) : null}
         {readOnly ? (
           <View style={[styles.warn, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}>
-            <Text style={[styles.warnText, { color: '#1e40af' }]}>Enviado — aguarde a análise. Não é possível editar agora.</Text>
+            <Text style={[styles.warnText, { color: '#1e40af' }]}>Enviado, aguarde a análise. Não é possível editar agora.</Text>
           </View>
         ) : null}
         <View style={styles.progressCard}>
@@ -2158,7 +2158,7 @@ export default function TechRegistrationScreen() {
           placeholder="Ex.: +55 11 99999-0000"
           keyboardType="phone-pad"
         />
-        <Text style={styles.fieldHint}>Opcional neste passo — ajuda a equipe ou clientes a contatá-lo.</Text>
+        <Text style={styles.fieldHint}>Opcional neste passo, ajuda a equipe ou clientes a contatá-lo.</Text>
         {isAiProfileGateEngine(primaryProfileCapture?.validationEngine) ? (
           <Text style={styles.fieldHint}>
             Passo 1: foto de perfil (IA). Passo 2: biometria. Passo 3: documento com foto (validação do rosto + leitura
@@ -2829,7 +2829,7 @@ export default function TechRegistrationScreen() {
     <Modal visible={regionMapVisible} animationType="slide" onRequestClose={() => setRegionMapVisible(false)}>
       <View style={[styles.mapModalRoot, { paddingTop: Platform.OS === 'ios' ? 52 : 36 }]}>
         <View style={styles.mapModalHeader}>
-          <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate, flex: 1 }}>Mapa — área de atendimento</Text>
+          <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate, flex: 1 }}>Mapa, área de atendimento</Text>
           <TouchableOpacity onPress={() => setRegionMapVisible(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Text style={{ color: C.accent, fontWeight: '800', fontSize: 16 }}>Fechar</Text>
           </TouchableOpacity>

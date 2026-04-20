@@ -57,38 +57,41 @@ function defaultServerThirtyDayWindow(): { fromMs: number; toMs: number } {
   return { fromMs: from.getTime(), toMs: to.getTime() };
 }
 
-function formatRangePtBR(fromMs: number, toMs: number): string {
+function formatRangeLocalized(fromMs: number, toMs: number, localeTag: string): string {
   const from = new Date(fromMs);
   const to = new Date(toMs);
   const o = { day: '2-digit' as const, month: '2-digit' as const, year: 'numeric' as const };
-  return `${from.toLocaleDateString('pt-BR', o)} — ${to.toLocaleDateString('pt-BR', o)}`;
+  const loc = localeTag.replace('_', '-');
+  return `${from.toLocaleDateString(loc, o)}, ${to.toLocaleDateString(loc, o)}`;
 }
 
-function typeLabel(t: string) {
-  switch (String(t).toUpperCase()) {
+function typeLabel(code: string, t: (k: string) => string) {
+  switch (String(code).toUpperCase()) {
     case 'IN':
-      return 'Entrada';
+      return t('technicianMobile.stockMoveIn');
     case 'OUT':
-      return 'Saída';
+      return t('technicianMobile.stockMoveOut');
     case 'ADJUST':
-      return 'Ajuste';
+      return t('technicianMobile.stockMoveAdjust');
     default:
-      return t;
+      return code;
   }
 }
 
-function formatWhen(iso: string) {
+function formatWhen(iso: string, localeTag: string) {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    const loc = localeTag.replace('_', '-');
+    return d.toLocaleString(loc, { dateStyle: 'short', timeStyle: 'short' });
   } catch {
     return iso;
   }
 }
 
 export default function TechnicianStockScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language || 'pt-BR';
   const router = useRouter();
   const { colors: C } = useTheme();
   const { user } = useAuth();
@@ -179,7 +182,7 @@ export default function TechnicianStockScreen() {
       setServerRows(data.items);
       setServerTruncated(data.truncated);
     } catch (e: any) {
-      let msg = e?.message || 'Falha ao carregar o período';
+      let msg = e?.message || t('technicianMobile.stockLoadPeriodError');
       try {
         const j = JSON.parse(msg);
         if (j?.error) msg = String(j.error);
@@ -307,7 +310,7 @@ export default function TechnicianStockScreen() {
     unitLabel: string,
   ) => {
     const p = parseTechStockReason(reason);
-    const adj = p.isAdjustment ? ' (ajuste)' : '';
+    const adj = p.isAdjustment ? t('technicianMobile.stockAdjustmentSuffix') : '';
     const osLine = labelForTechStockMovement(reason ?? null, taskById);
     return (
       <View style={[styles.card, { backgroundColor: C.surfaceLow, borderColor: C.border }]}>
@@ -316,18 +319,18 @@ export default function TechnicianStockScreen() {
             {materialName}
           </Text>
           <Text style={styles.meta}>
-            {materialSku} · {typeLabel(type)}
+            {materialSku} · {typeLabel(type, t)}
             {adj}
           </Text>
           <Text style={[styles.meta, { marginTop: 6 }]} numberOfLines={2}>
-            FT: {osLine}
+            {t('technicianMobile.stockFtPrefix')} {osLine}
           </Text>
           {reason && !p.taskId ? (
             <Text style={[styles.reasonRaw, { color: '#94a3b8' }]} numberOfLines={2}>
               {reason}
             </Text>
           ) : null}
-          <Text style={[styles.when, { color: '#94a3b8' }]}>{formatWhen(timestamp)}</Text>
+          <Text style={[styles.when, { color: '#94a3b8' }]}>{formatWhen(timestamp, localeTag)}</Text>
         </View>
         <View style={styles.stockCol}>
           <Text style={[styles.stockVal, { color: C.slate }]}>{quantity}</Text>
@@ -341,7 +344,7 @@ export default function TechnicianStockScreen() {
     <View style={[styles.container, { backgroundColor: C.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScreenSubheader
-        title="Estoque técnico"
+        title={t('technicianMobile.stockScreenTitle')}
         subtitle={t('technicianMobile.stockScreenSubtitle')}
         onBack={() => router.back()}
         onRightPress={() => onRefresh(true)}
@@ -354,14 +357,18 @@ export default function TechnicianStockScreen() {
           onPress={() => setTab('items')}
           activeOpacity={0.85}
         >
-          <Text style={[styles.tabText, { color: tab === 'items' ? '#0369a1' : '#64748b' }]}>Materiais</Text>
+          <Text style={[styles.tabText, { color: tab === 'items' ? '#0369a1' : '#64748b' }]}>
+            {t('technicianMobile.stockTabMaterials')}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tabBtn, tab === 'history' && styles.tabBtnActive]}
           onPress={() => setTab('history')}
           activeOpacity={0.85}
         >
-          <Text style={[styles.tabText, { color: tab === 'history' ? '#0369a1' : '#64748b' }]}>Histórico</Text>
+          <Text style={[styles.tabText, { color: tab === 'history' ? '#0369a1' : '#64748b' }]}>
+            {t('technicianMobile.stockTabHistory')}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -373,7 +380,7 @@ export default function TechnicianStockScreen() {
             activeOpacity={0.85}
           >
             <Ionicons name="add-circle-outline" size={22} color="#fff" />
-            <Text style={styles.newBtnText}>Novo material</Text>
+            <Text style={styles.newBtnText}>{t('technicianMobile.stockBtnNewMaterial')}</Text>
           </TouchableOpacity>
 
           {loading ? (
@@ -389,11 +396,8 @@ export default function TechnicianStockScreen() {
               ListEmptyComponent={
                 <View style={styles.emptyBox}>
                   <Ionicons name="cube-outline" size={48} color="#94a3b8" />
-                  <Text style={styles.emptyTitle}>Sem materiais</Text>
-                  <Text style={styles.emptySub}>
-                    Este inventário é só seu: não usa bens nem locais do portfólio. Toque em "Novo material" para
-                    começar.
-                  </Text>
+                  <Text style={styles.emptyTitle}>{t('technicianMobile.stockEmptyItemsTitle')}</Text>
+                  <Text style={styles.emptySub}>{t('technicianMobile.stockEmptyItemsBody')}</Text>
                 </View>
               }
               renderItem={({ item }) => (
@@ -419,9 +423,11 @@ export default function TechnicianStockScreen() {
         <View style={{ flex: 1 }}>
           {online ? (
             <View style={[styles.onlinePeriodCard, { borderColor: C.border, backgroundColor: C.surfaceLow }]}>
-              <Text style={[styles.periodFieldLabel, { color: '#64748b' }]}>Período no servidor (30 dias)</Text>
+              <Text style={[styles.periodFieldLabel, { color: '#64748b' }]}>
+                {t('technicianMobile.stockServerPeriodLabel')}
+              </Text>
               <Text style={[styles.periodFieldValue, { color: C.slate }]} selectable>
-                {formatRangePtBR(serverWindow.fromMs, serverWindow.toMs)}
+                {formatRangeLocalized(serverWindow.fromMs, serverWindow.toMs, localeTag)}
               </Text>
               <View style={styles.periodNavRow}>
                 <TouchableOpacity
@@ -430,14 +436,16 @@ export default function TechnicianStockScreen() {
                   activeOpacity={0.85}
                 >
                   <Ionicons name="chevron-back" size={22} color="#0369a1" />
-                  <Text style={styles.periodNavBtnText}>30 dias</Text>
+                  <Text style={styles.periodNavBtnText}>{t('technicianMobile.stockPeriodNavDays')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.periodTodayBtn, { backgroundColor: 'rgba(3, 105, 161, 0.12)' }]}
                   onPress={resetServerWindowToLatest}
                   activeOpacity={0.85}
                 >
-                  <Text style={[styles.periodTodayBtnText, { color: '#0369a1' }]}>Últimos 30 dias</Text>
+                  <Text style={[styles.periodTodayBtnText, { color: '#0369a1' }]}>
+                    {t('technicianMobile.stockPeriodLastDays')}
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -449,7 +457,9 @@ export default function TechnicianStockScreen() {
                   disabled={!canGoForwardServer}
                   activeOpacity={0.85}
                 >
-                  <Text style={[styles.periodNavBtnText, !canGoForwardServer && { color: '#94a3b8' }]}>30 dias</Text>
+                  <Text style={[styles.periodNavBtnText, !canGoForwardServer && { color: '#94a3b8' }]}>
+                    {t('technicianMobile.stockPeriodNavDays')}
+                  </Text>
                   <Ionicons
                     name="chevron-forward"
                     size={22}
@@ -457,16 +467,14 @@ export default function TechnicianStockScreen() {
                   />
                 </TouchableOpacity>
               </View>
-              <Text style={styles.periodHint}>
-                " retrocede 30 dias; " avança em direção a hoje (máx. 30 dias por pedido).
-              </Text>
+              <Text style={styles.periodHint}>{t('technicianMobile.stockPeriodHintNav')}</Text>
             </View>
           ) : (
             <View style={[styles.searchWrap, { borderColor: C.border, backgroundColor: C.surfaceLow }]}>
               <Ionicons name="search-outline" size={20} color="#64748b" style={{ marginRight: 8 }} />
               <TextInput
                 style={[styles.searchInput, { color: C.slate }]}
-                placeholder="Filtrar últimos 30 dias neste aparelho…"
+                placeholder={t('technicianMobile.stockSearchOfflinePlaceholder')}
                 placeholderTextColor="#94a3b8"
                 value={localQuery}
                 onChangeText={setLocalQuery}
@@ -484,9 +492,7 @@ export default function TechnicianStockScreen() {
           <View style={styles.banner}>
             <Ionicons name={online ? 'cloud-done-outline' : 'cloud-offline-outline'} size={18} color="#64748b" />
             <Text style={styles.bannerText}>
-              {online
-                ? 'Online: consulta por janelas de 30 dias no servidor. Offline: até 30 dias só no celular.'
-                : 'Sem conexão: mostrando até 30 dias de movimentos guardados neste aparelho. Use o campo acima para filtrar.'}
+              {online ? t('technicianMobile.stockBannerOnline') : t('technicianMobile.stockBannerOffline')}
             </Text>
           </View>
 
@@ -495,9 +501,7 @@ export default function TechnicianStockScreen() {
           ) : null}
 
           {serverTruncated && online ? (
-            <Text style={styles.warnText}>
-              Mostrando as primeiras 5000 movimentações deste período. Afinar o intervalo se precisar de tudo.
-            </Text>
+            <Text style={styles.warnText}>{t('technicianMobile.stockTruncatedNotice')}</Text>
           ) : null}
 
           {online ? (
@@ -516,11 +520,8 @@ export default function TechnicianStockScreen() {
                     !serverLoading ? (
                       <View style={styles.emptyBox}>
                         <Ionicons name="file-tray-outline" size={48} color="#94a3b8" />
-                        <Text style={styles.emptyTitle}>Nenhuma movimentação</Text>
-                        <Text style={styles.emptySub}>
-                          Não há registros sincronizados neste intervalo de datas. Volte 30 dias com o botão acima ou
-                          sincronize.
-                        </Text>
+                        <Text style={styles.emptyTitle}>{t('technicianMobile.stockEmptyHistoryServerTitle')}</Text>
+                        <Text style={styles.emptySub}>{t('technicianMobile.stockEmptyHistoryServerBody')}</Text>
                       </View>
                     ) : null
                   }
@@ -530,9 +531,9 @@ export default function TechnicianStockScreen() {
                       r.quantity,
                       r.timestamp,
                       r.reason,
-                      r.itemName || itemsById[r.itemId]?.name || 'Material',
+                      r.itemName || itemsById[r.itemId]?.name || t('technicianMobile.stockMaterialFallback'),
                       r.itemSku || itemsById[r.itemId]?.sku || r.itemId.slice(0, 8),
-                      itemsById[r.itemId]?.unit || 'un.',
+                      itemsById[r.itemId]?.unit || t('technicianMobile.stockUnitDefault'),
                     )
                   }
                 />
@@ -547,10 +548,8 @@ export default function TechnicianStockScreen() {
               ListEmptyComponent={
                 <View style={styles.emptyBox}>
                   <Ionicons name="time-outline" size={48} color="#94a3b8" />
-                  <Text style={styles.emptyTitle}>Sem movimentos recentes</Text>
-                  <Text style={styles.emptySub}>
-                    Neste dispositivo guardamos as movimentações dos últimos 30 dias para consulta offline.
-                  </Text>
+                  <Text style={styles.emptyTitle}>{t('technicianMobile.stockEmptyHistoryOfflineTitle')}</Text>
+                  <Text style={styles.emptySub}>{t('technicianMobile.stockEmptyHistoryOfflineBody')}</Text>
                 </View>
               }
               renderItem={({ item: m }) => {
@@ -560,9 +559,9 @@ export default function TechnicianStockScreen() {
                   m.quantity,
                   m.timestamp,
                   m.reason,
-                  it?.name || 'Material',
+                  it?.name || t('technicianMobile.stockMaterialFallback'),
                   it?.sku || m.itemId.slice(0, 8),
-                  it?.unit || 'un.',
+                  it?.unit || t('technicianMobile.stockUnitDefault'),
                 );
               }}
             />

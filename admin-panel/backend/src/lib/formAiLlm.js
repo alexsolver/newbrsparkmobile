@@ -16,6 +16,7 @@ const {
   formatAnalyzeFieldTypesForPrompt,
   formatSchemaTypeDocBlock,
   formatTransitDisplacementRulesForPrompt,
+  formatOsDestinationVsGeometryConventionForPrompt,
   formatAutomaticIconRulesForPrompt,
   buildFormContextBlock,
 } = require('./formAiFieldCatalog');
@@ -71,6 +72,8 @@ Regras estruturais:
 - Só usa tipos "avançados" (transit_*, geofence_check, facial_recognition, calculated) se estiverem na lista acima (contexto do administrador) ou se o usuário os pediu explicitamente no contexto.
 
 ${formatTransitDisplacementRulesForPrompt()}
+
+${formatOsDestinationVsGeometryConventionForPrompt()}
 `;
 }
 
@@ -106,6 +109,8 @@ Regras estruturais:
 - Mantenha a ordem de leitura natural (cima → baixo, esquerda → direita).
 
 ${formatTransitDisplacementRulesForPrompt()}
+
+${formatOsDestinationVsGeometryConventionForPrompt()}
 `;
 }
 
@@ -139,6 +144,8 @@ ${formatAutomaticIconRulesForPrompt()}
 "metadata" (opcional): objeto \`{ "icon": "<Ionicons kebab-case>" }\` — ícone da tarefa na lista do painel; alinhe ao "title".
 
 ${formatTransitDisplacementRulesForPrompt()}
+
+${formatOsDestinationVsGeometryConventionForPrompt()}
 `;
 }
 

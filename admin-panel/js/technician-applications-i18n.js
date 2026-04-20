@@ -1,18 +1,18 @@
 /**
- * Cadastro de prestadores — pt-BR, en-US e es-ES (locale do painel).
+ * Cadastro de prestadores, pt-BR, en-US e es-ES (locale do painel).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
 
 const M = {
   'pt-BR': {
-    tp_pageTitle: 'BrSpark Admin — Cadastro de prestadores',
+    tp_pageTitle: 'BrSpark Admin, Cadastro de prestadores',
     tp_bc_panel: 'Painel',
     tp_bc_users: 'Usuários',
     tp_bc_here: 'Cadastro de prestadores',
     tp_hero_title: 'Cadastro de prestadores',
     tp_hero_sub_html:
-      'Convites, revisão e aprovação do formulário global. Em <a href="users.html" style="color:var(--accent);font-weight:600">Usuários</a>, «Prestador pendente» vem do <em>perfil técnico</em>. Esta lista mostra quem tem <em>candidatura</em> (convite ou pedido pelo app). Perfis pendentes <em>sem</em> formulário aparecem como «Perfil sem candidatura» — use «Criar convite» para enviar o link.',
+      'Convites, revisão e aprovação do formulário global. Em <a href="users.html" style="color:var(--accent);font-weight:600">Usuários</a>, «Prestador pendente» vem do <em>perfil técnico</em>. Esta lista mostra quem tem <em>candidatura</em> (convite ou pedido pelo app). Perfis pendentes <em>sem</em> formulário aparecem como «Perfil sem candidatura», use «Criar convite» para enviar o link.',
     tp_back_users: 'Voltar aos usuários',
     tp_filter_state: 'Estado',
     tp_search_lbl: 'Busca',
@@ -61,7 +61,7 @@ const M = {
     tp_act_reject: 'Recusar',
     tp_modal_invite_title: 'Convidar prestador',
     tp_modal_invite_note_html:
-      '<strong>Requisito:</strong> o prestador já deve ter <strong>conta no app BrSpark</strong> com o <strong>mesmo e-mail</strong> que você vai convidar (cadastro no separador «Criar conta» na tela de login do app). Se ainda não existir usuário com esse e-mail, o convite não será criado.',
+      '<strong>Requisito:</strong> o prestador já deve ter <strong>conta no app BrSpark</strong> com o <strong>mesmo e-mail</strong> que você vai convidar (cadastro na aba «Criar conta» na tela de login do app). Se ainda não existir usuário com esse e-mail, o convite não será criado.',
     tp_lbl_invite_email: 'E-mail do candidato *',
     tp_ph_invite_email: 'tecnico@exemplo.com',
     tp_lbl_invite_tenant: 'Tenant (conta) *',
@@ -104,13 +104,13 @@ const M = {
     tp_st_rejected: 'Recusado',
   },
   'en-US': {
-    tp_pageTitle: 'BrSpark Admin — Technician signup',
+    tp_pageTitle: 'BrSpark Admin, Technician signup',
     tp_bc_panel: 'Home',
     tp_bc_users: 'Users',
     tp_bc_here: 'Technician signup',
     tp_hero_title: 'Technician signup',
     tp_hero_sub_html:
-      'Invites, review and approval of the global form. In <a href="users.html" style="color:var(--accent);font-weight:600">Users</a>, “Pending provider” comes from the <em>technician profile</em>. This list shows who has an <em>application</em> (invite or in-app request). Pending profiles <em>without</em> a form show as “Profile without application” — use “Create invite” to send the link.',
+      'Invites, review and approval of the global form. In <a href="users.html" style="color:var(--accent);font-weight:600">Users</a>, “Pending provider” comes from the <em>technician profile</em>. This list shows who has an <em>application</em> (invite or in-app request). Pending profiles <em>without</em> a form show as “Profile without application”, use “Create invite” to send the link.',
     tp_back_users: 'Back to users',
     tp_filter_state: 'Status',
     tp_search_lbl: 'Search',

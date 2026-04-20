@@ -43,7 +43,7 @@ export function labelForTechStockMovement(
     t?.osNumber != null && String(t.osNumber).trim() !== '' ? String(t.osNumber).trim() : null;
   const num = ftFromReason || numFromTask;
   const title = t?.title != null && String(t.title).trim() !== '' ? String(t.title).trim() : null;
-  if (num && title) return `FT ${num} — ${title}`;
+  if (num && title) return `FT ${num}, ${title}`;
   if (num) return `FT ${num}`;
   if (title) return title;
   return `Ref. técnica ${p.taskId.slice(0, 8)}…`;

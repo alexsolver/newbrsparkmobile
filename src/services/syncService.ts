@@ -49,6 +49,7 @@ import {
 } from '../lib/cloudTasksBuckets';
 import {
   updateStoredJsonArray,
+  updateStoredJsonArrayWhileLockHeld,
   withAsyncStorageKeyLock,
 } from '../lib/asyncStorageAtomic';
 import {
@@ -59,13 +60,14 @@ import {
 // ── Push fila offline de assets ───────────────────────────────────────────────
 
 let isSyncing = false;
+/** Se `pushSyncQueue` foi chamado enquanto um ciclo já corria — agenda exatamente mais um ciclo ao terminar (coalescing). */
+let pendingSyncRequested = false;
+let pendingSyncOwnerEmail: string | undefined = undefined;
 
 const EXECUTION_STATUS_OUTBOX_KEY = '@brspark_execution_status_outbox';
 const CHECKLIST_OUTBOX_KEY = '@brspark_outbox';
 const CHECKLIST_OUTBOX_CONFLICTS_KEY = '@brspark_outbox_conflicts_v1';
-const MEDIA_STUCK_ALERT_KEY = '@brspark_media_stuck_alert_v1';
 const MEDIA_STUCK_ATTEMPT_THRESHOLD = 3;
-const MEDIA_STUCK_ALERT_COOLDOWN_MS = 12 * 60 * 60 * 1000;
 
 function normalizeStoredId(v: unknown): string {
   const s = String(v ?? '').trim();
@@ -79,6 +81,30 @@ function checklistOutboxTaskId(item: any): string {
     normalizeStoredId(item?.executionId) ||
     normalizeStoredId(item?.metadata?.executionId)
   );
+}
+
+/** Task id em linhas de Conflitos (corrige `taskId` nulo e `identity` tipo `task:<id>`). */
+function taskIdFromChecklistConflictRow(row: {
+  taskId?: string | null;
+  identity?: string;
+  payload?: any;
+}): string {
+  const direct = normalizeStoredId(row?.taskId);
+  if (direct) return direct;
+  const fromPayload = checklistOutboxTaskId(row?.payload);
+  if (fromPayload) return fromPayload;
+  const iden = String(row?.identity || '').trim();
+  if (iden.startsWith('task:')) return normalizeStoredId(iden.slice('task:'.length));
+  return '';
+}
+
+/** Export para UI (ex.: Conflitos de Sync) quando `taskId` veio vazio na linha. */
+export function resolveChecklistConflictRowTaskId(row: {
+  taskId?: string | null;
+  identity?: string;
+  payload?: any;
+}): string {
+  return taskIdFromChecklistConflictRow(row);
 }
 
 function checklistOutboxSubmissionId(item: any): string {
@@ -130,6 +156,37 @@ function stripOutboxMediaStuckMetadata(payload: any): void {
   delete md.__pendingLocalMediaCount;
 }
 
+function djb2Hash32(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i += 1) {
+    h = (h << 5) + h + s.charCodeAt(i);
+  }
+  return h >>> 0;
+}
+
+/** Identidade estável quando não há task/sub/tpl — evita `JSON.stringify` não determinístico em objetos grandes. */
+function checklistOutboxIdentityKeyAnonFingerprint(item: any): string {
+  try {
+    const meta =
+      item?.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
+        ? Object.keys(item.metadata as object)
+            .sort()
+            .map((k) => `${k}=${String((item.metadata as any)[k]).slice(0, 80)}`)
+            .join('|')
+        : '';
+    const resp =
+      item?.responses && typeof item.responses === 'object' && !Array.isArray(item.responses)
+        ? Object.keys(item.responses as object)
+            .sort()
+            .join(',')
+        : '';
+    const seed = `${meta}|keys:${resp}`;
+    return String(djb2Hash32(seed));
+  } catch {
+    return '0';
+  }
+}
+
 export function checklistOutboxIdentityKey(item: any): string {
   const sub = checklistOutboxSubmissionId(item);
   if (sub) return `sub:${sub}`;
@@ -151,7 +208,7 @@ export function checklistOutboxIdentityKey(item: any): string {
   if (tpl || started || completed || owner) {
     return `tpl:${tpl}|st:${started}|end:${completed}|own:${owner}`;
   }
-  return `fallback:${JSON.stringify(item ?? {})}`;
+  return `fb:anon:${checklistOutboxIdentityKeyAnonFingerprint(item)}`;
 }
 
 export type ChecklistOutboxConflict = {
@@ -330,12 +387,16 @@ async function quarantineChecklistOutboxConflict(
   },
 ): Promise<void> {
   const identity = checklistOutboxIdentityKey(payload);
+  const resolvedTaskId =
+    opts.taskId != null && String(opts.taskId).trim()
+      ? String(opts.taskId).trim()
+      : checklistOutboxTaskId(payload) || null;
   const row = {
     id: `${identity}|${Date.now()}`,
     at: Date.now(),
     identity,
     reason: String(opts.reason || 'unknown_conflict'),
-    taskId: opts.taskId ? String(opts.taskId) : null,
+    taskId: resolvedTaskId,
     submissionRevision:
       opts.submissionRevision != null && Number.isFinite(opts.submissionRevision)
         ? Number(opts.submissionRevision)
@@ -614,12 +675,51 @@ async function getTaskIdsWithPendingChecklistOutbox(): Promise<Set<string>> {
   } catch {
     /* ignore */
   }
+  /** Mídia presa / outros: payload saiu da outbox principal mas ainda está em Conflitos de Sync. */
+  try {
+    const conflicts = await getChecklistOutboxConflicts();
+    for (const row of conflicts) {
+      const tid = taskIdFromChecklistConflictRow(row);
+      if (tid) ids.add(tid);
+    }
+  } catch {
+    /* ignore */
+  }
   return ids;
+}
+
+/**
+ * Checklist concluído no aparelho com POST ainda pendente (outbox principal ou Conflitos de Sync).
+ * Usar na UI da aba «Concluídas» junto com `@brspark_executed_tasks`.
+ */
+export async function getTaskIdsWithCompletedChecklistPendingServerAck(): Promise<Set<string>> {
+  return getTaskIdsWithPendingChecklistOutbox();
+}
+
+/** Com rede: devolve automaticamente conflitos só por mídia à outbox para novo ciclo de upload+POST. */
+async function autoRequeueMediaStuckConflictsBeforeChecklistPush(): Promise<void> {
+  try {
+    const netState = await Network.getNetworkStateAsync();
+    if (netState?.isConnected !== true) return;
+    const conflicts = await getChecklistOutboxConflicts();
+    const stuck = conflicts.filter((c) => String(c.reason || '') === 'media_upload_stuck');
+    if (stuck.length === 0) return;
+    await requeueChecklistOutboxConflicts(stuck.map((c) => String(c.id)));
+    console.log(
+      `[SYNC] Mídia: reenfileiramento automático de ${stuck.length} payload(s) (conflito → outbox).`,
+    );
+  } catch (e) {
+    console.warn('[SYNC] autoRequeueMediaStuck:', e);
+  }
 }
 
 export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
   if (isSyncing) {
-    console.log('[SYNC] Sincronização já em andamento, ignorando...');
+    pendingSyncRequested = true;
+    if (ownerEmail !== undefined && String(ownerEmail).trim() !== '') {
+      pendingSyncOwnerEmail = ownerEmail;
+    }
+    console.log('[SYNC] Sincronização já em andamento — pedido adiado (coalescing).');
     return;
   }
   isSyncing = true;
@@ -670,6 +770,15 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
     }
   } finally {
     isSyncing = false;
+    if (pendingSyncRequested) {
+      pendingSyncRequested = false;
+      const nextEmail =
+        pendingSyncOwnerEmail !== undefined && String(pendingSyncOwnerEmail).trim() !== ''
+          ? pendingSyncOwnerEmail
+          : ownerEmail;
+      pendingSyncOwnerEmail = undefined;
+      void pushSyncQueue(nextEmail);
+    }
   }
 }
 
@@ -1148,50 +1257,6 @@ async function inferPendingLocalMediaHint(payload: any): Promise<string> {
   }
 }
 
-async function maybeNotifyStuckMediaUpload(
-  identity: string,
-  taskId: string | null,
-  attempts: number,
-  pendingCount: number,
-): Promise<void> {
-  if (!identity || attempts < MEDIA_STUCK_ATTEMPT_THRESHOLD) return;
-  const now = Date.now();
-  const slotKey = `${identity}|${taskId || 'unknown'}`;
-  let state: Record<string, number> = {};
-  try {
-    const raw = await AsyncStorage.getItem(MEDIA_STUCK_ALERT_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        state = parsed as Record<string, number>;
-      }
-    }
-  } catch {
-    state = {};
-  }
-  const prev = Number(state[slotKey] || 0);
-  if (Number.isFinite(prev) && prev > 0 && now - prev < MEDIA_STUCK_ALERT_COOLDOWN_MS) return;
-
-  try {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Sincronização pendente de mídia',
-        body: `OS ${taskId || 'sem ID'} ainda tem ${pendingCount} arquivo(s) local(is) após ${attempts} tentativas. Abra Conflitos de Sync para revisar.`,
-        sound: 'default',
-      },
-      trigger: null,
-    });
-  } catch {
-    /* ignore notification errors */
-  }
-  state[slotKey] = now;
-  try {
-    await AsyncStorage.setItem(MEDIA_STUCK_ALERT_KEY, JSON.stringify(state));
-  } catch {
-    /* ignore persistence errors */
-  }
-}
-
 function formatReverseGeocodeLine(p: Location.LocationGeocodedAddress): string {
   return `${p.street || p.name || ''}, ${p.streetNumber || ''} - ${p.district || p.subregion || ''}, ${p.city || ''} - ${p.region || ''}`;
 }
@@ -1484,8 +1549,15 @@ async function enrichFacialBiometricAddressesInOutbox(outbox: any[]): Promise<nu
   return total;
 }
 
+/**
+ * Envio da outbox de checklists. O corpo principal corre dentro de `withAsyncStorageKeyLock(@brspark_outbox)`;
+ * outras escritas na mesma chave devem usar `updateStoredJsonArray` (lock por chave) ou este fluxo — nunca `setItem` solto.
+ */
 async function pushChecklistOutbox() {
   try {
+    await autoRequeueMediaStuckConflictsBeforeChecklistPush();
+
+    await withAsyncStorageKeyLock(CHECKLIST_OUTBOX_KEY, async () => {
      const raw = await AsyncStorage.getItem(CHECKLIST_OUTBOX_KEY);
      if (!raw) return;
      let outbox: any[] = [];
@@ -1514,7 +1586,7 @@ async function pushChecklistOutbox() {
      const gpsAddrFilled = await enrichPendingGpsDerivedAddressesInOutbox(outbox);
      const facialAddrFilled = await enrichFacialBiometricAddressesInOutbox(outbox);
      if (gpsAddrFilled > 0 || facialAddrFilled > 0) {
-       await updateStoredJsonArray<any>(
+       await updateStoredJsonArrayWhileLockHeld<any>(
          CHECKLIST_OUTBOX_KEY,
          (current) => {
            const byIdentity = new Map<string, any>();
@@ -1590,13 +1662,12 @@ async function pushChecklistOutbox() {
                      taskId: tid || undefined,
                      submissionRevision: parseChecklistSubmissionRevision(payload),
                    });
-                   await maybeNotifyStuckMediaUpload(identity, tid || null, attempts, pendingCount);
                    outboxRemovalKeys.add(identity);
                  }
                  console.warn(
                    `[SYNC] Upload de mídia incompleto para task=${tid || 'unknown'} (pendentes=${pendingCount}, tentativa=${attempts}); ${
                      attempts >= MEDIA_STUCK_ATTEMPT_THRESHOLD
-                       ? 'movido para Conflitos de Sync — reenfileire quando a rede estiver estável.'
+                       ? 'movido para Conflitos de Sync — reenfileiramento automático no próximo sync com rede.'
                        : 'payload mantido na outbox para nova tentativa.'
                    }`
                  );
@@ -1708,7 +1779,7 @@ async function pushChecklistOutbox() {
      }
      
      if (outboxMetaMutated) {
-         await updateStoredJsonArray<any>(
+         await updateStoredJsonArrayWhileLockHeld<any>(
            CHECKLIST_OUTBOX_KEY,
            (current) => {
              const byIdentity = new Map<string, any>();
@@ -1724,7 +1795,7 @@ async function pushChecklistOutbox() {
      }
 
      if (outboxRemovalKeys.size > 0) {
-         const next = await updateStoredJsonArray<any>(
+         const next = await updateStoredJsonArrayWhileLockHeld<any>(
            CHECKLIST_OUTBOX_KEY,
            (current) =>
              current.filter((item) => !outboxRemovalKeys.has(checklistOutboxIdentityKey(item))),
@@ -1736,6 +1807,7 @@ async function pushChecklistOutbox() {
            );
          }
      }
+    });
   } catch (e) {
      console.warn('[SYNC] Erro critico lendo outbox', e);
   }
@@ -1755,11 +1827,16 @@ async function pushModule(endpoint: string, storageKey: string): Promise<void> {
       return;
     }
     if (data.length === 0) return;
-    await apiFetch(endpoint, {
+    const res = await apiFetch(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),
       headers: { 'Content-Type': 'application/json' },
     });
+    if (!res.ok) {
+      console.warn(
+        `[SYNC] Push módulo não-OK (${res.status}) storageKey=${storageKey} endpoint=${endpoint}`,
+      );
+    }
   } catch (e) {
     console.warn(`[SYNC] Push falhou para ${storageKey}:`, e);
   }
@@ -2459,7 +2536,8 @@ export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<stri
 }
 
 /**
- * OS com itens na fila que o `pushSyncQueue` envia: `@brspark_outbox` e `@brspark_execution_status_outbox`.
+ * OS com itens na fila que o `pushSyncQueue` envia: `@brspark_outbox`, `@brspark_execution_status_outbox`
+ * e payloads em **Conflitos de Sync** (ex.: mídia presa após várias tentativas — ainda não enviados).
  *
  * **Não** inclui `@draft_tsk_*`: rascunho do checklist só sobe após conclusão (entra na outbox);
  * marcar rascunho aqui deixava a nuvem “pendente” para sempre com rede boa, sem sync automático possível.
@@ -2500,6 +2578,16 @@ export async function getTaskIdsWithPendingLocalSyncOverlay(): Promise<Set<strin
     }
   } catch (e) {
     console.warn('[SYNC] getTaskIdsWithPendingLocalSyncOverlay execution status:', e);
+  }
+
+  try {
+    const conflicts = await getChecklistOutboxConflicts();
+    for (const c of conflicts) {
+      const tid = taskIdFromChecklistConflictRow(c);
+      if (tid) ids.add(tid);
+    }
+  } catch (e) {
+    console.warn('[SYNC] getTaskIdsWithPendingLocalSyncOverlay conflicts:', e);
   }
 
   return ids;

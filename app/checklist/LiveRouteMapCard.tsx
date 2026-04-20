@@ -110,6 +110,8 @@ interface Props {
    * `taskId` deve ser omitido pelo pai para não expor chat.
    */
   reimbursementMode?: boolean;
+  /** Patrulhamento: trajeto KML/geometria da OS — mesmo mapa que serviço, com indicação no ecrã. */
+  patrolMode?: boolean;
 }
 
 /** Destino OSRM: target explícito ou último vértice da rota (evita lista vazia só com polígono) */
@@ -579,6 +581,7 @@ export default function LiveRouteMapCard({
   corridorToleranceM,
   keepScreenAwake = false,
   reimbursementMode = false,
+  patrolMode = false,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [windowDims, setWindowDims] = useState(() => Dimensions.get('window'));
@@ -1341,7 +1344,7 @@ export default function LiveRouteMapCard({
       }
       Alert.alert(
         'Rastreamento',
-        'Sem identificador da OS no mapa — o link do cliente não poderá ser atualizado quando houver rede.'
+        'Sem identificador da OS no mapa, o link do cliente não poderá ser atualizado quando houver rede.'
       );
       return;
     }
@@ -1449,11 +1452,8 @@ export default function LiveRouteMapCard({
       return;
     }
     
-    // For route, target start of route
-    const tLat = (zoneType === 'route' && route && route.length > 0) ? route[0][0] : targetLoc?.lat;
-    const tLng = (zoneType === 'route' && route && route.length > 0) ? route[0][1] : targetLoc?.lng;
-    
-    openDestInMaps(tLat, tLng);
+    const dest = pickDestinationForOsrm(targetLoc, route);
+    if (dest) openDestInMaps(dest.lat, dest.lng);
   };
   
   const openDestInMaps = (lat?: number | null, lng?: number | null) => {
@@ -1904,6 +1904,11 @@ export default function LiveRouteMapCard({
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>{transitHeaderLong}</Text>
+              {patrolMode && hasRoute ? (
+                <Text style={{ fontSize: 11, color: '#0f766e', fontWeight: '800', marginTop: 4 }}>
+                  Patrulhamento — trajeto KML / geometria da OS
+                </Text>
+              ) : null}
               {hasRoute && !isComplete && !isPaused ? (
                 <View style={styles.miniBar}>
                   <View style={[styles.miniBarFill, { width: `${pct}%` as any, backgroundColor: statusColor }]} />
@@ -1947,12 +1952,12 @@ export default function LiveRouteMapCard({
                 <Text style={styles.hintStrong}>laranja</Text> = trajeto planejado; linha{' '}
                 <Text style={styles.hintStrong}>azul</Text> = percurso GPS registrado; na linha de navegação (OSRM),
                 o trecho já percorrido fica <Text style={styles.hintStrong}>laranja sólido</Text> e o que falta em
-                azul tracejado — útil ao pausar para ver onde parou. A cobertura de patrulha estima quanto do
+                azul tracejado, útil ao pausar para ver onde parou. A cobertura de patrulha estima quanto do
                 trajeto planejado foi percorrido dentro do corredor (tolerância definida no despacho).
                 {'\n\n'}
                 <Text style={styles.hintStrong}>Waze / outra app:</Text> aceite localização "sempre" ou "em segundo plano"
                 quando o sistema pedir, para a trilha GPS continuar. No Android pode aparecer uma notificação
-                "Deslocamento em andamento" — é normal enquanto o deslocamento estiver ativo.
+                "Deslocamento em andamento", é normal enquanto o deslocamento estiver ativo.
               </Text>
             </ScrollView>
             <TouchableOpacity style={styles.hintBtn} onPress={dismissTransitHints} activeOpacity={0.85}>

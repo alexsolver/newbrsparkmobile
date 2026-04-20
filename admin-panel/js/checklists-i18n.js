@@ -1,5 +1,5 @@
 /**
- * Textos do Forms Builder (painel admin) — pt-BR, en-US e es-ES.
+ * Textos do Forms Builder (painel admin), pt-BR, en-US e es-ES.
  * Preferência: `getAdminUiLocale()` (localStorage `brspark_admin_ui_locale`; padrão pt-BR).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
@@ -9,7 +9,7 @@ const LS_LOCALE = 'brspark_admin_ui_locale';
 
 const M = {
   'pt-BR': {
-    fb_pageTitle: 'BrSpark Admin — Forms Builder',
+    fb_pageTitle: 'BrSpark Admin, Forms Builder',
     fb_bc_panel: 'Painel',
     fb_bc_builder: 'Forms Builder',
     fb_hero_title: 'Forms Builder',
@@ -80,8 +80,8 @@ const M = {
     fb_tb_form_complete_button: 'Botão concluir (FT / OS)',
     fb_tb_voice_note: 'Nota de voz',
     fb_tb_facial_recognition: 'Reconhecimento facial',
-    fb_tb_vision_checklist: 'Visão de IA — detecção',
-    fb_tb_vision_ai_analysis: 'Visão de IA — análise',
+    fb_tb_vision_checklist: 'Visão de IA, detecção',
+    fb_tb_vision_ai_analysis: 'Visão de IA, análise',
 
     fb_canvas_section_prefix: 'Seção ·',
     fb_canvas_preamble_title: 'Área Externa',
@@ -98,8 +98,8 @@ const M = {
     fb_canvas_section_logic: 'Lógica e regras',
     fb_canvas_section_dup: 'Duplicar seção',
     fb_canvas_section_del: 'Excluir seção',
-    fb_canvas_step_req_required: 'Etapa obrigatória — clique para tornar opcional',
-    fb_canvas_step_req_optional: 'Etapa opcional — clique para tornar obrigatória',
+    fb_canvas_step_req_required: 'Etapa obrigatória, clique para tornar opcional',
+    fb_canvas_step_req_optional: 'Etapa opcional, clique para tornar obrigatória',
     fb_canvas_add_section: 'Nova seção',
     fb_props_kind_section: 'Etapa / seção',
 
@@ -125,7 +125,7 @@ const M = {
     fb_prop_section_fill_wizard_title: 'Um campo de cada vez',
     fb_prop_section_fill_wizard_desc: 'Assistente: Próximo / Voltar só dentro desta seção.',
     fb_prop_section_legacy_inherit:
-      'Legado: «seguir global» — o app usa ainda <code>appFillMode</code> no JSON até escolher uma opção acima.',
+      'Legado: «seguir global», o app usa ainda <code>appFillMode</code> no JSON até escolher uma opção acima.',
     fb_prop_section_repeat_chk: 'Repetir esta seção (lista)',
     fb_prop_section_repeat_help:
       'O técnico pode preencher <b>várias instâncias</b> seguidas dos mesmos campos (ex.: vários equipamentos). Cada linha grava um objeto no array <b>__section_repeat_&lt;id&gt;</b> na execução. Use mín./máx. para limitar quantas instâncias.',
@@ -134,7 +134,7 @@ const M = {
     fb_ph_instance_example: 'ex.: {n}',
     fb_prop_reading_title: 'Texto da leitura (rich text)',
     fb_prop_reading_intro:
-      'Exibido no app como <strong>só leitura</strong> (scroll com o formulário). <strong>Links não são permitidos</strong> — são removidos ao editar.',
+      'Exibido no app como <strong>só leitura</strong> (scroll com o formulário). <strong>Links não são permitidos</strong>, são removidos ao editar.',
     fb_prop_instructions_title: 'Instruções ao técnico (rich text, opcional)',
     fb_prop_instructions_show_title: 'Mostrar instruções no celular do técnico',
     fb_prop_instructions_show_aria: 'Mostrar instruções no app móvel',
@@ -146,7 +146,7 @@ const M = {
     fb_prop_default_value_ph: 'Use tags como {{user.name}}, {{date}}',
     fb_prop_required_q: 'Resposta obrigatória?',
     fb_prop_leitura_block_note:
-      'Este bloco <strong>não recolhe resposta</strong> no app — serve apenas para o técnico ler (contratos, avisos, etc.).',
+      'Este bloco <strong>não coleta resposta</strong> no app, serve apenas para o técnico ler (contratos, avisos, etc.).',
     fb_prop_form_complete_btn_note:
       'No app, este bloco mostra um <strong>botão</strong> que faz o mesmo que o botão principal do rodapé (avançar, voltar ao menu de etapas ou <strong>concluir a OS</strong>). O texto do botão é o <strong>rótulo</strong> acima; se estiver vazio, o app usa o texto padrão do rodapé. Pode colocar o campo na <strong>Área Externa</strong> ou dentro de qualquer etapa.',
     fb_prop_repeat_field_title: 'Várias respostas (lista)',
@@ -176,19 +176,35 @@ const M = {
 
     fb_prop_tech_finance_title: 'PDF e compartilhamento com o cliente',
     fb_prop_tech_finance_help_html:
-      'Por padrão, <strong>este campo não entra no PDF geral</strong>. No construtor de relatório PDF (Relatórios), só passa a constar se ativar a visibilidade para este campo. Ao fazê-lo, <strong>informações que podem corresponder a custos operacionais internos do técnico poderão ficar disponíveis ao cliente</strong> ou a quem receber o documento — confirme sempre o preset antes de compartilhar.',
+      'Por padrão, <strong>este campo não entra no PDF geral</strong>. No construtor de relatório PDF (Relatórios), só passa a constar se ativar a visibilidade para este campo. Ao fazê-lo, <strong>informações que podem corresponder a custos operacionais internos do técnico poderão ficar disponíveis ao cliente</strong> ou a quem receber o documento, confirme sempre o preset antes de compartilhar.',
 
     fb_prop_geofence_title: 'Configurações da cerca eletrônica',
     fb_prop_geofence_zone_type_lbl: 'Tipo de zona',
-    fb_prop_geofence_opt_radius: 'Ponto + raio (Haversine)',
-    fb_prop_geofence_opt_polygon: 'Polígono (definido na OS)',
-    fb_prop_geofence_hint_radius: 'O app calcula a distância entre o GPS do técnico e o ponto central da OS.',
-    fb_prop_geofence_hint_polygon: 'O app verifica se o técnico está dentro do polígono definido na OS.',
+    fb_prop_geofence_opt_radius: 'Destino da OS (ponto + raio Haversine)',
+    fb_prop_geofence_opt_polygon: 'Geometria da OS (rota, área, polígono / KML no despacho)',
+    fb_prop_geofence_hint_radius:
+      'Validação face ao destino da OS: distância em linha reta (Haversine) do GPS ao ponto da OS; o raio abaixo é predefinição se a OS não fixar outro no despacho.',
+    fb_prop_geofence_hint_polygon:
+      'Validação face à geometria do despacho: polígono (área), corredor de rota (KML) ou extremos A/B (trecho). Os valores abaixo são predefinição quando a OS não trouxer tolerância.',
     fb_prop_geofence_radius_lbl: 'Raio de aceitação (metros)',
-    fb_prop_geofence_radius_help: 'A OS pode sobrescrever este raio. Este é o padrão do formulário.',
+    fb_prop_geofence_radius_help:
+      'Padrão do formulário quando a OS não define raio no despacho; se a OS tiver raio, esse valor prevalece.',
+    fb_prop_geofence_dest_radius_lbl: 'Raio de aceitação (metros)',
+    fb_prop_geofence_dest_radius_help:
+      'Predefinição se a OS não fixar raio no despacho; caso contrário prevalece o da OS.',
+    fb_prop_geofence_geom_tol_lbl: 'Corredor da rota / polilinha (metros)',
+    fb_prop_geofence_geom_tol_help:
+      'Rota, patrulhamento ou KML em linha: distância máxima do GPS ao traçado (evitar desvio do caminho). Predefinição se a OS não fixar tolerância no despacho.',
+    fb_prop_geofence_seg_buf_lbl: 'Tolerância nos extremos A↔B (metros)',
+    fb_prop_geofence_seg_buf_help:
+      'Só quando o despacho usa zona «trecho» (dois pontos A e B): distância máxima até A ou até B. Não substitui o corredor da rota acima, seguir linha/polilinha é sempre o campo de cima.',
     fb_prop_geofence_fail_mode_lbl: 'Modo de falha',
-    fb_prop_geofence_fail_block: 'Bloquear — impede avanço do formulário',
-    fb_prop_geofence_fail_warn: 'Apenas alertar — registra desvio e continua',
+    fb_prop_geofence_fail_block: 'Bloquear, impede avanço do formulário',
+    fb_prop_geofence_fail_warn: 'Apenas alertar, registra desvio e continua',
+    fb_prop_geofence_fail_allow_warn: 'Registrar e permitir, alerta se fora da zona',
+    fb_prop_geofence_fail_record_only: 'Só registro, fora/dentro sem bloquear',
+    fb_prop_geofence_unblock_reentry:
+      'Com bloqueio: liberar automaticamente ao voltar à zona permitida (GPS em segundo plano)',
     fb_prop_geofence_error_msg_lbl: 'Mensagem de erro customizada (opcional)',
     fb_prop_geofence_error_msg_ph: 'Ex.: Você está fora da área de serviço autorizada.',
 
@@ -198,7 +214,16 @@ const M = {
       'O equipamento pode consumir mais bateria, mas tende a aumentar a precisão e a continuidade da coleta de GPS enquanto o deslocamento estiver em curso (mapa visível ou minimizado). A opção desliga automaticamente ao tocar em <strong>Finalizar deslocamento</strong>.',
     fb_prop_transit_reimbursement_lbl: 'Apenas registro de deslocamento durante a atividade',
     fb_prop_transit_reimbursement_help:
-      'Regista só a trilha GPS no app. Sem ETA, sem chat com o cliente e sem página de acompanhamento — use um segundo par início/fim depois do deslocamento operacional.',
+      'Registra só a trilha GPS no app. Sem ETA, sem chat com o cliente e sem página de acompanhamento, use um segundo par início/fim depois do deslocamento operacional.',
+    fb_prop_transit_dest_os_lbl: 'Destino: local de atendimento da OS (ETA, mapa, acompanhamento)',
+    fb_prop_transit_patrol_lbl: 'Patrulhamento (trajeto KML / geometria da OS no mapa)',
+    fb_prop_transit_patrol_help:
+        'O mapa de deslocamento usa a polilinha ou zona enviada no despacho (ex.: KML). Indicado para seguir o percurso planejado sem assumir o destino como «serviço no cliente».',
+    fb_prop_transit_purpose_title: 'Finalidade deste início de deslocamento',
+    fb_prop_transit_first_default_hint:
+      'O primeiro «Iniciar deslocamento» do formulário vem por padrão com destino na OS, indicado para o deslocamento até o local de atendimento.',
+    fb_prop_transit_vs_geofence_help:
+      'Deslocamento (transit) registra trilha e tempos; a cerca eletrônica (campo à parte) é a prova de entrada na área de serviço.',
 
     fb_prop_location_pick_title: 'Localização (GPS + mapa)',
     fb_prop_location_pick_help:
@@ -220,16 +245,16 @@ const M = {
     fb_prop_facial_camera_note: 'A captura facial na app usa sempre a câmera do sistema (alta resolução).',
 
     fb_prop_vision_title_analysis_html:
-      '<ion-icon name="sparkles-outline" style="color:#b91c1c"></ion-icon> <span style="color:#dc2626;font-weight:900">Visão de IA — análise</span>',
+      '<ion-icon name="sparkles-outline" style="color:#b91c1c"></ion-icon> <span style="color:#dc2626;font-weight:900">Visão de IA, análise</span>',
     fb_prop_vision_title_detection_html:
-      '<ion-icon name="videocam-outline"></ion-icon> Visão de IA — detecção',
+      '<ion-icon name="videocam-outline"></ion-icon> Visão de IA, detecção',
     fb_prop_vision_body_analysis_html:
-      'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta traz nota de 0 a 10 em <code>answers[0].value</code> (string), confiança e racional. Com «Classificação 0–10» ativada (recomendado), a raiz do JSON inclui também <code>rating0To10</code>.',
+      'No app, o técnico usa <b>só a câmera</b>, sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta traz nota de 0 a 10 em <code>answers[0].value</code> (string), confiança e racional. Com «Classificação 0–10» ativada (recomendado), a raiz do JSON inclui também <code>rating0To10</code>.',
     fb_prop_vision_body_detection_html:
-      'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. Abaixo define-se <b>um único critério</b> por envio de mídia; a API devolve sim/não + confiança para esse critério.',
+      'No app, o técnico usa <b>só a câmera</b>, sem galeria nem escolha de arquivo. O servidor chama a integração <b>Visão IA - Moondream</b> (API de pergunta sobre imagem) ou encaminha ao proxy <b>Visão IA - YOLO</b>, conforme a preferência do tenant em Integrações / conta. Abaixo define-se <b>um único critério</b> em linguagem natural (estilo semelhante à «Visão de IA, análise»); a resposta normalizada traz <code>answers[0].value</code> (<code>yes</code> / <code>no</code> / <code>unknown</code>), confiança e racional.',
     fb_prop_vision_detection_prompt_lbl: 'Prompt (sim/não)',
     fb_prop_vision_detection_prompt_hint:
-      'Um <b>único</b> critério por envio de mídia (até <b>{maxSingle}</b> caracteres). A API devolve JSON com <code>answers</code> (sempre <code>q1</code>) e valor <code>yes</code>, <code>no</code> ou <code>unknown</code> quando o critério é sim/não.',
+      'Um <b>único</b> critério por envio de mídia (até <b>{maxSingle}</b> caracteres), em texto livre como no campo de análise. O backend devolve o mesmo envelope JSON (<code>answers</code> com <code>q1</code>, <code>value</code>, <code>confidence</code>, <code>rationale</code>) com valor <code>yes</code>, <code>no</code> ou <code>unknown</code>.',
     fb_prop_vision_default_structured_prompt:
       'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
       'Tarefa:\n' +
@@ -261,40 +286,46 @@ const M = {
       '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
       'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
     fb_prop_vision_default_detection_prompt:
-      'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?',
+      'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único; em vídeo o backend usa um frame como imagem).\n\n' +
+      'Tarefa:\n' +
+      '1) Com base apenas no visível, o critério abaixo deve ser avaliado de forma binária para este ponto da OS.\n' +
+      '2) Descreva no critério o que deve ser verificado (presença, ausência, estado, EPI, ordem, etc.).\n\n' +
+      'Critério (identificador q1):\n' +
+      '[Edite aqui, ex.: «Há pelo menos um extintor de incêndio claramente visível e aparentemente acessível na área fotografada?»]\n\n' +
+      'Resposta esperada no app: o servidor normaliza para yes, no ou unknown em answers[0].value, com confiança e racional (integração «Visão IA - Moondream» ou proxy «Visão IA - YOLO», conforme o tenant).',
     fb_prop_vision_rating_chk_lbl: 'Classificação 0–10 (preenchida pela API após a análise)',
     fb_prop_vision_rating_hint_html:
-      'Com esta opção, o Gemini devolve <code>rating0To10</code> na raiz do JSON (inteiro de 0 a 10, ou <code>null</code> se não for possível). O app mostra a nota junto ao resultado e nos relatórios.',
+      'Com esta opção, a API devolve <code>rating0To10</code> na raiz do JSON (inteiro de 0 a 10, ou <code>null</code> se não for possível). O app mostra a nota junto ao resultado e nos relatórios.',
     fb_prop_vision_show_ai_chk_lbl: 'Mostrar detalhes da resposta da IA no app',
     fb_prop_vision_show_ai_hint:
       'Desmarque para ocultar no formulário do técnico o texto da resposta, confiança, racional e bloco de classificação 0–10 (a mídia e o estado «concluído» mantêm-se). Relatórios e resumo de assinatura podem continuar mostrando os dados.',
-    fb_prop_vision_grid_lbl: 'Grade de fotos (envio único ao Gemini)',
+    fb_prop_vision_grid_lbl: 'Grade de fotos (composição única antes do envio)',
     fb_prop_vision_grid_help:
       'Só <b>1×1</b> ou <b>2×2</b>. Com mais de uma célula, o app exige <b>todas</b> as fotos (câmera) antes de analisar; só <b>foto</b> (sem vídeo). Modelos antigos com grade maior passam a <b>2×2</b> ao salvar.',
-    fb_prop_vision_grid_opt_1x1: '1 foto — 1×1',
-    fb_prop_vision_grid_opt_2x2: '4 fotos — 2×2',
+    fb_prop_vision_grid_opt_1x1: '1 foto, 1×1',
+    fb_prop_vision_grid_opt_2x2: '4 fotos, 2×2',
     fb_prop_vision_capture_lbl: 'Tipo de captura pela câmera',
     fb_prop_vision_capture_photo_only: 'Somente foto',
     fb_prop_vision_capture_video_only: 'Somente vídeo',
     fb_prop_vision_capture_photo_video: 'Foto e vídeo',
     fb_prop_vision_video_max_hint:
-      'Na app, em campos de Visão de IA (detecção ou análise), cada vídeo tem no máximo 10 segundos; clips mais longos são recusados. Na detecção (YOLO), o envio ao servidor usa uma imagem extraída do primeiro instante do vídeo — o serviço externo continua a receber só imagem.',
+      'Na app, em campos de Visão de IA (detecção ou análise), cada vídeo tem no máximo 10 segundos; clips mais longos são recusados. Na detecção, o envio ao servidor usa uma imagem extraída do primeiro instante do vídeo (Moondream e o proxy YOLO recebem só imagem).',
     fb_prop_vision_prompt_lbl: 'Prompt estruturado (único)',
     fb_vision_prompt_ex_btn: 'Exemplos',
-    fb_vision_prompt_ex_btn_title: 'Modelos de prompt para serviços de campo (Visão de IA — análise)',
+    fb_vision_prompt_ex_btn_title: 'Modelos de prompt para serviços de campo (Visão de IA, análise)',
     fb_vision_prompt_ex_modal_title: 'Exemplos de prompt estruturado',
     fb_vision_prompt_ex_modal_intro:
-      'Escolha um modelo para preencher o campo. Ajuste depois ao seu checklist. Em campos novos, «Classificação 0–10» vem ativada por defeito para a API devolver <code>rating0To10</code> alinhado à nota em <code>value</code>; desative nas propriedades se não precisar.',
+      'Escolha um modelo para preencher o campo. Ajuste depois ao seu checklist. Em campos novos, «Classificação 0–10» vem ativada por padrão para a API devolver <code>rating0To10</code> alinhado à nota em <code>value</code>; desative nas propriedades se não precisar.',
     fb_vision_prompt_ex_apply: 'Aplicar ao campo',
     fb_vision_prompt_ex_close: 'Fechar',
     fb_vision_prompt_ex_area_lbl: 'Área / setor',
     fb_vision_prompt_ex_empty_filter: 'Nenhum modelo nesta área. Escolha «Todas as áreas» ou outro setor.',
     fb_vision_prompt_ex_catalog_missing:
       'Catálogo de exemplos não carregado. Recarregue a página do Forms Builder (o script visionAiAnalysisPromptExamplesData.js deve estar disponível).',
-    fb_vision_detection_ex_btn_title: 'Exemplos de perguntas para objetos e contagem (Visão de IA — detecção)',
-    fb_vision_detection_ex_modal_title: 'Exemplos de perguntas para detecção',
+    fb_vision_detection_ex_btn_title: 'Modelos de prompt (Visão de IA, detecção)',
+    fb_vision_detection_ex_modal_title: 'Modelos de prompt para detecção',
     fb_vision_detection_ex_modal_intro:
-      'Escolha um exemplo e adapte os objetos, sinônimos e exclusões ao seu modelo YOLO. Prefira uma linha por pergunta e, para contagem, explicite o que deve ser ignorado.',
+      'Cada modelo inclui contexto, tarefa, critério (q1) e nota sobre <code>answers[0]</code>, o mesmo molde do prompt padrão do campo. Adapte o critério ao seu checklist. Um envio de mídia por critério; Moondream ou o proxy YOLO normalizam sim/não em <code>answers[0].value</code>. Para contagem, diga o que deve ser ignorado.',
     fb_vision_detection_ex_catalog_missing:
       'Catálogo de exemplos não carregado. Recarregue a página do Forms Builder (o script visionDetectionPromptExamplesData.js deve estar disponível).',
 
@@ -336,7 +367,7 @@ const M = {
     fb_prop_matrix_add_col: 'Adicionar coluna',
     fb_prop_matrix_remove_col: 'Remover coluna',
     fb_prop_matrix_col_empty_fallback: 'Coluna {n}',
-    fb_prop_matrix_json_adv: 'Avançado — editar JSON',
+    fb_prop_matrix_json_adv: 'Avançado, editar JSON',
     fb_prop_matrix_json_adv_hint:
       'Ao sair deste campo, o JSON substitui a grelha acima. Use só se souber o formato.',
     fb_prop_matrix_cols_lbl: 'Colunas (JSON)',
@@ -363,14 +394,14 @@ const M = {
     fb_placeholder_form_title: 'Ex.: Vistoria cautelar',
     fb_label_form_active: 'Formulário ativo',
     fb_hint_form_active:
-      'Desmarcado: o modelo fica inativo — não aparece no despacho de OS nem no GET público de modelos (no builder use a lista com «incluir arquivados»). Pode voltar a marcar e salvar para reativar.',
+      'Desmarcado: o modelo fica inativo, não aparece no despacho de OS nem no GET público de modelos (no builder use a lista com «incluir arquivados»). Pode voltar a marcar e salvar para reativar.',
     fb_label_public_desc: 'Descrição pública',
     fb_placeholder_public_desc: 'O que os seus parceiros farão com este documento?',
-    fb_tpl_icon_title: 'Ícone do formulário — clique para escolher',
+    fb_tpl_icon_title: 'Ícone do formulário, clique para escolher',
     fb_tpl_icon_aria: 'Escolher ícone do formulário',
     fb_nav_help_summary: 'Ajuda: navegação por seções na app (lista vs um a um)',
     fb_nav_help_p1:
-      'Navegação na app — Em cada seção, no painel de propriedades à direita, escolha lista com scroll ou um campo de cada vez. A app junta as seções num scroll único quando todas são lista; se alguma for «um a um», usa telas por etapa. Formulários antigos só com «seguir global» continuam usando o modo salvo no JSON até definir modo por seção.',
+      'Navegação na app, Em cada seção, no painel de propriedades à direita, escolha lista com scroll ou um campo de cada vez. A app junta as seções num scroll único quando todas são lista; se alguma for «um a um», usa telas por etapa. Formulários antigos só com «seguir global» continuam usando o modo salvo no JSON até definir modo por seção.',
     fb_nav_help_p2:
       'Com uma única seção, o menu de etapas é ignorado na app. Com hub ativo e várias seções só em lista, a app mostra uma etapa de cada vez em vez de um scroll único.',
     fb_app_start_eyebrow: 'Layout',
@@ -413,17 +444,19 @@ const M = {
     mdl_mobile_preview_wizard: 'Um a um',
     mdl_mobile_preview_hybrid: 'Híbrido',
     mdl_mobile_preview_notice:
-      'Simulação no navegador. Imita o layout do app (HTML/CSS), mas não é o mesmo motor do celular (React Native em app/checklist/[id].tsx — GPS, anexos, lógica de negócio, etc.).',
+      'Simulação no navegador. Imita o layout do app (HTML/CSS), mas não é o mesmo motor do celular (React Native em app/checklist/[id].tsx, GPS, anexos, lógica de negócio, etc.).',
     mdl_new_form_title: 'Novo formulário',
     mdl_new_form_label: 'Dê um nome / título para o documento:',
     mdl_new_form_ph: 'Ex.: Roteiro de ar condicionado',
     mdl_cancel: 'Cancelar',
     mdl_new_form_create: 'Criar painel em branco',
     mdl_forms_title: 'Meus formulários',
-    mdl_forms_sub: 'Pastas e modelos na árvore — expanda, arraste ou use as ações em cada linha.',
+    mdl_forms_sub:
+      'Vista em árvore: expanda pastas, arraste formulários para mover. Clique na pasta para definir onde criar um novo modelo.',
     mdl_forms_search_ph: 'Filtrar por nome (pastas e formulários)…',
+    mdl_forms_filter_non_archived: 'Apenas não arquivados',
     mdl_forms_tree_tip:
-        'Dica: arraste um formulário para uma pasta na árvore ou use «Mover para» na linha do modelo.',
+        'Arraste o cartão para uma pasta para mover. O sufixo #xxxxxx distingue títulos iguais. «Mover para outra pasta» fica no detalhe, só quando precisar.',
     mdl_forms_new_folder: '+ Nova pasta',
     mdl_forms_new_here: 'Novo formulário aqui',
     mdl_folder_title: 'Nova pasta',
@@ -444,7 +477,7 @@ const M = {
     mdl_duration_body:
       'Só o preenchimento do formulário (sem deslocamento). Opcional: se vazio, no despacho usa-se 60 min. Múltiplos de 5 min; mínimo 5.',
     mdl_duration_lbl: 'Minutos (opcional)',
-    mdl_duration_ph: 'Ex.: 90 — deixe vazio para o padrão no despacho',
+    mdl_duration_ph: 'Ex.: 90, deixe vazio para o padrão no despacho',
     mdl_duration_hint: 'Use Salvar formulário para gravar esta configuração no modelo.',
     mdl_section_title: 'Editar etapa',
     mdl_section_body: 'Nome e ícone usados no canvas e na app móvel (quando o campo de seção tiver ícone definido).',
@@ -463,7 +496,7 @@ const M = {
     mdl_logic_sub_default: 'A configurar gatilhos para o campo…',
     mdl_logic_rules_in_block: 'Regras neste bloco:',
     mdl_logic_sub_help_html:
-      'Use <em>Campo monitorado</em> para disparar a condição a partir de outro campo ou de uma <em>seção/etapa</em>. Ações "Buscar na API e preencher campo" disparam ao <strong>sair do campo monitorizado</strong> (teclado), em geral com o mesmo timing que "Validar na API externa" — GET sem corpo ou POST com JSON do formulário.',
+      'Use <em>Campo monitorado</em> para disparar a condição a partir de outro campo ou de uma <em>seção/etapa</em>. Ações "Buscar na API e preencher campo" disparam ao <strong>sair do campo monitorizado</strong> (teclado), em geral com o mesmo timing que "Validar na API externa", GET sem corpo ou POST com JSON do formulário.',
     mdl_logic_field_label_aria: 'Nome do campo ou etapa',
     mdl_logic_close_aria: 'Fechar',
     mdl_logic_h4: 'Condição (SE) e ações (ENTÃO)',
@@ -501,8 +534,8 @@ const M = {
     fb_logic_op_lt: 'Menor que (número)',
     fb_logic_op_gte: 'Maior ou igual (número)',
     fb_logic_op_lte: 'Menor ou igual (número)',
-    fb_logic_op_between: 'Entre dois números (inclusive) — valor: min|max',
-    fb_logic_op_not_between: 'Fora do intervalo — valor: min|max',
+    fb_logic_op_between: 'Entre dois números (inclusive), valor: min|max',
+    fb_logic_op_not_between: 'Fora do intervalo, valor: min|max',
     fb_logic_op_one_of: 'É um de (lista exata, separada por vírgula)',
     fb_logic_op_none_of: 'Não é nenhum de (lista exata)',
     fb_logic_op_includes_any: 'Contém qualquer trecho da lista (vírgula)',
@@ -531,7 +564,7 @@ const M = {
     fb_logic_op_form_elapsed_gt: 'Tempo total no formulário > (segundos)',
     fb_logic_op_form_elapsed_lt: 'Tempo total no formulário < (segundos)',
     fb_logic_op_form_elapsed_eq: 'Tempo total no formulário = (segundos inteiros)',
-    fb_logic_op_form_elapsed_between: 'Tempo total entre (seg) — min|max',
+    fb_logic_op_form_elapsed_between: 'Tempo total entre (seg), min|max',
 
     fb_logic_op_section_started: 'Técnico já entrou nesta etapa',
     fb_logic_op_section_not_started: 'Ainda não entrou nesta etapa',
@@ -543,10 +576,10 @@ const M = {
     fb_logic_op_section_elapsed_gt: 'Tempo gasto na etapa > (segundos)',
     fb_logic_op_section_elapsed_lt: 'Tempo gasto na etapa < (segundos)',
     fb_logic_op_section_elapsed_eq: 'Tempo gasto na etapa = (segundos inteiros)',
-    fb_logic_op_section_elapsed_between: 'Tempo na etapa entre (seg) — min|max',
+    fb_logic_op_section_elapsed_between: 'Tempo na etapa entre (seg), min|max',
 
     fb_logic_ph_between: 'Mínimo|Máximo (ex.: 10|500)',
-    fb_logic_ph_not_between: 'Mínimo|Máximo — fora do intervalo',
+    fb_logic_ph_not_between: 'Mínimo|Máximo, fora do intervalo',
     fb_logic_ph_one_of: 'Valor1, Valor2 (igualdade, ignora maiúsculas)',
     fb_logic_ph_none_of: 'Valor1, Valor2…',
     fb_logic_ph_includes_any: 'Trecho1, Trecho2…',
@@ -571,7 +604,7 @@ const M = {
     fb_logic_vision_hint_html:
       '<strong>Classificação 0–10 ativa neste campo:</strong> os operadores <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>, «Entre dois números» e «Fora do intervalo» comparam o valor <code>rating0To10</code> (0 a 10) devolvido pela análise Gemini. Use <b>Está preenchido</b> se só precisar de análise concluída. Se a resposta não tiver nota, <b>!=</b> com um número é verdadeiro; <b>==</b> e as outras comparações numéricas falham.',
     fb_logic_vision_detection_hint_html:
-      '<strong>Visão de IA — detecção:</strong> com análise concluída, <code>==</code>, <code>!=</code>, «contém», «um de», <b>É verdadeiro</b> (resposta <code>yes</code>) e <b>É falso</b> (resposta <code>no</code>) usam o valor de <code>answers[0]</code> (normalizado para <code>yes</code> / <code>no</code> / <code>unknown</code>). Use <b>Está preenchido</b> se só precisar de detecção concluída.',
+      '<strong>Visão de IA, detecção:</strong> com análise concluída, <code>==</code>, <code>!=</code>, «contém», «um de», <b>É verdadeiro</b> (resposta <code>yes</code>) e <b>É falso</b> (resposta <code>no</code>) usam o valor de <code>answers[0]</code> (normalizado para <code>yes</code> / <code>no</code> / <code>unknown</code>). Use <b>Está preenchido</b> se só precisar de detecção concluída.',
 
     fb_logic_api_fetch_offline: 'Se offline, não buscar nem alterar o campo',
     fb_logic_api_allow_offline: 'Permitir que o técnico pule a regra se estiver offline',
@@ -616,7 +649,7 @@ const M = {
     mdl_copilot_clear_chat: 'Limpar conversa',
     mdl_copilot_preview_title: 'Rever campos sugeridos',
     mdl_copilot_preview_intro:
-      'Marque Incluir para cada linha. Ajuste o tipo, a descrição, instruções por campo (para a IA) e obrigatório. Use Comentários gerais e Reprocessar com instruções para pedir à IA um novo rascunho antes de aplicar no canvas. Etapas (section_break) não podem ser excluídas — o tipo de etapa não é alterável aqui.',
+      'Marque Incluir para cada linha. Ajuste o tipo, a descrição, instruções por campo (para a IA) e obrigatório. Use Comentários gerais e Reprocessar com instruções para pedir à IA um novo rascunho antes de aplicar no canvas. Etapas (section_break) não podem ser excluídas, o tipo de etapa não é alterável aqui.',
     mdl_copilot_prev_th_inc: 'Incl.',
     mdl_copilot_prev_th_field: 'Campo / etapa',
     mdl_copilot_prev_th_type: 'Tipo',
@@ -625,17 +658,17 @@ const M = {
     mdl_copilot_prev_th_req: 'Obr.',
     mdl_copilot_prev_notes_lbl: 'Comentários gerais para a IA (opcional)',
     mdl_copilot_prev_notes_hint:
-      'Instruções globais (ex.: tom, LGPD, simplificar etapas). Use com Reprocessar com instruções para a IA reapresentar o formulário; ou preencha só para referência antes de Aplicar no canvas (nesse caso o texto não é enviado à IA — use Reprocessar para enviar).',
+      'Instruções globais (ex.: tom, LGPD, simplificar etapas). Use com Reprocessar com instruções para a IA reapresentar o formulário; ou preencha só para referência antes de Aplicar no canvas (nesse caso o texto não é enviado à IA, use Reprocessar para enviar).',
     mdl_copilot_prev_notes_ph:
       'Ex.: reduzir campos da etapa «Avaliação nutricional»; todos os textos em tom formal; adicionar campo de consentimento LGPD…',
     mdl_copilot_prev_optional: 'Tornar todos opcionais',
     mdl_copilot_prev_reprocess: 'Reprocessar com instruções',
     mdl_copilot_prev_apply: 'Aplicar no canvas',
     mdl_copilot_feedback_applied:
-      '**Concluído:** as alterações desta mensagem **já foram aplicadas** no editor (canvas, definições do modelo e/ou regras sugeridas). Use **«Desfazer última alteração»** se precisar reverter.',
+      '**Concluído:** as alterações desta mensagem **já foram aplicadas** no editor (canvas, configurações do modelo e/ou regras sugeridas). Use **«Desfazer última alteração»** se precisar reverter.',
     mdl_copilot_feedback_preview:
       '**Estado do painel:** abriu-se a **tabela de revisão** com os campos sugeridos. Confirme com **«Aplicar no canvas»** quando estiver pronto, ou ajuste as linhas antes.',
-    fb_copilot_empty_reply: '(A IA não devolveu texto — veja avisos ao lado ou tente de novo.)',
+    fb_copilot_empty_reply: '(A IA não devolveu texto, veja avisos ao lado ou tente de novo.)',
     fb_guided_title: 'Monte seu formulário com ajuda guiada',
     fb_guided_sub:
       'Descreva o objetivo, quem vai preencher e o cenário. O copiloto monta um primeiro rascunho profissional e já sugere estrutura, evidências e próximos passos.',
@@ -675,9 +708,9 @@ const M = {
     fb_alert_save_fatal: 'Erro ao salvar: {detail}',
     fb_alert_pdf_needs_fields: 'Adicione perguntas antes de gerar o PDF.',
     fb_alert_jspdf_missing:
-      'A biblioteca jsPDF não carregou (rede ou CDN). Não é possível gerar o PDF de pré-visualização — recarregue a página ou confira o script em checklists.html.',
+      'A biblioteca jsPDF não carregou (rede ou CDN). Não é possível gerar o PDF de pré-visualização, recarregue a página ou confira o script em checklists.html.',
     fb_alert_sortable_missing:
-      'A biblioteca SortableJS não carregou (rede ou CDN). O arrastar e soltar no canvas fica desativado — recarregue a página ou verifique o script em checklists.html.',
+      'A biblioteca SortableJS não carregou (rede ou CDN). O arrastar e soltar no canvas fica desativado, recarregue a página ou verifique o script em checklists.html.',
     fb_alert_folder_ui: 'Recarregue a página (interface «Nova pasta» não carregou).',
     fb_alert_folder_name: 'Indique um nome para a pasta.',
     fb_alert_folder_create_fail: 'Não foi possível criar a pasta: {detail}',
@@ -690,7 +723,7 @@ const M = {
     fb_alert_clone_net: 'Erro de rede ao clonar. A cópia local foi descartada.',
     fb_alert_clone_ok: "Formulário «{title}» clonado com sucesso.",
     fb_alert_new_panel:
-      'Painel preparado para «{title}». Já existe uma primeira etapa no canvas — arraste perguntas para a «Área Externa» ou para dentro de uma etapa (ou adicione mais seções).',
+      'Painel preparado para «{title}». Já existe uma primeira etapa no canvas, arraste perguntas para a «Área Externa» ou para dentro de uma etapa (ou adicione mais seções).',
     fb_alert_select_field: 'Selecione um campo no canvas (clique num cartão).',
     fb_alert_clarify_options: 'Marque pelo menos uma opção em alguma pergunta, ou escreva na caixa de texto.',
     fb_alert_copilot_reprocess: 'Sem proposta carregada para reprocessar.',
@@ -711,7 +744,7 @@ const M = {
     fb_alert_copilot_analyze_none: 'Nenhum arquivo foi analisado.',
   },
   'en-US': {
-    fb_pageTitle: 'BrSpark Admin — Forms Builder',
+    fb_pageTitle: 'BrSpark Admin, Forms Builder',
     fb_bc_panel: 'Home',
     fb_bc_builder: 'Forms Builder',
     fb_hero_title: 'Forms Builder',
@@ -782,8 +815,8 @@ const M = {
     fb_tb_form_complete_button: 'Complete button (form / work order)',
     fb_tb_voice_note: 'Voice note',
     fb_tb_facial_recognition: 'Face recognition',
-    fb_tb_vision_checklist: 'AI vision — detection',
-    fb_tb_vision_ai_analysis: 'AI vision — analysis',
+    fb_tb_vision_checklist: 'AI vision, detection',
+    fb_tb_vision_ai_analysis: 'AI vision, analysis',
 
     fb_canvas_section_prefix: 'Section ·',
     fb_canvas_preamble_title: 'External area',
@@ -800,8 +833,8 @@ const M = {
     fb_canvas_section_logic: 'Logic and rules',
     fb_canvas_section_dup: 'Duplicate section',
     fb_canvas_section_del: 'Delete section',
-    fb_canvas_step_req_required: 'Required step — click to make optional',
-    fb_canvas_step_req_optional: 'Optional step — click to require',
+    fb_canvas_step_req_required: 'Required step, click to make optional',
+    fb_canvas_step_req_optional: 'Optional step, click to require',
     fb_canvas_add_section: 'New section',
     fb_props_kind_section: 'Step / section',
 
@@ -827,7 +860,7 @@ const M = {
     fb_prop_section_fill_wizard_title: 'One field at a time',
     fb_prop_section_fill_wizard_desc: 'Wizard: Next / Back only within this section.',
     fb_prop_section_legacy_inherit:
-      'Legacy: “follow global” — the app still uses <code>appFillMode</code> in the JSON until you pick an option above.',
+      'Legacy: “follow global”, the app still uses <code>appFillMode</code> in the JSON until you pick an option above.',
     fb_prop_section_repeat_chk: 'Repeat this section (list)',
     fb_prop_section_repeat_help:
       'The technician can fill <b>several consecutive instances</b> of the same fields (e.g. multiple pieces of equipment). Each row saves an object in the <b>__section_repeat_&lt;id&gt;</b> array in the run. Use min/max to cap how many instances.',
@@ -836,7 +869,7 @@ const M = {
     fb_ph_instance_example: 'e.g. {n}',
     fb_prop_reading_title: 'Reading text (rich text)',
     fb_prop_reading_intro:
-      'Shown in the app as <strong>read-only</strong> (scrolls with the form). <strong>Hyperlinks are not allowed</strong> — they are removed when editing.',
+      'Shown in the app as <strong>read-only</strong> (scrolls with the form). <strong>Hyperlinks are not allowed</strong>, they are removed when editing.',
     fb_prop_instructions_title: 'Instructions for the technician (rich text, optional)',
     fb_prop_instructions_show_title: 'Show instructions on the technician’s phone',
     fb_prop_instructions_show_aria: 'Show instructions in the mobile app',
@@ -848,7 +881,7 @@ const M = {
     fb_prop_default_value_ph: 'Use tags like {{user.name}}, {{date}}',
     fb_prop_required_q: 'Required answer?',
     fb_prop_leitura_block_note:
-      'This block <strong>does not collect an answer</strong> in the app — it is only for the technician to read (contracts, notices, etc.).',
+      'This block <strong>does not collect an answer</strong> in the app, it is only for the technician to read (contracts, notices, etc.).',
     fb_prop_form_complete_btn_note:
       'In the app, this block shows a <strong>button</strong> that performs the same action as the main footer button (advance, return to the step menu, or <strong>complete the work order</strong>). The button text is the <strong>label</strong> above; if empty, the app uses the default footer label. You can place the field in the <strong>External area</strong> or inside any step.',
     fb_prop_repeat_field_title: 'Multiple answers (list)',
@@ -878,19 +911,35 @@ const M = {
 
     fb_prop_tech_finance_title: 'PDF and sharing with the client',
     fb_prop_tech_finance_help_html:
-      'By default, <strong>this field is not included in the general PDF</strong>. In the PDF report builder (Reports), it only appears if you enable visibility for this field. When you do, <strong>information that may correspond to the technician’s internal operating costs could become available to the client</strong> or anyone who receives the document — always confirm the preset before sharing.',
+      'By default, <strong>this field is not included in the general PDF</strong>. In the PDF report builder (Reports), it only appears if you enable visibility for this field. When you do, <strong>information that may correspond to the technician’s internal operating costs could become available to the client</strong> or anyone who receives the document, always confirm the preset before sharing.',
 
     fb_prop_geofence_title: 'Geofence settings',
     fb_prop_geofence_zone_type_lbl: 'Zone type',
-    fb_prop_geofence_opt_radius: 'Point + radius (Haversine)',
-    fb_prop_geofence_opt_polygon: 'Polygon (defined on the work order)',
-    fb_prop_geofence_hint_radius: 'The app calculates the distance between the technician’s GPS and the work order center point.',
-    fb_prop_geofence_hint_polygon: 'The app checks whether the technician is inside the polygon defined on the work order.',
+    fb_prop_geofence_opt_radius: 'WO destination (point + Haversine radius)',
+    fb_prop_geofence_opt_polygon: 'WO geometry (route, area, polygon / KML on dispatch)',
+    fb_prop_geofence_hint_radius:
+      'Validation against the WO destination point: straight-line (Haversine) distance from GPS to the WO point; the radius below is the default if the WO does not set one on dispatch.',
+    fb_prop_geofence_hint_polygon:
+      'Validation against dispatch geometry: polygon (area), route corridor (KML), or A/B endpoints (segment). The values below are defaults when the WO does not include tolerances.',
     fb_prop_geofence_radius_lbl: 'Acceptance radius (meters)',
-    fb_prop_geofence_radius_help: 'The work order can override this radius. This is the form default.',
+    fb_prop_geofence_radius_help:
+      'Form default when the WO does not set a radius on dispatch; if the WO defines a radius, that value wins.',
+    fb_prop_geofence_dest_radius_lbl: 'Acceptance radius (meters)',
+    fb_prop_geofence_dest_radius_help:
+      'Default if the WO does not set a radius on dispatch; otherwise the WO value wins.',
+    fb_prop_geofence_geom_tol_lbl: 'Route corridor / polyline (meters)',
+    fb_prop_geofence_geom_tol_help:
+      'Route, patrol, or line KML: max distance from GPS to the path (stay within the corridor). Default if the WO does not set tolerance on dispatch.',
+    fb_prop_geofence_seg_buf_lbl: 'A↔B endpoint tolerance (meters)',
+    fb_prop_geofence_seg_buf_help:
+      'Only when dispatch uses a segment zone (two points A and B): max distance to A or to B. Not for following a route line, use the field above for that.',
     fb_prop_geofence_fail_mode_lbl: 'Failure mode',
-    fb_prop_geofence_fail_block: 'Block — prevents advancing the form',
-    fb_prop_geofence_fail_warn: 'Warn only — logs deviation and continues',
+    fb_prop_geofence_fail_block: 'Block, prevents advancing the form',
+    fb_prop_geofence_fail_warn: 'Warn only, logs deviation and continues',
+    fb_prop_geofence_fail_allow_warn: 'Log and allow, warn if outside the zone',
+    fb_prop_geofence_fail_record_only: 'Log only, inside/outside without blocking',
+    fb_prop_geofence_unblock_reentry:
+      'When blocking: auto-release after returning to the allowed zone (background GPS)',
     fb_prop_geofence_error_msg_lbl: 'Custom error message (optional)',
     fb_prop_geofence_error_msg_ph: 'e.g. You are outside the authorized service area.',
 
@@ -900,7 +949,16 @@ const M = {
       'The device may use more battery, but GPS capture tends to be more accurate and continuous while travel is in progress (map visible or minimized). The option turns off automatically when tapping <strong>End travel</strong>.',
     fb_prop_transit_reimbursement_lbl: 'Displacement log only during the activity',
     fb_prop_transit_reimbursement_help:
-      'Records only the GPS track in the app. No ETA, no customer chat, and no public tracking page — add a second start/end pair after operational travel.',
+      'Records only the GPS track in the app. No ETA, no customer chat, and no public tracking page, add a second start/end pair after operational travel.',
+    fb_prop_transit_dest_os_lbl: 'Destination: work order service location (ETA, map, tracking)',
+    fb_prop_transit_patrol_lbl: 'Patrol (KML / work order geometry on the map)',
+    fb_prop_transit_patrol_help:
+      'The travel map uses the polyline or zone from dispatch (e.g. KML). Use this to follow the planned path without treating the destination as “customer service arrival”.',
+    fb_prop_transit_purpose_title: 'Purpose of this travel start',
+    fb_prop_transit_first_default_hint:
+      'The first “Start travel” in the form defaults to the OS destination, use it for travel to the service location.',
+    fb_prop_transit_vs_geofence_help:
+      'Travel (transit) records track and times; geofence (separate field) proves entry into the service area.',
 
     fb_prop_location_pick_title: 'Location (GPS + map)',
     fb_prop_location_pick_help:
@@ -922,16 +980,16 @@ const M = {
     fb_prop_facial_camera_note: 'Face capture in the app always uses the <b>system camera</b> (high resolution).',
 
     fb_prop_vision_title_analysis_html:
-      '<ion-icon name="sparkles-outline" style="color:#b91c1c"></ion-icon> <span style="color:#dc2626;font-weight:900">AI vision — analysis</span>',
+      '<ion-icon name="sparkles-outline" style="color:#b91c1c"></ion-icon> <span style="color:#dc2626;font-weight:900">AI vision, analysis</span>',
     fb_prop_vision_title_detection_html:
-      '<ion-icon name="videocam-outline"></ion-icon> AI vision — detection',
+      '<ion-icon name="videocam-outline"></ion-icon> AI vision, detection',
     fb_prop_vision_body_analysis_html:
-      'In the app, the technician uses <b>camera only</b> — no gallery or file picker. The BrSpark server calls the <b>Gemini</b> API with the <b>Google AI Studio</b> integration (key and model under Integrations). The text below is a <b>single structured prompt</b>; the response includes a 0–10 score in <code>answers[0].value</code> (string), confidence, and rationale. With <b>0–10 rating</b> enabled (recommended), the JSON root also includes <code>rating0To10</code>.',
+      'In the app, the technician uses <b>camera only</b>, no gallery or file picker. The BrSpark server calls the <b>Gemini</b> API with the <b>Google AI Studio</b> integration (key and model under Integrations). The text below is a <b>single structured prompt</b>; the response includes a 0–10 score in <code>answers[0].value</code> (string), confidence, and rationale. With <b>0–10 rating</b> enabled (recommended), the JSON root also includes <code>rating0To10</code>.',
     fb_prop_vision_body_detection_html:
-      'In the app, the technician uses <b>camera only</b> — no gallery or file picker. BrSpark forwards to the URL under <b>Integrations → Vision AI - YOLO</b>. Below defines <b>one criterion</b> per media upload; the API returns yes/no + confidence for that criterion.',
+      'In the app, the technician uses <b>camera only</b>, no gallery or file picker. The server calls the <b>Vision AI - Moondream</b> integration (image Q&amp;A API) or forwards to the <b>Vision AI - YOLO</b> proxy, depending on tenant settings under Integrations / account. Below you define <b>one criterion</b> in natural language (similar to <b>AI vision, analysis</b>); the normalized response includes <code>answers[0].value</code> (<code>yes</code> / <code>no</code> / <code>unknown</code>), confidence, and rationale.',
     fb_prop_vision_detection_prompt_lbl: 'Prompt (yes/no)',
     fb_prop_vision_detection_prompt_hint:
-      'A <b>single</b> criterion per media upload (up to <b>{maxSingle}</b> characters). The API returns JSON with <code>answers</code> (always <code>q1</code>) and <code>yes</code>, <code>no</code>, or <code>unknown</code> when the criterion is yes/no.',
+      'A <b>single</b> criterion per media upload (up to <b>{maxSingle}</b> characters), in free text like the analysis field. The backend returns the same JSON envelope (<code>answers</code> with <code>q1</code>, <code>value</code>, <code>confidence</code>, <code>rationale</code>) with <code>yes</code>, <code>no</code>, or <code>unknown</code>.',
     fb_prop_vision_default_structured_prompt:
       'Context: visual inspection of a field-service step (single photo or video).\n\n' +
       'Task:\n' +
@@ -963,27 +1021,33 @@ const M = {
       '- 9–10: excellent; step requirements clearly met.\n\n' +
       'In rationale, in 2–4 short sentences, state what you saw and what drove the score most.',
     fb_prop_vision_default_detection_prompt:
-      'Single criterion (id q1): can you state unambiguously that the expected object or situation for this checklist step is present (or absent, when applicable) according to your YOLO model’s criterion?',
+      'Context: visual inspection of a field-service step (single photo or video; for video the backend uses one frame as the image).\n\n' +
+      'Task:\n' +
+      '1) Based only on what is visible, the criterion below must be evaluated in a binary way for this work-order step.\n' +
+      '2) In the criterion, describe what must be verified (presence, absence, state, PPE, housekeeping, etc.).\n\n' +
+      'Criterion (id q1):\n' +
+      '[Edit here, e.g. “Is there at least one clearly visible and apparently accessible fire extinguisher in the photographed area?”]\n\n' +
+      'Expected app result: the server normalizes to yes, no, or unknown in answers[0].value, with confidence and rationale (<b>Vision AI - Moondream</b> integration or <b>Vision AI - YOLO</b> proxy, depending on the tenant).',
     fb_prop_vision_rating_chk_lbl: '0–10 rating (filled by the API after analysis)',
     fb_prop_vision_rating_hint_html:
-      'With this option, Gemini returns <code>rating0To10</code> at the JSON root (integer 0–10, or <code>null</code> if not possible). The app shows the score with the result and in reports.',
+      'With this option, the API returns <code>rating0To10</code> at the JSON root (integer 0–10, or <code>null</code> if not possible). The app shows the score with the result and in reports.',
     fb_prop_vision_show_ai_chk_lbl: 'Show AI response details in the app',
     fb_prop_vision_show_ai_hint:
       'Uncheck to hide from the technician’s form the response text, confidence, rationale, and 0–10 block (media and “completed” state remain). Reports and signature summary may still show the data.',
-    fb_prop_vision_grid_lbl: 'Photo grid (single upload to Gemini)',
+    fb_prop_vision_grid_lbl: 'Photo grid (single composite before upload)',
     fb_prop_vision_grid_help:
       'Only <b>1×1</b> or <b>2×2</b>. With more than one cell, the app requires <b>all</b> photos (camera) before analysis; <b>photo</b> only (no video). Older models with a larger grid are saved as <b>2×2</b>.',
-    fb_prop_vision_grid_opt_1x1: '1 photo — 1×1',
-    fb_prop_vision_grid_opt_2x2: '4 photos — 2×2',
+    fb_prop_vision_grid_opt_1x1: '1 photo, 1×1',
+    fb_prop_vision_grid_opt_2x2: '4 photos, 2×2',
     fb_prop_vision_capture_lbl: 'Camera capture type',
     fb_prop_vision_capture_photo_only: 'Photo only',
     fb_prop_vision_capture_video_only: 'Video only',
     fb_prop_vision_capture_photo_video: 'Photo and video',
     fb_prop_vision_video_max_hint:
-      'In the app, each video in AI Vision fields (detection and analysis) is limited to 10 seconds; longer clips are rejected. For detection (YOLO), the upload to the server uses an image taken from the first moment of the video — the external service still receives an image only.',
+      'In the app, each video in AI Vision fields (detection and analysis) is limited to 10 seconds; longer clips are rejected. For detection, the upload uses an image from the first moment of the video (Moondream and the YOLO proxy still receive an image only).',
     fb_prop_vision_prompt_lbl: 'Structured prompt (single)',
     fb_vision_prompt_ex_btn: 'Examples',
-    fb_vision_prompt_ex_btn_title: 'Ready-made prompts for field services (AI vision — analysis)',
+    fb_vision_prompt_ex_btn_title: 'Ready-made prompts for field services (AI vision, analysis)',
     fb_vision_prompt_ex_modal_title: 'Structured prompt examples',
     fb_vision_prompt_ex_modal_intro:
       'Pick a template to fill the field, then tune it for your checklist. On new fields, «0–10 rating» is on by default so the API returns <code>rating0To10</code> aligned with the score in <code>value</code>; turn it off in properties if you do not need it.',
@@ -993,10 +1057,10 @@ const M = {
     fb_vision_prompt_ex_empty_filter: 'No templates in this area. Choose “All areas” or another sector.',
     fb_vision_prompt_ex_catalog_missing:
       'Example catalog failed to load. Reload the Form Builder page (visionAiAnalysisPromptExamplesData.js must be available).',
-    fb_vision_detection_ex_btn_title: 'Question examples for objects and counting (AI vision — detection)',
-    fb_vision_detection_ex_modal_title: 'Detection question examples',
+    fb_vision_detection_ex_btn_title: 'Prompt templates (AI vision, detection)',
+    fb_vision_detection_ex_modal_title: 'Detection prompt templates',
     fb_vision_detection_ex_modal_intro:
-      'Pick an example and adapt the objects, synonyms, and exclusions to your YOLO model. Prefer one line per question and, for counting, state clearly what must be ignored.',
+      'Each template includes context, task, criterion (q1), and a note on <code>answers[0]</code>, same layout as the field’s default prompt. Adapt the criterion to your checklist. One criterion per media upload; Moondream or the YOLO proxy normalize yes/no in <code>answers[0].value</code>. For counting, state what must be ignored.',
     fb_vision_detection_ex_catalog_missing:
       'Example catalog failed to load. Reload the Form Builder page (visionDetectionPromptExamplesData.js must be available).',
 
@@ -1038,7 +1102,7 @@ const M = {
     fb_prop_matrix_add_col: 'Add column',
     fb_prop_matrix_remove_col: 'Remove column',
     fb_prop_matrix_col_empty_fallback: 'Column {n}',
-    fb_prop_matrix_json_adv: 'Advanced — edit JSON',
+    fb_prop_matrix_json_adv: 'Advanced, edit JSON',
     fb_prop_matrix_json_adv_hint:
       'When you leave this field, the JSON replaces the grid above. Use only if you know the format.',
     fb_prop_matrix_cols_lbl: 'Columns (JSON)',
@@ -1065,14 +1129,14 @@ const M = {
     fb_placeholder_form_title: 'e.g. Condition survey',
     fb_label_form_active: 'Form active',
     fb_hint_form_active:
-      'Unchecked: template is inactive — hidden from OS dispatch and from the default templates list (use “include archived” in the builder). Check and save to reactivate.',
+      'Unchecked: template is inactive, hidden from OS dispatch and from the default templates list (use “include archived” in the builder). Check and save to reactivate.',
     fb_label_public_desc: 'Public description',
     fb_placeholder_public_desc: 'What will partners do with this document?',
-    fb_tpl_icon_title: 'Form icon — click to choose',
+    fb_tpl_icon_title: 'Form icon, click to choose',
     fb_tpl_icon_aria: 'Choose form icon',
     fb_nav_help_summary: 'Help: section navigation in the app (list vs one-by-one)',
     fb_nav_help_p1:
-      'In-app navigation — For each section, in the properties panel on the right, choose list with scroll or one field at a time. The app merges sections into a single scroll when all are list mode; if any is one-by-one, it uses step screens. Older forms with only a global follow mode keep the JSON mode until you set per-section mode.',
+      'In-app navigation, For each section, in the properties panel on the right, choose list with scroll or one field at a time. The app merges sections into a single scroll when all are list mode; if any is one-by-one, it uses step screens. Older forms with only a global follow mode keep the JSON mode until you set per-section mode.',
     fb_nav_help_p2:
       'With a single section, the step menu is ignored in the app. With an active hub and several list-only sections, the app shows one step at a time instead of a single scroll.',
     fb_app_start_eyebrow: 'Layout',
@@ -1115,17 +1179,19 @@ const M = {
     mdl_mobile_preview_wizard: 'One by one',
     mdl_mobile_preview_hybrid: 'Hybrid',
     mdl_mobile_preview_notice:
-      'Browser simulation. It mimics the app layout (HTML/CSS), but is not the same engine as the phone (React Native in app/checklist/[id].tsx — GPS, attachments, business logic, etc.).',
+      'Browser simulation. It mimics the app layout (HTML/CSS), but is not the same engine as the phone (React Native in app/checklist/[id].tsx, GPS, attachments, business logic, etc.).',
     mdl_new_form_title: 'New form',
     mdl_new_form_label: 'Give a name / title for the document:',
     mdl_new_form_ph: 'e.g. AC maintenance runbook',
     mdl_cancel: 'Cancel',
     mdl_new_form_create: 'Create blank canvas',
     mdl_forms_title: 'My forms',
-    mdl_forms_sub: 'Folders and templates in the tree — expand, drag, or use the actions on each row.',
+    mdl_forms_sub:
+      'Tree view: expand folders, drag forms to move. Click a folder to set where new templates are created.',
     mdl_forms_search_ph: 'Filter by name (folders and forms)…',
+    mdl_forms_filter_non_archived: 'Non-archived only',
     mdl_forms_tree_tip:
-        'Tip: drag a form onto a folder in the tree, or use «Move to» on the form row.',
+        'Drag a card onto a folder to move it. The #xxxxxx suffix distinguishes duplicate titles. Expand «Move to another folder…» only when needed.',
     mdl_forms_new_folder: '+ New folder',
     mdl_forms_new_here: 'New form here',
     mdl_folder_title: 'New folder',
@@ -1146,7 +1212,7 @@ const M = {
     mdl_duration_body:
       'Filling the form only (no travel). Optional: if empty, dispatch defaults to 60 min. Multiples of 5 min; minimum 5.',
     mdl_duration_lbl: 'Minutes (optional)',
-    mdl_duration_ph: 'e.g. 90 — leave empty for dispatch default',
+    mdl_duration_ph: 'e.g. 90, leave empty for dispatch default',
     mdl_duration_hint: 'Use Save form to persist this setting on the template.',
     mdl_section_title: 'Edit step',
     mdl_section_body: 'Name and icon used on the canvas and mobile app (when the section field has an icon).',
@@ -1165,7 +1231,7 @@ const M = {
     mdl_logic_sub_default: 'Configuring triggers for field…',
     mdl_logic_rules_in_block: 'Rules in this block:',
     mdl_logic_sub_help_html:
-      'Use <em>Monitored field</em> to trigger the condition from another field or a <em>section/step</em>. “Fetch from API and fill field” runs when <strong>leaving the monitored field</strong> (keyboard), generally with the same timing as “Validate against external API” — GET with no body or POST with form JSON.',
+      'Use <em>Monitored field</em> to trigger the condition from another field or a <em>section/step</em>. “Fetch from API and fill field” runs when <strong>leaving the monitored field</strong> (keyboard), generally with the same timing as “Validate against external API”, GET with no body or POST with form JSON.',
     mdl_logic_field_label_aria: 'Field or step name',
     mdl_logic_close_aria: 'Close',
     mdl_logic_h4: 'Condition (IF) and actions (THEN)',
@@ -1203,8 +1269,8 @@ const M = {
     fb_logic_op_lt: 'Less than (number)',
     fb_logic_op_gte: 'Greater or equal (number)',
     fb_logic_op_lte: 'Less or equal (number)',
-    fb_logic_op_between: 'Between two numbers (inclusive) — value: min|max',
-    fb_logic_op_not_between: 'Outside range — value: min|max',
+    fb_logic_op_between: 'Between two numbers (inclusive), value: min|max',
+    fb_logic_op_not_between: 'Outside range, value: min|max',
     fb_logic_op_one_of: 'Is one of (exact list, comma-separated)',
     fb_logic_op_none_of: 'Is none of (exact list)',
     fb_logic_op_includes_any: 'Contains any substring from list (comma)',
@@ -1233,7 +1299,7 @@ const M = {
     fb_logic_op_form_elapsed_gt: 'Total time on form > (seconds)',
     fb_logic_op_form_elapsed_lt: 'Total time on form < (seconds)',
     fb_logic_op_form_elapsed_eq: 'Total time on form = (whole seconds)',
-    fb_logic_op_form_elapsed_between: 'Total time between (sec) — min|max',
+    fb_logic_op_form_elapsed_between: 'Total time between (sec), min|max',
 
     fb_logic_op_section_started: 'Technician has entered this step',
     fb_logic_op_section_not_started: 'Has not entered this step yet',
@@ -1245,10 +1311,10 @@ const M = {
     fb_logic_op_section_elapsed_gt: 'Time spent on step > (seconds)',
     fb_logic_op_section_elapsed_lt: 'Time spent on step < (seconds)',
     fb_logic_op_section_elapsed_eq: 'Time spent on step = (whole seconds)',
-    fb_logic_op_section_elapsed_between: 'Time on step between (sec) — min|max',
+    fb_logic_op_section_elapsed_between: 'Time on step between (sec), min|max',
 
     fb_logic_ph_between: 'Min|Max (e.g. 10|500)',
-    fb_logic_ph_not_between: 'Min|Max — outside range',
+    fb_logic_ph_not_between: 'Min|Max, outside range',
     fb_logic_ph_one_of: 'Value1, Value2 (equality, case-insensitive)',
     fb_logic_ph_none_of: 'Value1, Value2…',
     fb_logic_ph_includes_any: 'Substring1, Substring2…',
@@ -1273,7 +1339,7 @@ const M = {
     fb_logic_vision_hint_html:
       '<strong>0–10 rating active on this field:</strong> operators <code>==</code>, <code>!=</code>, <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>, “Between two numbers”, and “Outside range” compare the <code>rating0To10</code> value (0–10) from Gemini. Use <b>Has any value</b> if you only need analysis done. If there is no score, <b>!=</b> with a number is true; <b>==</b> and other numeric comparisons fail.',
     fb_logic_vision_detection_hint_html:
-      '<strong>AI vision — detection:</strong> once analysis completes, <code>==</code>, <code>!=</code>, “contains”, “one of”, <b>Is true</b> (<code>yes</code>) and <b>Is false</b> (<code>no</code>) use <code>answers[0]</code> (normalized to <code>yes</code> / <code>no</code> / <code>unknown</code>). Use <b>Has any value</b> if you only need detection done.',
+      '<strong>AI vision, detection:</strong> once analysis completes, <code>==</code>, <code>!=</code>, “contains”, “one of”, <b>Is true</b> (<code>yes</code>) and <b>Is false</b> (<code>no</code>) use <code>answers[0]</code> (normalized to <code>yes</code> / <code>no</code> / <code>unknown</code>). Use <b>Has any value</b> if you only need detection done.',
 
     fb_logic_api_fetch_offline: 'If offline, do not fetch or change the field',
     fb_logic_api_allow_offline: 'Allow technician to skip rule when offline',
@@ -1318,7 +1384,7 @@ const M = {
     mdl_copilot_clear_chat: 'Clear conversation',
     mdl_copilot_preview_title: 'Review suggested fields',
     mdl_copilot_preview_intro:
-      'Check Include on each row. Adjust type, description, per-field AI instructions, and required. Use General comments and Reprocess with instructions to ask the AI for a new draft before applying to the canvas. Steps (section_break) cannot be removed — step type is not editable here.',
+      'Check Include on each row. Adjust type, description, per-field AI instructions, and required. Use General comments and Reprocess with instructions to ask the AI for a new draft before applying to the canvas. Steps (section_break) cannot be removed, step type is not editable here.',
     mdl_copilot_prev_th_inc: 'Inc.',
     mdl_copilot_prev_th_field: 'Field / step',
     mdl_copilot_prev_th_type: 'Type',
@@ -1337,7 +1403,7 @@ const M = {
       '**Done:** changes from this message **have already been applied** in the editor (canvas, model settings, and/or suggested rules). Use **«Undo last change»** if you need to revert.',
     mdl_copilot_feedback_preview:
       '**Panel state:** the **review table** with suggested fields is open. Confirm with **«Apply to canvas»** when ready, or adjust rows first.',
-    fb_copilot_empty_reply: '(The AI returned no text — check side notes or try again.)',
+    fb_copilot_empty_reply: '(The AI returned no text, check side notes or try again.)',
     fb_guided_title: 'Build your form with guided help',
     fb_guided_sub:
       'Describe the goal, who will fill it out, and the scenario. The copilot will create a professional first draft and suggest structure, evidence, and next steps.',
@@ -1377,9 +1443,9 @@ const M = {
     fb_alert_save_fatal: 'Save error: {detail}',
     fb_alert_pdf_needs_fields: 'Add questions before generating the PDF.',
     fb_alert_jspdf_missing:
-      'The jsPDF library did not load (network or CDN). PDF preview cannot be generated — reload the page or check the script in checklists.html.',
+      'The jsPDF library did not load (network or CDN). PDF preview cannot be generated, reload the page or check the script in checklists.html.',
     fb_alert_sortable_missing:
-      'SortableJS did not load (network or CDN). Canvas drag-and-drop is disabled — reload the page or check the script in checklists.html.',
+      'SortableJS did not load (network or CDN). Canvas drag-and-drop is disabled, reload the page or check the script in checklists.html.',
     fb_alert_folder_ui: 'Reload the page (New folder UI did not load).',
     fb_alert_folder_name: 'Enter a folder name.',
     fb_alert_folder_create_fail: 'Could not create folder: {detail}',
@@ -1392,7 +1458,7 @@ const M = {
     fb_alert_clone_net: 'Network error while cloning. Local copy was rolled back.',
     fb_alert_clone_ok: 'Form “{title}” cloned successfully.',
     fb_alert_new_panel:
-      'Canvas ready for “{title}”. A first step already exists — drag questions into the “External area” or inside a step (or add more sections).',
+      'Canvas ready for “{title}”. A first step already exists, drag questions into the “External area” or inside a step (or add more sections).',
     fb_alert_select_field: 'Select a field on the canvas (click a card).',
     fb_alert_clarify_options: 'Select at least one option in a question, or type in the text box.',
     fb_alert_copilot_reprocess: 'No loaded draft to reprocess.',
@@ -1415,8 +1481,13 @@ const M = {
 };
 M['es-ES'] = { ...M['en-US'] };
 Object.assign(M['es-ES'], {
+  mdl_forms_sub:
+    'Vista en árbol: expanda carpetas, arrastre formularios para mover. Pulse una carpeta para definir dónde crear un modelo nuevo.',
+  mdl_forms_filter_non_archived: 'Solo no archivados',
+  mdl_forms_tree_tip:
+    'Arrastre la tarjeta a una carpeta para moverla. El sufijo #xxxxxx distingue títulos duplicados. «Mover a otra carpeta…» está plegado hasta que lo necesite.',
   fb_vision_prompt_ex_btn: 'Ejemplos',
-  fb_vision_prompt_ex_btn_title: 'Modelos de prompt para servicios de campo (visión IA — análisis)',
+  fb_vision_prompt_ex_btn_title: 'Modelos de prompt para servicios de campo (visión IA, análisis)',
   fb_vision_prompt_ex_modal_title: 'Ejemplos de prompt estructurado',
   fb_vision_prompt_ex_modal_intro:
     'Elija una plantilla para rellenar el campo y adáptela a su checklist. En campos nuevos, la «Clasificación 0–10» viene activada por defecto para que la API devuelva <code>rating0To10</code> alineado con la nota en <code>value</code>; desactívela en propiedades si no la necesita.',
@@ -1427,17 +1498,17 @@ Object.assign(M['es-ES'], {
     'No hay modelos en esta área. Elija «Todas las áreas» u otro sector.',
   fb_vision_prompt_ex_catalog_missing:
     'No se cargó el catálogo de ejemplos. Recargue la página del Form Builder (debe existir visionAiAnalysisPromptExamplesData.js).',
-  fb_vision_detection_ex_btn_title: 'Ejemplos de preguntas para objetos y conteo (visión IA — detección)',
-  fb_vision_detection_ex_modal_title: 'Ejemplos de preguntas para detección',
+  fb_vision_detection_ex_btn_title: 'Modelos de prompt (visión IA, detección)',
+  fb_vision_detection_ex_modal_title: 'Modelos de prompt para detección',
   fb_vision_detection_ex_modal_intro:
-    'Elija un ejemplo y adapte los objetos, sinónimos y exclusiones a su modelo YOLO. Solo hay <b>un criterio</b> por envío de medios; indique con claridad qué debe ignorarse en conteos.',
+    'Cada modelo incluye contexto, tarea, criterio (q1) y nota sobre <code>answers[0]</code>, la misma estructura que el prompt predeterminado del campo. Adapte el criterio a su checklist. Un criterio por envío de medios; Moondream o el proxy YOLO normalizan sí/no en <code>answers[0].value</code>. En conteos, indique qué debe ignorarse.',
   fb_prop_vision_body_detection_html:
-    'En la app, el técnico usa <b>solo la cámara</b> — sin galería ni selector de archivos. BrSpark reenvía a la URL en <b>Integraciones → Visión IA - YOLO</b>. Abajo se define <b>un único criterio</b> por envío de medios; la API devuelve sí/no + confianza para ese criterio.',
+    'En la app, el técnico usa <b>solo la cámara</b>, sin galería ni selector de archivos. El servidor llama a la integración <b>Visión IA - Moondream</b> (API de pregunta sobre imagen) o reenvía al proxy <b>Visión IA - YOLO</b>, según la preferencia del tenant en Integraciones / cuenta. Abajo se define <b>un único criterio</b> en lenguaje natural (estilo semejante a «visión IA, análisis»); la respuesta normalizada incluye <code>answers[0].value</code> (<code>yes</code> / <code>no</code> / <code>unknown</code>), confianza y racional.',
   fb_prop_vision_detection_prompt_lbl: 'Prompt (sí/no)',
   fb_prop_vision_detection_prompt_hint:
-    'Un <b>único</b> criterio por envío de medios (hasta <b>{maxSingle}</b> caracteres). La API devuelve JSON con <code>answers</code> (siempre <code>q1</code>) y valor <code>yes</code>, <code>no</code> o <code>unknown</code> cuando el criterio es sí/no.',
+    'Un <b>único</b> criterio por envío de medios (hasta <b>{maxSingle}</b> caracteres), en texto libre como en el campo de análisis. El backend devuelve el mismo sobre JSON (<code>answers</code> con <code>q1</code>, <code>value</code>, <code>confidence</code>, <code>rationale</code>) con valor <code>yes</code>, <code>no</code> o <code>unknown</code>.',
   fb_prop_vision_body_analysis_html:
-    'En la app, el técnico usa <b>solo la cámara</b> — sin galería ni selector de archivos. El servidor BrSpark llama a la API <b>Gemini</b> con la integración <b>Google AI Studio</b> (clave y modelo en Integraciones). El texto de abajo es un <b>único prompt estructurado</b>; la respuesta incluye una nota de 0 a 10 en <code>answers[0].value</code> (cadena), confianza y racional. Con la «Clasificación 0–10» activada (recomendado), la raíz del JSON incluye también <code>rating0To10</code>.',
+    'En la app, el técnico usa <b>solo la cámara</b>, sin galería ni selector de archivos. El servidor BrSpark llama a la API <b>Gemini</b> con la integración <b>Google AI Studio</b> (clave y modelo en Integraciones). El texto de abajo es un <b>único prompt estructurado</b>; la respuesta incluye una nota de 0 a 10 en <code>answers[0].value</code> (cadena), confianza y racional. Con la «Clasificación 0–10» activada (recomendado), la raíz del JSON incluye también <code>rating0To10</code>.',
   fb_prop_vision_ai_structured_prompt_hint:
     'Describa criterios de su operación, qué cuenta como buena o mala evidencia y qué debe observar la IA en el medio. Límite aproximado: {max} caracteres. La API devuelve JSON con <code>answers</code> (p. ej. <code>q1</code>); la plantilla predeterminada usa <code>value</code> como cadena de "0" a "10" o <code>unknown</code>. Con la clasificación 0–10 activada arriba, la raíz incluye también <code>rating0To10</code> (entero alineado con la misma nota).',
   fb_prop_vision_default_structured_prompt:
@@ -1471,9 +1542,15 @@ Object.assign(M['es-ES'], {
     '- 9–10: excelente; criterios de la etapa inequívocamente cumplidos.\n\n' +
     'En rationale, en 2–4 frases breves en es-ES, diga qué observó y qué movió más la nota.',
   fb_prop_vision_default_detection_prompt:
-    'Criterio único (identificador q1): ¿la imagen permite afirmar, sin ambigüedad relevante, que el objeto o situación esperados para este punto del checklist están presentes (o ausentes, cuando corresponda) según el criterio de su modelo YOLO?',
+    'Contexto: inspección visual de una etapa ejecutada en campo (foto o vídeo único; en vídeo el backend usa un frame como imagen).\n\n' +
+    'Tarea:\n' +
+    '1) Con base solo en lo visible, el criterio siguiente debe evaluarse de forma binaria para este punto de la OS.\n' +
+    '2) Describa en el criterio qué debe verificarse (presencia, ausencia, estado, EPI, orden, etc.).\n\n' +
+    'Criterio (identificador q1):\n' +
+    '[Edite aquí, ej.: «¿Hay al menos un extintor claramente visible y aparentemente accesible en la zona fotografiada?»]\n\n' +
+    'Respuesta esperada en la app: el servidor normaliza a yes, no o unknown en answers[0].value, con confianza y racional (integración «Visión IA - Moondream» o proxy «Visión IA - YOLO», según el tenant).',
   fb_logic_vision_detection_hint_html:
-    '<strong>Visión IA — detección:</strong> con análisis terminado, <code>==</code>, <code>!=</code>, «contiene», «uno de», <b>Es verdadero</b> (<code>yes</code>) y <b>Es falso</b> (<code>no</code>) usan <code>answers[0]</code> (normalizado a <code>yes</code> / <code>no</code> / <code>unknown</code>). Use <b>Está rellenado</b> si solo necesita detección completada.',
+    '<strong>Visión IA, detección:</strong> con análisis terminado, <code>==</code>, <code>!=</code>, «contiene», «uno de», <b>Es verdadero</b> (<code>yes</code>) y <b>Es falso</b> (<code>no</code>) usan <code>answers[0]</code> (normalizado a <code>yes</code> / <code>no</code> / <code>unknown</code>). Use <b>Está rellenado</b> si solo necesita detección completada.',
   fb_vision_detection_ex_catalog_missing:
     'No se cargó el catálogo de ejemplos. Recargue la página del Form Builder (debe existir visionDetectionPromptExamplesData.js).',
   fb_app_nav_scroll_hint: 'Desplace horizontalmente la barra si los controles no caben en pantalla.',
@@ -1492,14 +1569,31 @@ Object.assign(M['es-ES'], {
   fb_app_hub_wrap_title: 'Activo cuando «Menú de pasos» está seleccionado',
   fb_label_form_active: 'Formulario activo',
   fb_hint_form_active:
-    'Desmarcado: el modelo queda inactivo — no aparece en el despacho de OS ni en el listado público de plantillas (en el builder use la lista con «incluir archivados»). Vuelva a marcar y guardar para reactivar.',
+    'Desmarcado: el modelo queda inactivo, no aparece en el despacho de OS ni en el listado público de plantillas (en el builder use la lista con «incluir archivados»). Vuelva a marcar y guardar para reactivar.',
   fb_prop_vision_video_max_hint:
-    'En la app, en los campos de visión IA (detección o análisis), cada vídeo dura como máximo 10 segundos; se rechazan clips más largos. En detección (YOLO), el envío al servidor usa una imagen extraída del primer instante del vídeo: el servicio externo sigue recibiendo solo imagen.',
+    'En la app, en los campos de visión IA (detección o análisis), cada vídeo dura como máximo 10 segundos; se rechazan clips más largos. En detección, el envío al servidor usa una imagen extraída del primer instante del vídeo (Moondream y el proxy YOLO reciben solo imagen).',
   fb_canvas_preamble_title: 'Área externa',
   fb_canvas_loading:
     'Cargando el canvas… Puede colocar campos en el «Área externa» o dentro de cada paso; arrastre desde la barra lateral.',
+  fb_prop_geofence_opt_radius: 'Destino de la OS (punto + radio Haversine)',
+  fb_prop_geofence_opt_polygon: 'Geometría de la OS (ruta, área, polígono / KML en el despacho)',
+  fb_prop_geofence_hint_radius:
+    'Validación frente al destino de la OS: distancia en línea recta (Haversine) del GPS al punto de la OS; el radio de abajo es el valor predeterminado si la OS no fija otro en el despacho.',
+  fb_prop_geofence_hint_polygon:
+    'Validación frente a la geometría del despacho: polígono (área), corredor de ruta (KML) o extremos A/B (tramo). Los valores de abajo son predeterminados cuando la OS no trae tolerancias.',
+  fb_prop_geofence_radius_help:
+    'Valor predeterminado del formulario si la OS no define radio en el despacho; si la OS define radio, prevalece ese valor.',
+  fb_prop_geofence_dest_radius_lbl: 'Radio de aceptación (metros)',
+  fb_prop_geofence_dest_radius_help:
+    'Predeterminado si la OS no fija radio en el despacho; en caso contrario prevalece el de la OS.',
+  fb_prop_geofence_geom_tol_lbl: 'Corredor de ruta / polilínea (metros)',
+  fb_prop_geofence_geom_tol_help:
+    'Ruta, patrullaje o KML en línea: distancia máxima del GPS al trazado (no alejarse del camino). Valor predeterminado si la OS no fija tolerancia en el despacho.',
+  fb_prop_geofence_seg_buf_lbl: 'Tolerancia en extremos A↔B (metros)',
+  fb_prop_geofence_seg_buf_help:
+    'Solo cuando el despacho usa zona «tramo» (dos puntos A y B): distancia máxima hasta A o hasta B. No sustituye el corredor de ruta de arriba; seguir línea/polilínea es siempre el campo superior.',
   fb_alert_new_panel:
-    'Panel listo para «{title}». Ya existe un primer paso en el canvas — arrastre preguntas al «Área externa» o dentro de un paso (o añada más secciones).',
+    'Panel listo para «{title}». Ya existe un primer paso en el canvas, arrastre preguntas al «Área externa» o dentro de un paso (o añada más secciones).',
   fb_prop_form_complete_btn_note:
     'En la app, este bloque muestra un <strong>botón</strong> que hace lo mismo que el botón principal del pie (avanzar, volver al menú de pasos o <strong>cerrar la OS</strong>). El texto del botón es la <strong>etiqueta</strong> de arriba; si está vacío, la app usa el texto predeterminado del pie. Puede colocar el campo en el <strong>Área externa</strong> o dentro de cualquier paso.',
 });
@@ -1742,6 +1836,7 @@ export function applyChecklistsModalsI18n() {
   setText('mdl-forms-title', fbT('mdl_forms_title'));
   setText('mdl-forms-sub', fbT('mdl_forms_sub'));
   setInputPh('form-search', fbT('mdl_forms_search_ph'));
+  setText('mdl-forms-filter-archived-text', fbT('mdl_forms_filter_non_archived'));
   setText('forms-tree-tip', fbT('mdl_forms_tree_tip'));
   setText('btn-new-template-folder', fbT('mdl_forms_new_folder'));
   const btnHere = document.querySelector('[data-fb-forms-new-here]');

@@ -89,6 +89,13 @@
     .fb-form-audit-panel[hidden] {
       display: none !important;
     }
+    /* Lista de formulários: mover pasta (details) sem marcador nativo */
+    .fb-form-move-details > summary {
+      list-style: none;
+    }
+    .fb-form-move-details > summary::-webkit-details-marker {
+      display: none;
+    }
     .fb-form-audit-head {
       display: flex;
       align-items: flex-start;
@@ -1935,17 +1942,23 @@
 
 <!-- Pastas e formulários (gaveta lateral esquerda, estilo semelhante a clientes de e-mail) -->
 <div id="forms-list-modal" style="display:none;" onclick="if(event.target===this && window.closeFormsBrowser)window.closeFormsBrowser()">
-    <div style="background:var(--color-bg); width:min(560px, 96vw); height:100vh; min-height:0; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); box-sizing:border-box; border-right:1px solid var(--color-border);" onclick="event.stopPropagation()">
+    <div style="background:var(--color-bg); width:min(960px, 98vw); height:100vh; min-height:0; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); box-sizing:border-box; border-right:1px solid var(--color-border);" onclick="event.stopPropagation()">
         <div style="padding:18px 20px; background:white; border-bottom:1px solid var(--color-border); display:flex; justify-content:space-between; align-items:center; gap:12px; flex-shrink:0;">
             <div>
                <h3 id="mdl-forms-title" style="margin:0; font-size:20px; color:#0f172a; font-weight:900;">Meus Formulários</h3>
-               <p id="mdl-forms-sub" style="margin:4px 0 0 0; font-size:13px; color:var(--color-text-light);">Pastas e modelos na árvore — expanda, arraste ou use as ações em cada linha.</p>
+               <p id="mdl-forms-sub" style="margin:4px 0 0 0; font-size:13px; color:var(--color-text-light);">Navegação em colunas (como o Finder): clique numa pasta para abrir a coluna seguinte.</p>
             </div>
             <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeFormsBrowser && window.closeFormsBrowser()" aria-label="Fechar lista de formulários"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
         </div>
-        <div style="padding:14px 20px; background:white; border-bottom:1px solid var(--color-border); display:flex; align-items:center; gap:8px; flex-shrink:0;">
-            <ion-icon name="search-outline" style="font-size:20px; color:var(--color-text-light);"></ion-icon>
-            <input type="text" id="form-search" placeholder="Filtrar por nome (pastas e formulários)…" class="prop-input" onkeyup="window.filterFormsList()" style="font-size:15px; padding:12px; flex:1; border:none; outline:none;" >
+        <div style="padding:14px 20px; background:white; border-bottom:1px solid var(--color-border); flex-shrink:0;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <ion-icon name="search-outline" style="font-size:20px; color:var(--color-text-light); flex-shrink:0;"></ion-icon>
+                <input type="text" id="form-search" placeholder="Filtrar por nome (pastas e formulários)…" class="prop-input" onkeyup="window.filterFormsList()" style="font-size:15px; padding:12px; flex:1; border:none; outline:none; min-width:0;" >
+            </div>
+            <label id="mdl-forms-filter-archived-lbl" style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13px; font-weight:600; color:#334155; cursor:pointer; user-select:none;">
+                <input type="checkbox" id="forms-filter-hide-archived" checked onchange="window.onFormsFilterArchivedChange && window.onFormsFilterArchivedChange()" style="width:18px;height:18px;flex-shrink:0;" />
+                <span id="mdl-forms-filter-archived-text">Apenas não arquivados</span>
+            </label>
         </div>
         <div style="flex:1 1 0%; display:flex; flex-direction:column; min-height:0; min-width:0; background:var(--color-bg);">
             <div id="forms-browser-toolbar" style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--color-border); flex-shrink:0; background:white;">
@@ -1953,8 +1966,8 @@
                 <button type="button" class="btn btn-outline" id="btn-new-template-folder" style="font-size:12px; white-space:nowrap;">+ Nova pasta</button>
                 <button type="button" class="btn btn-primary" data-fb-forms-new-here onclick="window.createNewChecklistInBrowseFolder()" style="font-size:12px; white-space:nowrap;">Novo formulário aqui</button>
             </div>
-            <p id="forms-tree-tip" style="margin:0; padding:8px 16px; font-size:11px; color:var(--color-text-light); flex-shrink:0; background:white; border-bottom:1px solid var(--color-border); line-height:1.45;">Dica: arraste um formulário para uma pasta na árvore ou use «Mover para» na linha do modelo.</p>
-            <aside id="forms-folder-tree" style="flex:1 1 0%; min-height:0; overflow-y:auto; overflow-x:hidden; background:white; padding:10px 12px 18px; font-size:13px;">
+            <p id="forms-tree-tip" style="margin:0; padding:8px 16px; font-size:11px; color:var(--color-text-light); flex-shrink:0; background:white; border-bottom:1px solid var(--color-border); line-height:1.45;">Dica: arraste um modelo para uma pasta em qualquer coluna, ou use «Mover para» na linha do formulário.</p>
+            <aside id="forms-folder-tree" class="fb-finder-host" style="flex:1 1 0%; min-height:0; display:flex; flex-direction:column; overflow:hidden; background:#e5e7eb; font-size:13px;">
             </aside>
             <div id="forms-grid" style="display:none;" aria-hidden="true"></div>
         </div>

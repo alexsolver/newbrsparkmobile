@@ -32,6 +32,7 @@ export type TelemetryEventType =
   | 'CHECKIN'      | 'CHECKOUT'
   | 'TRANSIT_START'| 'TRANSIT_END'
   | 'HEARTBEAT'    | 'GEOFENCE_ENTER' | 'GEOFENCE_EXIT'
+  | 'GEOFENCE_FIELD_AUDIT'
   | 'PAUSE'        | 'RESUME'
   | 'FRAUD_FLAG'   | 'INTEGRITY_CHECK' | 'POLICY_VIOLATION';
 

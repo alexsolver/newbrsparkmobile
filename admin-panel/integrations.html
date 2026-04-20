@@ -509,6 +509,26 @@
           </div>
         </div>
 
+        <!-- Visão IA — Moondream (API cloud VQA /query) -->
+        <div class="int-card" id="card-vision-moondream">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#0c4a6e;color:#7dd3fc"><ion-icon name="moon-outline" style="vertical-align:-2px"></ion-icon></div>
+            <div><div class="int-name">Visão IA - Moondream</div><div class="int-cat">Visão IA</div></div>
+            <span class="int-status inactive" id="status-vision-moondream" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc"><strong>Só o servidor BrSpark</strong> chama a API Moondream (<code>POST …/v1/query</code>) com a imagem em base64 e cada pergunta do checklist. Obtenha a chave em <a href="https://moondream.ai" target="_blank" rel="noopener">moondream.ai</a>. <strong>Predefinição:</strong> se Moondream e YOLO estiverem configurados e o tenant não tiver preferência em <code>tenant.features.visionDetectionEngine</code>, usa-se Moondream. Para forçar o proxy YOLO, defina <code>visionDetectionEngine: &quot;yolo&quot;</code> (<code>PATCH /api/tenants/:id/features</code>). Se só um dos dois estiver configurado, usa-se esse.</div>
+          <div class="int-fields" id="fields-vision-moondream">
+            <input class="form-control" id="url-vision-moondream" placeholder="Base da API (padrão: https://api.moondream.ai/v1)" />
+            <input class="form-control" id="key-vision-moondream" type="password" placeholder="API key (cabeçalho X-Moondream-Auth)" autocomplete="off" />
+            <input class="form-control" id="timeout-vision-moondream" placeholder="Timeout ms (opcional, padrão 120000)" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveMoondreamVisionInt()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-vision-moondream" style="display:none" onclick="testInt('vision-moondream')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-vision-moondream" style="display:none" onclick="deleteMoondreamVisionInt()">Remover</button>
+          </div>
+        </div>
+
       </div>
 
       </section>
@@ -562,14 +582,19 @@
     'AWS Rekognition':     { slug:'aws-rekog' },
     'Exadel CompreFace':   { slug:'compreface' },
     'Visão IA - YOLO': { slug:'vision-checklist' },
+    'Visão IA - Moondream': { slug: 'vision-moondream' },
     'Stripe': { slug: 'stripe' },
     'Didit': { slug: 'didit' },
   };
 
   const VISION_CHECKLIST_INT_NAME = 'Visão IA - YOLO';
   const VISION_CHECKLIST_INT_LEGACY = 'Visão IA (checklists)';
+  const VISION_MOONDREAM_INT_NAME = 'Visão IA - Moondream';
   function activeVisionChecklistInt() {
     return activeInts[VISION_CHECKLIST_INT_NAME] || activeInts[VISION_CHECKLIST_INT_LEGACY];
+  }
+  function activeMoondreamInt() {
+    return activeInts[VISION_MOONDREAM_INT_NAME];
   }
 
   /** Integração Gemini via Google AI Studio (nome novo) ou legado «Google AI (Gemini)». */
@@ -634,6 +659,7 @@
     const name = Object.keys(CARD_MAP).find(k => CARD_MAP[k].slug === slug);
     let intObj = activeInts[name];
     if (slug === 'vision-checklist') intObj = activeVisionChecklistInt();
+    if (slug === 'vision-moondream') intObj = activeMoondreamInt();
     if (slug === 'googleai') intObj = activeGoogleAiStudioInt();
     if (!intObj?.id) return showToast(integT('integ_toast_save_first'), false);
 
@@ -732,6 +758,17 @@
       toVc.value = m.timeoutMs != null && String(m.timeoutMs).trim() !== '' ? String(m.timeoutMs) : '';
     }
 
+    const urlMd = document.getElementById('url-vision-moondream');
+    const keyMd = document.getElementById('key-vision-moondream');
+    const toMd = document.getElementById('timeout-vision-moondream');
+    const mdm = activeMoondreamInt();
+    if (urlMd) urlMd.value = mdm?.baseUrl || 'https://api.moondream.ai/v1';
+    if (keyMd) keyMd.value = '';
+    if (toMd) {
+      const m = mdm?.metadata && typeof mdm.metadata === 'object' ? mdm.metadata : {};
+      toMd.value = m.timeoutMs != null && String(m.timeoutMs).trim() !== '' ? String(m.timeoutMs) : '';
+    }
+
     const urlGa = document.getElementById('url-googleai');
     const modelGa = document.getElementById('model-googleai');
     const keyGa = document.getElementById('key-googleai');
@@ -781,9 +818,11 @@
       const intForCard =
         slug === 'vision-checklist'
           ? activeVisionChecklistInt()
-          : slug === 'googleai'
-            ? activeGoogleAiStudioInt()
-            : activeInts[name];
+          : slug === 'vision-moondream'
+            ? activeMoondreamInt()
+            : slug === 'googleai'
+              ? activeGoogleAiStudioInt()
+              : activeInts[name];
       const connected = !!intForCard;
       if (connected) count++;
       setConnected(slug, connected, intForCard);
@@ -1067,6 +1106,54 @@
     if (!confirm(integT('integ_confirm_remove', { name: VISION_CHECKLIST_INT_NAME }))) return;
     await CONFIG.del(`/integrations/${intObj.id}`);
     loadIntegrations();
+  };
+
+  window.deleteMoondreamVisionInt = async () => {
+    if (!canManageIntegrations) return;
+    const intObj = activeMoondreamInt();
+    if (!intObj) return;
+    if (!confirm(integT('integ_confirm_remove', { name: VISION_MOONDREAM_INT_NAME }))) return;
+    await CONFIG.del(`/integrations/${intObj.id}`);
+    loadIntegrations();
+  };
+
+  window.saveMoondreamVisionInt = async () => {
+    if (!canManageIntegrations) return;
+    const url = document.getElementById('url-vision-moondream')?.value.trim() || 'https://api.moondream.ai/v1';
+    const key = document.getElementById('key-vision-moondream')?.value.trim() || '';
+    const timeoutRaw = document.getElementById('timeout-vision-moondream')?.value.trim() || '';
+    if (!key) return alert(integT('integ_alert_moondream_key'));
+    const metadata = {};
+    if (timeoutRaw) {
+      const n = parseInt(timeoutRaw, 10);
+      if (!Number.isFinite(n) || n < 10000) return alert(integT('integ_alert_timeout'));
+      metadata.timeoutMs = Math.min(300000, n);
+    }
+    const existing = activeMoondreamInt();
+    if (existing) {
+      const patch = { baseUrl: url, status: 'ACTIVE', apiKey: key };
+      patch.metadata = Object.keys(metadata).length ? metadata : existing.metadata ?? null;
+      const res = await CONFIG.patch(`/integrations/${existing.id}`, patch);
+      if (res?.id || res?.name) {
+        loadIntegrations();
+        showToast(integT('integ_toast_vision_moondream_updated'));
+      } else alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
+      return;
+    }
+    const body = {
+      type: 'VISION',
+      name: VISION_MOONDREAM_INT_NAME,
+      status: 'ACTIVE',
+      baseUrl: url,
+      apiKey: key,
+      description: 'Moondream cloud — POST /v1/query (X-Moondream-Auth).',
+      ...(Object.keys(metadata).length ? { metadata } : {}),
+    };
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) {
+      loadIntegrations();
+      showToast(integT('integ_toast_vision_moondream_saved'));
+    } else alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
   };
 
   window.saveVisionInt = async (name, slug) => {

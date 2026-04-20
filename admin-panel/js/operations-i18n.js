@@ -1,5 +1,5 @@
 /**
- * Textos da Central de Operações (painel admin) — pt-BR, en-US e es-ES.
+ * Textos da Central de Operações (painel admin), pt-BR, en-US e es-ES.
  * Preferência: `getAdminUiLocale()` (localStorage `brspark_admin_ui_locale`; padrão pt-BR).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
@@ -7,7 +7,7 @@ import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-r
 
 const M = {
   'pt-BR': {
-    ops_pageTitle: 'BrSpark Admin — Central de Operações',
+    ops_pageTitle: 'BrSpark Admin, Central de Operações',
     ops_bc_panel: 'Painel',
     ops_bc_current: 'Central de operações',
     ops_hero_title: 'Central de operações',
@@ -106,12 +106,12 @@ const M = {
     ops_dispatch_section_geo_html:
       '<ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Local de serviço (cerca eletrônica)',
     ops_dispatch_email_lbl: 'E-mail do técnico *',
-    ops_dispatch_email_ph: 'Nome ou e-mail — sugestões ao digitar',
+    ops_dispatch_email_ph: 'Nome ou e-mail, sugestões ao digitar',
     ops_dispatch_suggest_aria: 'Técnicos sugeridos',
     ops_dispatch_template_lbl: 'Formulário / template *',
     ops_dispatch_template_ph: 'Selecionar formulário…',
     ops_dispatch_title_lbl: 'Título da OS',
-    ops_dispatch_title_ph: 'Ex.: vistoria técnica — apt. 302',
+    ops_dispatch_title_ph: 'Ex.: vistoria técnica, apt. 302',
     ops_dispatch_address_ph: 'Ex.: Rua das Flores, 123, São Paulo',
     ops_dispatch_desc_lbl: 'Descrição',
     ops_dispatch_desc_ph: 'Instruções adicionais para o técnico…',
@@ -119,12 +119,12 @@ const M = {
     ops_dispatch_sched_lbl: 'Início na agenda *',
     ops_dispatch_sched_hint:
       'Defina quando a OS aparece na agenda do técnico (largura proporcional à duração prevista do formulário).',
-    ops_dispatch_dur_lbl: 'Tempo previsto do formulário (min) — opcional',
+    ops_dispatch_dur_lbl: 'Tempo previsto do formulário (min), opcional',
     ops_dispatch_dur_ph: 'Usar valor do formulário (ou 60 min se vazio)',
     ops_dispatch_dur_hint:
       'Só preenchimento do checklist, sem deslocamento. Múltiplos de 5 min; mínimo 5. Se vazio, usa o definido no builder ou 60 min.',
     ops_dispatch_planned_end_preview:
-      'Fim previsto (formulário): {when} — {mins} min de preenchimento (sem deslocamento).',
+      'Fim previsto (formulário): {when}, {mins} min de preenchimento (sem deslocamento).',
     ops_dispatch_section_geo: 'Local de serviço (cerca eletrônica)',
     ops_dispatch_geo_point: 'Ponto',
     ops_dispatch_geo_segment: 'Trecho',
@@ -151,7 +151,7 @@ const M = {
     ops_geo_segment_help_html:
       '<ion-icon name="swap-horizontal-outline" style="vertical-align:-2px"></ion-icon> <strong>Trecho (A↔B):</strong> o técnico deve estar perto do <strong>ponto A</strong> ou do <strong>ponto B</strong>.<br/>Preencha os endereços ou coordenadas abaixo ou clique no mapa para os 2 pontos.',
     ops_geo_polygon_help_html:
-      '<ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> <strong>Polígono:</strong> o técnico deve estar <strong>dentro</strong> da área delimitada.<br/>Validação: dentro / fora — sem tolerância de borda.',
+      '<ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> <strong>Polígono:</strong> o técnico deve estar <strong>dentro</strong> da área delimitada.<br/>Validação: dentro / fora, sem tolerância de borda.',
     ops_geo_none_help_html:
       '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> <strong>Sem validação geográfica.</strong> O técnico pode executar a OS de qualquer local. Campos do tipo "Validar cerca" apenas registram a posição GPS como evidência.',
     ops_label_address: 'Endereço (busca por nome)',
@@ -183,7 +183,7 @@ const M = {
     ops_geo_polygon_preview: 'Visualizar polígono no mapa',
   },
   'en-US': {
-    ops_pageTitle: 'BrSpark Admin — Operations Center',
+    ops_pageTitle: 'BrSpark Admin, Operations Center',
     ops_bc_panel: 'Home',
     ops_bc_current: 'Operations center',
     ops_hero_title: 'Operations center',
@@ -282,12 +282,12 @@ const M = {
     ops_dispatch_section_geo_html:
       '<ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Service location (geofence)',
     ops_dispatch_email_lbl: 'Technician email *',
-    ops_dispatch_email_ph: 'Name or email — suggestions as you type',
+    ops_dispatch_email_ph: 'Name or email, suggestions as you type',
     ops_dispatch_suggest_aria: 'Suggested technicians',
     ops_dispatch_template_lbl: 'Form / template *',
     ops_dispatch_template_ph: 'Select a form…',
     ops_dispatch_title_lbl: 'Work order title',
-    ops_dispatch_title_ph: 'e.g. Technical inspection — Apt 302',
+    ops_dispatch_title_ph: 'e.g. Technical inspection, Apt 302',
     ops_dispatch_address_ph: 'e.g. 123 Main St, São Paulo',
     ops_dispatch_desc_lbl: 'Description',
     ops_dispatch_desc_ph: 'Extra instructions for the technician…',
@@ -295,12 +295,12 @@ const M = {
     ops_dispatch_sched_lbl: 'Schedule start *',
     ops_dispatch_sched_hint:
       'Controls when the work order appears on the technician’s calendar (width follows the expected form duration).',
-    ops_dispatch_dur_lbl: 'Expected form time (min) — optional',
+    ops_dispatch_dur_lbl: 'Expected form time (min), optional',
     ops_dispatch_dur_ph: 'Use form default (or 60 min if empty)',
     ops_dispatch_dur_hint:
       'Checklist filling only, no travel time. Multiples of 5 minutes; minimum 5. If empty, uses the builder default or 60 min.',
     ops_dispatch_planned_end_preview:
-      'Expected end (form): {when} — {mins} min of filling (no travel).',
+      'Expected end (form): {when}, {mins} min of filling (no travel).',
     ops_dispatch_section_geo: 'Service location (geofence)',
     ops_dispatch_geo_point: 'Point',
     ops_dispatch_geo_segment: 'Segment',
@@ -327,7 +327,7 @@ const M = {
     ops_geo_segment_help_html:
       '<ion-icon name="swap-horizontal-outline" style="vertical-align:-2px"></ion-icon> <strong>Segment (A↔B):</strong> the technician must be near <strong>point A</strong> or <strong>point B</strong>.<br/>Fill addresses or coordinates below, or click the map for both points.',
     ops_geo_polygon_help_html:
-      '<ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> <strong>Polygon:</strong> the technician must be <strong>inside</strong> the area.<br/>Rule: inside / outside — no edge tolerance.',
+      '<ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> <strong>Polygon:</strong> the technician must be <strong>inside</strong> the area.<br/>Rule: inside / outside, no edge tolerance.',
     ops_geo_none_help_html:
       '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> <strong>No geographic validation.</strong> The technician can execute the work order from anywhere. “Validate fence” fields only log GPS as evidence.',
     ops_label_address: 'Address (search by name)',

@@ -1,0 +1,4 @@
+{"sessionId":"a2145a","timestamp":1776652727448,"hypothesisId":"H5","location":"index.js:boot","message":"process_start","data":{"pid":89476,"ppid":89421,"cwd":"/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/admin-panel/backend","execArgv":[]}}
+{"sessionId":"a2145a","timestamp":1776652727449,"hypothesisId":"H5","location":"index.js:boot","message":"process_start","data":{"pid":89476,"ppid":89421,"cwd":"/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/admin-panel/backend","execArgv":[]}}
+{"sessionId":"a2145a","hypothesisId":"H6","location":"index.js:server.error","message":"server_listen_error","data":{"code":"EADDRINUSE","message":"listen EADDRINUSE: address already in use 0.0.0.0:3001"},"timestamp":1776652735890}
+{"sessionId":"a2145a","hypothesisId":"H4","location":"index.js:exit","message":"exit","data":{"code":1},"timestamp":1776652735943}

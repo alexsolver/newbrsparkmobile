@@ -5,6 +5,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MEDIA_TAG_COLORS } from '../theme/colors';
 import { taskOsLabel } from '../utils/taskOsLabel';
+import { stripFormTemplateTitleLabelPrefix } from '../utils/stripFormTemplateTitleLabelPrefix';
 import { effectiveProviderTaskStatus } from '../utils/providerTaskStatus';
 import { updateStoredJsonArray } from '../lib/asyncStorageAtomic';
 import {
@@ -12,6 +13,7 @@ import {
   purgeExpiredCompletedExecutionCaches,
   getTaskIdsWithPendingExecutionStatusOutbox,
   getTaskIdsWithPendingLocalSyncOverlay,
+  getTaskIdsWithCompletedChecklistPendingServerAck,
   COMPLETED_BODY_LOCAL_TTL_MS,
 } from './syncService';
 import { AgendaService } from './agendaService';
@@ -285,10 +287,14 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
     });
 
   const pendingSyncIds = await getTaskIdsWithPendingLocalSyncOverlay();
-  const completedSetForMap = new Set(Object.keys(executedMap));
+  const pendingChecklistPostAckIds = await getTaskIdsWithCompletedChecklistPendingServerAck();
+  const completedSetForMap = new Set<string>([
+    ...Object.keys(executedMap),
+    ...pendingChecklistPostAckIds,
+  ]);
   const inprogSetForMap = new Set(inprogressMerged);
 
-  const rows: ProviderOsSearchRow[] = pt_filtered.map((t: any) => {
+  let rows: ProviderOsSearchRow[] = pt_filtered.map((t: any) => {
     const geo = parseCoordLatLng(t);
     const eff = effectiveProviderTaskStatus(t, completedSetForMap, inprogSetForMap, acceptedIdSet);
     const serviceTitle = t.title || 'Serviço';
@@ -308,7 +314,7 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
     const dueMs = parseIsoToMs(dueIso);
     const createdMs = parseIsoToMs(createdAtDisplay);
 
-    const title = `${taskOsLabel({ ...t, id: String(t.id) })} — ${t.title || 'Manutenção'}`;
+    const title = `${taskOsLabel({ ...t, id: String(t.id) })}, ${t.title || 'Manutenção'}`;
     const meta = taskMetadataRecord(t);
     const baseParts = [
       String(t.id),
@@ -323,7 +329,9 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
       String(t.templateId ?? ''),
       String(t.asset?.title ?? ''),
       String(t.assetTitle ?? ''),
-      pendingSyncIds.has(String(t.id)) ? 'pendente_sincronizacao' : '',
+      pendingSyncIds.has(String(t.id)) || pendingChecklistPostAckIds.has(String(t.id))
+        ? 'pendente_sincronizacao'
+        : '',
     ];
     const searchIndex = baseParts.join(' ').replace(/\s+/g, ' ').trim();
 
@@ -349,11 +357,44 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
         locationLat: geo?.lat ?? t.locationLat ?? null,
         locationLng: geo?.lng ?? t.locationLng ?? null,
         status: eff,
-        isPendingSync: pendingSyncIds.has(String(t.id)),
+        isPendingSync:
+          pendingSyncIds.has(String(t.id)) || pendingChecklistPostAckIds.has(String(t.id)),
         isCachedLocally: false,
       },
     };
   });
+
+  for (let ri = 0; ri < rows.length; ri++) {
+    const id = String(rows[ri]?.id || '');
+    if (!id || !pendingChecklistPostAckIds.has(id)) continue;
+    try {
+      const exRaw = await AsyncStorage.getItem(`@brspark_execution_${id}`);
+      if (!exRaw) continue;
+      const ex = JSON.parse(exRaw);
+      const svc = String(ex?.title || ex?.metadata?.title || '').trim();
+      const tplRaw = String(ex?.metadata?.templateTitle || ex?.templateTitle || '').trim();
+      const formTpl = tplRaw ? stripFormTemplateTitleLabelPrefix(tplRaw) : null;
+      const desc = String(ex?.description || '').trim();
+      const t = rows[ri].raw;
+      const baseLabel = taskOsLabel({ ...t, id });
+      const newTitle = svc ? `${baseLabel}, ${svc}` : rows[ri].title;
+      rows[ri] = {
+        ...rows[ri],
+        title: newTitle,
+        serviceTitle: svc || rows[ri].serviceTitle,
+        description: desc || rows[ri].description,
+        formTemplateTitle: formTpl ?? rows[ri].formTemplateTitle,
+        searchIndex: `${rows[ri].searchIndex} ${svc} ${formTpl || ''}`.trim(),
+        raw: {
+          ...rows[ri].raw,
+          title: newTitle,
+          description: desc || rows[ri].raw.description,
+        },
+      };
+    } catch {
+      /* ignore */
+    }
+  }
 
   const completedIdList = rows.filter((r) => r.statusEff === 'COMPLETED').map((r) => r.id);
   const execKeys = completedIdList.map((id) => `@brspark_execution_${id}`);

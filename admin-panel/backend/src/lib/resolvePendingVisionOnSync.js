@@ -7,6 +7,8 @@ const {
   fetchVisionPostPreservingMethod,
 } = require('./visionChecklistAnalyze');
 const { findGoogleAiStudioIntegration, analyzeWithGoogleAiStudio } = require('./visionStudioAnalyze');
+const { findMoondreamIntegration, analyzeWithMoondream } = require('./visionMoondreamAnalyze');
+const { pickVisionDetectionBackend } = require('./visionDetectionRouting');
 const { consumeQuota } = require('./planQuotaService');
 const { MAX_VISION_STRUCTURED_PROMPT_CHARS } = require('../constants/visionSimNaoQuestions');
 
@@ -227,6 +229,14 @@ async function resolvePendingVisionAnalysisOnSync(prisma, { responses, templateI
   const schema = Array.isArray(tmpl?.schemaData) ? tmpl.schemaData : [];
   if (!schema.length) return 0;
 
+  const tenantFeat = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { features: true },
+  });
+  const tf =
+    tenantFeat?.features && typeof tenantFeat.features === 'object' && !Array.isArray(tenantFeat.features)
+      ? tenantFeat.features
+      : {};
   let updated = 0;
   let currentSectionId = null;
   let curSecRepeat = false;
@@ -281,50 +291,69 @@ async function resolvePendingVisionAnalysisOnSync(prisma, { responses, templateI
         visionRating0To10,
       });
     } else if (ft === 'vision_checklist') {
-      const integration = await prisma.integration.findFirst({
+      const yoloIntegration = await prisma.integration.findFirst({
         where: prismaWhereVisionChecklistIntegration(),
       });
-      if (!integration || !String(integration.baseUrl || '').trim()) return;
+      const yoloOk = !!(yoloIntegration && String(yoloIntegration.baseUrl || '').trim());
+      const moonIntegration = await findMoondreamIntegration();
+      const moonOk = !!(moonIntegration && String(moonIntegration.apiKey || '').trim());
+      let { useMoondream: useMoon } = pickVisionDetectionBackend(tf, { yoloOk, moonOk });
+
       const qd = await consumeQuota(prisma, tenantId, 'AI_VISION_DETECTION', 1);
       if (!qd.ok) {
-        console.warn('[resolvePendingVisionOnSync] quota YOLO', qd.error);
+        console.warn('[resolvePendingVisionOnSync] quota visão detecção', qd.error);
         return;
       }
-      const baseUrl = String(integration.baseUrl).trim().replace(/\/+$/, '');
-      const apiKey = integration.apiKey != null ? String(integration.apiKey).trim() : '';
-      const isVideo = String(mime).toLowerCase().startsWith('video/');
-      const boundary = '----BrSparkVisionSync' + Date.now().toString(36);
-      const bodyBuf = buildMultipartBuffer(boundary, [
-        {
-          name: 'media',
-          value: buf,
-          filename: fileName || (isVideo ? 'upload.mp4' : 'upload.jpg'),
-          contentType: mime || 'application/octet-stream',
-        },
-        { name: 'questions', value: JSON.stringify(qs) },
-        { name: 'schemaVersion', value: '1' },
-      ]);
-      const timeoutMs =
-        integration.metadata &&
-        typeof integration.metadata === 'object' &&
-        integration.metadata.timeoutMs != null
-          ? Math.min(300_000, Math.max(10_000, parseInt(String(integration.metadata.timeoutMs), 10) || 120_000))
-          : 120_000;
-      const extRes = await fetchVisionPostPreservingMethod(baseUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        },
-        body: bodyBuf,
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      const text = await extRes.text();
-      if (!extRes.ok) {
-        console.warn('[resolvePendingVisionOnSync] YOLO HTTP', extRes.status, text.slice(0, 200));
-        return;
+
+      if (useMoon) {
+        if (!moonOk) return;
+        const visionRating0To10 = field?.visionRating0To10Enabled === true;
+        normalized = await analyzeWithMoondream({
+          buffer: buf,
+          mimetype: mime || 'application/octet-stream',
+          questions: qs,
+          integration: moonIntegration,
+          visionRating0To10,
+        });
+      } else {
+        const integration = yoloIntegration;
+        if (!integration || !String(integration.baseUrl || '').trim()) return;
+        const baseUrl = String(integration.baseUrl).trim().replace(/\/+$/, '');
+        const apiKey = integration.apiKey != null ? String(integration.apiKey).trim() : '';
+        const isVideo = String(mime).toLowerCase().startsWith('video/');
+        const boundary = '----BrSparkVisionSync' + Date.now().toString(36);
+        const bodyBuf = buildMultipartBuffer(boundary, [
+          {
+            name: 'media',
+            value: buf,
+            filename: fileName || (isVideo ? 'upload.mp4' : 'upload.jpg'),
+            contentType: mime || 'application/octet-stream',
+          },
+          { name: 'questions', value: JSON.stringify(qs) },
+          { name: 'schemaVersion', value: '1' },
+        ]);
+        const timeoutMs =
+          integration.metadata &&
+          typeof integration.metadata === 'object' &&
+          integration.metadata.timeoutMs != null
+            ? Math.min(300_000, Math.max(10_000, parseInt(String(integration.metadata.timeoutMs), 10) || 120_000))
+            : 120_000;
+        const extRes = await fetchVisionPostPreservingMethod(baseUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          },
+          body: bodyBuf,
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        const text = await extRes.text();
+        if (!extRes.ok) {
+          console.warn('[resolvePendingVisionOnSync] YOLO HTTP', extRes.status, text.slice(0, 200));
+          return;
+        }
+        normalized = normalizeVisionAnalyzeResponse(text, qs);
       }
-      normalized = normalizeVisionAnalyzeResponse(text, qs);
     } else {
       return;
     }

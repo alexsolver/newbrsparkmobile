@@ -82,12 +82,12 @@ function formatEventPeriod(ev: AgendaEvent, locale: string): string | null {
     const s = new Date(ev.agendaStartAt);
     const e = new Date(ev.agendaEndAt);
     if (Number.isFinite(s.getTime()) && Number.isFinite(e.getTime())) {
-      return `${s.toLocaleString(tag, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} — ${e.toLocaleString(tag, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+      return `${s.toLocaleString(tag, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}, ${e.toLocaleString(tag, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
     }
   }
   if (ev.startDate && ev.endDate) {
     if (ev.startDate === ev.endDate) return ev.startDate;
-    return `${ev.startDate} — ${ev.endDate}`;
+    return `${ev.startDate}, ${ev.endDate}`;
   }
   return null;
 }

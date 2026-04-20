@@ -101,7 +101,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowVisionChecklist',
     descPt:
-      'Visão de IA Detecção: captura só pela câmera (no builder: somente foto, somente vídeo ou foto e vídeo), perguntas sim/não; respostas com confiança via integração "Visão IA - YOLO".',
+      'Visão de IA Detecção: captura só pela câmera (no builder: somente foto, somente vídeo ou foto e vídeo); um critério por envio em texto livre (estilo semelhante à Visão IA Análise), resposta normalizada yes/no/unknown; no servidor via «Visão IA - Moondream» (/v1/query) ou proxy «Visão IA - YOLO» (multipart), conforme Integrações e tenant.features.visionDetectionEngine.',
   },
   {
     type: 'vision_ai_analysis',
@@ -117,7 +117,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowTransit',
     descPt:
-      'Início de deslocamento (registro operacional). Sempre em par com transit_end; no BrSpark ficam sempre no início do formulário (primeiro bloco operacional), nunca no meio nem no final. transitKeepScreenAwake: por omissão true (manter a tela acesa); só false desliga. transitPurpose "reimbursement" para segundo par só com trilha GPS (sem ETA, sem link ao cliente, sem chat) — típico para km de reembolso.',
+      'Início de deslocamento (prova de deslocamento: trilha/tempos). Par obrigatório com transit_end. transitPurpose: "service" = destino na OS (ETA, mapa); "reimbursement" = só registo de trilha; "patrol" = patrulhamento: mapa com geometria/KML da OS. Em OS tipo trecho (A–B), no app o técnico escolhe o vértice para navegação. Isto é distinto da cerca eletrônica (prova de entrada na área).',
   },
   {
     type: 'transit_end',
@@ -132,7 +132,8 @@ const FIELD_SPECS = [
     tier: 'advanced',
     proposalsDefault: false,
     contextFlag: 'allowGeofence',
-    descPt: 'Validação de proximidade ao ponto da OS (metros).',
+    descPt:
+      'Cerca eletrônica (prova de entrada na área de serviço). geofenceType: radius = destino da OS (Haversine; geofenceRadius); polygon = geometria: geofenceGeometryToleranceM = corredor à polilinha (rota/patrulhamento/KML); geofenceSegmentBufferM = só zona trecho A↔B (perto de A ou B), não substitui o corredor. geofenceFailMode: block | allow_warn | record_only; geofenceUnblockOnReentry com block. Distinto do deslocamento (transit).',
   },
   {
     type: 'calculated',
@@ -314,6 +315,17 @@ function formatTransitDisplacementRulesForPrompt() {
 - **Par obrigatório**: se houver \`transit_start\`, **tem de existir** \`transit_end\` no mesmo formulário. Não sugira nem crie só um dos dois.
 - **Ordem no array:** primeiro \`transit_start\`, depois \`transit_end\`; \`transit_end\` **nunca** antes do primeiro \`transit_start\`.
 - Em \`schemaPatch\` (ex.: \`add_field\` com \`afterId\`) ou \`schemaData\`, **garanta** essa posição no topo; não «empurre» o par para o fim com \`afterId\` em últimos campos.`;
+}
+
+/**
+ * Convenção produto: destino (navegação) vs geometria (validação de cerca).
+ * Incluir em prompts de IA / documentação quando falar de OS, despacho, KML ou geofence.
+ * @returns {string}
+ */
+function formatOsDestinationVsGeometryConventionForPrompt() {
+  return `### Convenção BrSpark: destino vs geometria (OS / despacho)
+- **Destino** = o **ponto GPS da OS** para onde o técnico vai na **navegação** (Waze/Google Maps, ETA, início de \`transit_start\`). Costuma ser o endereço/coordenadas definidos no despacho (\`locationLat\`/\`locationLng\` e, quando aplicável, \`metadata.navigationDestination\`). Em OS **trecho (A↔B)**, o destino de navegação no momento é **A ou B** (escolha no app) — ainda assim são só **dois pontos** de destino possíveis, não «o KML inteiro».
+- **Geometria** = **todo o resto** usado para **validar** se o trabalho está no sítio certo: polígono, linha/rota KML (corredor), tolerâncias, modo «perto de A ou B», etc. Serve à **cerca eletrônica** e ao campo \`geofence_check\`; **não** substitui o destino de navegação quando o despacho separa «destino» de «KML só para validação».`;
 }
 
 /** Ícones Ionicons por tipo quando o modelo não enviou icon (fallback no servidor). */
@@ -498,6 +510,7 @@ module.exports = {
   formatAnalyzeFieldTypesForPrompt,
   formatSchemaTypeDocBlock,
   formatTransitDisplacementRulesForPrompt,
+  formatOsDestinationVsGeometryConventionForPrompt,
   formatAutomaticIconRulesForPrompt,
   applyDefaultTypeIconsToSchemaItems,
   buildFormContextBlock,

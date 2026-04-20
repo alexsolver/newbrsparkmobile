@@ -1,20 +1,20 @@
 /**
- * Cockpit global (sync / operações) — pt-BR e en-US.
+ * Cockpit global (sync / operações), pt-BR e en-US.
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { mpT } from './menu-pages-i18n.js';
 
 const M = {
   'pt-BR': {
-    cp_pageTitle: 'BrSpark Admin — Cockpit global',
+    cp_pageTitle: 'BrSpark Admin, Cockpit global',
     cp_bc_panel: 'Painel',
     cp_bc_page: 'Cockpit global',
-    cp_hero_title: 'Cockpit global — operações',
+    cp_hero_title: 'Cockpit global, operações',
     cp_hero_sub: 'Visão em tempo quase real de sincronização, quadro global de OS/RT (todas as empresas), pipeline e telemetria.',
     cp_last_sync: 'Sincronizando…',
-    cp_sec_board: 'Quadro OS e RT — todas as empresas',
+    cp_sec_board: 'Quadro OS e RT, todas as empresas',
     cp_board_intro:
-      'Totais no banco (FT e tarefas de rotina), sem limite de linhas — equivalente ao resumo que existia na Central de operações.',
+      'Totais no banco (FT e tarefas de rotina), sem limite de linhas, equivalente ao resumo que existia na Central de operações.',
     cp_ct_total: 'Total no quadro',
     cp_cf_total: 'FT + RT (todas)',
     cp_ct_pending: 'Não iniciadas',
@@ -58,16 +58,16 @@ const M = {
     cp_console_warn: 'Erro ao atualizar Cockpit',
   },
   'en-US': {
-    cp_pageTitle: 'BrSpark Admin — Global cockpit',
+    cp_pageTitle: 'BrSpark Admin, Global cockpit',
     cp_bc_panel: 'Home',
     cp_bc_page: 'Global cockpit',
-    cp_hero_title: 'Global cockpit — operations',
+    cp_hero_title: 'Global cockpit, operations',
     cp_hero_sub:
       'Near–real-time view of sync, global WO/RT board (all companies), pipeline and telemetry.',
     cp_last_sync: 'Syncing…',
-    cp_sec_board: 'WO & RT board — all companies',
+    cp_sec_board: 'WO & RT board, all companies',
     cp_board_intro:
-      'Database totals (FT and routine tasks), no row cap — same summary as in Operations Center.',
+      'Database totals (FT and routine tasks), no row cap, same summary as in Operations Center.',
     cp_ct_total: 'Board total',
     cp_cf_total: 'FT + RT (all)',
     cp_ct_pending: 'Not started',

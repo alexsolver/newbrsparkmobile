@@ -18,6 +18,10 @@ const {
   VISION_INTEGRATION_LEGACY_NAME,
 } = require('./visionChecklistAnalyze');
 const { isGoogleMapsPlatformName } = require('./integrationNameMatch');
+const {
+  MOONDREAM_INTEGRATION_NAME,
+  normalizeMoondreamBaseUrl,
+} = require('./visionMoondreamAnalyze');
 
 /** PNG 1×1 para POST de teste (mesmo contrato multipart do app). */
 const VISION_CHECKLIST_PROBE_PNG = Buffer.from(
@@ -106,6 +110,10 @@ async function testIntegration(integration) {
 
   if (type === 'VISION' && (name === VISION_INTEGRATION_NAME || name === VISION_INTEGRATION_LEGACY_NAME)) {
     return testVisionChecklist(integration);
+  }
+
+  if (type === 'VISION' && name === MOONDREAM_INTEGRATION_NAME) {
+    return testMoondreamVision(integration);
   }
 
   return { ok: false, message: `Teste não implementado para "${name}"` };
@@ -200,6 +208,53 @@ async function testVisionChecklist({ baseUrl, apiKey }) {
   }
 
   return { ok: false, message: `Resposta HTTP inesperada ao POST (${st}).` };
+}
+
+/**
+ * Moondream — POST JSON /v1/query (VQA) com imagem base64 e uma pergunta curta.
+ */
+async function testMoondreamVision({ baseUrl, apiKey }) {
+  const key = String(apiKey || '').trim();
+  if (!key) return { ok: false, message: 'API key Moondream não configurada.' };
+  const base = normalizeMoondreamBaseUrl(baseUrl || '');
+  const url = `${base.replace(/\/+$/g, '')}/query`;
+  const image_url = 'data:image/png;base64,' + VISION_CHECKLIST_PROBE_PNG.toString('base64');
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Moondream-Auth': key,
+      },
+      body: JSON.stringify({
+        image_url,
+        question: 'Reply with one word only: yes or no. Is this a tiny test image?',
+      }),
+      /** Moondream em CPU (servidor próprio) pode levar 2–5+ min; cloud costuma ser < 20s. */
+      signal: AbortSignal.timeout(300_000),
+    });
+  } catch (e) {
+    return { ok: false, message: e.message || 'Erro de rede ao contactar Moondream.' };
+  }
+  const text = await res.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    return {
+      ok: false,
+      message: `Moondream HTTP ${res.status}: resposta não é JSON (primeiros caracteres: ${text.slice(0, 120)}).`,
+    };
+  }
+  if (!res.ok) {
+    const hint = json.error || json.message || text.slice(0, 200);
+    return { ok: false, message: `Moondream HTTP ${res.status}: ${hint}` };
+  }
+  if (json.answer == null || !String(json.answer).trim()) {
+    return { ok: false, message: 'Moondream respondeu sem campo «answer».' };
+  }
+  return { ok: true, message: 'Moondream (API /v1/query) conectado com sucesso ✓' };
 }
 
 // ── Helpers HTTP ──────────────────────────────────────────

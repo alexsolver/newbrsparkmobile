@@ -2,7 +2,12 @@
 
 const prisma = require('../db');
 const { normalizeGoogleGenerativeLanguageBaseUrl } = require('./integrationTester');
-const { normalizeVisionAnalyzeResponse } = require('./visionChecklistAnalyze');
+const {
+  normalizeVisionAnalyzeResponse,
+  buildVisionSingleQuestionJsonExampleLines,
+  VISION_SINGLE_STRUCTURED_DISCIPLINE,
+  VISION_RATIONALE_LANGUAGE_BLOCK,
+} = require('./visionChecklistAnalyze');
 
 const GOOGLE_AI_STUDIO_NAMES = ['Google AI Studio', 'Google AI (Gemini)'];
 
@@ -75,16 +80,14 @@ async function analyzeWithGoogleAiStudio(opts) {
   const singleStructured = questions.length === 1;
   const q0 = questions[0];
   const q0id = String(q0?.id || 'q1').replace(/"/g, '');
-  const jsonShapeSingle =
-    wantRating && singleStructured
-      ? `{"rating0To10":<inteiro 0-10 ou null>,"answers":[{"questionId":${JSON.stringify(q0id)},"value":"<string>","confidence":0.0,"rationale":"pt-BR, opcional"}]}`
-      : `{"answers":[{"questionId":${JSON.stringify(q0id)},"value":"<string>","confidence":0.0,"rationale":"pt-BR, opcional"}]}`;
+  const jsonShapeSingle = singleStructured ? buildVisionSingleQuestionJsonExampleLines(q0id, wantRating) : '';
   const ratingRules =
     wantRating && singleStructured
       ? '\n\nNa raiz do JSON inclua "rating0To10": inteiro entre 0 e 10 (inclusivo), coerente com o critério do prompt, ou null se for impossível avaliar com segurança. Este campo é obrigatório na raiz (pode ser null).'
       : '';
   const instruction = singleStructured
-    ? 'Analise a mídia anexa (imagem ou vídeo) seguindo estritamente o prompt abaixo. Baseie-se apenas no que é visível.\n\n' +
+    ? VISION_RATIONALE_LANGUAGE_BLOCK +
+      'Analise a mídia anexa (imagem ou vídeo) seguindo estritamente o prompt abaixo. Baseie-se apenas no que é visível.\n\n' +
       '--- Prompt ---\n' +
       String(q0?.text || '') +
       '\n--- Fim do prompt ---\n\n' +
@@ -95,17 +98,28 @@ async function analyzeWithGoogleAiStudio(opts) {
       '- Se o prompt for estritamente sim/não, use exatamente yes, no ou unknown (inglês).\n' +
       '- Caso contrário, coloque em value a resposta direta pedida (ex.: nota "5", "8/10", rótulo breve). Não use parágrafos em value; detalhe em rationale.\n' +
       'confidence entre 0 e 1. Inclua exatamente uma entrada em answers (questionId igual ao indicado).' +
-      ratingRules
-    : 'Analise a mídia anexa (imagem ou vídeo) e responda a cada pergunta abaixo com base apenas no que é visível.\n\n' +
+      ratingRules +
+      VISION_SINGLE_STRUCTURED_DISCIPLINE
+    : VISION_RATIONALE_LANGUAGE_BLOCK +
+      'Analise a mídia anexa (imagem ou vídeo) e responda a cada pergunta abaixo com base apenas no que é visível.\n\n' +
       'Perguntas (use exatamente estes ids no campo questionId de cada resposta):\n' +
       qBlock +
       '\n\nResponda somente com JSON neste formato (sem markdown, sem texto fora do JSON):\n' +
-      '{"answers":[{"questionId":"q1","value":"yes"|"no"|"unknown","confidence":0.0,"rationale":"breve pt-BR"}]}\n' +
-      'value deve ser yes, no ou unknown (sempre em inglês). confidence entre 0 e 1. Inclua uma entrada em answers para cada pergunta.';
+      '{"answers":[{"questionId":"q1","value":"yes","confidence":0.74,"rationale":"Breve resumo em português do observado na imagem."}]}\n' +
+      'value deve ser yes, no ou unknown (sempre em inglês). confidence entre 0 e 1 (evite 0,0 salvo imagem inútil). rationale: texto real em pt-BR. Inclua uma entrada em answers para cada pergunta.';
 
   const mime = String(mimetype || 'application/octet-stream').slice(0, 120);
 
   const bodyPrimary = {
+    systemInstruction: {
+      parts: [
+        {
+          text:
+            'És um assistente de inspeção de campo. Regra fixa: em todo o JSON devolvido, o campo answers[].rationale deve estar apenas em português do Brasil. ' +
+            'Não uses inglês em rationale. Os valores yes, no e unknown em value mantêm-se em inglês por convenção do sistema.',
+        },
+      ],
+    },
     contents: [
       {
         parts: [

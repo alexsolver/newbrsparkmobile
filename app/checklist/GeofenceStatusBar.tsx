@@ -6,14 +6,16 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Location from 'expo-location';
+import { evaluateCombinedGlobalFence } from './globalGeofenceCombined';
 
 // ── Types ──────────────────────────────────────────────────────
 interface TaskLocation {
-  locationZoneType?: string | null;  // 'radius' | 'polygon' | 'route'
+  locationZoneType?: string | null; // 'radius' | 'polygon' | 'route' | 'combined'
   locationLat?: number | null;
   locationLng?: number | null;
   locationRadius?: number | null;
   locationPolygon?: number[][] | string | null;
+  metadata?: { globalGeofence?: import('./globalGeofenceCombined').GlobalGeofenceMeta } | null;
 }
 
 interface Props {
@@ -87,6 +89,23 @@ export default function GeofenceStatusBar({ task }: Props) {
       if (!zoneType || zoneType === 'none' || zoneType === 'route') {
         setStatus('no_zone');
         setDetail('Sem validação da barra (Gerido por outros cards)');
+        return;
+      }
+
+      if (zoneType === 'combined') {
+        const gf = task.metadata?.globalGeofence;
+        if (!gf) {
+          setStatus('unknown');
+          setDetail('Cerca global: dados indisponíveis.');
+          setProgress(null);
+          return;
+        }
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const { latitude: lat, longitude: lng } = loc.coords;
+        const r = evaluateCombinedGlobalFence(lat, lng, gf);
+        setStatus(r.inside ? 'inside' : 'outside');
+        setDetail(r.statusMsg);
+        setProgress(null);
         return;
       }
 

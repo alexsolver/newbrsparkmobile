@@ -105,11 +105,109 @@ function normalizeConfidence(c) {
   return Math.min(1, n);
 }
 
+/**
+ * Remove rationales que são cópia literal do exemplo antigo dos prompts Gemini/Moondream.
+ * @param {unknown} raw
+ * @returns {string}
+ */
+function sanitizeVisionModelRationale(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  if (/^pt-br,?\s*opcional\.?$/i.test(s)) return '';
+  if (/^breve\s+pt-br\.?$/i.test(s)) return '';
+  if (/^pt-br\.?$/i.test(s)) return '';
+  /** Cópia literal do exemplo antigo (quadro elétrico) — não confundir com o prompt real do cliente. */
+  const legacyElectricalExPt =
+    'o quadro e disjuntores aparecem na imagem; não se observam indícios graves de arco-carbonização na área visível.';
+  if (s.replace(/\s+/g, ' ').trim().toLowerCase() === legacyElectricalExPt) return '';
+  return s.slice(0, 800);
+}
+
+/**
+ * Quando o modelo ignora o pedido de pt-BR, ajusta aberturas muito frequentes em inglês (heurística leve).
+ * @param {string} s
+ * @returns {string}
+ */
+function nudgeVisionRationaleEnglishOpenersToPortuguese(s) {
+  let t = String(s ?? '').trim();
+  if (!t) return '';
+  if (/\b(não|nao|com|para|imagem|cena|visível|visivel|apenas|quadro|mostra|vê-se|ve-se)\b/i.test(t)) {
+    return t;
+  }
+  if (/^in the image,?\s+/i.test(t)) t = t.replace(/^in the image,?\s+/i, 'Na imagem, ');
+  else if (/^this image\s+/i.test(t)) t = t.replace(/^this image\s+/i, 'Esta imagem ');
+  else if (/^the image\s+/i.test(t)) t = t.replace(/^the image\s+/i, 'A imagem ');
+  else if (/^the scene\s+/i.test(t)) t = t.replace(/^the scene\s+/i, 'A cena ');
+  /** Mistura comum após só corrigir "In the image": "Na imagem, the scene …" */
+  if (/^Na imagem, the scene\b/i.test(t)) t = t.replace(/^Na imagem, the scene\b/i, 'Na imagem, a cena');
+  return t.slice(0, 800);
+}
+
+/**
+ * Exemplo JSON válido para instruções LLM (evita copiar "pt-BR, opcional" e confidence 0.0).
+ * @param {string} q0id
+ * @param {boolean} wantRating
+ * @returns {string}
+ */
+function buildVisionSingleQuestionJsonExampleLines(q0id, wantRating) {
+  const id = JSON.stringify(String(q0id || 'q1').replace(/"/g, ''));
+  /** Exemplo com unknown: trechos críticos fora de quadro → não assumir "yes". Racional concreto (não meta). */
+  const rationale =
+    'Na imagem vê-se apenas parte do cenário; os elementos exigidos pelo PROMPT para concluir o critério não aparecem ou estão ilegíveis — evidência insuficiente.';
+  const r = JSON.stringify(rationale);
+  const example = wantRating
+    ? `{"rating0To10":null,"answers":[{"questionId":${id},"value":"unknown","confidence":0.62,"rationale":${r}}]}`
+    : `{"answers":[{"questionId":${id},"value":"unknown","confidence":0.62,"rationale":${r}}]}`;
+  return (
+    example +
+    '\n\n' +
+    'Substitua rating0To10, value, confidence e rationale pelos valores reais da mídia. O rationale deve ser sempre em português (pt-BR), salvo o PROMPT pedir outro idioma. ' +
+    'Não escreva rationale em inglês (evite frases que começam por "In the image", "The scene", "This image"). ' +
+    'O exemplo usa value "unknown" quando a evidência é insuficiente — não copie esse texto; descreva o que **esta** mídia mostra. ' +
+    'confidence entre 0 e 1: valores baixos com ambiguidade ou dados em falta; evite copiar números do exemplo.'
+  );
+}
+
+/**
+ * Bloco curto no início do prompt (Moondream/Gemini): prioridade sobre tendência do modelo a responder em inglês.
+ */
+const VISION_RATIONALE_LANGUAGE_BLOCK =
+  '[IDIOMA — OBRIGATÓRIO] O campo answers[].rationale deve estar inteiramente em português do Brasil (pt-BR). ' +
+  'Não use inglês, espanhol ou outro idioma em rationale (exceto se o PROMPT do cliente pedir explicitamente outro idioma). ' +
+  'Os valores yes / no / unknown em value permanecem em inglês, por convenção do sistema.\n\n';
+
+/**
+ * Anexado às instruções Gemini/Moondream (prompt único) para evitar respostas só com "yes" e rationale vazio.
+ */
+const VISION_SINGLE_STRUCTURED_DISCIPLINE =
+  '\n\n' +
+  'Disciplina de resposta (obrigatório):\n' +
+  '- answers[0].rationale: português do Brasil, com observação concreta (várias dezenas de caracteres úteis) sobre o que a mídia mostra em relação ao PROMPT acima. Proibido inglês no rationale. Não devolva rationale vazio; não copie o texto de exemplo do JSON; não escreva só meta-instruções.\n' +
+  '- Se o PROMPT pedir elementos (ex.: tubos, dreno, fixação) e estes **não forem visíveis** ou não for possível avaliar com segurança, use value "unknown" e explique em rationale. Não use "yes" por omissão ou só porque o equipamento principal aparece.\n' +
+  '- Use value "no" quando a imagem mostrar inequivocamente não conformidade face ao PROMPT.\n' +
+  '- rating0To10 (quando existir) deve ser coerente com value e com o que é visível.';
+
 function normQuestionText(s) {
   return String(s ?? '')
     .trim()
     .replace(/\s+/g, ' ')
     .toLowerCase();
+}
+
+/**
+ * Alinha ids do tipo q1, q_1, q-1, question_1 para comparação (Gemini/Moondream variam o formato).
+ * @param {unknown} raw
+ * @returns {string}
+ */
+function canonicalVisionQuestionId(raw) {
+  const s = String(raw ?? '').trim().toLowerCase();
+  if (!s) return '';
+  let m = s.match(/^q[_-]?(\d+)$/);
+  if (m) return `q${m[1]}`;
+  m = s.match(/^question[_-]?(\d+)$/);
+  if (m) return `q${m[1]}`;
+  if (/^\d+$/.test(s)) return `q${s}`;
+  return s;
 }
 
 /**
@@ -120,14 +218,23 @@ function normQuestionText(s) {
 function answersFromQuestionIdKeysAtRoot(root, questions) {
   if (!root || typeof root !== 'object' || Array.isArray(root) || !Array.isArray(questions)) return [];
   const out = [];
+  const rootKeys = Object.keys(root);
   for (const q of questions) {
-    const k = String(q.id);
-    if (!Object.prototype.hasOwnProperty.call(root, k)) continue;
-    const v = root[k];
+    const want = canonicalVisionQuestionId(q.id);
+    let hitKey = '';
+    for (const rk of rootKeys) {
+      if (canonicalVisionQuestionId(rk) === want) {
+        hitKey = rk;
+        break;
+      }
+    }
+    if (!hitKey) continue;
+    const v = /** @type {Record<string, unknown>} */ (root)[hitKey];
+    const qid = String(q.id);
     if (v && typeof v === 'object' && !Array.isArray(v)) {
-      out.push({ questionId: k, .../** @type {any} */ (v) });
+      out.push({ questionId: qid, .../** @type {any} */ (v) });
     } else if (v !== undefined && v !== null) {
-      out.push({ questionId: k, value: v });
+      out.push({ questionId: qid, value: v });
     }
   }
   return out;
@@ -790,12 +897,12 @@ function injectQuestionIdsByIndex(rawAnswers, questions) {
   if (!Array.isArray(rawAnswers) || !Array.isArray(questions)) return rawAnswers;
   if (rawAnswers.length !== questions.length) return rawAnswers;
   if (countMatchedQuestions(rawAnswers, questions) > 0) return rawAnswers;
+  /** Ordem fiável quando o modelo devolve questionId no formato errado (q_1 vs q1). */
   return rawAnswers.map((a, i) => {
     const q = questions[i];
     if (a && typeof a === 'object' && !Array.isArray(a)) {
       const copy = { .../** @type {any} */ (a) };
-      const existing = String(copy.questionId ?? copy.question_id ?? '').trim();
-      if (!existing) copy.questionId = q.id;
+      copy.questionId = q.id;
       return copy;
     }
     return { questionId: q.id, question: q.text, value: a };
@@ -805,12 +912,14 @@ function injectQuestionIdsByIndex(rawAnswers, questions) {
 function findRawAnswerForQuestion(raw, q) {
   const list = Array.isArray(raw) ? raw : [];
   const qid = String(q.id);
+  const qCanon = canonicalVisionQuestionId(qid);
   const qtext = normQuestionText(q.text);
   const byId = (a) => {
     if (!a || typeof a !== 'object') return false;
     const o = /** @type {any} */ (a);
     const id = String(o.questionId ?? o.question_id ?? o.qId ?? o.id ?? '').trim();
-    return id === qid;
+    if (id === qid) return true;
+    return qCanon.length > 0 && canonicalVisionQuestionId(id) === qCanon;
   };
   const byText = (a) => {
     if (!a || typeof a !== 'object') return false;
@@ -910,12 +1019,15 @@ function normalizeVisionAnalyzeResponse(body, questions, options) {
         : qLabel.slice(0, 500),
       value: normVal,
       confidence: confVal,
-      rationale:
-        found.rationale != null
-          ? String(found.rationale).slice(0, 800)
-          : found.explanation != null
-            ? String(found.explanation).slice(0, 800)
-            : '',
+      rationale: nudgeVisionRationaleEnglishOpenersToPortuguese(
+        sanitizeVisionModelRationale(
+          found.rationale != null
+            ? String(found.rationale)
+            : found.explanation != null
+              ? String(found.explanation)
+              : '',
+        ),
+      ),
       evidenceTimeRanges: Array.isArray(found.evidenceTimeRanges) ? found.evidenceTimeRanges.slice(0, 8) : undefined,
       detectionIds: Array.isArray(found.detectionIds)
         ? found.detectionIds.map((x) => String(x)).slice(0, 20)
@@ -1011,4 +1123,7 @@ module.exports = {
   normalizeVisionAnalyzeResponse,
   buildMultipartBuffer,
   fetchVisionPostPreservingMethod,
+  buildVisionSingleQuestionJsonExampleLines,
+  VISION_SINGLE_STRUCTURED_DISCIPLINE,
+  VISION_RATIONALE_LANGUAGE_BLOCK,
 };

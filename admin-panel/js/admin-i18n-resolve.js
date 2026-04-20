@@ -12,7 +12,7 @@ export function adminI18nChain(loc) {
 }
 
 /**
- * @param {Record<string, Record<string, string>>} M — mapa { 'pt-BR': {...}, 'en-US': {...}, 'es-ES': {...} }
+ * @param {Record<string, Record<string, string>>} M, mapa { 'pt-BR': {...}, 'en-US': {...}, 'es-ES': {...} }
  * @param {string} loc
  * @param {string} key
  */

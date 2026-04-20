@@ -131,7 +131,7 @@ export const AssetAIService = {
       insights.push({
         id: 'ins_expiring', type: 'warning', icon: 'time-outline',
         title: i18n.t('ai.insuranceExpiring', { days }),
-        description: `${POLICY_TYPE_LABELS[soonest?.type || 'OTHER']} — ${soonest?.insurer || ''} (${days}d)`,
+        description: `${POLICY_TYPE_LABELS[soonest?.type || 'OTHER']}, ${soonest?.insurer || ''} (${days}d)`,
         priority: 2,
       });
     }
@@ -139,7 +139,7 @@ export const AssetAIService = {
       insights.push({
         id: 'ins_ok', type: 'success', icon: 'shield-checkmark',
         title: i18n.t('ai.insuranceOk'),
-        description: `${data.activePolicies} ${i18n.t('ai.activePolicies')} — ${InsuranceService.formatCurrency(data.totalPremium)}/${i18n.t('common.year')}.`,
+        description: `${data.activePolicies} ${i18n.t('ai.activePolicies')}, ${InsuranceService.formatCurrency(data.totalPremium)}/${i18n.t('common.year')}.`,
         priority: 8,
       });
     }
@@ -157,7 +157,7 @@ export const AssetAIService = {
       insights.push({
         id: 'stock_ok', type: 'success', icon: 'cube',
         title: i18n.t('ai.healthyStock'),
-        description: `${data.stockItems.length} item(s) — ${InsuranceService.formatCurrency(data.totalStockValue)}.`,
+        description: `${data.stockItems.length} item(s), ${InsuranceService.formatCurrency(data.totalStockValue)}.`,
         priority: 9,
       });
     }
@@ -181,7 +181,7 @@ export const AssetAIService = {
         insights.push({
           id: 'cost_ok', type: 'info', icon: 'wallet-outline',
           title: i18n.t('ai.tcoControlled'),
-          description: `${InsuranceService.formatCurrency(data.avgMonthlyExpense)}/${i18n.t('common.month')} — ${InsuranceService.formatCurrency(data.totalExpenses3m)} (3m).`,
+          description: `${InsuranceService.formatCurrency(data.avgMonthlyExpense)}/${i18n.t('common.month')}, ${InsuranceService.formatCurrency(data.totalExpenses3m)} (3m).`,
           priority: 7,
         });
       }

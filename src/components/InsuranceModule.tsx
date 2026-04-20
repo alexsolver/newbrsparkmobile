@@ -130,7 +130,7 @@ export function InsuranceModule({ assetId, assetType }: Props) {
     const recurringCost: RecurringCost = {
       id: `ins_cost_${policy.id}`,
       assetId: policy.assetId,
-      description: `Seguro ${POLICY_TYPE_LABELS[policy.type]} — ${policy.insurer}`,
+      description: `Seguro ${POLICY_TYPE_LABELS[policy.type]}, ${policy.insurer}`,
       amount: policy.premiumValue,
       category: 'SEGURO',
       type: 'EXPENSE',
@@ -319,7 +319,7 @@ export function InsuranceModule({ assetId, assetType }: Props) {
                         <Text style={{ fontSize: 13, fontWeight: '700', color: C.textSecondary, marginTop: 2 }}>{POLICY_TYPE_LABELS[detailPolicy.type]}</Text>
                         <View style={[S.statusBadge, { backgroundColor: cfg.bg, marginTop: 6 }]}>
                           <Ionicons name={cfg.icon as any} size={12} color={cfg.color} />
-                          <Text style={[S.statusBadgeT, { color: cfg.color }]}>{cfg.label} — {days < 0 ? `vencida há ${Math.abs(days)}d` : `${days}d restantes`}</Text>
+                          <Text style={[S.statusBadgeT, { color: cfg.color }]}>{cfg.label}, {days < 0 ? `vencida há ${Math.abs(days)}d` : `${days}d restantes`}</Text>
                         </View>
                       </View>
                     </View>

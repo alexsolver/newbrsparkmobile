@@ -27,10 +27,6 @@ const DEFAULT_VISION_ANALYSIS_PROMPT =
   '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
   'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.';
 
-/** Alinhado a `fb_prop_vision_default_detection_prompt` (Visão de IA — detecção / YOLO). */
-const DEFAULT_VISION_DETECTION_PROMPT =
-  'Critério único (identificador q1): a imagem permite afirmar, sem ambiguidade relevante, que o objeto ou situação esperados para este ponto do checklist estão presentes (ou ausentes, quando for o caso) de acordo com o critério do seu modelo YOLO?';
-
 /**
  * Garante que cada campo tem uma paleta completa de tipos (IA + catálogo BrSpark), sem duplicar por `type`.
  * @param {string} itemKey
@@ -95,6 +91,8 @@ function defaultFieldShell(type, label) {
     dependsOnOperator: '==',
     dependsOnValue: '',
     geofenceRadius: t === 'geofence_check' ? '150' : null,
+    geofenceGeometryToleranceM: t === 'geofence_check' ? '150' : null,
+    geofenceSegmentBufferM: t === 'geofence_check' ? '150' : null,
     options: t === 'dropdown' || t === 'multiselect' ? 'Opção 1, Opção 2' : null,
     calcFormula: t === 'calculated' ? '' : null,
     textMask: t === 'text' || t === 'number' || t === 'phone' ? '' : null,
@@ -110,9 +108,12 @@ function defaultFieldShell(type, label) {
     ...(t === 'section_break' ? { sectionFillMode: 'list' } : {}),
     ...(t === 'vision_checklist'
       ? {
-          visionStructuredPrompt: DEFAULT_VISION_DETECTION_PROMPT,
-          visionQuestions: [{ id: 'q1', text: DEFAULT_VISION_DETECTION_PROMPT }],
+          visionStructuredPrompt: DEFAULT_VISION_ANALYSIS_PROMPT,
+          visionQuestions: [{ id: 'q1', text: DEFAULT_VISION_ANALYSIS_PROMPT }],
           visionCaptureMode: 'photo_and_video',
+          visionAnalysisGrid: '1x1',
+          visionRating0To10Enabled: true,
+          visionShowAiResponseInForm: true,
         }
       : {}),
     ...(t === 'vision_ai_analysis'
@@ -230,25 +231,7 @@ function normalizeSchemaItem(raw, usedIds) {
         .slice(0, MAX_VISION_SIMNAO_QUESTIONS);
     };
 
-    if (type === 'vision_checklist') {
-      const items = parseVisionQuestionItems();
-      let structured = raw.visionStructuredPrompt != null ? String(raw.visionStructuredPrompt).trim() : '';
-      if (!structured && items.length === 1) {
-        structured = items[0].text;
-      }
-      if (!structured && items.length >= 2) {
-        structured = items
-          .map((x) => x.text)
-          .join('\n\n')
-          .trim();
-      }
-      if (!structured) {
-        structured = DEFAULT_VISION_DETECTION_PROMPT;
-      }
-      structured = structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-      base.visionStructuredPrompt = structured;
-      base.visionQuestions = [{ id: 'q1', text: structured }];
-    } else {
+    {
       let structured =
         raw.visionStructuredPrompt != null ? String(raw.visionStructuredPrompt).trim() : '';
       if (!structured) {
@@ -271,7 +254,7 @@ function normalizeSchemaItem(raw, usedIds) {
         base.visionCaptureMode = m;
       }
     }
-    if (type === 'vision_ai_analysis') {
+    if (type === 'vision_ai_analysis' || type === 'vision_checklist') {
       const grid = raw.visionAnalysisGrid ?? raw.vision_analysis_grid;
       if (typeof grid === 'string') {
         const g = grid.trim().toLowerCase().replace(/\*/g, 'x');

@@ -41,15 +41,6 @@ function donutSectorPath(
   return `M ${p1.x} ${p1.y} A ${rOuter} ${rOuter} 0 ${large} 1 ${p2.x} ${p2.y} L ${p3.x} ${p3.y} A ${rInner} ${rInner} 0 ${large} 0 ${p4.x} ${p4.y} Z`;
 }
 
-function formatBrlCompact(n: number) {
-  return (Number(n) || 0).toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-}
-
 type Props = {
   items: TechnicianFinanceEntry[];
   expenseCatCatalog: TechnicianExpenseCategoryRow[];
@@ -61,7 +52,18 @@ function barsFallbackWidth(winW: number) {
 }
 
 export function TechnicianFinanceDashboard({ items, expenseCatCatalog }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language || 'pt-BR';
+  const formatBrlCompact = useCallback(
+    (n: number) =>
+      (Number(n) || 0).toLocaleString(localeTag.replace('_', '-'), {
+        style: 'currency',
+        currency: 'BRL',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }),
+    [localeTag],
+  );
   const { colors: C } = useTheme();
   const { width: winW } = useWindowDimensions();
   const [barsTrackW, setBarsTrackW] = useState(0);

@@ -6,7 +6,7 @@
  */
 const MAX_VISION_SIMNAO_QUESTIONS = 10;
 
-/** Visão de IA — detecção (YOLO): apenas um critério por envio de mídia. */
+/** Visão de IA — detecção (Moondream VQA ou proxy YOLO): apenas um critério por envio de mídia. */
 const MAX_VISION_CHECKLIST_QUESTIONS = 1;
 
 /** Tamanho máximo do texto do único prompt estruturado (`visionStructuredPrompt` / `q1`). */

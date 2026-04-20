@@ -30,14 +30,14 @@ async function ensureAndroidPushChannels(): Promise<void> {
     sound: 'default',
   });
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_TECH, {
-    name: 'BrSpark — Atividades (prestador)',
+    name: 'BrSpark, Atividades (prestador)',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#2563EB',
     sound: 'default',
   });
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_CLIENT, {
-    name: 'BrSpark — Deslocamento (cliente)',
+    name: 'BrSpark, Deslocamento (cliente)',
     importance: Notifications.AndroidImportance.DEFAULT,
     lightColor: '#059669',
     sound: 'default',
@@ -245,7 +245,7 @@ export const NotificationService = {
           const tpl = it.template?.name || 'Avaliação';
           generated.push({
             id: `eval_ack_${it.id}`,
-            title: 'Avaliação crítica — confirme ciência',
+            title: 'Avaliação crítica, confirme ciência',
             body: `${tpl}${os}: toque para abrir e confirmar que tomou conhecimento.`,
             category: 'evaluation',
             read: false,
@@ -291,7 +291,7 @@ export const NotificationService = {
         const title = diffDays < 0 ? 'Conformidade vencida' : 'Conformidade a vencer';
         const body =
           diffDays < 0
-            ? `"${d.title}" — vencimento ${d.validUntil}.`
+            ? `"${d.title}", vencimento ${d.validUntil}.`
             : `"${d.title}" vence em ${diffDays} dia(s) (${d.validUntil}).`;
         generated.push({
           id: `compliance_inapp_${d.id}`,

@@ -1,12 +1,12 @@
 /**
- * Página Estoque crítico — pt-BR, en-US e es-ES (locale do painel).
+ * Página Estoque crítico, pt-BR, en-US e es-ES (locale do painel).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
 
 const M = {
   'pt-BR': {
-    sc_pageTitle: 'BrSpark Admin — Estoque abaixo do mínimo',
+    sc_pageTitle: 'BrSpark Admin, Estoque abaixo do mínimo',
     sc_bc_panel: 'Painel',
     sc_bc_here: 'Estoque abaixo do mínimo',
     sc_hero_title: 'Estoque abaixo do mínimo',
@@ -41,7 +41,7 @@ const M = {
     sc_page_of: 'Página {page} de {total}',
   },
   'en-US': {
-    sc_pageTitle: 'BrSpark Admin — Below-minimum stock',
+    sc_pageTitle: 'BrSpark Admin, Below-minimum stock',
     sc_bc_panel: 'Home',
     sc_bc_here: 'Below-minimum stock',
     sc_hero_title: 'Below-minimum stock',
@@ -76,7 +76,7 @@ const M = {
     sc_page_of: 'Page {page} of {total}',
   },
   'es-ES': {
-    sc_pageTitle: 'BrSpark Admin — Stock por debajo del mínimo',
+    sc_pageTitle: 'BrSpark Admin, Stock por debajo del mínimo',
     sc_bc_panel: 'Inicio',
     sc_bc_here: 'Stock por debajo del mínimo',
     sc_hero_title: 'Stock por debajo del mínimo',
@@ -88,7 +88,7 @@ const M = {
     sc_filter_tenant: 'Inquilino',
     sc_filter_all_tenants: 'Todos los inquilinos',
     sc_limit: 'Por página',
-    sc_refresh: 'Actualizar',
+    sc_refresh: 'Atualizar',
     sc_refresh_aria: 'Recargar lista',
     sc_export: 'Exportar CSV',
     sc_export_aria: 'Descargar CSV con el filtro actual (hasta 5000 filas)',
@@ -97,7 +97,7 @@ const M = {
     sc_th_asset: 'Activo',
     sc_th_item: 'Artículo',
     sc_th_sku: 'SKU',
-    sc_th_current: 'Actual',
+    sc_th_current: 'Atual',
     sc_th_min: 'Mín.',
     sc_th_gap: 'Déficit',
     sc_th_unit: 'Ud.',

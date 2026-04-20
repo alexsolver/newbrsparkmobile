@@ -1,12 +1,12 @@
 /**
- * Textos da página de auditoria — pt-BR, en-US e es-ES (locale do painel).
+ * Textos da página de auditoria, pt-BR, en-US e es-ES (locale do painel).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
 
 const M = {
   'pt-BR': {
-    au_pageTitle: 'BrSpark Admin — Auditoria',
+    au_pageTitle: 'BrSpark Admin, Auditoria',
     au_bc_panel: 'Painel',
     au_bc_here: 'Auditoria',
     au_hero_title: 'Log de auditoria',
@@ -18,7 +18,7 @@ const M = {
     au_cat_DATA: 'Dados',
     au_cat_ADMIN: 'Admin',
     au_cat_SYSTEM: 'Sistema',
-    au_refresh: 'Atualizar',
+    au_refresh: 'Actualizar',
     au_refresh_title: 'Recarregar eventos',
     au_export: 'Exportar CSV',
     au_export_title: 'Exportar até 1000 eventos com o filtro atual',
@@ -43,7 +43,7 @@ const M = {
     au_csv_category: 'Categoria',
   },
   'en-US': {
-    au_pageTitle: 'BrSpark Admin — Audit log',
+    au_pageTitle: 'BrSpark Admin, Audit log',
     au_bc_panel: 'Home',
     au_bc_here: 'Audit',
     au_hero_title: 'Audit log',
@@ -80,7 +80,7 @@ const M = {
     au_csv_category: 'Category',
   },
   'es-ES': {
-    au_pageTitle: 'BrSpark Admin — Registro de auditoría',
+    au_pageTitle: 'BrSpark Admin, Registro de auditoría',
     au_bc_panel: 'Inicio',
     au_bc_here: 'Auditoría',
     au_hero_title: 'Registro de auditoría',
@@ -92,7 +92,7 @@ const M = {
     au_cat_DATA: 'Datos',
     au_cat_ADMIN: 'Admin',
     au_cat_SYSTEM: 'Sistema',
-    au_refresh: 'Actualizar',
+    au_refresh: 'Atualizar',
     au_refresh_title: 'Recargar eventos',
     au_export: 'Exportar CSV',
     au_export_title: 'Exportar hasta 1000 eventos con el filtro actual',

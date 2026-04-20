@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { lightColors, darkColors, ColorPalette } from './colors';
 import { useAuth } from '../hooks/useAuth';
 import { API_BASE } from '../services/auth';
 
 const BRANDING_CACHE_KEY = '@brspark:tenant_branding_cache';
+const BRANDING_LOGO_CACHE_KEY = '@brspark:tenant_branding_logo_cache';
 
 type TenantBranding = {
   enabled?: boolean;
@@ -19,6 +21,23 @@ type TenantBranding = {
   loginBackgroundUrl?: string;
   brandingVersion?: number;
 };
+
+type BrandingLogoCache = {
+  lightRemoteUrl: string | null;
+  darkRemoteUrl: string | null;
+  lightLocalUri: string | null;
+  darkLocalUri: string | null;
+  updatedAt: number;
+};
+
+function hashString(input: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16);
+}
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const clean = String(hex || '').trim().replace(/^#/, '');
@@ -99,6 +118,7 @@ function resolveBrandingUrl(url: string | null | undefined): string | null {
 function ThemeProviderInner({ children }: { children: React.ReactNode }) {
   const [dark, setDark] = useState(false);
   const [brandingCache, setBrandingCache] = useState<TenantBranding | null>(null);
+  const [logoCache, setLogoCache] = useState<BrandingLogoCache | null>(null);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -115,6 +135,20 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
         if (!raw) return;
         try {
           setBrandingCache(JSON.parse(raw));
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    AsyncStorage.getItem(BRANDING_LOGO_CACHE_KEY)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw) as BrandingLogoCache;
+          if (parsed && typeof parsed === 'object') setLogoCache(parsed);
         } catch {
           /* ignore */
         }
@@ -151,6 +185,73 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     setBrandingCache(liveBranding);
     AsyncStorage.setItem(BRANDING_CACHE_KEY, nextRaw).catch(() => {});
   }, [liveBranding, brandingCache, user?.tenant?.branding]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!liveBranding?.enabled) return;
+      const lightRemote = resolveBrandingUrl(liveBranding.logoLightUrl || liveBranding.logoDarkUrl || null);
+      const darkRemote = resolveBrandingUrl(liveBranding.logoDarkUrl || liveBranding.logoLightUrl || null);
+      if (!lightRemote && !darkRemote) return;
+
+      const current = logoCache || {
+        lightRemoteUrl: null,
+        darkRemoteUrl: null,
+        lightLocalUri: null,
+        darkLocalUri: null,
+        updatedAt: 0,
+      };
+      let next: BrandingLogoCache = { ...current };
+
+      const ensureLogoCached = async (
+        remoteUrl: string | null,
+        variant: 'light' | 'dark',
+      ): Promise<string | null> => {
+        if (!remoteUrl) return null;
+        const currRemote = variant === 'light' ? current.lightRemoteUrl : current.darkRemoteUrl;
+        const currLocal = variant === 'light' ? current.lightLocalUri : current.darkLocalUri;
+        if (currRemote === remoteUrl && currLocal) {
+          try {
+            const info = await FileSystem.getInfoAsync(currLocal);
+            if (info.exists) return currLocal;
+          } catch {
+            /* ignore */
+          }
+        }
+        try {
+          const baseDir = `${FileSystem.documentDirectory || FileSystem.cacheDirectory}branding-cache/`;
+          await FileSystem.makeDirectoryAsync(baseDir, { intermediates: true });
+          const file = `${baseDir}logo_${variant}_${hashString(remoteUrl)}.png`;
+          await FileSystem.downloadAsync(remoteUrl, file);
+          return file;
+        } catch {
+          return currLocal || null;
+        }
+      };
+
+      const [lightLocal, darkLocal] = await Promise.all([
+        ensureLogoCached(lightRemote, 'light'),
+        ensureLogoCached(darkRemote, 'dark'),
+      ]);
+
+      next = {
+        lightRemoteUrl: lightRemote || null,
+        darkRemoteUrl: darkRemote || null,
+        lightLocalUri: lightLocal || null,
+        darkLocalUri: darkLocal || null,
+        updatedAt: Date.now(),
+      };
+
+      if (cancelled) return;
+      setLogoCache(next);
+      await AsyncStorage.setItem(BRANDING_LOGO_CACHE_KEY, JSON.stringify(next)).catch(() => {});
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [liveBranding, logoCache]);
+
   const palette = useMemo(
     () => resolveTenantPalette(dark ? darkColors : lightColors, branding || null),
     [dark, branding],
@@ -160,10 +261,10 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
   const appTagline =
     (branding?.enabled && String(branding.tagline || '').trim()) || 'Precisou, resolveu.';
   const resolvedLogoUrl =
-    branding?.enabled && (dark ? branding.logoDarkUrl || branding.logoLightUrl : branding.logoLightUrl || branding.logoDarkUrl)
+    branding?.enabled
       ? dark
-        ? resolveBrandingUrl(branding.logoDarkUrl || branding.logoLightUrl || null)
-        : resolveBrandingUrl(branding.logoLightUrl || branding.logoDarkUrl || null)
+        ? logoCache?.darkLocalUri || logoCache?.lightLocalUri || null
+        : logoCache?.lightLocalUri || logoCache?.darkLocalUri || null
       : null;
   const loginBackgroundUrl =
     branding?.enabled && branding.loginBackgroundUrl ? resolveBrandingUrl(branding.loginBackgroundUrl) : null;

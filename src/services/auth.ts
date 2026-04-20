@@ -191,6 +191,8 @@ export interface User {
     id: string;
     name: string;
     status: string;
+    /** Preferência para campos «Visão de IA — detecção»: API Moondream vs proxy YOLO (painel / tenant.features). */
+    visionDetectionEngine?: 'yolo' | 'moondream';
     branding?: {
       enabled?: boolean;
       appDisplayName?: string;

@@ -1,5 +1,5 @@
 /**
- * Textos da listagem e ficha de usuários (painel admin) — pt-BR, en-US e es-ES.
+ * Textos da listagem e ficha de usuários (painel admin), pt-BR, en-US e es-ES.
  * Preferência: localStorage `brspark_admin_ui_locale`; se vazio, **pt-BR** (painel).
  */
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
@@ -14,7 +14,7 @@ const M = {
     localePt: 'Português (Brasil)',
     localeEn: 'English (US)',
     localeEs: 'Español',
-    nav_home_title: 'BrSpark — Início',
+    nav_home_title: 'BrSpark, Início',
     nav_sidebar_expand: 'Expandir menu',
     nav_sidebar_collapse: 'Recolher menu',
     imp_banner_prefix: 'Visualizando o painel como ',
@@ -32,7 +32,7 @@ const M = {
     nav_tech_signup: 'Cadastro prestador',
     nav_forms_builder: 'Forms Builder',
     nav_operations: 'Central de Operações',
-    nav_routine_tasks: 'RT — Tarefas de rotina',
+    nav_routine_tasks: 'RT, Tarefas de rotina',
     nav_reports_pdf: 'Relatórios PDF',
     nav_evaluations: 'Avaliações',
     nav_cockpit: 'Sync Cockpit',
@@ -107,7 +107,7 @@ const M = {
     elevateBody:
       'Você está atribuindo um papel de administração elevado. Para confirmar, digite o e-mail completo deste usuário:',
     elevateMismatch: 'O e-mail não coincide. Operação cancelada.',
-    roleMatrixTitle: 'Papéis — resumo',
+    roleMatrixTitle: 'Papéis, resumo',
     filterLocs: 'Filtrar bases por nome…',
     docSituation: 'Situação',
     docAttach: 'Anexo (URL ou arquivo)',
@@ -120,7 +120,7 @@ const M = {
     matriculaCheckErr: 'Não foi possível validar a matrícula.',
     leaveUnsaved: 'Há alterações não salvas. Sair mesmo assim?',
     openNewTab: 'Abrir ficha em nova aba',
-    usersNavStored: 'Navegação da lista ativa — use anterior/próximo na ficha.',
+    usersNavStored: 'Navegação da lista ativa, use anterior/próximo na ficha.',
     ul_breadcrumb: 'Painel',
     ul_breadcrumbUsers: 'Usuários',
     ul_heroTitle: 'Gestão de usuários',
@@ -163,7 +163,7 @@ const M = {
     ul_phName: 'João Silva',
     ul_phEmail: 'joao@exemplo.com',
     ul_lblMatricula: 'Matrícula funcional',
-    ul_phMatricula: 'Opcional — única na organização',
+    ul_phMatricula: 'Opcional, única na organização',
     ul_lblTenant: 'Conta (Tenant)',
     ul_tenantPick: 'Selecione…',
     ul_lblRole: 'Papel',
@@ -273,7 +273,7 @@ const M = {
     ul_sortMatricula: 'Matrícula (ordenar)',
     ul_sortRoleOpt: 'Papel (ordenar)',
     ul_sortActiveOpt: 'Conta ativa (ordenar)',
-    ul_sortPontoOpt: 'Ponto — flag (ordenar)',
+    ul_sortPontoOpt: 'Ponto, flag (ordenar)',
     ul_sortClickHint: 'Clique para ordenar por esta coluna; clique de novo para inverter ascendente/descendente.',
     ul_colsExtra: 'Colunas extra',
     ul_thCountry: 'País',
@@ -317,7 +317,7 @@ const M = {
     ul_openResetEmailTxt: 'Reset por e-mail',
     ul_resetEmailConfirmBtn: 'Redefinir senha',
     ue_stickyHint_html:
-      '<strong>Dica de uso:</strong> utilize os atalhos abaixo. <strong>Documentos multi-location:</strong> em «Bases», deixe vazio (nenhuma seleção com Ctrl) para indicar validade em <em>todo o tenant</em>; ou selecione uma ou mais <code>Location</code> do tenant (edifícios, áreas, armazéns) para restringir onde o documento se aplica — alinhado ao modelo Multi-Location do painel. <strong>Lista:</strong> «Voltar à lista» repõe filtros, ordenação e página que tinha ao abrir a ficha (quando veio da listagem).',
+      '<strong>Dica de uso:</strong> utilize os atalhos abaixo. <strong>Documentos multi-location:</strong> em «Bases», deixe vazio (nenhuma seleção com Ctrl) para indicar validade em <em>todo o tenant</em>; ou selecione uma ou mais <code>Location</code> do tenant (edifícios, áreas, armazéns) para restringir onde o documento se aplica, alinhado ao modelo Multi-Location do painel. <strong>Lista:</strong> «Voltar à lista» repõe filtros, ordenação e página que tinha ao abrir a ficha (quando veio da listagem).',
     ue_navDados: 'Dados pessoais',
     ue_navFace: 'Reconhecimento facial',
     ue_navWorkTime: 'Registro de horas',
@@ -332,7 +332,7 @@ const M = {
     ue_lblPhone: 'Telefone / WhatsApp',
     ue_phPhone: '+55 …',
     ue_lblAvatarUrl: 'URL foto de perfil',
-    ue_secFace: 'Reconhecimento facial — fotos base',
+    ue_secFace: 'Reconhecimento facial, fotos base',
     ue_faceIntro_html:
       'Fotos base para o motor de reconhecimento: <strong>JPEG, PNG ou WebP</strong> (máx. <strong>5 MB</strong> cada; até <strong>12</strong>). HEIC do iPhone não é aceito. Quem veio do <strong>cadastro em etapas</strong> traz a foto do passo 1 como referência principal (não removível aqui; só muda com novo cadastro aprovado ou exclusão do usuário). Reforce com fotos nítidas adicionais do rosto. O campo «URL foto de perfil» em Dados pessoais é gestão administrativa (o app do colaborador <strong>não</strong> permite trocar foto nem matrícula após o perfil de prestador ficar <strong>ACTIVE</strong>).',
     ue_faceAddPhotos: '+ Adicionar fotos',
@@ -340,7 +340,7 @@ const M = {
     ue_cfGalleryDesc_html:
       'Ao adicionar ou remover fotos base ou ao gravar alteração de avatar, o <strong>servidor envia na hora</strong> a galeria ao FaceMatch (ordem: referência do passo 1, quando existir; depois avatar; depois demais matrículas).',
     ue_cfSyncAgain: 'Sincronizar novamente',
-    ue_cfSyncIdle: 'Pronto — a sincronizar após alterar fotos.',
+    ue_cfSyncIdle: 'Pronto, a sincronizar após alterar fotos.',
     ue_cfSubjectFoot: 'O subject no FaceMatch segue o formato tenant:usuário definido pelo painel.',
     ue_secWorkTime: 'Registro de horas (ponto)',
     ue_lblMatricula: 'Matrícula funcional',
@@ -351,7 +351,7 @@ const M = {
     ue_wtEnableLbl: 'Habilitar registro de horas para este usuário',
     ue_wtBrRegimeTitle: 'Vínculo laboral (Brasil)',
     ue_wtBrRegimeHint:
-      'CLT: no app móvel mantém-se o separador «Ponto» e o texto «Jornada acumulada do dia». PJ: o separador passa a «Registro» e o texto torna-se «Horas registradas hoje». Só disponível quando a organização tem país BR no perfil de localização do tenant; nas demais localizações não há esta opção.',
+      'CLT: no app móvel mantém a aba «Ponto» e o texto «Jornada acumulada do dia». PJ: a aba passa a «Registro» e o texto vira «Horas registradas hoje». Só disponível quando a organização tem país BR no perfil de localização do tenant; nas demais localizações não há esta opção.',
     ue_wtPolicy_html:
       'Efetivo no app para todos os papéis <strong>exceto cliente</strong> (papel «Usuário» / <code>USER</code>): com a flag <strong>work_time</strong>, módulo ligado em <a href="work-time.html" style="color:var(--accent);font-weight:700">Registro de horas</a>, esta opção ativa no usuário e matrícula facial conforme a política.',
     ue_secAddr: 'Endereço (JSON estruturado / multi-location)',
@@ -389,7 +389,7 @@ const M = {
       '<strong>Prestador</strong> ativa o perfil técnico (horários, regiões, docs. profissionais). <strong>SaaS admin</strong> é para a equipe da plataforma; use só em contas que devam operar no âmbito global do serviço.',
     ue_activeLbl: 'Conta ativa (pode fazer login no app / painel)',
     ue_activeHint_html:
-      'Isto é <strong>independente</strong> do estado do prestador abaixo: uma conta pode estar ativa e o prestador <strong>inativo</strong> — nesse caso <strong>não</strong> é possível despachar OS para este e-mail.',
+      'Isto é <strong>independente</strong> do estado do prestador abaixo: uma conta pode estar ativa e o prestador <strong>inativo</strong>, nesse caso <strong>não</strong> é possível despachar OS para este e-mail.',
     ue_secTech: 'Prestador de serviço (técnico)',
     ue_techIntro:
       'Estes campos aplicam-se quando o papel é Prestador (ou quando já existe perfil técnico). Se mudar o papel para outro, o perfil técnico fica INACTIVE (não apaga histórico).',
@@ -403,7 +403,7 @@ const M = {
     ue_lblSpecialty: 'Especialidade principal',
     ue_lblSkills: 'Habilidades (tags separadas por vírgula)',
     ue_phSkills: 'Ar condicionado, Elétrica, Hidráulica…',
-    ue_secDocsP: 'Documentos pessoais — escopo por base (multi-location)',
+    ue_secDocsP: 'Documentos pessoais, escopo por base (multi-location)',
     ue_secDocsPro: 'Documentos profissionais (certificações, ASO, NR, etc.)',
     ue_btnAddDoc: '+ Adicionar documento',
     ue_docThType: 'Tipo',
@@ -461,14 +461,14 @@ const M = {
     ue_readonlyCrumb: 'Ver (só leitura)',
     ue_readonlyBannerTitle: 'Modo só leitura.',
     ue_readonlyBannerBody:
-      'Não é possível alterar dados nesta vista. Feche o separador ou abra a ficha em modo edição a partir da lista.',
+      'Não é possível alterar dados nesta visualização. Feche a aba ou abra o cadastro em modo de edição a partir da lista.',
     ue_roleMatrixIntro:
       'Modelo de acesso em alto nível. Permissões exatas acompanham o produto.',
-    ue_roleMatrixLiUser: 'USER — usuário padrão / fluxos de cliente.',
-    ue_roleMatrixLiProv: 'PROVIDER — prestador de campo, horários, documentos.',
-    ue_roleMatrixLiMgr: 'MANAGER — gestão operacional no tenant.',
-    ue_roleMatrixLiTenant: 'TENANT_ADMIN — administração completa da organização.',
-    ue_roleMatrixLiSaas: 'SAAS_ADMIN — equipe da plataforma, multi-tenant. Atribuir com muito cuidado.',
+    ue_roleMatrixLiUser: 'USER, usuário padrão / fluxos de cliente.',
+    ue_roleMatrixLiProv: 'PROVIDER, prestador de campo, horários, documentos.',
+    ue_roleMatrixLiMgr: 'MANAGER, gestão operacional no tenant.',
+    ue_roleMatrixLiTenant: 'TENANT_ADMIN, administração completa da organização.',
+    ue_roleMatrixLiSaas: 'SAAS_ADMIN, equipe da plataforma, multi-tenant. Atribuir com muito cuidado.',
     ue_addrHintBR: 'Brasil: bairro e UF são comuns. Código postal: CEP.',
     ue_addrHintUS: 'Estados Unidos: use ZIP e estado com duas letras quando aplicável.',
     ue_addrHintGeneric: 'Use ISO país (2 letras). Rótulos genéricos; alinhe à prática local.',
@@ -483,7 +483,7 @@ const M = {
     ue_copyLinkOk: 'Link copiado.',
     ue_copyLinkPrompt: 'Copie:',
     ue_cfAdminNoState_html:
-      '<strong>FaceMatch (registro)</strong> — sem estado salvo. Após enviar fotos ou «Sincronizar», o estado aparece aqui.',
+      '<strong>FaceMatch (registro)</strong>, sem estado salvo. Após enviar fotos ou «Sincronizar», o estado aparece aqui.',
     ue_cfBadgeSynced: 'Sincronizado',
     ue_cfBadgePending: 'Pendente',
     ue_cfBadgeErr: 'Erro de sincronização',
@@ -494,22 +494,22 @@ const M = {
     ue_cfFailDefault: 'Falha',
     ue_cfLastOk: ' Último OK: {date} ({n} img).',
     ue_cfSyncLoading: 'A sincronizar com FaceMatch…',
-    ue_cfSyncGalleryOkShort: 'Galeria atualizada — {n} imagem(ns) enviada(s) · subject: {sub}',
+    ue_cfSyncGalleryOkShort: 'Galeria atualizada, {n} imagem(ns) enviada(s) · subject: {sub}',
     ue_cfSyncFail: 'Falha na sincronização.',
     ue_cfSyncNetErrShort: 'Erro de rede ao contatar o servidor.',
     ue_cfSyncNetErrAlert: 'Erro de rede ao sincronizar.',
     ue_cfSyncApplyErr: 'FaceMatch: sincronização falhou.',
     ue_faceGalleryEmpty: 'Nenhuma foto base. Use «Adicionar fotos».',
-    ue_faceProtectedTitle: 'Foto do passo 1 do cadastro do prestador — não pode ser removida aqui.',
+    ue_faceProtectedTitle: 'Foto do passo 1 do cadastro do prestador, não pode ser removida aqui.',
     ue_faceProtectedBadge: 'Protegida',
     ue_faceRibbonPrimary: 'Referência (passo 1)',
     ue_facePrimaryRemoveBlock:
-      'Esta é a foto de referência do passo 1 do cadastro do prestador. Ela não pode ser removida aqui — só muda se o cadastro for refeito e aprovado de novo ou se o usuário for excluído.',
+      'Esta é a foto de referência do passo 1 do cadastro do prestador. Ela não pode ser removida aqui, só muda se o cadastro for refeito e aprovado de novo ou se o usuário for excluído.',
     ue_faceRemoveConfirm: 'Remover esta foto base?',
     ue_wtPolicyLoadErr: 'Não foi possível carregar a política de ponto do tenant.',
     ue_wtHintModuleOff: 'O módulo de ponto está desligado nas configurações do tenant.',
     ue_wtHintFaceNoPhotos:
-      'Sem fotos base de rosto — batidas podem sair com ressalva até adicionar fotos em Reconhecimento facial.',
+      'Sem fotos base de rosto, batidas podem sair com ressalva até adicionar fotos em Reconhecimento facial.',
     ue_wtHintFaceMatchNotSynced:
       'FaceMatch ainda não confirmou esta galeria no servidor (integração, rede ou falha no envio). Em Integrações, verifique «Exadel CompreFace» ativo e use «Testar». Batidas podem sair com ressalva até ficar OK.',
     ue_wtHintTechActive:
@@ -522,7 +522,7 @@ const M = {
     ue_wtFacePhotosCount: '{n} foto(s) base',
     ue_wtFaceNoPhotos: 'sem fotos base',
     ue_faceIdentityActive:
-      'Prestador ACTIVE: o colaborador não altera foto de perfil nem matrícula facial pelo app — só por esta ficha no painel.',
+      'Prestador ACTIVE: o colaborador não altera foto de perfil nem matrícula facial pelo app, só por esta ficha no painel.',
     ue_faceHeicAlert:
       'HEIC não é suportado aqui: {file}\nNo iPhone use Ajustes → Câmera → Formatos → «Mais compatível», ou converta para JPEG.',
     ue_faceFormatAlert: 'Formato não reconhecido (use JPEG, PNG ou WebP): {file}',
@@ -541,7 +541,7 @@ const M = {
     localePt: 'Portuguese (Brazil)',
     localeEn: 'English (US)',
     localeEs: 'Spanish',
-    nav_home_title: 'BrSpark — Home',
+    nav_home_title: 'BrSpark, Home',
     nav_sidebar_expand: 'Expand menu',
     nav_sidebar_collapse: 'Collapse menu',
     imp_banner_prefix: 'Viewing the panel as ',
@@ -633,7 +633,7 @@ const M = {
     elevateTitle: 'Confirm privilege elevation',
     elevateBody: 'You are assigning an elevated admin role. Type the user’s full email to confirm:',
     elevateMismatch: 'Email does not match. Cancelled.',
-    roleMatrixTitle: 'Roles — overview',
+    roleMatrixTitle: 'Roles, overview',
     filterLocs: 'Filter sites by name…',
     docSituation: 'Status',
     docAttach: 'Attachment (URL or file)',
@@ -646,7 +646,7 @@ const M = {
     matriculaCheckErr: 'Could not validate employee ID.',
     leaveUnsaved: 'You have unsaved changes. Leave anyway?',
     openNewTab: 'Open record in new tab',
-    usersNavStored: 'List navigation active — use prev/next on the user record.',
+    usersNavStored: 'List navigation active, use prev/next on the user record.',
     ul_breadcrumb: 'Panel',
     ul_breadcrumbUsers: 'Users',
     ul_heroTitle: 'User management',
@@ -689,7 +689,7 @@ const M = {
     ul_phName: 'John Doe',
     ul_phEmail: 'john@example.com',
     ul_lblMatricula: 'Employee ID',
-    ul_phMatricula: 'Optional — unique in the organization',
+    ul_phMatricula: 'Optional, unique in the organization',
     ul_lblTenant: 'Account (tenant)',
     ul_tenantPick: 'Select…',
     ul_lblRole: 'Role',
@@ -843,7 +843,7 @@ const M = {
     ul_openResetEmailTxt: 'Reset by email',
     ul_resetEmailConfirmBtn: 'Reset password',
     ue_stickyHint_html:
-      '<strong>Tip:</strong> use the shortcuts below. <strong>Multi-location documents:</strong> under “Sites”, leave nothing selected (Ctrl+click to clear) to mean <em>valid for the whole tenant</em>; or select one or more tenant <code>Location</code> records (buildings, areas, warehouses) to limit where the document applies — aligned with the panel’s multi-location model. <strong>List:</strong> “Back to list” restores filters, sort and page from when you opened this record (when coming from the list).',
+      '<strong>Tip:</strong> use the shortcuts below. <strong>Multi-location documents:</strong> under “Sites”, leave nothing selected (Ctrl+click to clear) to mean <em>valid for the whole tenant</em>; or select one or more tenant <code>Location</code> records (buildings, areas, warehouses) to limit where the document applies, aligned with the panel’s multi-location model. <strong>List:</strong> “Back to list” restores filters, sort and page from when you opened this record (when coming from the list).',
     ue_navDados: 'Personal data',
     ue_navFace: 'Face recognition',
     ue_navWorkTime: 'Time clock',
@@ -858,7 +858,7 @@ const M = {
     ue_lblPhone: 'Phone / WhatsApp',
     ue_phPhone: '+1 …',
     ue_lblAvatarUrl: 'Profile photo URL',
-    ue_secFace: 'Face recognition — base photos',
+    ue_secFace: 'Face recognition, base photos',
     ue_faceIntro_html:
       'Base photos for the recognition engine: <strong>JPEG, PNG or WebP</strong> (max <strong>5 MB</strong> each; up to <strong>12</strong>). iPhone HEIC is not accepted. Users from <strong>step-by-step registration</strong> keep step 1 as the main reference (not removable here; only changes with a new approved signup or user deletion). Add sharp face photos. The “profile photo URL” field under Personal data is admin-only (the field app <strong>does not</strong> allow changing photo or employee ID after the provider profile is <strong>ACTIVE</strong>).',
     ue_faceAddPhotos: '+ Add photos',
@@ -866,7 +866,7 @@ const M = {
     ue_cfGalleryDesc_html:
       'When you add or remove base photos or save a profile photo URL change, the <strong>server pushes immediately</strong> to FaceMatch (order: step 1 reference if any; then avatar; then other enrollment photos).',
     ue_cfSyncAgain: 'Sync again',
-    ue_cfSyncIdle: 'Ready — will sync after photo changes.',
+    ue_cfSyncIdle: 'Ready, will sync after photo changes.',
     ue_cfSubjectFoot: 'The FaceMatch subject follows the tenant:user format defined by the panel.',
     ue_secWorkTime: 'Time clock',
     ue_lblMatricula: 'Employee ID',
@@ -915,7 +915,7 @@ const M = {
       '<strong>Provider</strong> enables the technician profile (schedules, regions, professional documents). <strong>SaaS admin</strong> is for the platform team; use only on accounts that must operate globally.',
     ue_activeLbl: 'Account active (can sign in to app / panel)',
     ue_activeHint_html:
-      'This is <strong>independent</strong> of the provider state below: the account can be active and the provider <strong>inactive</strong> — then work orders <strong>cannot</strong> be dispatched to this email.',
+      'This is <strong>independent</strong> of the provider state below: the account can be active and the provider <strong>inactive</strong>, then work orders <strong>cannot</strong> be dispatched to this email.',
     ue_secTech: 'Service provider (technician)',
     ue_techIntro:
       'These fields apply when the role is Provider (or a technician profile already exists). If you change the role, the technician profile becomes INACTIVE (history is kept).',
@@ -929,7 +929,7 @@ const M = {
     ue_lblSpecialty: 'Main specialty',
     ue_lblSkills: 'Skills (comma-separated tags)',
     ue_phSkills: 'HVAC, Electrical, Plumbing…',
-    ue_secDocsP: 'Personal documents — per site (multi-location)',
+    ue_secDocsP: 'Personal documents, per site (multi-location)',
     ue_secDocsPro: 'Professional documents (certs, medical fitness, safety, etc.)',
     ue_btnAddDoc: '+ Add document',
     ue_docThType: 'Type',
@@ -989,11 +989,11 @@ const M = {
     ue_readonlyBannerBody:
       'You cannot change data in this view. Close the tab or open the record in edit mode from the list.',
     ue_roleMatrixIntro: 'High-level access model. Exact permissions evolve with the product.',
-    ue_roleMatrixLiUser: 'USER — default collaborator / client workflows.',
-    ue_roleMatrixLiProv: 'PROVIDER — field technician, schedules, documents.',
-    ue_roleMatrixLiMgr: 'MANAGER — operational management in the tenant.',
-    ue_roleMatrixLiTenant: 'TENANT_ADMIN — full administration of the organization.',
-    ue_roleMatrixLiSaas: 'SAAS_ADMIN — platform team, cross-tenant. Assign with extreme care.',
+    ue_roleMatrixLiUser: 'USER, default collaborator / client workflows.',
+    ue_roleMatrixLiProv: 'PROVIDER, field technician, schedules, documents.',
+    ue_roleMatrixLiMgr: 'MANAGER, operational management in the tenant.',
+    ue_roleMatrixLiTenant: 'TENANT_ADMIN, full administration of the organization.',
+    ue_roleMatrixLiSaas: 'SAAS_ADMIN, platform team, cross-tenant. Assign with extreme care.',
     ue_addrHintBR: 'Brazil: neighbourhood (bairro) and state (UF) are common. Postal code: CEP.',
     ue_addrHintUS: 'United States: use ZIP and two-letter state when applicable.',
     ue_addrHintGeneric: 'Use a 2-letter ISO country. Labels are generic; align with local practice.',
@@ -1008,7 +1008,7 @@ const M = {
     ue_copyLinkOk: 'Link copied.',
     ue_copyLinkPrompt: 'Copy:',
     ue_cfAdminNoState_html:
-      '<strong>FaceMatch (record)</strong> — no saved state yet. After uploading photos or tapping “Sync”, status appears here.',
+      '<strong>FaceMatch (record)</strong>, no saved state yet. After uploading photos or tapping “Sync”, status appears here.',
     ue_cfBadgeSynced: 'Synced',
     ue_cfBadgePending: 'Pending',
     ue_cfBadgeErr: 'Sync error',
@@ -1019,22 +1019,22 @@ const M = {
     ue_cfFailDefault: 'Failed',
     ue_cfLastOk: ' Last OK: {date} ({n} img).',
     ue_cfSyncLoading: 'Syncing with FaceMatch…',
-    ue_cfSyncGalleryOkShort: 'Gallery updated — {n} image(s) sent · subject: {sub}',
+    ue_cfSyncGalleryOkShort: 'Gallery updated, {n} image(s) sent · subject: {sub}',
     ue_cfSyncFail: 'Synchronization failed.',
     ue_cfSyncNetErrShort: 'Network error contacting the server.',
     ue_cfSyncNetErrAlert: 'Network error while syncing.',
     ue_cfSyncApplyErr: 'FaceMatch: synchronization failed.',
     ue_faceGalleryEmpty: 'No base photos yet. Use “Add photos”.',
-    ue_faceProtectedTitle: 'Technician signup step-1 photo — cannot be removed here.',
+    ue_faceProtectedTitle: 'Technician signup step-1 photo, cannot be removed here.',
     ue_faceProtectedBadge: 'Protected',
     ue_faceRibbonPrimary: 'Reference (step 1)',
     ue_facePrimaryRemoveBlock:
-      'This is the technician signup step-1 reference photo. It cannot be removed here — it only changes if signup is re-done and approved again, or the user is deleted.',
+      'This is the technician signup step-1 reference photo. It cannot be removed here, it only changes if signup is re-done and approved again, or the user is deleted.',
     ue_faceRemoveConfirm: 'Remove this base photo?',
     ue_wtPolicyLoadErr: 'Could not load the tenant time-clock policy.',
     ue_wtHintModuleOff: 'The time clock module is turned off in tenant settings.',
     ue_wtHintFaceNoPhotos:
-      'No face base photos yet — punches may stay flagged until you add photos under Face recognition.',
+      'No face base photos yet, punches may stay flagged until you add photos under Face recognition.',
     ue_wtHintFaceMatchNotSynced:
       'FaceMatch has not confirmed this gallery on the server (integration, network, or upload failure). In Integrations, check “Exadel CompreFace” is active and use “Test”. Punches may stay flagged until OK.',
     ue_wtHintTechActive:
@@ -1046,7 +1046,7 @@ const M = {
     ue_wtFacePhotosCount: '{n} base photo(s)',
     ue_wtFaceNoPhotos: 'no base photos',
     ue_faceIdentityActive:
-      'Provider ACTIVE: the worker cannot change profile photo or enrollment photos in the app — only on this page.',
+      'Provider ACTIVE: the worker cannot change profile photo or enrollment photos in the app, only on this page.',
     ue_faceHeicAlert:
       'HEIC is not supported here: {file}\nOn iPhone use Settings → Camera → Formats → “Most Compatible”, or convert to JPEG.',
     ue_faceFormatAlert: 'Unrecognized format (use JPEG, PNG or WebP): {file}',
@@ -1062,7 +1062,7 @@ const M = {
 };
 M['es-ES'] = Object.assign({}, M['en-US'], USER_PAGES_ES_MERGE);
 
-/** Valores persistidos (JSON) — documentos de identificação / pessoais */
+/** Valores persistidos (JSON), documentos de identificação / pessoais */
 export const DOC_TYPE_ROWS_PERSONAL = {
   'pt-BR': [
     ['CPF', 'CPF'],
@@ -1094,7 +1094,7 @@ export const DOC_TYPE_ROWS_PERSONAL = {
 };
 
 /**
- * Valores persistidos — certificações, saúde ocupacional, NRs (mesmos códigos em todos os locales).
+ * Valores persistidos, certificações, saúde ocupacional, NRs (mesmos códigos em todos os locales).
  * Rótulos traduzidos para o painel.
  */
 export const DOC_TYPE_ROWS_PROFESSIONAL = {
@@ -1139,7 +1139,7 @@ export const DOC_TYPE_ROWS_PROFESSIONAL = {
   ],
 };
 
-/** @deprecated Preferir `DOC_TYPE_ROWS_PERSONAL` — mantido por compatibilidade com imports antigos */
+/** @deprecated Preferir `DOC_TYPE_ROWS_PERSONAL`, mantido por compatibilidade com imports antigos */
 export const DOC_TYPE_ROWS = DOC_TYPE_ROWS_PERSONAL;
 
 const DAYS_PT = [

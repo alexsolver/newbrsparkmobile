@@ -121,7 +121,7 @@ export function ChecklistMaterialsReceiptField({ value, onChange, readOnly, user
 
   const stockMatchHint = (l: MaterialsReceiptLineV2): string | null => {
     const id = resolveReceiptLineToStockItemId(l, stockItems);
-    return id ? null : 'Sem correspondência no seu estoque pelo SKU — cadastre em Meu estoque ou ajuste a integração.';
+    return id ? null : 'Sem correspondência no seu estoque pelo SKU, cadastre em Meu estoque ou ajuste a integração.';
   };
 
   if (loading) {
@@ -185,7 +185,7 @@ export function ChecklistMaterialsReceiptField({ value, onChange, readOnly, user
   return (
     <View>
       <Text style={styles.intro}>
-        Lista definida pela integração — não é possível alterar quantidades ou incluir itens manualmente. Aceite ou
+        Lista definida pela integração, não é possível alterar quantidades ou incluir itens manualmente. Aceite ou
         recuse cada linha. Em caso de recusa, a justificativa é obrigatória.
       </Text>
 

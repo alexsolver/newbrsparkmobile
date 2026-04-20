@@ -39,29 +39,32 @@ import {
   type TechnicianExpenseCategoryRow,
 } from '../../src/utils/technicianExpenseCategoryCatalog';
 
-function formatBrl(n: number) {
-  return (Number(n) || 0).toLocaleString('pt-BR', {
+function formatBrl(n: number, localeTag: string) {
+  const loc = localeTag.replace('_', '-');
+  return (Number(n) || 0).toLocaleString(loc, {
     style: 'currency',
     currency: 'BRL',
     minimumFractionDigits: 2,
   });
 }
 
-function formatWhen(iso: string) {
+function formatWhen(iso: string, localeTag: string) {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+    const loc = localeTag.replace('_', '-');
+    return d.toLocaleString(loc, { dateStyle: 'short', timeStyle: 'short' });
   } catch {
     return iso;
   }
 }
 
-function formatDateShort(iso: string) {
+function formatDateShort(iso: string, localeTag: string) {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleDateString('pt-BR', { dateStyle: 'short' });
+    const loc = localeTag.replace('_', '-');
+    return d.toLocaleDateString(loc, { dateStyle: 'short' });
   } catch {
     return iso;
   }
@@ -84,6 +87,7 @@ function OsLinkedDetailsBlock({
   taskById: Map<string, CloudTaskFinanceInfo>;
   amountRight?: string;
 }) {
+  const { t } = useTranslation();
   const inf = taskById.get(String(taskId));
   const head = formatOsHeadline(taskId, inf);
   return (
@@ -98,25 +102,25 @@ function OsLinkedDetailsBlock({
         <>
           {inf.requester ? (
             <Text style={styles.osDetailLine} numberOfLines={2}>
-              <Text style={styles.osDetailLbl}>Solicitante: </Text>
+              <Text style={styles.osDetailLbl}>{t('technicianMobile.financeOsRequester')} </Text>
               {inf.requester}
             </Text>
           ) : null}
           {inf.location ? (
             <Text style={styles.osDetailLine} numberOfLines={2}>
-              <Text style={styles.osDetailLbl}>Local: </Text>
+              <Text style={styles.osDetailLbl}>{t('technicianMobile.financeOsLocation')} </Text>
               {inf.location}
             </Text>
           ) : null}
           {inf.activityTitle ? (
             <Text style={styles.osDetailLine} numberOfLines={2}>
-              <Text style={styles.osDetailLbl}>Atividade: </Text>
+              <Text style={styles.osDetailLbl}>{t('technicianMobile.financeOsActivity')} </Text>
               {inf.activityTitle}
             </Text>
           ) : null}
         </>
       ) : (
-        <Text style={styles.osDetailMissing}>Abra ou sincronize a OS para carregar detalhes.</Text>
+        <Text style={styles.osDetailMissing}>{t('technicianMobile.financeOsDetailMissing')}</Text>
       )}
     </View>
   );
@@ -270,7 +274,8 @@ function buildFinanceListRows(entries: TechnicianFinanceEntry[], ownerEmail?: st
 }
 
 export default function TechnicianFinanceScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const localeTag = i18n.language || 'pt-BR';
   const router = useRouter();
   const { colors: C } = useTheme();
   const { user } = useAuth();
@@ -333,12 +338,15 @@ export default function TechnicianFinanceScreen() {
         await TechnicianFinanceService.markRevenueAsReceived(id, user?.email || undefined);
         await load();
       } catch (e: any) {
-        Alert.alert('Erro', e?.message || 'Não foi possível confirmar o recebimento.');
+        Alert.alert(
+          t('common.error'),
+          e?.message || t('technicianMobile.financeConfirmReceiptError'),
+        );
       } finally {
         setConfirmingRevId(null);
       }
     },
-    [load, user?.email]
+    [load, user?.email, t]
   );
 
   const listRowsExpense = useMemo(
@@ -375,7 +383,7 @@ export default function TechnicianFinanceScreen() {
         const b = baseDescriptionWithoutRateio(p.description);
         if (b && (!title || b.length > title.length)) title = b;
       }
-      if (!title) title = 'Despesa';
+      if (!title) title = t('technicianMobile.financeDefaultExpenseTitle');
       const seenUri = new Set<string>();
       const attachCount = parts.reduce((n, p) => {
         for (const a of p.attachments || []) {
@@ -398,11 +406,11 @@ export default function TechnicianFinanceScreen() {
         <>
           <View style={styles.cardTop}>
             <View style={[styles.badge, { backgroundColor: '#fee2e2' }]}>
-              <Text style={styles.badgeTxt}>Despesa</Text>
+              <Text style={styles.badgeTxt}>{t('technicianMobile.financeKindExpense')}</Text>
             </View>
             <View style={styles.totalBlock}>
-              <Text style={styles.totalLbl}>Total</Text>
-              <Text style={styles.amt}>{formatBrl(total)}</Text>
+              <Text style={styles.totalLbl}>{t('technicianMobile.financeTotalLabel')}</Text>
+              <Text style={styles.amt}>{formatBrl(total, localeTag)}</Text>
             </View>
           </View>
           <ExpenseCategoryRow catalog={expenseCatCatalog} categoryKey={parts[0]?.categoryKey} />
@@ -410,7 +418,9 @@ export default function TechnicianFinanceScreen() {
             {title}
           </Text>
           <Text style={styles.rateioPrincipalHint}>
-            Despesa principal · rateio em {parts.length} {parts.length === 1 ? 'ordem' : 'ordens'} de serviço
+            {parts.length === 1
+              ? t('technicianMobile.financeRateioPrincipalOne')
+              : t('technicianMobile.financeRateioPrincipalMany', { count: parts.length })}
           </Text>
           <TouchableOpacity
             style={styles.rateioToggle}
@@ -418,27 +428,39 @@ export default function TechnicianFinanceScreen() {
             activeOpacity={0.75}
             accessibilityRole="button"
             accessibilityState={{ expanded: rateioOpen }}
-            accessibilityLabel={rateioOpen ? 'Ocultar detalhes do rateio' : 'Ver detalhes do rateio'}
+            accessibilityLabel={
+              rateioOpen
+                ? t('technicianMobile.financeRateioToggleHideA11y')
+                : t('technicianMobile.financeRateioToggleShowA11y')
+            }
           >
-            <Text style={styles.rateioToggleTxt}>{rateioOpen ? 'Ocultar rateio' : 'Ver rateio'}</Text>
+            <Text style={styles.rateioToggleTxt}>
+              {rateioOpen ? t('technicianMobile.financeRateioToggleHide') : t('technicianMobile.financeRateioToggleShow')}
+            </Text>
             <Ionicons name={rateioOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#475569" />
           </TouchableOpacity>
           {rateioOpen ? (
             <View style={styles.detailsSection}>
-              <Text style={styles.detailsSectionTitle}>Detalhes do rateio</Text>
-              <Text style={styles.detailsSectionSub}>{parts.length} OS · valor por ordem abaixo</Text>
+              <Text style={styles.detailsSectionTitle}>{t('technicianMobile.financeRateioSectionTitle')}</Text>
+              <Text style={styles.detailsSectionSub}>
+                {t('technicianMobile.financeRateioSectionSub', { count: parts.length })}
+              </Text>
               {parts.map((p, si) => {
                 const tid = p.taskId ? String(p.taskId) : '';
                 if (!tid) {
                   return (
                     <View key={p.id} style={[si === parts.length - 1 && { marginBottom: 0 }]}>
-                      <Text style={styles.splitLineAmt}>{formatBrl(p.amount)}</Text>
+                      <Text style={styles.splitLineAmt}>{formatBrl(p.amount, localeTag)}</Text>
                     </View>
                   );
                 }
                 return (
                   <View key={p.id} style={{ marginBottom: si === parts.length - 1 ? 0 : 12 }}>
-                    <OsLinkedDetailsBlock taskId={tid} taskById={taskById} amountRight={formatBrl(p.amount)} />
+                    <OsLinkedDetailsBlock
+                      taskId={tid}
+                      taskById={taskById}
+                      amountRight={formatBrl(p.amount, localeTag)}
+                    />
                   </View>
                 );
               })}
@@ -448,32 +470,32 @@ export default function TechnicianFinanceScreen() {
             <View style={styles.attachRow}>
               <Ionicons name="attach-outline" size={14} color="#64748b" />
               <Text style={styles.attachMeta}>
-                {attachCount} anexo{attachCount === 1 ? '' : 's'}
+                {attachCount === 1
+                  ? t('technicianMobile.financeAttachmentSingular', { count: attachCount })
+                  : t('technicianMobile.financeAttachmentPlural', { count: attachCount })}
               </Text>
             </View>
           ) : null}
           <View style={styles.metaRow}>
-            <Text style={styles.meta}>{formatWhen(createdAt)}</Text>
+            <Text style={styles.meta}>{formatWhen(createdAt, localeTag)}</Text>
             <Text style={styles.metaOs} numberOfLines={1}>
-              · {parts.length} OS · Manual (rateio)
+              {t('technicianMobile.financeMetaManualRateio', { count: parts.length })}
             </Text>
           </View>
           {splitUnlocked ? (
             <View style={styles.editHintRow}>
               <Ionicons name="shield-checkmark-outline" size={15} color="#b45309" />
               <Text style={[styles.editHint, { color: '#b45309' }]}>
-                Devolvido para revisão: toque para corrigir valor, descrição ou rateio (todas as OS no celular).
+                {t('technicianMobile.financeReturnedReviewSplit')}
               </Text>
             </View>
           ) : splitEditable ? (
             <View style={styles.editHintRow}>
               <Ionicons name="create-outline" size={15} color="#0f766e" />
-              <Text style={styles.editHint}>Toque para ajustar o rateio (OS). Valor e anexos estão fechados.</Text>
+              <Text style={styles.editHint}>{t('technicianMobile.financeAdjustSplitOnDevice')}</Text>
             </View>
           ) : (
-            <Text style={styles.editHintMuted}>
-              Sincronize todas as OS deste rateio neste celular para poder incluir ou remover OS.
-            </Text>
+            <Text style={styles.editHintMuted}>{t('technicianMobile.financeAdjustSingleSync')}</Text>
           )}
         </>
       );
@@ -504,15 +526,19 @@ export default function TechnicianFinanceScreen() {
               { backgroundColor: item.kind === 'revenue' ? '#d1fae5' : '#fee2e2' },
             ]}
           >
-            <Text style={styles.badgeTxt}>{item.kind === 'revenue' ? 'Receita' : 'Despesa'}</Text>
+            <Text style={styles.badgeTxt}>
+              {item.kind === 'revenue'
+                ? t('technicianMobile.financeKindRevenue')
+                : t('technicianMobile.financeKindExpense')}
+            </Text>
           </View>
           {item.kind === 'expense' ? (
             <View style={styles.totalBlock}>
-              <Text style={styles.totalLbl}>Total</Text>
-              <Text style={styles.amt}>{formatBrl(item.amount)}</Text>
+              <Text style={styles.totalLbl}>{t('technicianMobile.financeTotalLabel')}</Text>
+              <Text style={styles.amt}>{formatBrl(item.amount, localeTag)}</Text>
             </View>
           ) : (
-            <Text style={styles.amt}>{formatBrl(item.amount)}</Text>
+            <Text style={styles.amt}>{formatBrl(item.amount, localeTag)}</Text>
           )}
         </View>
         {item.kind === 'revenue' ? (
@@ -549,9 +575,9 @@ export default function TechnicianFinanceScreen() {
                 <Text style={[styles.revStatusBadgeTxt, { color: '#065f46' }]} numberOfLines={3}>
                   {t('technicianMobile.financeRevenueStatusRealized')}
                   {item.receiptRealizedAt
-                    ? ` · ${formatDateShort(item.receiptRealizedAt)}`
+                    ? ` · ${formatDateShort(item.receiptRealizedAt, localeTag)}`
                     : item.source === 'manual'
-                      ? ` · ${formatDateShort(item.createdAt)}`
+                      ? ` · ${formatDateShort(item.createdAt, localeTag)}`
                       : ''}
                 </Text>
               </View>
@@ -570,7 +596,9 @@ export default function TechnicianFinanceScreen() {
         {hasOs ? (
           <View style={styles.detailsSection}>
             <Text style={styles.detailsSectionTitle}>
-              {osIds.length > 1 ? 'Detalhes (OS ligadas)' : 'Detalhes da OS'}
+              {osIds.length > 1
+                ? t('technicianMobile.financeOsDetailsMulti')
+                : t('technicianMobile.financeOsDetailsSingle')}
             </Text>
             <View style={styles.osDetailsWrap}>
               {osIds.map((tid, oi) => (
@@ -585,28 +613,30 @@ export default function TechnicianFinanceScreen() {
           <View style={styles.attachRow}>
             <Ionicons name="attach-outline" size={14} color="#64748b" />
             <Text style={styles.attachMeta}>
-              {item.attachments.length} anexo{item.attachments.length === 1 ? '' : 's'}
+              {item.attachments.length === 1
+                ? t('technicianMobile.financeAttachmentSingular', { count: item.attachments.length })
+                : t('technicianMobile.financeAttachmentPlural', { count: item.attachments.length })}
             </Text>
           </View>
         ) : null}
         <View style={styles.metaRow}>
-          <Text style={styles.meta}>{formatWhen(item.createdAt)}</Text>
+          <Text style={styles.meta}>{formatWhen(item.createdAt, localeTag)}</Text>
           {item.source === 'checklist' && hasOs ? (
             <Text style={styles.metaOs} numberOfLines={1}>
-              · {osIds.length} OS · Checklist
+              {t('technicianMobile.financeMetaOsChecklist', { count: osIds.length })}
             </Text>
           ) : item.source === 'manual' && hasOs ? (
             <Text style={styles.metaOs} numberOfLines={1}>
-              · {osIds.length} OS · Manual
+              {t('technicianMobile.financeMetaOsManual', { count: osIds.length })}
             </Text>
           ) : item.source === 'manual' ? (
-            <Text style={styles.metaOs}> · Manual</Text>
+            <Text style={styles.metaOs}>{t('technicianMobile.financeMetaManualOnly')}</Text>
           ) : item.source === 'checklist' ? (
-            <Text style={styles.metaOs}> · Checklist</Text>
+            <Text style={styles.metaOs}>{t('technicianMobile.financeMetaChecklistOnly')}</Text>
           ) : null}
         </View>
         {item.source === 'checklist' && item.kind !== 'revenue' ? (
-          <Text style={styles.editHintMuted}>Altere no formulário da OS.</Text>
+          <Text style={styles.editHintMuted}>{t('technicianMobile.financeEditOnChecklist')}</Text>
         ) : item.source === 'checklist' && item.kind === 'revenue' ? (
           <Text style={styles.editHintMuted}>
             {t('technicianMobile.financeRevenueChecklistHint')}
@@ -615,22 +645,20 @@ export default function TechnicianFinanceScreen() {
           <View style={styles.editHintRow}>
             <Ionicons name="shield-checkmark-outline" size={15} color="#b45309" />
             <Text style={[styles.editHint, { color: '#b45309' }]}>
-              Devolvido para revisão: toque para corrigir (todas as OS no celular).
+              {t('technicianMobile.financeReturnedReviewSingle')}
             </Text>
           </View>
         ) : item.source === 'manual' && item.kind === 'expense' && hasOs ? (
           <View style={styles.editHintRow}>
             <Ionicons name="create-outline" size={15} color="#0f766e" />
             <Text style={styles.editHint}>
-              {onDevice
-                ? 'Toque para ajustar a OS (rateio). Valor e anexos estão fechados.'
-                : 'Sincronize a OS neste celular para ajustar o vínculo.'}
+              {onDevice ? t('technicianMobile.financeAdjustOsOnDevice') : t('technicianMobile.financeAdjustOsSync')}
             </Text>
           </View>
         ) : item.source === 'manual' ? (
           <View style={styles.editHintRow}>
             <Ionicons name="create-outline" size={15} color="#0f766e" />
-            <Text style={styles.editHint}>Toque para editar</Text>
+            <Text style={styles.editHint}>{t('technicianMobile.financeEditTap')}</Text>
           </View>
         ) : null}
       </>
@@ -657,7 +685,7 @@ export default function TechnicianFinanceScreen() {
     <View style={[styles.container, { backgroundColor: C.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScreenSubheader
-        title="Financeiro"
+        title={t('technicianMobile.financeScreenTitle')}
         subtitle={t('technicianMobile.financeScreenSubtitle')}
         onBack={() => router.back()}
         onRightPress={() => onRefresh()}
@@ -716,23 +744,29 @@ export default function TechnicianFinanceScreen() {
               >
                 <View style={[styles.summary, { backgroundColor: C.surfaceLow, borderColor: C.border }]}>
                   <View style={styles.sumCol}>
-                    <Text style={[styles.sumLbl, { color: C.textSecondary }]}>Despesas</Text>
-                    <Text style={[styles.sumVal, { color: '#b91c1c' }]}>{formatBrl(totals.exp)}</Text>
+                    <Text style={[styles.sumLbl, { color: C.textSecondary }]}>
+                      {t('technicianMobile.financeSummaryExpenses')}
+                    </Text>
+                    <Text style={[styles.sumVal, { color: '#b91c1c' }]}>{formatBrl(totals.exp, localeTag)}</Text>
                   </View>
                   <View style={styles.sumCol}>
-                    <Text style={[styles.sumLbl, { color: C.textSecondary }]}>Receitas</Text>
-                    <Text style={[styles.sumVal, { color: '#047857' }]}>{formatBrl(totals.rev)}</Text>
+                    <Text style={[styles.sumLbl, { color: C.textSecondary }]}>
+                      {t('technicianMobile.financeSummaryRevenue')}
+                    </Text>
+                    <Text style={[styles.sumVal, { color: '#047857' }]}>{formatBrl(totals.rev, localeTag)}</Text>
                   </View>
                   <View style={styles.sumCol}>
-                    <Text style={[styles.sumLbl, { color: C.textSecondary }]}>Saldo</Text>
+                    <Text style={[styles.sumLbl, { color: C.textSecondary }]}>
+                      {t('technicianMobile.financeSummaryBalance')}
+                    </Text>
                     <Text style={[styles.sumVal, { color: totals.net >= 0 ? '#047857' : '#b91c1c' }]}>
-                      {formatBrl(totals.net)}
+                      {formatBrl(totals.net, localeTag)}
                     </Text>
                   </View>
                 </View>
                 <TechnicianFinanceDashboard items={items} expenseCatCatalog={expenseCatCatalog} />
                 <Text style={[styles.disclaimer, { color: C.textLight }]}>
-                  Separado dos bens e do financeiro de ativos. Sincroniza com a sua conta ao atualizar.
+                  {t('technicianMobile.financeDisclaimer')}
                 </Text>
               </ScrollView>
             </View>

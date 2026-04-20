@@ -1,11 +1,11 @@
 /**
- * Construtor de relatório PDF — pt-BR e en-US.
+ * Construtor de relatório PDF, pt-BR e en-US.
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 
 const M = {
   'pt-BR': {
-    rep_pageTitle: 'BrSpark Admin — Construtor de relatório PDF',
+    rep_pageTitle: 'BrSpark Admin, Construtor de relatório PDF',
     rep_bc_panel: 'Painel',
     rep_bc_page: 'Relatórios PDF',
     rep_hero_title: 'Construtor de relatório PDF',
@@ -16,7 +16,7 @@ const M = {
     rep_lbl_preset: 'Preset',
     rep_help_sum: 'Notas + API',
     rep_help_body_html:
-      'O painel à direita simula a planilha A4. As alterações aplicam-se em tempo real. O preset escolhido na Central de Operações usa a mesma configuração.<div style="margin-top:6px;font-size:10px;word-break:break-all"><strong>API</strong> — <code>GET /api/reports/executions/&lt;id&gt;/export?presetId=&amp;format=json</code></div>',
+      'O painel à direita simula a planilha A4. As alterações aplicam-se em tempo real. O preset escolhido na Central de Operações usa a mesma configuração.<div style="margin-top:6px;font-size:10px;word-break:break-all"><strong>API</strong>, <code>GET /api/reports/executions/&lt;id&gt;/export?presetId=&amp;format=json</code></div>',
     rep_btn_new: '+ Novo',
     rep_save: 'Salvar',
     rep_delete: 'Excluir',
@@ -94,7 +94,7 @@ const M = {
     rep_mock_reset: 'Exemplo padrão.',
   },
   'en-US': {
-    rep_pageTitle: 'BrSpark Admin — PDF report builder',
+    rep_pageTitle: 'BrSpark Admin, PDF report builder',
     rep_bc_panel: 'Home',
     rep_bc_page: 'PDF reports',
     rep_hero_title: 'PDF report builder',
@@ -105,7 +105,7 @@ const M = {
     rep_lbl_preset: 'Preset',
     rep_help_sum: 'Notes + API',
     rep_help_body_html:
-      'The right panel simulates the A4 sheet. Changes apply in near real time. The preset selected in Operations Center uses the same configuration.<div style="margin-top:6px;font-size:10px;word-break:break-all"><strong>API</strong> — <code>GET /api/reports/executions/&lt;id&gt;/export?presetId=&amp;format=json</code></div>',
+      'The right panel simulates the A4 sheet. Changes apply in near real time. The preset selected in Operations Center uses the same configuration.<div style="margin-top:6px;font-size:10px;word-break:break-all"><strong>API</strong>, <code>GET /api/reports/executions/&lt;id&gt;/export?presetId=&amp;format=json</code></div>',
     rep_btn_new: '+ New',
     rep_save: 'Save',
     rep_delete: 'Delete',

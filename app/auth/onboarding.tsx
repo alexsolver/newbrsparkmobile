@@ -19,6 +19,7 @@ import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { NotificationService } from '../../src/services/notifications';
 import { apiFetch, canUseProviderMode } from '../../src/services/auth';
+import { ONBOARDING_PROVIDER_DONE_KEY } from '../../src/lib/onboardingPrefs';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { useTranslation } from 'react-i18next';
 import { getDeviceRegion } from '../../src/i18n';
@@ -256,6 +257,9 @@ export default function OnboardingScreen() {
       await NotificationService.registerForPushNotificationsAsync().catch(() => {});
       await dataCollectionService.onSessionOpen(ownerEmail, tenantId || undefined, isTechnician);
       await AsyncStorage.setItem('@brspark_onboarding_done', '1');
+      if (isTechnician) {
+        await AsyncStorage.setItem(ONBOARDING_PROVIDER_DONE_KEY, '1');
+      }
     } catch (e) {
       console.warn('[Onboarding] Erro ao salvar consentimentos:', e);
     } finally {

@@ -17,6 +17,7 @@ import {
   getChecklistOutboxConflicts,
   requeueChecklistOutboxConflicts,
   removeChecklistOutboxConflictsByIds,
+  resolveChecklistConflictRowTaskId,
 } from '../../src/services/syncService';
 import { ApiService } from '../../src/services/api';
 
@@ -194,15 +195,19 @@ export default function SyncConflictsScreen() {
             <View style={s.empty}>
               <Ionicons name="checkmark-done-circle-outline" size={24} color="#16A34A" />
               <Text style={s.emptyTitle}>Nenhum conflito pendente</Text>
-              <Text style={s.emptyBody}>Quando houver conflito de revisão, ele aparecerá aqui.</Text>
+              <Text style={s.emptyBody}>
+                Conflitos de revisão e envios bloqueados por mídia local (após várias tentativas) aparecem aqui. Use
+                «Reenfileirar» com rede estável ou após corrigir o arquivo.
+              </Text>
             </View>
           ) : (
             rows.map((row) => {
               const disabled = bulkBusy || busyId === row.id;
+              const displayTaskId = resolveChecklistConflictRowTaskId(row) || row.taskId || '';
               return (
                 <View key={row.id} style={s.itemCard}>
                   <View style={s.itemTop}>
-                    <Text style={s.itemTask}>OS: {row.taskId || 'sem taskId'}</Text>
+                    <Text style={s.itemTask}>OS: {displayTaskId || 'sem taskId'}</Text>
                     <Text style={s.itemWhen}>{fmtWhen(row.at)}</Text>
                   </View>
                   <Text style={s.itemReason}>{reasonLabel(row.reason)}</Text>

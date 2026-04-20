@@ -1,5 +1,5 @@
 /**
- * Textos do dashboard admin — pt-BR, en-US e es-ES.
+ * Textos do dashboard admin, pt-BR, en-US e es-ES.
  * Preferência: `getAdminUiLocale()` (localStorage `brspark_admin_ui_locale`; padrão pt-BR).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
@@ -7,7 +7,7 @@ import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-r
 
 const M = {
   'pt-BR': {
-    dash_pageTitle: 'BrSpark Admin — Dashboard',
+    dash_pageTitle: 'BrSpark Admin, Dashboard',
     dash_bc_panel: 'Painel',
     dash_bc_summary: 'Resumo',
     dash_hero_title: 'Dashboard',
@@ -15,7 +15,7 @@ const M = {
       'Visão geral da plataforma: métricas principais, última atividade de auditoria e tenants recentes.',
     dash_last_update_loading: 'Carregando…',
     dash_last_update_server: 'Dados do servidor: {datetime}',
-    dash_last_update_local: 'Atualizado neste separador: {time}',
+    dash_last_update_local: 'Atualizado nesta aba: {time}',
     dash_refresh: 'Atualizar',
     dash_refresh_aria: 'Recarregar dados do painel',
     dash_stat_tenants: 'Tenants',
@@ -64,7 +64,7 @@ const M = {
     dash_auto_aria: 'Intervalo de atualização automática do painel',
     dash_activity_tenant: 'Tenant: {name}',
     dash_system_events_24h: 'Sistema (24 h): {count}',
-    dash_system_events_24h_title: 'Abrir auditoria — categoria Sistema',
+    dash_system_events_24h_title: 'Abrir auditoria, categoria Sistema',
     dash_stock_preview_link_title: 'Ver estoque crítico filtrado por este tenant e SKU',
     st_TRIAL: 'Avaliação',
     st_ACTIVE: 'Ativo',
@@ -72,7 +72,7 @@ const M = {
     st_CANCELLED: 'Cancelado',
   },
   'en-US': {
-    dash_pageTitle: 'BrSpark Admin — Dashboard',
+    dash_pageTitle: 'BrSpark Admin, Dashboard',
     dash_bc_panel: 'Home',
     dash_bc_summary: 'Overview',
     dash_hero_title: 'Dashboard',
@@ -129,7 +129,7 @@ const M = {
     dash_auto_aria: 'Dashboard auto-refresh interval',
     dash_activity_tenant: 'Tenant: {name}',
     dash_system_events_24h: 'System (24h): {count}',
-    dash_system_events_24h_title: 'Open audit log — System category',
+    dash_system_events_24h_title: 'Open audit log, System category',
     dash_stock_preview_link_title: 'Critical stock for this tenant and SKU',
     st_TRIAL: 'Trial',
     st_ACTIVE: 'Active',
@@ -137,7 +137,7 @@ const M = {
     st_CANCELLED: 'Cancelled',
   },
   'es-ES': {
-    dash_pageTitle: 'BrSpark Admin — Panel',
+    dash_pageTitle: 'BrSpark Admin, Panel',
     dash_bc_panel: 'Inicio',
     dash_bc_summary: 'Resumen',
     dash_hero_title: 'Panel',
@@ -145,8 +145,8 @@ const M = {
       'Visión general de la plataforma: métricas clave, última actividad de auditoría e inquilinos recientes.',
     dash_last_update_loading: 'Cargando…',
     dash_last_update_server: 'Instantánea del servidor: {datetime}',
-    dash_last_update_local: 'Actualizado en esta pestaña: {time}',
-    dash_refresh: 'Actualizar',
+    dash_last_update_local: 'Atualizado en esta pestaña: {time}',
+    dash_refresh: 'Atualizar',
     dash_refresh_aria: 'Recargar datos del panel',
     dash_stat_tenants: 'Inquilinos',
     dash_stat_users: 'Usuarios activos',
@@ -178,7 +178,7 @@ const M = {
     dash_tenants_empty_sub: 'Cuando existan cuentas, se mostrarán en esta tabla.',
     dash_tenant_row_open_users: 'Ver usuarios de este inquilino',
     dash_load_error: 'No se pudo cargar el panel. Intente actualizar.',
-    dash_row_qty: 'Actual: {current} · Mín.: {min}',
+    dash_row_qty: 'Atual: {current} · Mín.: {min}',
     dash_badge_alert_one: '1 artículo por debajo del mínimo',
     dash_badge_alert_many: '{n} artículos por debajo del mínimo',
     dash_stat_go_tenants: 'Abrir lista de inquilinos',
@@ -186,7 +186,7 @@ const M = {
     dash_stat_go_assets: 'Recuento global de activos (sin lista dedicada en el admin)',
     dash_stat_go_stock: 'Abrir página de stock por debajo del mínimo',
     dash_stat_go_critical: 'Abrir página de stock por debajo del mínimo',
-    dash_auto_lbl: 'Actualización automática',
+    dash_auto_lbl: 'Atualización automática',
     dash_auto_0: 'Desactivada',
     dash_auto_60: '1 min',
     dash_auto_120: '2 min',
@@ -194,7 +194,7 @@ const M = {
     dash_auto_aria: 'Intervalo de actualización automática del panel',
     dash_activity_tenant: 'Inquilino: {name}',
     dash_system_events_24h: 'Sistema (24 h): {count}',
-    dash_system_events_24h_title: 'Abrir auditoría — categoría Sistema',
+    dash_system_events_24h_title: 'Abrir auditoría, categoría Sistema',
     dash_stock_preview_link_title: 'Stock crítico para este inquilino y SKU',
     st_TRIAL: 'Prueba',
     st_ACTIVE: 'Activo',
@@ -329,7 +329,7 @@ export function dashFormatDateOnly(iso) {
   }
 }
 
-/** Hora local do separador (curta), para complementar o horário do snapshot do servidor. */
+/** Hora local da aba (curta), para complementar o horário do snapshot do servidor. */
 export function dashFormatTimeOnly(d) {
   const loc = adminIntlLocale(getAdminUiLocale());
   try {

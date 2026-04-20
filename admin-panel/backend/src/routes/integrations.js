@@ -10,6 +10,7 @@ const {
 } = require('../lib/integrationTester');
 const { normalizeOsrmBaseUrl } = require('../lib/osrmBaseUrl');
 const { normalizeNylasApiUri } = require('../lib/nylasCredentials');
+const { normalizeMoondreamBaseUrl } = require('../lib/visionMoondreamAnalyze');
 
 function maskIntegrationSecret(v) {
   if (!v || typeof v !== 'string') return null;
@@ -100,6 +101,8 @@ router.post('/', async (req, res) => {
       } catch {
         resolvedBase = 'https://verification.didit.me';
       }
+    } else if (name === 'Visão IA - Moondream') {
+      resolvedBase = normalizeMoondreamBaseUrl(baseUrl || '');
     }
     const integration = await prisma.integration.create({
       data: {
@@ -159,6 +162,8 @@ router.patch('/:id', async (req, res) => {
         const u = new URL(String(data.baseUrl).trim().replace(/\/+$/g, ''));
         data = { ...data, baseUrl: u.origin };
       } catch { /* manter */ }
+    } else if (existing.name === 'Visão IA - Moondream' && data.baseUrl != null) {
+      data = { ...data, baseUrl: normalizeMoondreamBaseUrl(data.baseUrl) };
     }
     const integration = await prisma.integration.update({ where: { id: req.params.id }, data });
     res.json({

@@ -143,7 +143,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const pathname = usePathname() || '';
   const { t } = useTranslation();
   const params = useLocalSearchParams();
-  const { colors: C, appDisplayName, resolvedLogoUrl } = useTheme();
+  const { colors: C } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const { guardRef } = useAppContext();
   const { user } = useAuth();
@@ -152,19 +152,6 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const avatarUri = useResolvedAvatarUri(user);
   const { isOnline } = useConnectivity();
   const gpsIssue = useGpsAuraIssue();
-  /** Logo do tenant vem por URL; sem rede o RN pode deixar o `Image` vazio — voltamos ao PNG embutido. */
-  const [headerLogoRemoteFailed, setHeaderLogoRemoteFailed] = useState(false);
-  const [headerLogoRemoteLoaded, setHeaderLogoRemoteLoaded] = useState(false);
-  useEffect(() => {
-    setHeaderLogoRemoteFailed(false);
-    setHeaderLogoRemoteLoaded(false);
-  }, [resolvedLogoUrl]);
-  useEffect(() => {
-    if (isOnline === true) setHeaderLogoRemoteFailed(false);
-    if (isOnline !== true) setHeaderLogoRemoteLoaded(false);
-  }, [isOnline]);
-  const canShowRemoteLogo = !!resolvedLogoUrl && isOnline === true && !headerLogoRemoteFailed;
-
   const [notifUnread, setNotifUnread] = useState(() =>
     NotificationService.getUnreadCount(activePersona)
   );
@@ -441,15 +428,6 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
                 style={{ width: 70, height: 22 }}
                 resizeMode="contain"
               />
-              {canShowRemoteLogo ? (
-                <Image
-                  source={{ uri: resolvedLogoUrl! }}
-                  style={{ position: 'absolute', left: 0, top: 0, width: 70, height: 22, opacity: headerLogoRemoteLoaded ? 1 : 0 }}
-                  resizeMode="contain"
-                  onLoad={() => setHeaderLogoRemoteLoaded(true)}
-                  onError={() => setHeaderLogoRemoteFailed(true)}
-                />
-              ) : null}
             </View>
 
             {title ? (
@@ -537,24 +515,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
               style={{ width: 100, height: 32 }}
               resizeMode="contain"
             />
-            {canShowRemoteLogo ? (
-              <Image
-                source={{ uri: resolvedLogoUrl! }}
-                style={{ position: 'absolute', left: 0, top: 0, width: 100, height: 32, opacity: headerLogoRemoteLoaded ? 1 : 0 }}
-                resizeMode="contain"
-                onLoad={() => setHeaderLogoRemoteLoaded(true)}
-                onError={() => setHeaderLogoRemoteFailed(true)}
-              />
-            ) : null}
           </View>
-          {!resolvedLogoUrl || !canShowRemoteLogo || !headerLogoRemoteLoaded ? null : (
-            <Text
-              numberOfLines={1}
-              style={{ fontSize: 9, fontWeight: '800', color: C.textLight, marginTop: -2 }}
-            >
-              {appDisplayName}
-            </Text>
-          )}
         </View>
 
         {/* Centro: rótulo de concha (só na persona prestador) entre logo e avatar */}
@@ -568,7 +529,11 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
           pointerEvents="box-none"
         >
           {showModeSegmentBadge && activePersona === 'provider'
-            ? renderPersonaModePill('PRESTADOR', MODE_SEGMENT_COLORS.PROVIDER, 'Prestador')
+            ? renderPersonaModePill(
+                t('tabs.personaProviderBadge'),
+                MODE_SEGMENT_COLORS.PROVIDER,
+                t('tabs.personaProviderA11y'),
+              )
             : null}
         </View>
 

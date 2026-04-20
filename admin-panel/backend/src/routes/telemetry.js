@@ -118,8 +118,29 @@ async function runEtaCron() {
       // Resolve destination coordinates
       let destLat = task.locationLat;
       let destLng = task.locationLng;
+      const zt = String(task.locationZoneType || '').toLowerCase();
 
-      if (!destLat && task.locationPolygon) {
+      if (zt === 'segment' && (meta.transitSegmentDestination === 'A' || meta.transitSegmentDestination === 'B')) {
+        try {
+          const poly =
+            typeof task.locationPolygon === 'string'
+              ? JSON.parse(task.locationPolygon)
+              : task.locationPolygon;
+          if (Array.isArray(poly) && poly.length >= 2) {
+            const idx = meta.transitSegmentDestination === 'B' ? 1 : 0;
+            const p = poly[idx];
+            if (Array.isArray(p)) {
+              destLat = parseFloat(p[0]);
+              destLng = parseFloat(p[1]);
+            } else if (p && typeof p === 'object') {
+              destLat = parseFloat(p.lat);
+              destLng = parseFloat(p.lng ?? p.lon);
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (!destLat && task.locationPolygon && zt !== 'segment') {
         try {
           const poly = typeof task.locationPolygon === 'string'
             ? JSON.parse(task.locationPolygon)
@@ -255,6 +276,7 @@ router.post('/batch', async (req, res) => {
       TRANSIT_END:       'LEGAL',
       GEOFENCE_ENTER:    'LEGAL',
       GEOFENCE_EXIT:     'LEGAL',
+      GEOFENCE_FIELD_AUDIT: 'LEGAL',
       PAUSE:             'OPERATIONAL',
       RESUME:            'OPERATIONAL',
       FRAUD_FLAG:        'LEGAL',
@@ -328,17 +350,40 @@ router.post('/batch', async (req, res) => {
           // Calcula ETA se estiver ACCEPTED ou IN_PROGRESS e tiver um lugar para ir
           let destLat = task?.locationLat;
           let destLng = task?.locationLng;
-          if (!destLat && task?.locationPolygon) {
-             try {
-                const poly = typeof task.locationPolygon === 'string' ? JSON.parse(task.locationPolygon) : task.locationPolygon;
-                if (poly && poly.length > 0) {
-                   destLat = poly[0][0] || poly[0].lat;
-                   destLng = poly[0][1] || poly[0].lng;
-                }
-             } catch(e){}
-          }
-
           const meta = typeof task?.metadata === 'object' && task?.metadata ? task.metadata : {};
+          const ztBatch = String(task?.locationZoneType || '').toLowerCase();
+          if (ztBatch === 'segment' && (meta.transitSegmentDestination === 'A' || meta.transitSegmentDestination === 'B')) {
+            try {
+              const poly =
+                typeof task.locationPolygon === 'string'
+                  ? JSON.parse(task.locationPolygon)
+                  : task.locationPolygon;
+              if (Array.isArray(poly) && poly.length >= 2) {
+                const idx = meta.transitSegmentDestination === 'B' ? 1 : 0;
+                const p = poly[idx];
+                if (Array.isArray(p)) {
+                  destLat = parseFloat(p[0]);
+                  destLng = parseFloat(p[1]);
+                } else if (p && typeof p === 'object') {
+                  destLat = parseFloat(p.lat);
+                  destLng = parseFloat(p.lng ?? p.lon);
+                }
+              }
+            } catch (e) {
+              /* ignore */
+            }
+          } else if (!destLat && task?.locationPolygon && ztBatch !== 'segment') {
+            try {
+              const poly =
+                typeof task.locationPolygon === 'string' ? JSON.parse(task.locationPolygon) : task.locationPolygon;
+              if (poly && poly.length > 0) {
+                destLat = poly[0][0] || poly[0].lat;
+                destLng = poly[0][1] || poly[0].lng;
+              }
+            } catch (e) {
+              /* ignore */
+            }
+          }
 
           if (task && (task.status === 'ACCEPTED' || task.status === 'IN_PROGRESS') && destLat && destLng && !meta.trackingPaused && !meta.trackingEndedAt) {
             let traceRows = await prisma.telemetryEvent.findMany({

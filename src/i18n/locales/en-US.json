@@ -41,6 +41,12 @@
     "year": "year",
     "month": "month"
   },
+  "segmentDest": {
+    "title": "Travel destination",
+    "subtitle": "This work order is a segment (A ↔ B). Choose where to navigate and compute ETA.",
+    "chooseA": "Navigate to point A",
+    "chooseB": "Navigate to point B"
+  },
   "datePicker": {
     "chipToday": "Today",
     "chipTomorrow": "Tomorrow",
@@ -85,9 +91,14 @@
     "scanner": "Scanner",
     "providerOsSearch": "WO search",
     "workTime": "Time clock",
-    "workTimeBrPj": "Log"
+    "workTimeBrPj": "Log",
+    "personaProviderBadge": "PROVIDER",
+    "personaProviderA11y": "Provider"
   },
   "radialMenu": {
+    "providerTechnicalStock": "Technical stock",
+    "providerQuickActionsTitle": "Quick actions",
+    "providerQuickActionsLead": "Tap an option to open the corresponding area of the app.",
     "productivity": "My productivity",
     "routineTasksSection": "Routine tasks (RT)",
     "routineTasksLoading": "Loading routine tasks…",
@@ -96,7 +107,7 @@
   },
   "providerOsSearch": {
     "title": "Work order search",
-    "subtitle": "Advanced filters on data stored on this device — includes drafts and cached checklist answers.",
+    "subtitle": "Advanced filters on data stored on this device, includes drafts and cached checklist answers.",
     "hero": "Search WO number, service, address, metadata, form template, and locally stored response text. Use the period to filter by receipt time, schedule start, due date, or WO creation.",
     "queryPlaceholder": "Keywords (all must match)…",
     "quickRanges": "Quick period",
@@ -252,7 +263,7 @@
   "technicianMobile": {
     "stockScreenSubtitle": "Materials on this device only; local history and a server window for movements.",
     "stockNewScreenSubtitle": "Add SKU, name, and unit. You can use the barcode scanner.",
-    "financeScreenSubtitle": "Technician expenses and revenues on this device — part of the flow syncs to your account.",
+    "financeScreenSubtitle": "Technician expenses and revenues on this device, part of the flow syncs to your account.",
     "financeNewSubtitle": "Amount, category, and attachments; you can link to a work order present on this phone.",
     "financeEditSubtitle": "Edit the entry according to the lock rules shown below.",
     "financeNewOsLinkTitle": "Link to work order (optional)",
@@ -289,7 +300,72 @@
     "financeDashReceiptTitle": "Receipt tracking (revenue)",
     "financeDashReceiptBooked": "To receive (booked)",
     "financeDashReceiptRealized": "Received (settled)",
-    "financeDashReceiptEmpty": "No revenue entries to show."
+    "financeDashReceiptEmpty": "No revenue entries to show.",
+    "financeScreenTitle": "Financial",
+    "stockScreenTitle": "Technical stock",
+    "financeSummaryExpenses": "Expenses",
+    "financeSummaryRevenue": "Revenue",
+    "financeSummaryBalance": "Balance",
+    "financeDisclaimer": "Separate from portfolio and asset finances. Syncs to your account when you refresh.",
+    "financeKindExpense": "Expense",
+    "financeKindRevenue": "Revenue",
+    "financeTotalLabel": "Total",
+    "financeDefaultExpenseTitle": "Expense",
+    "financeRateioPrincipalOne": "Main expense · split across 1 work order",
+    "financeRateioPrincipalMany": "Main expense · split across {{count}} work orders",
+    "financeRateioToggleHide": "Hide split",
+    "financeRateioToggleShow": "View split",
+    "financeRateioToggleHideA11y": "Hide split details",
+    "financeRateioToggleShowA11y": "View split details",
+    "financeRateioSectionTitle": "Split details",
+    "financeRateioSectionSub": "{{count}} WOs · amount per order below",
+    "financeAttachmentSingular": "{{count}} attachment",
+    "financeAttachmentPlural": "{{count}} attachments",
+    "financeMetaManualRateio": "· {{count}} WO · Manual (split)",
+    "financeReturnedReviewSplit": "Returned for review: tap to fix amount, description, or split (all WOs on this device).",
+    "financeReturnedReviewSingle": "Returned for review: tap to fix (all WOs on this device).",
+    "financeAdjustSplitOnDevice": "Tap to adjust the split (WO). Amount and attachments are locked.",
+    "financeAdjustSingleSync": "Sync all WOs in this split on this phone to add or remove WOs.",
+    "financeAdjustOsOnDevice": "Tap to adjust the WO (split). Amount and attachments are locked.",
+    "financeAdjustOsSync": "Sync the WO on this phone to adjust the link.",
+    "financeEditTap": "Tap to edit",
+    "financeEditOnChecklist": "Change it in the WO form.",
+    "financeMetaOsChecklist": "· {{count}} WO · Checklist",
+    "financeMetaOsManual": "· {{count}} WO · Manual",
+    "financeMetaManualOnly": " · Manual",
+    "financeMetaChecklistOnly": " · Checklist",
+    "financeOsRequester": "Requester:",
+    "financeOsLocation": "Location:",
+    "financeOsActivity": "Activity:",
+    "financeOsDetailMissing": "Open or sync the WO to load details.",
+    "financeOsDetailsMulti": "Details (linked WOs)",
+    "financeOsDetailsSingle": "WO details",
+    "financeConfirmReceiptError": "Could not confirm receipt.",
+    "stockTabMaterials": "Materials",
+    "stockTabHistory": "History",
+    "stockBtnNewMaterial": "New item",
+    "stockEmptyItemsTitle": "No materials",
+    "stockEmptyItemsBody": "This inventory is yours only: it does not use portfolio assets or locations. Tap \"New item\" to start.",
+    "stockServerPeriodLabel": "Server period (30 days)",
+    "stockPeriodNavDays": "30 days",
+    "stockPeriodLastDays": "Last 30 days",
+    "stockPeriodHintNav": "« goes back 30 days; » moves toward today (max. 30 days per request).",
+    "stockSearchOfflinePlaceholder": "Filter last 30 days on this device…",
+    "stockBannerOnline": "Online: query 30-day windows on the server. Offline: up to 30 days on phone only.",
+    "stockBannerOffline": "Offline: showing up to 30 days of movements stored on this device. Use the field above to filter.",
+    "stockLoadPeriodError": "Failed to load period",
+    "stockTruncatedNotice": "Showing the first 5000 movements in this range. Narrow the interval if you need everything.",
+    "stockEmptyHistoryServerTitle": "No movements",
+    "stockEmptyHistoryServerBody": "No synced records in this date range. Go back 30 days with the button above or sync.",
+    "stockEmptyHistoryOfflineTitle": "No recent movements",
+    "stockEmptyHistoryOfflineBody": "This device keeps movements from the last 30 days for offline lookup.",
+    "stockMaterialFallback": "Material",
+    "stockUnitDefault": "ea",
+    "stockFtPrefix": "FT:",
+    "stockAdjustmentSuffix": " (adjustment)",
+    "stockMoveIn": "In",
+    "stockMoveOut": "Out",
+    "stockMoveAdjust": "Adjust"
   },
   "auth": {
     "sessionExpired": "Session expired. Please sign in again.",
@@ -385,7 +461,7 @@
     "confirmEnter": "Confirm and continue",
     "welcomeTitle": "Welcome to BrSpark",
     "welcomeTechBody": "To ensure service quality and your safety, we need to align data use and permissions on your device.",
-    "welcomeClientBody": "Manage your assets, find services, and keep everything in one place. Next, we explain clearly what we may collect — always under your control.",
+    "welcomeClientBody": "Manage your assets, find services, and keep everything in one place. Next, we explain clearly what we may collect, always under your control.",
     "techCollectGpsTitle": "GPS location",
     "techCollectGpsDesc": "Check-in, route, and on-site presence",
     "techCollectDeviceTitle": "Device status",
@@ -851,7 +927,7 @@
     "noStockCreated": "No stock created",
     "noStockCreatedSub": "Create a stock at a location\nto start managing items.",
     "noStockLocation": "No stock location",
-    "noStockLocationSub": "Location was removed — move the items",
+    "noStockLocationSub": "Location was removed, move the items",
     "stockLowBadge": "Low stock",
     "stockLocations": "Stock locations",
     "otherAssets": "Other assets",
@@ -947,7 +1023,7 @@
     "exportShareTitle": "Export BrSpark data",
     "exportFailedMsg": "Could not generate the export file.",
     "exportDataBtn": "Export My Data",
-    "lgpdPortability": "GDPR/LGPD — Data Portability",
+    "lgpdPortability": "GDPR/LGPD, Data Portability",
     "logoutTitle": "Log Out",
     "logoutConfirm": "Do you want to end your session on this device?",
     "logoutBtn": "Log Out",
@@ -955,7 +1031,7 @@
     "deleteAccountMsg": "This action is irreversible. All your data will be permanently removed per GDPR/LGPD.\n\nDo you wish to proceed?",
     "deleteForever": "Delete Permanently",
     "deleteAccountBtn": "Delete My Account",
-    "lgpdDeletion": "GDPR/LGPD — Right to Erasure",
+    "lgpdDeletion": "GDPR/LGPD, Right to Erasure",
     "editBtn": "Edit Profile"
   },
   "chat": {
@@ -1048,7 +1124,7 @@
     "deletePolicyConfirm": "Delete policy {{number}}?",
     "fillRequired": "Fill at least: Insurer, Policy # and Expiration Date.",
     "policySaved": "Policy Saved",
-    "policySavedMsg": "{{type}} — {{insurer}}\nRecurring cost added automatically to the Costs module.",
+    "policySavedMsg": "{{type}}, {{insurer}}\nRecurring cost added automatically to the Costs module.",
     "attachDocument": "Attach Document",
     "attachSource": "Choose the policy document source:",
     "cameraSource": "📷 Camera",
@@ -1253,7 +1329,35 @@
     "availableNow": "Available now",
     "providerDescription": "Provider description",
     "topRated": "Top rated",
-    "verifiedProviders": "Verified providers"
+    "verifiedProviders": "Verified providers",
+    "mapOpenLegA": "Open leg A on map",
+    "mapOpenLegB": "Open leg B on map",
+    "mapOpenLocation": "Open location on map",
+    "routingErrorTitle": "Routing error",
+    "osOpenDetailHint": "Opens work order details",
+    "mapMarkerLegA": "Segment end A",
+    "mapMarkerLegB": "Segment end B",
+    "mapZoneViewLocation": "{{label}}. View location on map",
+    "providerTaskSectionClientLocation": "Client and location",
+    "providerTaskRequesterLabel": "Requester",
+    "providerTaskSegmentLegA": "Segment, end A (start)",
+    "providerTaskSegmentLegB": "Segment, end B (end)",
+    "providerTaskServiceLocationLabel": "Service location",
+    "providerTaskDetailsTitle": "Details",
+    "providerTaskCreatedAtLabel": "Created",
+    "providerTaskSegmentEndShortA": "End A",
+    "providerTaskSegmentEndShortB": "End B",
+    "providerTaskModalStartResume": "Start / Resume",
+    "providerTaskModalView": "View",
+    "providerTabPending": "Pending",
+    "providerTabInProgress": "In progress",
+    "providerTabCompleted": "Completed",
+    "providerEmptyPendingTitle": "No pending work orders",
+    "providerEmptyInProgressTitle": "No work orders in progress",
+    "providerEmptyCompletedTitle": "None completed",
+    "providerEmptyListSubtitle": "Your service list will appear here when work is dispatched from the admin panel.",
+    "providerRejectReasonTitle": "Rejection reason",
+    "providerRejectReasonPlaceholder": "Describe the reason in detail…"
   },
   "services": {
     "title": "Companies",
@@ -1635,8 +1739,8 @@
       "specialty": "Special use cases"
     },
     "contextDesc": {
-      "residential": "House, apartment, townhouse, studio — your home or residential unit",
-      "personal_mobility": "Car, motorbike or personal/family vehicle — not a fleet or work vehicle",
+      "residential": "House, apartment, townhouse, studio, your home or residential unit",
+      "personal_mobility": "Car, motorbike or personal/family vehicle, not a fleet or work vehicle",
       "infra_built": "Condominiums, malls, hotels, factories, warehouses",
       "food_horeca": "Kitchens, bars, bakeries, breweries, retail food",
       "health": "Clinics, aesthetics, physio, lab",
@@ -1649,7 +1753,7 @@
       "specialty": "Aviation, marine, art, wine, museum"
     },
     "maint": {
-      "elevator": "Elevator systems often need periodic inspection (roughly every {{months}} months — check contract and local code).",
+      "elevator": "Elevator systems often need periodic inspection (roughly every {{months}} months, check contract and local code).",
       "fire": "Extinguishers, pumps and sprinklers need periodic checks (reference: {{months}} months).",
       "server": "Check warranty, firmware and power redundancy (reference: {{months}} months)."
     }
@@ -1704,9 +1808,9 @@
   },
   "assetKinds": {
     "residentialProperty": "Residential property (house, apartment…)",
-    "residentialPropertyShort": "Home — not industrial equipment",
+    "residentialPropertyShort": "Home, not industrial equipment",
     "privateVehicle": "Private vehicle (car, motorbike…)",
-    "privateVehicleShort": "Personal or family use — not fleet or commercial",
+    "privateVehicleShort": "Personal or family use, not fleet or commercial",
     "elevator": "Elevator / lift system",
     "elevatorShort": "Cabin, controller, sheave",
     "fireFighting": "Fire protection system",
@@ -1892,8 +1996,8 @@
     "addMedia": "Add Media",
     "addBtn": "Add",
     "chooseSource": "CHOOSE SOURCE",
-    "cameraPhoto": "📷 Camera — Photo",
-    "cameraVideo": "🎬 Camera — Video",
+    "cameraPhoto": "📷 Camera, Photo",
+    "cameraVideo": "🎬 Camera, Video",
     "gallery": "🖼️ Gallery",
     "description": "Description",
     "descriptionPlaceholder": "Describe this media...",
@@ -1951,7 +2055,7 @@
     "optionCount": "{{count}} option",
     "optionCount_plural": "{{count}} options",
     "otherDetail": "Describe the reason",
-    "otherDetailHint": "Required — at least 12 characters",
+    "otherDetailHint": "Required, at least 12 characters",
     "confirmPause": "Confirm pause",
     "back": "Back",
     "pausedTitle": "Paused",
@@ -1985,47 +2089,47 @@
         "meal": "Meal / snack",
         "rest": "Break / rest",
         "hygiene": "Hygiene / restroom",
-        "other": "Other (personal) — specify"
+        "other": "Other (personal), specify"
       },
       "operational": {
         "wait_parts": "Waiting for parts / material",
         "wait_approval": "Waiting for approval / guidance",
         "redo_work": "Redo step / rework",
-        "other": "Other (operational) — specify"
+        "other": "Other (operational), specify"
       },
       "logistics": {
         "traffic": "Traffic / delay en route",
         "fuel": "Refueling",
         "parking": "Parking / access",
-        "other": "Other (logistics) — specify"
+        "other": "Other (logistics), specify"
       },
       "client_site": {
         "client_absent": "Client absent",
         "site_closed": "Site closed / no access",
         "access_denied": "Access denied",
-        "other": "Other (site) — specify"
+        "other": "Other (site), specify"
       },
       "equipment": {
         "tool_failure": "Tool / equipment failure",
         "vehicle_issue": "Vehicle issue",
         "ppe": "PPE missing / issue",
-        "other": "Other (equipment) — specify"
+        "other": "Other (equipment), specify"
       },
       "safety": {
         "weather": "Weather conditions",
         "hazard": "Hazard / unsafe condition",
         "incident": "Incident / emergency",
-        "other": "Other (safety) — specify"
+        "other": "Other (safety), specify"
       },
       "communication": {
         "call_supervisor": "Contact supervisor / dispatch",
         "system_down": "System / app unavailable",
-        "other": "Other (communication) — specify"
+        "other": "Other (communication), specify"
       },
       "admin": {
         "documentation": "Documentation / paperwork",
         "billing": "Billing / commercial approval",
-        "other": "Other (admin) — specify"
+        "other": "Other (admin), specify"
       },
       "other": {
         "free": "Specify reason"
@@ -2038,7 +2142,7 @@
     "dashboardEntryTitle": "Time clock",
     "dashboardEntryHintReady": "Tap to open and punch in/out.",
     "dashboardEntryHintBlocked": "Open to see status (e.g. biometrics pending).",
-    "dashboardEntryHintMatriculaPending": "Time clock available — complete face enrollment in your profile for full validation.",
+    "dashboardEntryHintMatriculaPending": "Time clock available, complete face enrollment in your profile for full validation.",
     "unavailable": "Work time is not available for this session.",
     "offlineNoMeCacheHint": "No cached settings on this device. While online, open this screen or stay on the tab bar until data syncs; then offline mode shows the company notice and saved punch history.",
     "moduleOffTitle": "Time tracking unavailable",
@@ -2067,11 +2171,11 @@
     "detailFaceValidatedNo": "No facial verification recorded for this punch.",
     "detailFaceValidatedPending": "Facial verification will complete after this punch is sent.",
     "detailExceptionLabel": "Exception punch",
-    "detailExceptionBodyWithFaceVerified": "The exception applies to another requirement (e.g. GPS or address), not missing facial verification — see the section above.",
+    "detailExceptionBodyWithFaceVerified": "The exception applies to another requirement (e.g. GPS or address), not missing facial verification, see the section above.",
     "detailExceptionNoBiometricBody": "Exception punch with no facial verification recorded (and justification, if any).",
     "detailExceptionJustificationLabel": "Justification",
     "detailExceptionNotApplicable": "—",
-    "punchStatusSuccess": "Registered — OK",
+    "punchStatusSuccess": "Registered, OK",
     "punchStatusCaution": "Registered with caveat",
     "dayJourneyTitle": "Accumulated time today",
     "dayJourneyTitleBrPj": "Hours logged today",

@@ -72,17 +72,18 @@ export function effectiveProviderTaskStatus(
   const raw = String(t?.status || 'PENDING').toUpperCase();
   if (SERVER_COMPLETED_STATUSES.has(raw)) return 'COMPLETED';
   const meta = providerTaskMetadataRecord(t);
+  /**
+   * `@brspark_executed_tasks`: conclusão offline-first. Tem de ficar **antes** do ramo de revisão:
+   * com metadata de revisão/reopen no snapshot remoto, o servidor pode ainda devolver PENDING no pull
+   * enquanto o POST do checklist não fechou a OS — o cartão não pode voltar a «Pendentes» só por isso.
+   * Reabertura real no painel: o pull remove o id do cache (`syncPolicy.shouldRemoveExecutedCacheForRemoteTask`).
+   */
+  if (completedIds.has(taskId)) return 'COMPLETED';
   const reopenRevision = taskMetadataIndicatesRevisionVisit(t, meta);
   if (reopenRevision && (raw === 'PENDING' || raw === 'RECEIVED')) {
     if (inprogressIds.has(taskId)) return 'IN_PROGRESS';
     return 'PENDING';
   }
-  /**
-   * `@brspark_executed_tasks`: conclusão offline-first. Enquanto o POST/sync não fechar a OS,
-   * o GET pode continuar a devolver IN_PROGRESS — sem isto o cartão volta à aba «Iniciadas» por minutos.
-   * Reabertura/revisão no painel: o pull remove o id do cache executado (`syncPolicy`); não confundir com sync pendente.
-   */
-  if (completedIds.has(taskId)) return 'COMPLETED';
   const pausedByMeta =
     meta.executionPaused === true ||
     meta.executionPaused === 'true' ||

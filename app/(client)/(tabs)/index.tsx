@@ -69,6 +69,7 @@ import {
   enqueueExecutionStatusPatch,
   getTaskIdsWithPendingExecutionStatusOutbox,
   getTaskIdsWithPendingLocalSyncOverlay,
+  getTaskIdsWithCompletedChecklistPendingServerAck,
   purgeExpiredCompletedExecutionCaches,
   COMPLETED_BODY_LOCAL_TTL_MS,
 } from '../../../src/services/syncService';
@@ -1097,7 +1098,7 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
             letterSpacing: 0.45,
           }}
         >
-          Cliente e local
+          {t('home.providerTaskSectionClientLocation')}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 }}>
           <Ionicons
@@ -1107,7 +1108,9 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
             style={{ marginRight: 10, marginTop: 2 }}
           />
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>Solicitante</Text>
+            <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
+              {t('home.providerTaskRequesterLabel')}
+            </Text>
             <Text style={{ fontSize: 13, color: P.slate, fontWeight: '700' }}>
               {providerTaskRequesterDisplayName(task) || '—'}
             </Text>
@@ -1117,9 +1120,15 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
           <>
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 }}>
               <TouchableOpacity
-                onPress={() => openLatLngInExternalMaps(segmentEnds.a.lat, segmentEnds.a.lng, segmentLineA || 'Extremo A')}
+                onPress={() =>
+                  openLatLngInExternalMaps(
+                    segmentEnds.a.lat,
+                    segmentEnds.a.lng,
+                    segmentLineA || t('home.providerTaskSegmentEndShortA'),
+                  )
+                }
                 accessibilityRole="button"
-                accessibilityLabel="Abrir extremo A no mapa"
+                accessibilityLabel={t('home.mapOpenLegA')}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 style={{ marginRight: 10, marginTop: 0, padding: 4 }}
               >
@@ -1127,10 +1136,16 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
-                  Trecho — extremo A (início)
+                  {t('home.providerTaskSegmentLegA')}
                 </Text>
                 <TouchableOpacity
-                  onPress={() => openLatLngInExternalMaps(segmentEnds.a.lat, segmentEnds.a.lng, segmentLineA || 'Extremo A')}
+                  onPress={() =>
+                    openLatLngInExternalMaps(
+                      segmentEnds.a.lat,
+                      segmentEnds.a.lng,
+                      segmentLineA || t('home.providerTaskSegmentEndShortA'),
+                    )
+                  }
                   activeOpacity={0.65}
                 >
                   <Text
@@ -1149,9 +1164,15 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
               <TouchableOpacity
-                onPress={() => openLatLngInExternalMaps(segmentEnds.b.lat, segmentEnds.b.lng, segmentLineB || 'Extremo B')}
+                onPress={() =>
+                  openLatLngInExternalMaps(
+                    segmentEnds.b.lat,
+                    segmentEnds.b.lng,
+                    segmentLineB || t('home.providerTaskSegmentEndShortB'),
+                  )
+                }
                 accessibilityRole="button"
-                accessibilityLabel="Abrir extremo B no mapa"
+                accessibilityLabel={t('home.mapOpenLegB')}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 style={{ marginRight: 10, marginTop: 0, padding: 4 }}
               >
@@ -1159,10 +1180,16 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
-                  Trecho — extremo B (fim)
+                  {t('home.providerTaskSegmentLegB')}
                 </Text>
                 <TouchableOpacity
-                  onPress={() => openLatLngInExternalMaps(segmentEnds.b.lat, segmentEnds.b.lng, segmentLineB || 'Extremo B')}
+                  onPress={() =>
+                    openLatLngInExternalMaps(
+                      segmentEnds.b.lat,
+                      segmentEnds.b.lng,
+                      segmentLineB || t('home.providerTaskSegmentEndShortB'),
+                    )
+                  }
                   activeOpacity={0.65}
                 >
                   <Text
@@ -1185,14 +1212,16 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
             <TouchableOpacity
               onPress={() => openProviderTaskInExternalMaps(task)}
               accessibilityRole="button"
-              accessibilityLabel="Abrir local no mapa"
+              accessibilityLabel={t('home.mapOpenLocation')}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               style={{ marginRight: 10, marginTop: 0, padding: 4 }}
             >
               <Ionicons name="location-outline" size={18} color={linkBlue} />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>Local de atendimento</Text>
+              <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
+                {t('home.providerTaskServiceLocationLabel')}
+              </Text>
               <TouchableOpacity
                 onPress={() => openProviderTaskInExternalMaps(task)}
                 activeOpacity={0.65}
@@ -1237,14 +1266,19 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
             letterSpacing: 0.45,
           }}
         >
-          Detalhes
+          {t('home.providerTaskDetailsTitle')}
         </Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
           <Ionicons name="time" size={15} color={P.textLight} style={{ marginRight: 10 }} />
           <View>
-            <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>Criado em</Text>
+            <Text style={{ fontSize: 10, color: P.textLight, fontWeight: '600' }}>
+              {t('home.providerTaskCreatedAtLabel')}
+            </Text>
             <Text style={{ fontSize: 12, color: P.textSecondary, fontWeight: '800' }}>
-              {new Date(task.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+              {new Date(task.createdAt).toLocaleString(
+                (i18n.language || 'pt-BR').replace('_', '-'),
+                { dateStyle: 'short', timeStyle: 'short' },
+              )}
             </Text>
           </View>
         </View>
@@ -2187,7 +2221,7 @@ export default function DashboardScreen() {
   /** Mapa compacto no card da OS (local de atendimento). */
   const [providerOsMiniMapTask, setProviderOsMiniMapTask] = useState<any | null>(null);
   const providerOsMiniMapHeaderName = providerOsMiniMapTask
-    ? providerTaskServiceLocationName(providerOsMiniMapTask) || 'Local de atendimento'
+    ? providerTaskServiceLocationName(providerOsMiniMapTask) || t('home.providerTaskServiceLocationLabel')
     : '';
   const providerOsMiniMapHeaderAddress = providerOsMiniMapTask
     ? providerTaskServiceAddressTextOnly(providerOsMiniMapTask)
@@ -2586,7 +2620,7 @@ export default function DashboardScreen() {
           }
         })();
     } catch (err: any) {
-        Alert.alert("Erro de Roteamento", err?.message || String(err));
+        Alert.alert(t('home.routingErrorTitle'), err?.message || String(err));
     } finally {
         setIsOptimizingRoute(false);
         setOsrmOptimizingMode(null);
@@ -2854,7 +2888,6 @@ export default function DashboardScreen() {
            knownExecutionIdsSize: cloudExecIds.size,
          });
          const rejectedIdSet = new Set(rejectedTasks.map((id) => String(id)));
-         const strictRejectCounters: Record<string, number> = {};
          const ptFilteredStrict = combinedEvents.filter((e: any) => {
            const decision = decideProviderTaskInclusion({
              event: e,
@@ -2866,13 +2899,9 @@ export default function DashboardScreen() {
              executedRawList: executedTasksRaw,
              requireKnownExecution,
            });
-           if (decision.ok) return true;
-           strictRejectCounters[decision.reason] = (strictRejectCounters[decision.reason] || 0) + 1;
-           return false;
+           return Boolean(decision.ok);
          });
          let pt_filtered = ptFilteredStrict;
-         let relaxedFallbackApplied = false;
-         let relaxedRejectCounters: Record<string, number> = {};
          if (requireKnownExecution) {
            const strictActiveCount = ptFilteredStrict.filter((row: any) =>
              ACTIVE_PROVIDER_STATUSES.has(String(row?.status || '').toUpperCase())
@@ -2887,7 +2916,6 @@ export default function DashboardScreen() {
                ACTIVE_PROVIDER_STATUSES.has(String(row?.status || '').toUpperCase())
              ).length;
              if (relaxedActiveCandidateCount > 0) {
-               relaxedRejectCounters = {};
                pt_filtered = combinedEvents.filter((e: any) => {
                  const decision = decideProviderTaskInclusion({
                    event: e,
@@ -2899,36 +2927,21 @@ export default function DashboardScreen() {
                    executedRawList: executedTasksRaw,
                    requireKnownExecution: false,
                  });
-                 if (decision.ok) return true;
-                 relaxedRejectCounters[decision.reason] = (relaxedRejectCounters[decision.reason] || 0) + 1;
-                 return false;
+                 return Boolean(decision.ok);
                });
-               relaxedFallbackApplied = true;
              }
            }
          }
 
          const pendingSyncIds = await getTaskIdsWithPendingLocalSyncOverlay();
+         const pendingChecklistPostAckIds = await getTaskIdsWithCompletedChecklistPendingServerAck();
 
-         console.log(
-           'AGENDA EVENTS LOADED:',
-           events.length,
-           'INJECTED:',
-           combinedEvents.length - events.length,
-           'FILTERED:',
-           pt_filtered.length,
-           'STRICT_KNOWN_EXEC:',
-           requireKnownExecution,
-           'RELAXED_FALLBACK:',
-           relaxedFallbackApplied,
-           'STRICT_REJECTS:',
-           JSON.stringify(strictRejectCounters),
-           'RELAXED_REJECTS:',
-           JSON.stringify(relaxedRejectCounters),
-         );
-         const completedSetForMap = new Set(Object.keys(executedMap));
+         const completedSetForMap = new Set<string>([
+           ...Object.keys(executedMap),
+           ...pendingChecklistPostAckIds,
+         ]);
          const inprogSetForMap = new Set(inprogressMerged);
-         const mapped = pt_filtered.map((t: any) => {
+         let mapped = pt_filtered.map((t: any) => {
             const dt = new Date(t.startDate || Date.now());
             const day = isNaN(dt.getDate()) ? '29' : dt.getDate().toString().padStart(2,'0');
             const month = isNaN(dt.getMonth()) ? '03' : (dt.getMonth() + 1).toString().padStart(2,'0');
@@ -2973,9 +2986,10 @@ export default function DashboardScreen() {
                locationLng: geo?.lng ?? t.locationLng ?? null,
                expectedFormDurationMinutes: providerTaskExpectedFormDurationMinutes(t),
                etaMinutes: providerTaskEtaMinutes(t),
-               title: `${taskOsLabel({ ...t, id: String(t.id) })} — ${t.title || 'Manutenção'}`,
+               title: `${taskOsLabel({ ...t, id: String(t.id) })}, ${t.title || 'Manutenção'}`,
                status: eff,
-               isPendingSync: pendingSyncIds.has(String(t.id)),
+               isPendingSync:
+                 pendingSyncIds.has(String(t.id)) || pendingChecklistPostAckIds.has(String(t.id)),
                isCachedLocally: false,
                service: serviceTitle,
                formTemplateTitle,
@@ -3005,6 +3019,31 @@ export default function DashboardScreen() {
                lastPauseAt: t.metadata?.lastPauseAt ?? null,
             };
          });
+         /** Cartão com snapshot vazio do servidor: preencher a partir do payload local em `@brspark_execution_*` (quarentena / mídia). */
+         for (let mi = 0; mi < mapped.length; mi++) {
+           const row = mapped[mi];
+           const mid = String(row?.id || '');
+           if (!mid || !pendingChecklistPostAckIds.has(mid)) continue;
+           try {
+             const exRaw = await AsyncStorage.getItem(`@brspark_execution_${mid}`);
+             if (!exRaw) continue;
+             const ex = JSON.parse(exRaw);
+             const svc = String(ex?.title || ex?.metadata?.title || '').trim();
+             const tplRaw = String(ex?.metadata?.templateTitle || ex?.templateTitle || '').trim();
+             const formTpl = tplRaw ? stripFormTemplateTitleLabelPrefix(tplRaw) : null;
+             const desc = String(ex?.description || '').trim();
+             const baseLabel = taskOsLabel({ ...row, id: mid });
+             mapped[mi] = {
+               ...row,
+               title: svc ? `${baseLabel}, ${svc}` : row.title,
+               service: svc || row.service,
+               formTemplateTitle: formTpl || row.formTemplateTitle,
+               description: desc || row.description,
+             };
+           } catch {
+             /* ignore */
+           }
+         }
          // Ordem inicial alinhada a «Recentes»: data de recebimento no aparelho (fallback criação).
          mapped.sort((a: any, b: any) => compareProviderTasksForList(a, b, 'NEWEST'));
 
@@ -3038,7 +3077,7 @@ export default function DashboardScreen() {
 
          setProviderTasks(mapped);
          setInprogressIds(new Set(inprogressMerged));
-         setCompletedIds(new Set(Object.keys(executedMap)));
+         setCompletedIds(completedSetForMap);
       } catch(e) {
          console.error('ERROR LOADING AGENDA:', e);
       }
@@ -4409,24 +4448,25 @@ export default function DashboardScreen() {
                 [
                   {
                     id: 'PENDING' as const,
-                    label: 'Pendentes',
+                    labelKey: 'home.providerTabPending',
                     color: MODE_SEGMENT_COLORS.PROVIDER,
                     icon: 'hourglass-outline' as const,
                   },
                   {
                     id: 'IN_PROGRESS' as const,
-                    label: 'Iniciadas',
+                    labelKey: 'home.providerTabInProgress',
                     color: MEDIA_TAG_COLORS.BEFORE,
                     icon: 'build-outline' as const,
                   },
                   {
                     id: 'COMPLETED' as const,
-                    label: 'Concluídas',
+                    labelKey: 'home.providerTabCompleted',
                     color: MEDIA_TAG_COLORS.AFTER,
                     icon: 'checkmark-done-outline' as const,
                   },
                 ] as const
               ).map((tab) => {
+                const tabLabel = t(tab.labelKey);
                 const isActive = providerTab === tab.id;
                 const stageCount =
                   tab.id === 'PENDING'
@@ -4447,7 +4487,7 @@ export default function DashboardScreen() {
                     key={tab.id}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: isActive }}
-                    accessibilityLabel={`${tab.label}, ${stageCount}`}
+                    accessibilityLabel={`${tabLabel}, ${stageCount}`}
                     android_ripple={{ color: themeDark ? 'rgba(255,255,255,0.12)' : 'rgba(15,23,42,0.08)', foreground: true }}
                     onPress={() => selectProviderTab(tab.id)}
                     style={({ pressed }) => [
@@ -4505,7 +4545,7 @@ export default function DashboardScreen() {
                         adjustsFontSizeToFit
                         minimumFontScale={0.88}
                       >
-                        {tab.label}
+                        {tabLabel}
                       </Text>
                       <View
                         style={{
@@ -4563,10 +4603,14 @@ export default function DashboardScreen() {
                       <Ionicons name="construct" size={40} color={MODE_SEGMENT_COLORS.PROVIDER} />
                     </View>
                     <Text style={{ fontSize: 24, fontWeight: '900', color: C.slate, textAlign: 'center', marginBottom: 12, letterSpacing: -0.5 }}>
-                      {providerTab === 'PENDING' ? 'Nenhuma Ordem Pendente' : providerTab === 'IN_PROGRESS' ? 'Nenhuma Ordem Iniciada' : 'Nenhuma Concluída'}
+                      {providerTab === 'PENDING'
+                        ? t('home.providerEmptyPendingTitle')
+                        : providerTab === 'IN_PROGRESS'
+                          ? t('home.providerEmptyInProgressTitle')
+                          : t('home.providerEmptyCompletedTitle')}
                     </Text>
                     <Text style={{ fontSize: 14, color: C.textLight, textAlign: 'center', lineHeight: 22 }}>
-                      A lista de serviços aparecerá aqui logo que houver despachos do painel central.
+                      {t('home.providerEmptyListSubtitle')}
                     </Text>
                   </View>
                   ) : (
@@ -4951,7 +4995,7 @@ export default function DashboardScreen() {
                                     }}
                                     accessibilityRole="button"
                                     accessibilityLabel={t('home.revisionBadge')}
-                                    accessibilityHint="Abre o detalhe da OS"
+                                    accessibilityHint={t('home.osOpenDetailHint')}
                                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                     style={({ pressed }) => ({
                                       width: 30,
@@ -5006,7 +5050,9 @@ export default function DashboardScreen() {
                               <Pressable
                                 onPress={() => runProviderOsMapMiniPress(order, setProviderOsMiniMapTask)}
                                 accessibilityRole="button"
-                                accessibilityLabel={`${osMapZoneVisual.label}. Ver local no mapa`}
+                                accessibilityLabel={t('home.mapZoneViewLocation', {
+                                  label: osMapZoneVisual.label,
+                                })}
                                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                                 style={({ pressed }) => ({
                                   width: isPremiumCard ? 46 : 44,
@@ -5691,7 +5737,7 @@ export default function DashboardScreen() {
                             textTransform: 'uppercase',
                           }}
                         >
-                          Motivo da Rejeição
+                          {t('home.providerRejectReasonTitle')}
                         </Text>
                         <TextInput
                           style={{
@@ -5704,7 +5750,7 @@ export default function DashboardScreen() {
                             textAlignVertical: 'top',
                             color: C.slate,
                           }}
-                          placeholder="Especifique o motivo detalhadamente..."
+                          placeholder={t('home.providerRejectReasonPlaceholder')}
                           multiline
                           value={rejectReason}
                           onChangeText={setRejectReason}
@@ -5992,7 +6038,9 @@ export default function DashboardScreen() {
                             elevation: 3,
                           }}
                         >
-                          <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 13 }}>Iniciar / Retomar</Text>
+                          <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 13 }}>
+                            {t('home.providerTaskModalStartResume')}
+                          </Text>
                         </TouchableOpacity>
                       )}
                     </>
@@ -6020,7 +6068,9 @@ export default function DashboardScreen() {
                         elevation: 3,
                       }}
                     >
-                      <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 13 }}>Visualizar</Text>
+                      <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 13 }}>
+                        {t('home.providerTaskModalView')}
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -6041,7 +6091,7 @@ export default function DashboardScreen() {
         <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 22 }}>
           <TouchableOpacity
             accessibilityRole="button"
-            accessibilityLabel="Fechar"
+            accessibilityLabel={t('common.close')}
             activeOpacity={1}
             onPress={() => setProviderOsMiniMapTask(null)}
             style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.48)' }]}
@@ -6089,7 +6139,7 @@ export default function DashboardScreen() {
                   onPress={() => setProviderOsMiniMapTask(null)}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   accessibilityRole="button"
-                  accessibilityLabel="Fechar"
+                  accessibilityLabel={t('common.close')}
                 >
                   <Ionicons name="close" size={26} color={C.textLight} />
                 </TouchableOpacity>
@@ -6112,6 +6162,7 @@ export default function DashboardScreen() {
                     const mini = providerOsMiniMapTask;
                     const polyCoords = providerTaskMiniMapPolygonCoords(mini);
                     const lineCoords = providerTaskMiniMapPolylineCoords(mini);
+                    const segmentEnds = providerTaskSegmentPolygonEndpoints(mini);
                     const pin = providerTaskMapTargetCoords(mini)!;
                     const pinTitle = (
                       providerTaskServiceLocationName(mini) ||
@@ -6119,6 +6170,20 @@ export default function DashboardScreen() {
                       'OS'
                     ).slice(0, 80);
                     const pinDesc = providerTaskServiceAddressTextOnly(mini).slice(0, 200);
+                    const segPinStyle = {
+                      width: 34,
+                      height: 34,
+                      borderRadius: 17,
+                      justifyContent: 'center' as const,
+                      alignItems: 'center' as const,
+                      borderWidth: 2.5,
+                      borderColor: C.cardWhite,
+                      shadowColor: C.slate,
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.28,
+                      shadowRadius: 5,
+                      elevation: 6,
+                    };
                     return (
                       <>
                         {polyCoords ? (
@@ -6138,12 +6203,35 @@ export default function DashboardScreen() {
                             lineJoin="round"
                           />
                         ) : null}
-                        <Marker
-                          coordinate={{ latitude: pin.lat, longitude: pin.lng }}
-                          tracksViewChanges={false}
-                          title={pinTitle}
-                          description={pinDesc || undefined}
-                        />
+                        {segmentEnds ? (
+                          <>
+                            <Marker
+                              coordinate={{ latitude: segmentEnds.a.lat, longitude: segmentEnds.a.lng }}
+                              tracksViewChanges={false}
+                              accessibilityLabel={t('home.mapMarkerLegA')}
+                            >
+                              <View style={[segPinStyle, { backgroundColor: MEDIA_TAG_COLORS.BEFORE }]}>
+                                <Text style={{ color: C.cardWhite, fontSize: 14, fontWeight: '900' }}>A</Text>
+                              </View>
+                            </Marker>
+                            <Marker
+                              coordinate={{ latitude: segmentEnds.b.lat, longitude: segmentEnds.b.lng }}
+                              tracksViewChanges={false}
+                              accessibilityLabel={t('home.mapMarkerLegB')}
+                            >
+                              <View style={[segPinStyle, { backgroundColor: MEDIA_TAG_COLORS.DURING }]}>
+                                <Text style={{ color: C.cardWhite, fontSize: 14, fontWeight: '900' }}>B</Text>
+                              </View>
+                            </Marker>
+                          </>
+                        ) : (
+                          <Marker
+                            coordinate={{ latitude: pin.lat, longitude: pin.lng }}
+                            tracksViewChanges={false}
+                            title={pinTitle}
+                            description={pinDesc || undefined}
+                          />
+                        )}
                       </>
                     );
                   })()}

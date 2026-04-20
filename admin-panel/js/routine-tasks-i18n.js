@@ -1,5 +1,5 @@
 /**
- * Textos da página RT (tarefas de rotina) — pt-BR, en-US e es-ES.
+ * Textos da página RT (tarefas de rotina), pt-BR, en-US e es-ES.
  * Preferência: `getAdminUiLocale()` (localStorage `brspark_admin_ui_locale`; padrão pt-BR).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
@@ -7,10 +7,10 @@ import { adminResolve, adminDocumentLang } from './admin-i18n-resolve.js';
 
 const M = {
   'pt-BR': {
-    rt_pageTitle: 'BrSpark Admin — RT — Tarefas de rotina',
+    rt_pageTitle: 'BrSpark Admin, RT, Tarefas de rotina',
     rt_bc_panel: 'Painel',
     rt_bc_page: 'Tarefas de rotina',
-    rt_hero_title: 'RT — Tarefas de rotina',
+    rt_hero_title: 'RT, Tarefas de rotina',
     rt_hero_sub:
       'Associe modelos do Form Builder a prestadores da organização e gerencie rótulos do menu «Mais», ordem e pré-carga no app.',
     rt_tenant_bar_html:
@@ -84,15 +84,15 @@ const M = {
     rt_csv_order: 'Ordem',
     rt_csv_prefetch: 'Pre_carga',
     rt_csv_template_id: 'ID do modelo',
-    rt_csv_user_id: 'ID do utilizador',
+    rt_csv_user_id: 'ID do usuário',
     rt_export_empty: 'Não há linhas para exportar com os filtros atuais.',
     rt_aria_live_region: 'Mensagens de tarefas de rotina',
   },
   'en-US': {
-    rt_pageTitle: 'BrSpark Admin — RT — Routine tasks',
+    rt_pageTitle: 'BrSpark Admin, RT, Routine tasks',
     rt_bc_panel: 'Home',
     rt_bc_page: 'Routine tasks',
-    rt_hero_title: 'RT — Routine tasks',
+    rt_hero_title: 'RT, Routine tasks',
     rt_hero_sub:
       'Link Form Builder templates to field technicians in your organization and manage «More» menu labels, order, and mobile prefetch in the app.',
     rt_tenant_bar_html:

@@ -12,6 +12,8 @@ const {
   fetchVisionPostPreservingMethod,
 } = require('../lib/visionChecklistAnalyze');
 const { findGoogleAiStudioIntegration, analyzeWithGoogleAiStudio } = require('../lib/visionStudioAnalyze');
+const { findMoondreamIntegration, analyzeWithMoondream } = require('../lib/visionMoondreamAnalyze');
+const { pickVisionDetectionBackend } = require('../lib/visionDetectionRouting');
 const { consumeQuota } = require('../lib/planQuotaService');
 const {
   MAX_VISION_SIMNAO_QUESTIONS,
@@ -107,7 +109,7 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
       return res.status(400).json({
         error: useGoogleStudioEarly
           ? `Máximo de ${MAX_VISION_SIMNAO_QUESTIONS} perguntas por análise.`
-          : `Detecção (YOLO) aceita apenas ${MAX_VISION_CHECKLIST_QUESTIONS} pergunta por envio de mídia.`,
+          : `Detecção (Moondream ou YOLO) aceita apenas ${MAX_VISION_CHECKLIST_QUESTIONS} pergunta por envio de mídia.`,
       });
     }
 
@@ -170,13 +172,75 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
       }
     }
 
-    const integration = await prisma.integration.findFirst({
+    const yoloIntegration = await prisma.integration.findFirst({
       where: prismaWhereVisionChecklistIntegration(),
     });
+    const yoloOk = yoloIntegration && String(yoloIntegration.baseUrl || '').trim();
+    const moonIntegration = await findMoondreamIntegration();
+    const moonOk = moonIntegration && String(moonIntegration.apiKey || '').trim();
+
+    const tenantFeatRow = req.user?.tenantId
+      ? await prisma.tenant.findUnique({ where: { id: req.user.tenantId }, select: { features: true } })
+      : null;
+    const tf =
+      tenantFeatRow?.features && typeof tenantFeatRow.features === 'object' && !Array.isArray(tenantFeatRow.features)
+        ? tenantFeatRow.features
+        : {};
+    let { useMoondream } = pickVisionDetectionBackend(tf, { yoloOk, moonOk });
+    /** Pedido explícito «moondream» sem chave: cair para YOLO se existir (comportamento anterior). */
+    const wantedMoonExplicit = !useGoogleStudioEarly && engineEarly === 'moondream';
+    if (wantedMoonExplicit && !moonOk && yoloOk) {
+      useMoondream = false;
+    }
+
+    if (useMoondream) {
+      if (!moonOk) {
+        return res.status(503).json({
+          error:
+            'Integração "Visão IA - Moondream" não configurada ou sem API key. Configure em Integrações no painel admin.',
+        });
+      }
+      if (req.user?.tenantId) {
+        const q = await consumeQuota(prisma, req.user.tenantId, 'AI_VISION_DETECTION', 1);
+        if (!q.ok) {
+          return res.status(403).json({ error: q.error, code: q.code || 'PLAN_QUOTA_EXCEEDED' });
+        }
+      }
+      try {
+        const normalized = await analyzeWithMoondream({
+          buffer: file.buffer,
+          mimetype: mt || 'application/octet-stream',
+          questions,
+          integration: moonIntegration,
+          visionRating0To10,
+        });
+        if (!normalized.ok) {
+          return res.status(502).json({ error: normalized.error });
+        }
+        return res.json(normalized.payload);
+      } catch (e) {
+        const name = e && e.name;
+        const msg = e && e.message ? String(e.message) : String(e);
+        const isTimeout = name === 'AbortError' || name === 'TimeoutError';
+        const outMsg = isTimeout
+          ? 'Tempo esgotado ao contatar Moondream.'
+          : msg;
+        const status = isTimeout ? 502 : 500;
+        console.error('[checklists/vision/analyze] moondream', {
+          status,
+          name,
+          msg,
+          stack: e && e.stack,
+        });
+        return res.status(status).json({ error: outMsg });
+      }
+    }
+
+    const integration = yoloIntegration;
     if (!integration || !String(integration.baseUrl || '').trim()) {
       return res.status(503).json({
         error:
-          'Integração "Visão IA - YOLO" não configurada. Configure URL e chave em Integrações no painel admin.',
+          'Integração "Visão IA - YOLO" não configurada. Configure URL e chave em Integrações no painel admin (ou use «Visão IA - Moondream»).',
       });
     }
 
@@ -250,7 +314,9 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
       });
     }
 
-    const normalized = normalizeVisionAnalyzeResponse(text, questions);
+    const normalized = normalizeVisionAnalyzeResponse(text, questions, {
+      visionRating0To10: visionRating0To10 === true,
+    });
     if (!normalized.ok) {
       return res.status(502).json({
         error: normalized.error,

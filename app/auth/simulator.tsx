@@ -45,7 +45,7 @@ export default function TrainingSimulatorScreen() {
           <View>
             <View style={s.card}>
               <Text style={s.label}>Pedido (exemplo)</Text>
-              <Text style={s.value}>Instalação de rede — R. Exemplo, 100</Text>
+              <Text style={s.value}>Instalação de rede, R. Exemplo, 100</Text>
               <Text style={{ marginTop: 8, color: C.textSecondary, fontSize: 13 }}>2,3 km · janela 14h–18h</Text>
             </View>
             <TouchableOpacity

@@ -939,7 +939,16 @@
 
       <!-- BLOCO 2: LOCALIZAÇÃO -->
       <div style="border-top:1px solid var(--border); margin:18px 0 14px;"></div>
-      <div id="ops-dispatch-sec-geo" style="font-size:10px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Local de Serviço (Cerca Eletrônica)</div>
+      <div id="ops-dispatch-sec-geo" style="font-size:10px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Local de serviço</div>
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:11px;line-height:1.5;color:#14532d;">
+        <strong style="display:block;margin-bottom:4px;">1 — Destino (navegação / GPS)</strong>
+        Só pode ser <strong>um ponto</strong> (endereço ou coordenadas) ou um <strong>trecho A↔B</strong> (aba Trecho). Isto é para onde o Waze/Google Maps e o ETA apontam.
+      </div>
+      <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:11px;line-height:1.5;color:#7c2d12;">
+        <strong style="display:block;margin-bottom:4px;">2 — Geometria da cerca (validação)</strong>
+        <strong>Rota</strong> ou <strong>Polígono</strong> KML definem só o <em>corredor ou área</em> onde a OS é válida — <strong>não</strong> substituem o destino. Preencha abaixo o <strong>destino (ponto)</strong> antes ou ao lado do KML.
+        <div style="margin-top:6px;font-size:10px;color:#9a3412">KML: Google Earth / My Maps (<code>LineString</code> ou <code>Polygon</code>) ou JSON <code>[[lat,lng],…]</code>.</div>
+      </div>
 
       <!-- Tab de Modo de Zona -->
       <div style="display:flex; gap:4px; margin-bottom:12px; background:var(--surface2); border-radius:10px; padding:4px;">
@@ -948,6 +957,29 @@
         <button id="geo-tab-route"   onclick="window.switchGeoTab('route')"   style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> Rota</button>
         <button id="geo-tab-polygon" onclick="window.switchGeoTab('polygon')" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono</button>
         <button id="geo-tab-none"    onclick="window.switchGeoTab('none')"    style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="ban-outline" style="vertical-align:-2px"></ion-icon> Livre</button>
+      </div>
+
+      <!-- Destino explícito quando Rota ou Polígono KML (obrigatório: não usar 1.º vértice do ficheiro) -->
+      <div id="geo-dest-point-wrap" style="display:none;background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:12px;margin-bottom:12px;">
+        <div style="font-size:12px;font-weight:800;color:#1e3a8a;margin-bottom:8px;"><ion-icon name="navigate-outline" style="vertical-align:-2px"></ion-icon> Destino para navegação (obrigatório com KML)</div>
+        <div style="font-size:10px;color:#1d4ed8;margin-bottom:10px;line-height:1.45;">Indique o ponto para onde o técnico deve ir. O ficheiro KML só valida o percurso ou a área — não define este destino.</div>
+        <div class="form-group">
+          <label class="form-label" for="d-nav-address">Endereço (busca)</label>
+          <div style="display:flex; gap:6px;">
+            <input class="form-control" id="d-nav-address" placeholder="Ex.: Rua do cliente, 100" style="flex:1; font-size:11px;" />
+            <button type="button" class="btn btn-outline btn-sm" onclick="window.geocodeNavAddress()" style="white-space:nowrap;font-size:10px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div class="form-group">
+            <label class="form-label" style="font-size:10px;" for="d-nav-lat">Latitude destino</label>
+            <input class="form-control" id="d-nav-lat" type="number" step="any" placeholder="-23.55" style="font-size:11px;" oninput="window.refreshDispatchNavPreviewIfPossible && window.refreshDispatchNavPreviewIfPossible()" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size:10px;" for="d-nav-lng">Longitude destino</label>
+            <input class="form-control" id="d-nav-lng" type="number" step="any" placeholder="-46.63" style="font-size:11px;" oninput="window.refreshDispatchNavPreviewIfPossible && window.refreshDispatchNavPreviewIfPossible()" />
+          </div>
+        </div>
       </div>
 
       <!-- TAB: Ponto + Raio -->
@@ -1009,6 +1041,7 @@
         </div>
         <!-- Hidden storage for route coords -->
         <textarea id="d-route" style="display:none;"></textarea>
+        <div style="font-size:10px;color:var(--text3);margin:8px 0 4px;line-height:1.4;"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Pré-visualização: linha <strong style="color:#ea580c">laranja</strong> = KML; marcador <strong style="color:#059669">D</strong> = destino de navegação (digitado acima).</div>
         <div id="dispatch-map-route" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9; margin-top:8px;"></div>
       </div>
 
@@ -1093,8 +1126,9 @@
         <!-- JSON Manual -->
         <div class="form-group">
           <label class="form-label" style="font-size:11px;" for="d-polygon">Ou cole manualmente (JSON)</label>
-          <textarea class="form-control" id="d-polygon" rows="3" placeholder='[[lat,lng],[lat,lng],[lat,lng]]&#10;Ex: [[-23.55,-46.63],[-23.56,-46.63],[-23.56,-46.62]]'></textarea>
+          <textarea class="form-control" id="d-polygon" rows="3" placeholder='[[lat,lng],[lat,lng],[lat,lng]]&#10;Ex: [[-23.55,-46.63],[-23.56,-46.63],[-23.56,-46.62]]' oninput="window.refreshDispatchNavPreviewIfPossible && window.refreshDispatchNavPreviewIfPossible()"></textarea>
         </div>
+        <div style="font-size:10px;color:var(--text3);margin:8px 0 4px;line-height:1.4;"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Pré-visualização: área/linha <strong style="color:#2563eb">azul</strong> ou <strong style="color:#ea580c">laranja</strong> = KML; marcador <strong style="color:#059669">D</strong> = destino de navegação (bloco «Destino para navegação»).</div>
         <div id="dispatch-map-polygon" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9;"></div>
         <button type="button" id="ops-geo-polygon-preview-btn" class="btn btn-outline btn-sm" onclick="window.renderPolygonPreview()" style="margin-top:8px; width:100%; font-size:11px;"><ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Visualizar Polígono no Mapa</button>
       </div>
@@ -1316,6 +1350,54 @@ function statusColClass(status) {
   if (!status) return 'col-error';
   return map[status.toUpperCase()] || 'col-error';
 }
+
+/** Lista eventos GEOFENCE_FIELD_AUDIT (telemetria) na ficha Informações da OS. */
+window.loadOpsGeofenceAudit = async function (execId) {
+  const id = String(execId || '').trim();
+  if (!id) return;
+  const el = document.getElementById('ops-geofence-audit-' + id);
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--text3)">A carregar…</span>';
+  try {
+    const res = await fetch(
+      CONFIG.API_BASE + '/telemetry?executionId=' + encodeURIComponent(id) + '&eventType=GEOFENCE_FIELD_AUDIT&limit=80',
+      { headers: CONFIG.headers() }
+    );
+    if (!res.ok) {
+      el.innerHTML = '<span style="color:#dc2626">Não foi possível carregar (ver sessão / permissões).</span>';
+      return;
+    }
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+      el.innerHTML =
+        '<span style="color:var(--text3)">Sem eventos de auditoria de cerca nesta OS (ou o app ainda não enviou telemetria).</span>';
+      return;
+    }
+    const esc = (s) =>
+      String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    const lines = rows.map((r) => {
+      const t = r.serverTimestamp ? new Date(r.serverTimestamp).toLocaleString('pt-BR') : '—';
+      const pl = r.payload && typeof r.payload === 'object' ? JSON.stringify(r.payload) : String(r.payload || '');
+      return (
+        '<tr><td style="padding:4px 8px;border-bottom:1px solid var(--border);vertical-align:top;white-space:nowrap">' +
+        esc(t) +
+        '</td><td style="padding:4px 8px;border-bottom:1px solid var(--border);font-size:10px;word-break:break-all">' +
+        esc(pl) +
+        '</td></tr>'
+      );
+    });
+    el.innerHTML =
+      '<table style="width:100%;border-collapse:collapse;font-size:10px"><thead><tr><th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border)">Data</th><th style="text-align:left;padding:4px 8px;border-bottom:1px solid var(--border)">Payload</th></tr></thead><tbody>' +
+      lines.join('') +
+      '</tbody></table>';
+  } catch (e) {
+    console.warn('[OPS] geofence audit', e);
+    el.innerHTML = '<span style="color:#dc2626">Erro de rede.</span>';
+  }
+};
 
 // ── Reabrir para revisão (modal + técnico) ───────────────────
 let reopenRevisionTaskId = null;
@@ -4298,6 +4380,13 @@ function buildInfoTab(t) {
         </div>
       </div>
     </div>
+    <div class="report-field" style="grid-column:1/-1;margin-top:10px">
+      <div class="report-field-label">Eventos de cerca (telemetria)</div>
+      <div class="report-field-value" style="padding-top:6px">
+        <button type="button" class="btn btn-outline btn-sm" data-ops-geofence-audit="${escI(t.id)}" onclick="if (window.loadOpsGeofenceAudit) window.loadOpsGeofenceAudit(this.getAttribute('data-ops-geofence-audit'))">Carregar últimos eventos (entradas/saídas da zona)</button>
+        <div id="ops-geofence-audit-${String(t.id).replace(/"/g, '')}" style="margin-top:10px;font-size:11px;line-height:1.45;color:var(--text2)"></div>
+      </div>
+    </div>
     ${buildRevisionHistoryHtml(t)}
     <div class="report-field" style="margin-top:6px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
       <div class="report-field-label">Produtividade do técnico</div>
@@ -4363,6 +4452,31 @@ function buildReportTab(t) {
   }
 
   const escHtml = (t) => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  /** `{campo}__biometric` no mesmo cartão que a foto (campo facial no template ou repetível). */
+  function appendBiometricAuditHtml(fieldId, rowScope) {
+    const bioKey = String(fieldId || '') + '__biometric';
+    const raw =
+      rowScope && typeof rowScope === 'object' && Object.prototype.hasOwnProperty.call(rowScope, bioKey)
+        ? rowScope[bioKey]
+        : responses[bioKey];
+    if (raw === undefined || raw === null || String(raw).trim() === '') return '';
+    try {
+      const o = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return (
+        '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">' +
+        '<div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.45">Resultado da validação (FaceMatch)</div>' +
+        formatBiometricAuditDetailHtml(o, escHtml, { borderColor: 'var(--border)' }) +
+        '</div>'
+      );
+    } catch (e2) {
+      return (
+        '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">' +
+        '<div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.45">Resultado da validação (FaceMatch)</div>' +
+        `<div style="font-size:12px;color:var(--text2)">${escHtml(String(raw))}</div>` +
+        '</div>'
+      );
+    }
+  }
   function mediaCapLine(responses, fieldId, index, rowScope) {
     if (!responses || !fieldId) return '';
     const raw =
@@ -4770,18 +4884,23 @@ function buildReportTab(t) {
         if (Array.isArray(v)) return v.some((x) => x !== undefined && x !== null && String(x).trim() !== '');
         return true;
       })();
+      const effFieldForRender = effectiveFieldForReportRender(field, v);
       const displayHtml = renderFieldValue(
         v,
-        effectiveFieldForReportRender(field, v),
+        effFieldForRender,
         responses,
         field.id,
         rowScope || undefined,
       );
+      const biometricAppend =
+        normalizePanelFieldTypeOps(effFieldForRender.type) === 'facial_recognition'
+          ? appendBiometricAuditHtml(field.id, rowScope || undefined)
+          : '';
       const qHead = field.label || field.id;
       const qLab = instSuffix ? `${qHead} <span style="font-size:10px;font-weight:800;color:#6d28d9">(${instSuffix})</span>` : qHead;
       items += `<div class="report-response-item">
         <div class="report-response-q">${qLab}</div>
-        <div class="report-response-a ${!hasVal ? 'empty' : ''}">${displayHtml}</div>
+        <div class="report-response-a ${!hasVal && !biometricAppend ? 'empty' : ''}">${displayHtml}${biometricAppend}</div>
       </div>`;
       if (
         showTransitMapSection &&
@@ -4858,14 +4977,23 @@ function buildReportTab(t) {
       if (key.startsWith('__')) return;
       if (!templateFieldIds.includes(key)) {
          if (!reportDeltaOrphanKeyVisible(t, key)) return;
-         /** Chave auxiliar do app: `{campo}__biometric` — foto do campo base + auditoria formatada (sem JSON bruto). */
+         /** Chave auxiliar do app: `{campo}__biometric` — evitar duplicar a foto do campo base (órfão ou já listado no template). */
+         if (
+           typeof key === 'string' &&
+           !key.endsWith('__biometric') &&
+           Object.prototype.hasOwnProperty.call(responses, key + '__biometric')
+         ) {
+           return;
+         }
+         /** Chave auxiliar: `{campo}__biometric` — já fundido no cartão do campo facial quando o base existe no template. */
          if (typeof key === 'string' && key.endsWith('__biometric')) {
            const baseFieldId = key.slice(0, -'__biometric'.length);
+           if (templateFieldIds.includes(baseFieldId)) return;
            const photoRaw = responses[baseFieldId];
            let photoHtml = '';
            if (photoRaw != null && String(photoRaw).trim() !== '') {
              photoHtml =
-               '<div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.45">Captura facial e auditoria técnica (FaceMatch):</div>' +
+               '<div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.45">Captura facial</div>' +
                '<div style="margin-bottom:4px">' +
                renderFieldValue(photoRaw, 'facial_recognition', responses, baseFieldId, null) +
                '</div>';
@@ -4876,18 +5004,21 @@ function buildReportTab(t) {
            try {
              const o = typeof val === 'string' ? JSON.parse(val) : val;
              auditBlockHtml =
-               '<div style="margin-top:10px;font-size:11px;font-weight:700;color:#475569">Auditoria biométrica (FaceMatch)</div>' +
-               formatBiometricAuditDetailHtml(o, escHtml, { borderColor: 'var(--border)' });
+               '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">' +
+               '<div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.45">Resultado da validação (FaceMatch)</div>' +
+               formatBiometricAuditDetailHtml(o, escHtml, { borderColor: 'var(--border)' }) +
+               '</div>';
            } catch (e2) {
              auditBlockHtml =
-               '<div style="margin-top:10px;font-size:11px;font-weight:700;color:#475569">Auditoria biométrica (FaceMatch)</div>' +
-               `<div style="margin-top:6px;font-size:12px;color:var(--text2)">${escHtml(String(val))}</div>`;
+               '<div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border)">' +
+               '<div style="font-size:11px;color:#64748b;margin-bottom:8px;line-height:1.45">Resultado da validação (FaceMatch)</div>' +
+               `<div style="margin-top:6px;font-size:12px;color:var(--text2)">${escHtml(String(val))}</div>` +
+               '</div>';
            }
-           const auditBlock = auditBlockHtml;
            const qLabel = (baseFieldId || key) + ' · reconhecimento facial';
            items += `<div class="report-response-item">
              <div class="report-response-q" style="color:var(--text3)">${escHtml(qLabel)} <span style="font-size:9px;font-weight:400;opacity:0.6">(Órfão)</span></div>
-             <div class="report-response-a">${photoHtml}${auditBlock}</div>
+             <div class="report-response-a">${photoHtml}${auditBlockHtml}</div>
            </div>`;
            return;
          }
@@ -4907,6 +5038,13 @@ function buildReportTab(t) {
     // Sem template: renderiza as chaves do response diretamente
     Object.entries(responses).forEach(([key, val]) => {
       if (key.startsWith('__')) return;
+      if (
+        typeof key === 'string' &&
+        !key.endsWith('__biometric') &&
+        Object.prototype.hasOwnProperty.call(responses, key + '__biometric')
+      ) {
+        return;
+      }
       const displayHtml = renderFieldValue(val, null, responses, key);
       items += `<div class="report-response-item">
         <div class="report-response-q">${key}</div>
@@ -7264,6 +7402,12 @@ window.openDispatchModal = async function() {
   document.getElementById('d-address').value = '';
   document.getElementById('d-lat').value = '';
   document.getElementById('d-lng').value = '';
+  const dNavA = document.getElementById('d-nav-address');
+  const dNavLa = document.getElementById('d-nav-lat');
+  const dNavLn = document.getElementById('d-nav-lng');
+  if (dNavA) dNavA.value = '';
+  if (dNavLa) dNavLa.value = '';
+  if (dNavLn) dNavLn.value = '';
   document.getElementById('d-radius').value = '200';
   document.getElementById('d-polygon').value = '';
   if (window.clearSegmentMap) window.clearSegmentMap();
@@ -7323,6 +7467,8 @@ window.switchGeoTab = function(mode) {
     if (!window._dispatchMapRoute) window.initRouteMap();
     else window._dispatchMapRoute.invalidateSize();
   }, 100);
+  const destWrap = document.getElementById('geo-dest-point-wrap');
+  if (destWrap) destWrap.style.display = (mode === 'route' || mode === 'polygon') ? 'block' : 'none';
 };
 
 window._segmentPoints = [];
@@ -7434,6 +7580,51 @@ window.clearSegmentMap = function() {
 // ── Leaflet Map (Rota) ─────────────────────────────────────────
 window._dispatchMapRoute = null;
 window._routePolyline = null;
+/** Camadas extra na pré-visualização da rota (polilinha + marcadores), para poder limpar sem acumular. */
+window._routePreviewLayers = [];
+
+window._clearRoutePreviewOverlays = function() {
+  if (!window._dispatchMapRoute) return;
+  (window._routePreviewLayers || []).forEach(function(layer) {
+    try { window._dispatchMapRoute.removeLayer(layer); } catch (e) {}
+  });
+  window._routePreviewLayers = [];
+  window._routePolyline = null;
+};
+
+/** Lê lat/lng do bloco «Destino para navegação» (aceita vírgula ou ponto decimal). */
+window.parseDispatchNavCoords = function() {
+  const latEl = document.getElementById('d-nav-lat');
+  const lngEl = document.getElementById('d-nav-lng');
+  if (!latEl || !lngEl) return null;
+  const lat = parseFloat(String(latEl.value || '').trim().replace(/\s/g, '').replace(',', '.'));
+  const lng = parseFloat(String(lngEl.value || '').trim().replace(/\s/g, '').replace(',', '.'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return [lat, lng];
+};
+
+window._makeDispatchNavDestIcon = function() {
+  return L.divIcon({
+    className: 'dispatch-nav-dest-marker',
+    html: '<div style="width:22px;height:22px;border-radius:50%;background:#059669;color:#fff;font-weight:800;font-size:12px;line-height:22px;text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)">D</div>',
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+  });
+};
+
+/** Atualiza o mapa de pré-visualização (rota ou polígono) quando o destino de navegação muda manualmente. */
+window.refreshDispatchNavPreviewIfPossible = function() {
+  const mode = window._geoMode || 'radius';
+  if (mode === 'route') {
+    const raw = document.getElementById('d-route') && document.getElementById('d-route').value.trim();
+    if (raw && window._dispatchMapRoute) window.renderRoutePreview({ silent: true });
+    return;
+  }
+  if (mode === 'polygon') {
+    const raw = document.getElementById('d-polygon') && document.getElementById('d-polygon').value.trim();
+    if (raw && window._dispatchMapPoly) window.renderPolygonPreview({ silent: true });
+  }
+};
 
 window.initRouteMap = function() {
   const el = document.getElementById('dispatch-map-route');
@@ -7445,20 +7636,36 @@ window.initRouteMap = function() {
   }).addTo(window._dispatchMapRoute);
 };
 
-window.renderRoutePreview = function() {
-  const raw = document.getElementById('d-route')?.value?.trim();
-  if (!raw || !window._dispatchMapRoute) return;
+window.renderRoutePreview = function(opts) {
+  opts = opts || {};
+  const silent = !!opts.silent;
+  const raw = document.getElementById('d-route') && document.getElementById('d-route').value.trim();
+  if (!raw) {
+    if (!silent) alert('Importe ou defina a rota (KML / JSON) antes de visualizar.');
+    return;
+  }
+  if (!window._dispatchMapRoute) return;
   try {
     const coords = JSON.parse(raw);
-    if (window._routePolyline) window._dispatchMapRoute.removeLayer(window._routePolyline);
-    const latlngs = coords.map(c => [c[0], c[1]]);
+    if (!Array.isArray(coords) || coords.length < 2) throw new Error('Mínimo 2 pontos necessários.');
+    window._clearRoutePreviewOverlays();
+    const latlngs = coords.map(function(c) { return [c[0], c[1]]; });
     window._routePolyline = L.polyline(latlngs, { color: '#f97316', weight: 4, dashArray: '8,4' })
       .addTo(window._dispatchMapRoute);
-    // Start + end markers
-    L.marker(latlngs[0], { title: 'Início' }).addTo(window._dispatchMapRoute);
-    L.marker(latlngs[latlngs.length - 1], { title: 'Fim' }).addTo(window._dispatchMapRoute);
-    window._dispatchMapRoute.fitBounds(window._routePolyline.getBounds(), { padding: [20, 20] });
-  } catch(e) { console.error('renderRoutePreview:', e); }
+    window._routePreviewLayers.push(window._routePolyline);
+    const nav = window.parseDispatchNavCoords && window.parseDispatchNavCoords();
+    if (nav) {
+      const m = L.marker(nav, { icon: window._makeDispatchNavDestIcon(), title: 'Destino de navegação' })
+        .addTo(window._dispatchMapRoute)
+        .bindPopup('<strong>Destino de navegação</strong><br><span style="font-size:11px">Ponto definido no bloco «Destino para navegação».</span>');
+      window._routePreviewLayers.push(m);
+    }
+    const fg = L.featureGroup(window._routePreviewLayers);
+    window._dispatchMapRoute.fitBounds(fg.getBounds(), { padding: [24, 24] });
+  } catch (e) {
+    console.error('renderRoutePreview:', e);
+    if (!silent) alert('Rota inválida: ' + (e && e.message ? e.message : String(e)));
+  }
 };
 
 // ── KML Upload Handler (Rota) ───────────────────────────────────
@@ -7538,6 +7745,28 @@ window.updateMapFromInputs = function() {
   if (!isNaN(lat) && !isNaN(lng)) window.placeMapMarker(lat, lng);
 };
 
+window.geocodeNavAddress = async function() {
+  const addr = document.getElementById('d-nav-address') && document.getElementById('d-nav-address').value.trim();
+  if (!addr) return alert('Digite um endereço para o destino de navegação.');
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addr)}&limit=1`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'pt-BR' } });
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const lat = parseFloat(data[0].lat).toFixed(6);
+      const lng = parseFloat(data[0].lon).toFixed(6);
+      document.getElementById('d-nav-lat').value = lat;
+      document.getElementById('d-nav-lng').value = lng;
+      if (typeof window.refreshDispatchNavPreviewIfPossible === 'function') window.refreshDispatchNavPreviewIfPossible();
+    } else {
+      alert('Endereço não encontrado.');
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Erro ao buscar o endereço.');
+  }
+};
+
 window.geocodeAddress = async function() {
   const addr = document.getElementById('d-address').value.trim();
   if (!addr) return;
@@ -7573,6 +7802,17 @@ window.useMyLocation = function() {
 // ── Leaflet Map (Polígono) ─────────────────────────────────────
 window._dispatchMapPoly = null;
 window._polyLayer = null;
+/** Polígono/linha KML + marcador de destino (evita acumular camadas). */
+window._polyPreviewLayers = [];
+
+window._clearPolygonPreviewOverlays = function() {
+  if (!window._dispatchMapPoly) return;
+  (window._polyPreviewLayers || []).forEach(function(layer) {
+    try { window._dispatchMapPoly.removeLayer(layer); } catch (e) {}
+  });
+  window._polyPreviewLayers = [];
+  window._polyLayer = null;
+};
 
 window.initPolygonMap = function() {
   const el = document.getElementById('dispatch-map-polygon');
@@ -7660,20 +7900,25 @@ window.parseKML = function(kmlText) {
 };
 
 
-window.renderPolygonPreview = function() {
+window.renderPolygonPreview = function(opts) {
+  opts = opts || {};
+  const silent = !!opts.silent;
   const raw = document.getElementById('d-polygon').value.trim();
-  if (!raw) { alert('Insira os pontos do polígono primeiro.'); return; }
+  if (!raw) {
+    if (!silent) alert('Insira os pontos do polígono primeiro.');
+    return;
+  }
   let coords;
   try {
     coords = JSON.parse(raw);
     if (!Array.isArray(coords) || coords.length < 2) throw new Error('Mínimo 2 pontos necessários.');
-  } catch(e) {
-    alert('Formato inválido: ' + e.message);
+  } catch (e) {
+    if (!silent) alert('Formato inválido: ' + e.message);
     return;
   }
   const map = window._dispatchMapPoly;
   if (!map) return;
-  if (window._polyLayer) map.removeLayer(window._polyLayer);
+  window._clearPolygonPreviewOverlays();
   const latlngs = coords.map(function(c) { return [c[0], c[1]]; });
   const isRoute = (window._kmlZoneType === 'route') || (coords.length === 2);
   if (isRoute) {
@@ -7681,7 +7926,16 @@ window.renderPolygonPreview = function() {
   } else {
     window._polyLayer = L.polygon(latlngs, { color: '#3b82f6', fillOpacity: 0.15, weight: 2 }).addTo(map);
   }
-  map.fitBounds(window._polyLayer.getBounds());
+  window._polyPreviewLayers.push(window._polyLayer);
+  const nav = window.parseDispatchNavCoords && window.parseDispatchNavCoords();
+  if (nav) {
+    const m = L.marker(nav, { icon: window._makeDispatchNavDestIcon(), title: 'Destino de navegação' })
+      .addTo(map)
+      .bindPopup('<strong>Destino de navegação</strong><br><span style="font-size:11px">Ponto definido no bloco «Destino para navegação».</span>');
+    window._polyPreviewLayers.push(m);
+  }
+  const fg = L.featureGroup(window._polyPreviewLayers);
+  map.fitBounds(fg.getBounds(), { padding: [24, 24] });
 };
 
 // ── confirmDispatch (Updated) ───────────────────────────────────
@@ -7781,6 +8035,8 @@ window.confirmDispatch = async function() {
   // ── Build location payload baseado na aba ativa ─────────────────
   const geoMode = window._geoMode || 'none';
   let locationPayload = {};
+  /** Destino explícito para GPS/ETA (ponto ou trecho); gravado em metadata.navigationDestination. */
+  let navigationDestination = null;
 
   if (geoMode === 'radius') {
     // <ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> PONTO
@@ -7789,25 +8045,33 @@ window.confirmDispatch = async function() {
     const radius = parseInt(document.getElementById('d-radius').value) || 200;
     const address = document.getElementById('d-address').value.trim();
     if (!isNaN(lat) && !isNaN(lng)) {
+      navigationDestination = { kind: 'point', lat: lat, lng: lng, address: address || null };
       locationPayload = {
         locationLat: lat, locationLng: lng, locationRadius: radius,
         locationAddress: address || null, locationZoneType: 'radius'
       };
     }
   } else if (geoMode === 'route') {
-    // <ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> ROTA
+    // <ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> ROTA (KML = validação; destino = campos d-nav-*)
     const rawRoute = document.getElementById('d-route')?.value?.trim() || document.getElementById('d-polygon')?.value?.trim();
+    const navLat = parseFloat(document.getElementById('d-nav-lat') && document.getElementById('d-nav-lat').value);
+    const navLng = parseFloat(document.getElementById('d-nav-lng') && document.getElementById('d-nav-lng').value);
+    const navAddr = document.getElementById('d-nav-address') && document.getElementById('d-nav-address').value.trim();
     if (rawRoute && rawRoute.length > 5) {
       try {
         const coords = JSON.parse(rawRoute);
         if (Array.isArray(coords) && coords.length >= 2) {
+          if (!Number.isFinite(navLat) || !Number.isFinite(navLng)) {
+            alert('Indique latitude e longitude do DESTINO de navegação (bloco azul). O KML só define o corredor de validação, não para onde o GPS deve ir.');
+            return;
+          }
           const tolEl = document.getElementById('d-route-tolerance');
           const tolerance = tolEl ? (parseInt(tolEl.value) || 100) : 100;
-          const centLat = coords.reduce((s,c) => s + c[0], 0) / coords.length;
-          const centLng = coords.reduce((s,c) => s + c[1], 0) / coords.length;
+          navigationDestination = { kind: 'point', lat: navLat, lng: navLng, address: navAddr || null };
           locationPayload = {
             locationPolygon: coords, locationZoneType: 'route', locationRadius: tolerance,
-            locationLat: parseFloat(centLat.toFixed(6)), locationLng: parseFloat(centLng.toFixed(6))
+            locationLat: parseFloat(navLat.toFixed(6)), locationLng: parseFloat(navLng.toFixed(6)),
+            locationAddress: navAddr || null
           };
         }
       } catch(e) { console.error('Erro na rota:', e); }
@@ -7818,9 +8082,12 @@ window.confirmDispatch = async function() {
       const tolEl = document.getElementById('d-segment-radius');
       const tolerance = tolEl ? (parseInt(tolEl.value) || 150) : 150;
       const coords = window._segmentPoints;
-      // The center could just be the middle of the segment
       const centLat = (coords[0][0] + coords[1][0]) / 2;
       const centLng = (coords[0][1] + coords[1][1]) / 2;
+      navigationDestination = {
+        kind: 'segment',
+        points: [ [coords[0][0], coords[0][1]], [coords[1][0], coords[1][1]] ]
+      };
       locationPayload = {
         locationPolygon: coords, locationZoneType: 'segment', locationRadius: tolerance,
         locationLat: parseFloat(centLat.toFixed(6)), locationLng: parseFloat(centLng.toFixed(6))
@@ -7829,15 +8096,22 @@ window.confirmDispatch = async function() {
   } else if (geoMode === 'polygon') {
     // <ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> POLÍGONO
     const rawPoly = document.getElementById('d-polygon')?.value?.trim();
+    const navLat = parseFloat(document.getElementById('d-nav-lat') && document.getElementById('d-nav-lat').value);
+    const navLng = parseFloat(document.getElementById('d-nav-lng') && document.getElementById('d-nav-lng').value);
+    const navAddr = document.getElementById('d-nav-address') && document.getElementById('d-nav-address').value.trim();
     if (rawPoly && rawPoly.length > 5) {
       try {
         const coords = JSON.parse(rawPoly);
         if (Array.isArray(coords) && coords.length >= 3) {
-          const centLat = coords.reduce((s,c) => s + c[0], 0) / coords.length;
-          const centLng = coords.reduce((s,c) => s + c[1], 0) / coords.length;
+          if (!Number.isFinite(navLat) || !Number.isFinite(navLng)) {
+            alert('Indique latitude e longitude do DESTINO de navegação (bloco azul). O KML só define a área de validação.');
+            return;
+          }
+          navigationDestination = { kind: 'point', lat: navLat, lng: navLng, address: navAddr || null };
           locationPayload = {
             locationPolygon: coords, locationZoneType: 'polygon',
-            locationLat: parseFloat(centLat.toFixed(6)), locationLng: parseFloat(centLng.toFixed(6))
+            locationLat: parseFloat(navLat.toFixed(6)), locationLng: parseFloat(navLng.toFixed(6)),
+            locationAddress: navAddr || null
           };
         }
       } catch(e) { console.error('Erro no polígono:', e); }
@@ -7847,7 +8121,10 @@ window.confirmDispatch = async function() {
   try {
     const dispatchBody = {
       ownerEmail: email, refId, title: title || 'Nova OS Designada', description: desc,
-      metadata: { icon: 'build-outline' },
+      metadata: {
+        icon: 'build-outline',
+        ...(navigationDestination ? { navigationDestination: navigationDestination } : {}),
+      },
       scheduledStartAt: schedDt.toISOString(),
       ...locationPayload
     };

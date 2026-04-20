@@ -40,6 +40,7 @@ import {
 import { isImperial, setUnitSystem, setNumberFormat, getNumberFormat, loadNumberFormatPreference, NumberFormatPrefs } from '../src/i18n/formatters';
 import { shareUserLocalDataJson } from '../src/utils/exportUserLocalData';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
+import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
 
 const REGION_KEY   = '@brspark_region';
 const LANGUAGE_KEY = '@brspark_language';
@@ -791,7 +792,7 @@ export default function ProfileScreen() {
         {user.technicianProfile && !isTechnicianProfileActive(user) ? (
           <View style={[styles.listCard, { marginHorizontal: 16, marginTop: 12, marginBottom: 12, padding: 16 }]}>
             <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a', marginBottom: 6 }}>
-              Prestador — aguardando habilitação
+              Prestador, aguardando habilitação
             </Text>
             <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20 }}>
               {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING'
@@ -881,7 +882,12 @@ export default function ProfileScreen() {
                       );
                       return;
                     }
+                    const providerOnboardingDone = await isProviderOnboardingComplete();
                     await setUserRole('TECHNICIAN');
+                    if (!providerOnboardingDone) {
+                      router.push('/auth/onboarding' as any);
+                      return;
+                    }
                     router.replace(getPersonaHomeHref('provider') as any);
                   }}
                   style={{
