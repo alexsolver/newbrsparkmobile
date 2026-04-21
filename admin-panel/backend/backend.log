@@ -2,17 +2,34 @@
 > brspark-admin-backend@1.0.0 dev
 > nodemon src/index.js
 
-/Users/alex/Desktop/BrsparkMobile/admin-panel/backend/node_modules/nodemon/bin/nodemon.js:7
-nodemon(options);
-^
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): src/**/* prisma/**/*[39m
+[33m[nodemon] watching extensions: js,cjs,json[39m
+[32m[nodemon] starting `node src/index.js`[39m
+prisma:error 
+Invalid `prisma.$executeRawUnsafe()` invocation:
 
-TypeError: nodemon is not a function
-    at Object.<anonymous> (/Users/alex/Desktop/BrsparkMobile/admin-panel/backend/node_modules/nodemon/bin/nodemon.js:7:1)
-    at Module._compile (node:internal/modules/cjs/loader:1521:14)
-    at Module._extensions..js (node:internal/modules/cjs/loader:1623:10)
-    at Module.load (node:internal/modules/cjs/loader:1266:32)
-    at Module._load (node:internal/modules/cjs/loader:1091:12)
-    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12)
-    at node:internal/main/run_main_module:28:49
 
-Node.js v20.20.2
+Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+[schema] Colunas de chat (preferred_chat_locale / translations) não puderam ser garantidas — execute `npm run db:migrate` no backend. Detalhe: 
+Invalid `prisma.$executeRawUnsafe()` invocation:
+
+
+Can't reach database server at `localhost:5432`
+
+Please make sure your database server is running at `localhost:5432`.
+[BrSpark] Erro ao escutar HTTP: Error: listen EPERM: operation not permitted 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1886:21)
+    at listenInCluster (node:net:1965:12)
+    at doListen (node:net:2139:7)
+    at process.processTicksAndRejections (node:internal/process/task_queues:83:21) {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
+}
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m

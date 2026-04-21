@@ -35,9 +35,6 @@ export function useConnectivity(intervalMs?: number) {
     try {
       const net = await Network.getNetworkStateAsync();
       if (net?.isConnected === false) {
-        // #region agent log
-        fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'useConnectivity.ts:check',message:'net disconnected',data:{hypothesisId:'H1',netConnected:false},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-        // #endregion
         setIsOnline(false);
         setLastChecked(new Date());
         return;
@@ -51,14 +48,8 @@ export function useConnectivity(intervalMs?: number) {
       });
       clearTimeout(timeout);
       const ok = res.ok || res.status === 304;
-      // #region agent log
-      fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'useConnectivity.ts:check',message:'config ping',data:{hypothesisId:'H1',netConnected:net?.isConnected === true,status:res.status,ok},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
       setIsOnline(ok);
     } catch (e: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'useConnectivity.ts:check',message:'config ping error',data:{hypothesisId:'H1',name:e?.name,msg:String(e?.message||e).slice(0,120)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
       setIsOnline(false);
     } finally {
       setLastChecked(new Date());

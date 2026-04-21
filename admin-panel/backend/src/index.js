@@ -109,7 +109,25 @@ const app  = express();
 const PORT = process.env.PORT || 3001;
 
 // ── Middleware ─────────────────────────────────────────────
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }));
+/** CORS: em dev, aceita qualquer origem em localhost / 127.0.0.1 (evita bloqueio se a página é
+ *  `localhost:3001` mas o front gravou API em `127.0.0.1:3001` no localStorage, ou vice‑versa).
+ *  Com `credentials: true`, o header não pode ser `*` — precisa espelhar a origem da requisição. */
+const corsOriginOption =
+  process.env.NODE_ENV === 'production'
+    ? process.env.CORS_ORIGIN || '*'
+    : (origin, cb) => {
+        if (!origin) return cb(null, true);
+        try {
+          const h = new URL(origin).hostname;
+          if (h === 'localhost' || h === '127.0.0.1') return cb(null, origin);
+        } catch (_) {
+          /* ignore */
+        }
+        const cfg = (process.env.CORS_ORIGIN || '').trim();
+        if (cfg && cfg !== '*') return cb(null, cfg);
+        cb(null, true);
+      };
+app.use(cors({ origin: corsOriginOption, credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));

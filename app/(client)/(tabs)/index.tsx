@@ -3406,17 +3406,11 @@ export default function DashboardScreen() {
     if (!user?.email) return;
     if (isOnline === false) {
       reconnectOnlineRef.current = false;
-      // #region agent log
-      fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'index.tsx:reconnect',message:'mark offline',data:{hypothesisId:'H2',reconnectRef:false},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
       return;
     }
     if (isOnline !== true) return;
     const prev = reconnectOnlineRef.current;
     reconnectOnlineRef.current = true;
-    // #region agent log
-    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'index.tsx:reconnect',message:'online branch',data:{hypothesisId:'H2',prev,willRunBurst:prev===false},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     if (prev !== false) return;
     let cancelled = false;
     void (async () => {

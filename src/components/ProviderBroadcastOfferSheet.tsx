@@ -1,16 +1,19 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   Modal,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   ActivityIndicator,
   Pressable,
+  Platform,
+  ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { PermissionStatus } from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
@@ -18,9 +21,53 @@ import { useProviderBroadcastOffer } from '../context/ProviderBroadcastOfferCont
 import { fetchDrivingLegMetrics } from '../services/osrmClient';
 import { stripFormTemplateTitleLabelPrefix } from '../utils/stripFormTemplateTitleLabelPrefix';
 import { taskOsLabel } from '../utils/taskOsLabel';
+import { tabBarOuterHeight, TAB_BAR_INSETS_BOTTOM_MIN } from './FloatingRadialMenu';
 
-const SHEET_H = Dimensions.get('window').height * 0.52;
-const MAP_H = 132;
+const MAP_H = 118;
+/** Altura máxima da folha em relação à janela (antes ~52%; ScrollView cobre overflow — evita “tela inteira”). */
+const SHEET_MAX_HEIGHT_FRAC = 0.58;
+/** Evita spinner infinito se a permissão de local não resolver (bug conhecido em alguns builds iOS). */
+const PERMISSION_MS = 12000;
+/** Evita spinner infinito se o GPS não resolver (simulador / permissões). */
+const GPS_POSITION_MS = 20000;
+/** Velocidade média urbana (m/s) só para ETA aproximado quando o OSRM não responde. */
+const FALLBACK_URBAN_SPEED_MS = 28 / 3.6;
+
+function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371000;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+/** Evita 0,0 e NaN como “destino” no texto de endereço. */
+function isTriviallyEmptyMapCoords(lat: number, lng: number): boolean {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true;
+  if (Math.abs(lat) < 1e-8 && Math.abs(lng) < 1e-8) return true;
+  return false;
+}
+
+/** Mesma lógica do dashboard prestador: endereço textual ou coordenadas. */
+function serviceAddressLineForOffer(t: any): string {
+  const top = t?.locationAddress;
+  if (top != null && String(top).trim()) return String(top).trim();
+  const meta = taskMetadataRecord(t);
+  for (const k of ['locationAddress', 'serviceAddress', 'endereco', 'address']) {
+    const v = meta[k];
+    const s = v != null ? String(v).trim() : '';
+    if (s) return s;
+  }
+  const c = parseCoordLatLng(t);
+  if (c && !isTriviallyEmptyMapCoords(c.lat, c.lng)) {
+    return `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`;
+  }
+  return '';
+}
 
 function parseCoordLatLng(t: any): { lat: number; lng: number } | null {
   const rawLat = t?.locationLat ?? t?.metadata?.locationLat ?? t?.metadata?.lat;
@@ -145,6 +192,21 @@ function useOfferCountdownSeconds(task: any | null): number | null {
 export function ProviderBroadcastOfferSheet() {
   const { colors: C } = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+
+  const sheetMaxHeight = Math.min(
+    windowHeight * SHEET_MAX_HEIGHT_FRAC,
+    windowHeight - Math.max(insets.top, 8)
+  );
+  /**
+   * Android: folga acima da tab custom; `tabBarOuterHeight` já inclui o inset inferior (não somar de novo).
+   * iOS: só área segura do home indicator.
+   */
+  const footerBottomPad =
+    12 +
+    (Platform.OS === 'android'
+      ? tabBarOuterHeight(insets.bottom)
+      : Math.max(insets.bottom, TAB_BAR_INSETS_BOTTOM_MIN));
   const {
     broadcastOfferTasks,
     setBroadcastOfferTasks,
@@ -156,9 +218,16 @@ export function ProviderBroadcastOfferSheet() {
   const visible = broadcastOfferTasks.length > 0;
 
   const dest = task ? parseCoordLatLng(task) : null;
+  /** Primitivos estáveis — o objeto `dest` muda de referência a cada render e quebrava useCallback/useEffect. */
+  const destLat = dest?.lat;
+  const destLng = dest?.lng;
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [distText, setDistText] = useState<string>('—');
   const [etaText, setEtaText] = useState<string>('—');
+  /** Ignore atualizações de texto de corridas antigas; dist/eta só da última carga. */
+  const metricsLoadSeqRef = useRef(0);
+  /** Várias cargas sobrepostas — só desliga o spinner quando a última termina. */
+  const metricsInflightRef = useRef(0);
 
   const mapRegion = useMemo(() => {
     if (!dest) {
@@ -177,47 +246,99 @@ export function ProviderBroadcastOfferSheet() {
     };
   }, [dest?.lat, dest?.lng]);
 
-  const loadOsrm = useCallback(async (t: any | null) => {
-    if (!t || !dest) {
-      setDistText('—');
-      setEtaText('—');
-      return;
+  const applyDistEtaIfCurrent = useCallback((seq: number, dist: string, eta: string) => {
+    if (metricsLoadSeqRef.current === seq) {
+      setDistText(dist);
+      setEtaText(eta);
     }
-    setMetricsLoading(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
+  }, []);
+
+  const loadOsrm = useCallback(
+    async (t: any | null) => {
+      if (!t || destLat == null || destLng == null) {
         setDistText('—');
         setEtaText('—');
         return;
       }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const oLat = loc.coords.latitude;
-      const oLng = loc.coords.longitude;
-      const m = await fetchDrivingLegMetrics(oLat, oLng, dest.lat, dest.lng, { timeoutMs: 22000 });
-      if (!m.ok) {
-        setDistText('—');
-        setEtaText('—');
-        return;
+      const mySeq = ++metricsLoadSeqRef.current;
+      metricsInflightRef.current += 1;
+      setMetricsLoading(true);
+      try {
+        let status: PermissionStatus;
+        try {
+          const perm = await Promise.race([
+            Location.requestForegroundPermissionsAsync(),
+            new Promise<never>((_, rej) =>
+              setTimeout(() => rej(new Error('perm_timeout')), PERMISSION_MS)
+            ),
+          ]);
+          status = perm.status;
+        } catch {
+          status = PermissionStatus.DENIED;
+        }
+        if (status !== 'granted') {
+          applyDistEtaIfCurrent(mySeq, '—', '—');
+          return;
+        }
+        let loc: Location.LocationObject;
+        try {
+          loc = await Promise.race([
+            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+            new Promise<Location.LocationObject>((_, rej) =>
+              setTimeout(() => rej(new Error('gps_timeout')), GPS_POSITION_MS)
+            ),
+          ]);
+        } catch {
+          applyDistEtaIfCurrent(mySeq, '—', '—');
+          return;
+        }
+        const oLat = loc.coords.latitude;
+        const oLng = loc.coords.longitude;
+        const m = await fetchDrivingLegMetrics(oLat, oLng, destLat, destLng, { timeoutMs: 22000 });
+        if (!m.ok) {
+          const hm = haversineMeters(
+            { lat: oLat, lng: oLng },
+            { lat: destLat, lng: destLng }
+          );
+          if (Number.isFinite(hm) && hm > 0) {
+            const minEst = Math.max(1, Math.round(hm / FALLBACK_URBAN_SPEED_MS / 60));
+            applyDistEtaIfCurrent(mySeq, formatMetersForUi(hm), `~${minEst} min`);
+          } else {
+            applyDistEtaIfCurrent(mySeq, '—', '—');
+          }
+          return;
+        }
+        const dm = m.distanceMeters;
+        const dLabel = dm != null && Number.isFinite(dm) ? formatMetersForUi(dm) : '—';
+        const min = m.durationSeconds != null ? Math.max(1, Math.round(m.durationSeconds / 60)) : null;
+        const eLabel = min != null ? `${min} min` : '—';
+        applyDistEtaIfCurrent(mySeq, dLabel, eLabel);
+      } catch {
+        applyDistEtaIfCurrent(mySeq, '—', '—');
+      } finally {
+        metricsInflightRef.current = Math.max(0, metricsInflightRef.current - 1);
+        if (metricsInflightRef.current === 0) {
+          setMetricsLoading(false);
+        }
       }
-      const dm = m.distanceMeters;
-      setDistText(dm != null && Number.isFinite(dm) ? formatMetersForUi(dm) : '—');
-      const min = m.durationSeconds != null ? Math.max(1, Math.round(m.durationSeconds / 60)) : null;
-      setEtaText(min != null ? `${min} min` : '—');
-    } catch {
-      setDistText('—');
-      setEtaText('—');
-    } finally {
-      setMetricsLoading(false);
-    }
-  }, [dest]);
+    },
+    [applyDistEtaIfCurrent, destLat, destLng]
+  );
 
   useEffect(() => {
     void loadOsrm(task);
-  }, [task?.id, dest?.lat, dest?.lng, loadOsrm, task]);
+  }, [task?.id, destLat, destLng, loadOsrm]);
+
+  /** Se algum await nativo ignorar deadline, o spinner não pode ficar eterno. */
+  useEffect(() => {
+    if (!metricsLoading) return;
+    const id = setTimeout(() => setMetricsLoading(false), 22000);
+    return () => clearTimeout(id);
+  }, [metricsLoading]);
 
   const durMinutes = task ? expectedFormDurationMinutes(task) : null;
   const durLabel = durMinutes != null ? `${durMinutes} min` : '—';
+  const serviceAddressLine = task ? serviceAddressLineForOffer(task) : '';
 
   const countdownSec = useOfferCountdownSeconds(task);
   const [busy, setBusy] = useState<'accept' | 'reject' | null>(null);
@@ -228,24 +349,45 @@ export function ProviderBroadcastOfferSheet() {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onDismiss}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onDismiss}
+      statusBarTranslucent={Platform.OS === 'android'}
+      {...(Platform.OS === 'ios' ? { presentationStyle: 'overFullScreen' as const } : {})}
+    >
       <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} android_disableSound />
         <View
           style={[
-            styles.sheet,
-            {
-              backgroundColor: C.cardWhite,
-              height: SHEET_H,
-              maxHeight: SHEET_H,
-              paddingBottom: Math.max(insets.bottom, 12),
-            },
+            styles.sheetWrap,
+            Platform.OS === 'android' ? { elevation: 9999 } : null,
+            { zIndex: 9999 },
           ]}
         >
-          <View style={[styles.handle, { backgroundColor: C.border }]} />
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: C.cardWhite,
+                height: sheetMaxHeight,
+                maxHeight: sheetMaxHeight,
+              },
+            ]}
+          >
+            {task ? (
+              <>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator
+                  bounces={false}
+                  nestedScrollEnabled
+                  style={styles.sheetScroll}
+                  contentContainerStyle={styles.sheetScrollContent}
+                >
+                  <View style={[styles.handle, { backgroundColor: C.border }]} />
 
-          {task ? (
-            <>
               <Text style={{ fontSize: 11, fontWeight: '600', color: C.textLight, marginBottom: 6 }}>
                 {taskOsLabel(task)}
               </Text>
@@ -255,6 +397,22 @@ export function ProviderBroadcastOfferSheet() {
               <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 10 }} numberOfLines={2}>
                 {offerSubtitleLine(task)}
               </Text>
+              {serviceAddressLine ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'flex-start',
+                    gap: 8,
+                    marginBottom: 10,
+                    paddingHorizontal: 2,
+                  }}
+                >
+                  <Ionicons name="location-outline" size={18} color={C.textSecondary} style={{ marginTop: 1 }} />
+                  <Text style={{ fontSize: 13, color: C.slate, fontWeight: '600', flex: 1 }} numberOfLines={4}>
+                    {serviceAddressLine}
+                  </Text>
+                </View>
+              ) : null}
 
               <View style={[styles.mapWrap, { borderColor: C.border }]}>
                 {dest ? (
@@ -344,8 +502,19 @@ export function ProviderBroadcastOfferSheet() {
                   </Text>
                 ) : null}
               </View>
+                </ScrollView>
 
-              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View
+                  style={[
+                    styles.sheetFooter,
+                    {
+                      borderTopColor: C.border,
+                      backgroundColor: C.cardWhite,
+                      paddingBottom: footerBottomPad,
+                    },
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', gap: 10, paddingTop: 12 }}>
                 <TouchableOpacity
                   disabled={!!busy}
                   onPress={async () => {
@@ -404,9 +573,11 @@ export function ProviderBroadcastOfferSheet() {
                     <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 14 }}>Aceitar</Text>
                   )}
                 </TouchableOpacity>
-              </View>
-            </>
-          ) : null}
+                  </View>
+                </View>
+              </>
+            ) : null}
+          </View>
         </View>
       </View>
     </Modal>
@@ -418,11 +589,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
   },
+  /** Garante stacking acima da tab (Android). */
+  sheetWrap: {
+    width: '100%',
+  },
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 16,
     paddingTop: 6,
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  sheetScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  sheetScrollContent: {
+    paddingBottom: 8,
+    flexGrow: 1,
+  },
+  sheetFooter: {
+    flexShrink: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 0,
   },
   handle: {
     width: 40,

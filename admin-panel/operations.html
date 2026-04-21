@@ -1741,12 +1741,6 @@ function initDispatchSubmitButton() {
       } catch (err) {
         console.warn('[ops-dispatch-submit] path', err);
       }
-      // #region agent log
-      try {
-        const candLen = Array.isArray(window._dispatchCandidateList) ? window._dispatchCandidateList.length : -1;
-        void fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e72ba8' }, body: JSON.stringify({ sessionId: 'e72ba8', hypothesisId: 'H1', location: 'operations.html:dispatchModalClick', message: 'modal click', data: { submitFound: !!submit, targetTag: e.target && e.target.nodeName, candLen: candLen }, timestamp: Date.now() }) }).catch(function () {});
-      } catch (_d) {}
-      // #endregion
       if (!submit) return;
       e.preventDefault();
       e.stopPropagation();
@@ -8581,12 +8575,6 @@ window.confirmDispatch = async function() {
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const candidateEmails = normalizeDispatchCandidateEmails();
-  // #region agent log
-  try {
-    const rawLen = Array.isArray(window._dispatchCandidateList) ? window._dispatchCandidateList.length : -1;
-    void fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e72ba8' }, body: JSON.stringify({ sessionId: 'e72ba8', hypothesisId: 'H2', location: 'operations.html:confirmDispatch', message: 'normalized emails', data: { candidateN: candidateEmails.length, chipListN: rawLen }, timestamp: Date.now() }) }).catch(function () {});
-  } catch (_d) {}
-  // #endregion
   if (candidateEmails.length === 0) {
     alert(typeof opsT === 'function' ? opsT('ops_dispatch_email_required') : 'Informe o e-mail do técnico.');
     return;
@@ -8737,17 +8725,7 @@ window.confirmDispatch = async function() {
       dispatchBody.ownerEmail = candidateEmails[0];
     }
     if (expectedOverride != null) dispatchBody.expectedFormDurationMinutes = expectedOverride;
-    // #region agent log
-    try {
-      void fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e72ba8' }, body: JSON.stringify({ sessionId: 'e72ba8', hypothesisId: 'H3', location: 'operations.html:confirmDispatch', message: 'before CONFIG.post dispatch', data: { geoMode: window._geoMode || 'none', candN: dispatchBody.candidateEmails ? dispatchBody.candidateEmails.length : 0, hasOwner: !!dispatchBody.ownerEmail, keys: Object.keys(dispatchBody) }, timestamp: Date.now() }) }).catch(function () {});
-    } catch (_d) {}
-    // #endregion
     const res = await CONFIG.post('/checklists/dispatch', dispatchBody);
-    // #region agent log
-    try {
-      void fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e72ba8' }, body: JSON.stringify({ sessionId: 'e72ba8', hypothesisId: 'H5', location: 'operations.html:confirmDispatch', message: 'after CONFIG.post dispatch', data: { resNull: res == null, success: res && res.success, errSnippet: res && res.error ? String(res.error).slice(0, 120) : '' }, timestamp: Date.now() }) }).catch(function () {});
-    } catch (_d) {}
-    // #endregion
     if (res == null) {
       /* 401: CONFIG já redireciona para login */
       return;
@@ -8779,11 +8757,6 @@ window.confirmDispatch = async function() {
       );
     }
   } catch (e) {
-    // #region agent log
-    try {
-      void fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e72ba8' }, body: JSON.stringify({ sessionId: 'e72ba8', hypothesisId: 'H5', location: 'operations.html:confirmDispatch:catch', message: 'confirmDispatch threw', data: { errName: e && e.name, errMsg: e && e.message ? String(e.message).slice(0, 200) : '' }, timestamp: Date.now() }) }).catch(function () {});
-    } catch (_d) {}
-    // #endregion
     console.error('[confirmDispatch]', e);
     alert(
       typeof opsT === 'function'

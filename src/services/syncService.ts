@@ -722,17 +722,10 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
     if (ownerEmail !== undefined && String(ownerEmail).trim() !== '') {
       pendingSyncOwnerEmail = ownerEmail;
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pushSyncQueue',message:'busy coalesce',data:{hypothesisId:'H5',pending:true},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
     console.log('[SYNC] Sincronização já em andamento — pedido adiado (coalescing).');
     return;
   }
   isSyncing = true;
-  const __tPush0 = Date.now();
-  // #region agent log
-  fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pushSyncQueue',message:'start',data:{hypothesisId:'H3',hasEmail:!!ownerEmail},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-  // #endregion
   try {
     try {
       // 0. Enviar eventos de telemetria primeiro (dados de coleta)
@@ -779,9 +772,6 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
       console.warn('[SYNC] pushSyncQueue interrompido (rede ou dados locais):', e);
     }
   } finally {
-    // #region agent log
-    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pushSyncQueue',message:'end',data:{hypothesisId:'H3',ms:Date.now()-__tPush0,pendingAfter:pendingSyncRequested},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
     isSyncing = false;
     if (pendingSyncRequested) {
       pendingSyncRequested = false;
@@ -2678,16 +2668,9 @@ async function removeExecutedCacheEntriesForActiveRemoteTasks(remoteTasks: any[]
 
 export async function pullTasks(ownerEmail?: string): Promise<void> {
   const q = ownerEmail ? `?owner_email=${encodeURIComponent(ownerEmail)}` : '';
-  const __tPull0 = Date.now();
-  // #region agent log
-  fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pullTasks',message:'start',data:{hypothesisId:'H3',hasEmail:!!ownerEmail},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-  // #endregion
   console.log(`[pullTasks] 🔄 Iniciando para email: "${ownerEmail}" | URL: /api/sync/tasks${q}`);
   try {
     const res = await apiFetch(`/api/sync/tasks${q}`);
-    // #region agent log
-    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pullTasks',message:'fetch done',data:{hypothesisId:'H3',status:res.status,ms:Date.now()-__tPull0},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
     console.log(`[pullTasks] HTTP status: ${res.status}`);
     if (res.ok) {
         const remoteTasks = await res.json();
@@ -2832,16 +2815,10 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         console.log(`[pullTasks] 💾 Cache FT + RT (buckets separados) atualizado`);
     } else {
         const err = await res.text();
-        // #region agent log
-        fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pullTasks',message:'http not ok',data:{hypothesisId:'H3',status:res.status,ms:Date.now()-__tPull0,errSlice:String(err).slice(0,80)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-        // #endregion
         console.warn(`[pullTasks] ❌ Servidor retornou ${res.status}: ${err}`);
         // Offline-first: never block the user with an alert
     }
   } catch(e) { 
-      // #region agent log
-      fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pullTasks',message:'catch',data:{hypothesisId:'H3',ms:Date.now()-__tPull0,msg:String((e as any)?.message||e).slice(0,120)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
       console.warn('[pullTasks] ❌ Servidor inalcançável (modo offline):', e);
       // Offline-first: silent fail — data already exists locally
   }

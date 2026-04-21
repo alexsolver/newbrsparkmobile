@@ -161,8 +161,13 @@ export async function fetchDrivingLegEtaMinutes(
   return one(dLng, dLat);
 }
 
+function rejectAfterOsrm(ms: number): Promise<never> {
+  return new Promise((_, rej) => setTimeout(() => rej(new Error('osrm_deadline')), ms));
+}
+
 /**
  * Um pedido `overview=false` devolve duração e distância da perna (evita duplicar chamadas).
+ * Deadline duro no corpo inteiro: `getOsrmBaseUrl`, fetch e `text()` podem empilhar espera no RN.
  */
 export async function fetchDrivingLegMetrics(
   oLat: number,
@@ -172,44 +177,60 @@ export async function fetchDrivingLegMetrics(
   options?: { timeoutMs?: number }
 ): Promise<{ ok: boolean; durationSeconds?: number; distanceMeters?: number }> {
   const timeoutMs = options?.timeoutMs ?? 22000;
-  const base = await getOsrmBaseUrl();
+  /** Duas tentativas de rota + lookup de base — teto para não deixar a UI presa em await infinito. */
+  const hardDeadlineMs = timeoutMs * 2 + 20000;
 
-  const one = async (qLat: number, qLng: number): Promise<{ ok: boolean; durationSeconds?: number; distanceMeters?: number }> => {
-    const url = `${base}/route/v1/driving/${oLng},${oLat};${qLng},${qLat}?overview=false`;
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-      const r = await fetch(url, {
-        method: 'GET',
-        headers: { Accept: 'application/json', 'User-Agent': UA },
-        signal: ctrl.signal,
-      });
-      const text = await r.text();
-      let j: any;
+  const run = async (): Promise<{ ok: boolean; durationSeconds?: number; distanceMeters?: number }> => {
+    const base = await getOsrmBaseUrl();
+
+    const one = async (qLat: number, qLng: number): Promise<{ ok: boolean; durationSeconds?: number; distanceMeters?: number }> => {
+      const url = `${base}/route/v1/driving/${oLng},${oLat};${qLng},${qLat}?overview=false`;
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
-        j = JSON.parse(text);
+        const r = await fetch(url, {
+          method: 'GET',
+          headers: { Accept: 'application/json', 'User-Agent': UA },
+          signal: ctrl.signal,
+        });
+        const text = await Promise.race([r.text(), rejectAfterOsrm(Math.min(timeoutMs, 12000))]);
+        let j: any;
+        try {
+          j = JSON.parse(text);
+        } catch {
+          return { ok: false };
+        }
+        if (!r.ok) return { ok: false };
+        const dur = routeDurationSeconds(j);
+        const dist = routeDistanceMeters(j);
+        if (dur == null) return { ok: false };
+        return {
+          ok: true,
+          durationSeconds: dur,
+          distanceMeters: dist != null ? dist : undefined,
+        };
       } catch {
         return { ok: false };
+      } finally {
+        clearTimeout(to);
       }
-      if (!r.ok) return { ok: false };
-      const dur = routeDurationSeconds(j);
-      const dist = routeDistanceMeters(j);
-      if (dur == null) return { ok: false };
-      return {
-        ok: true,
-        durationSeconds: dur,
-        distanceMeters: dist != null ? dist : undefined,
-      };
-    } catch {
-      return { ok: false };
-    } finally {
-      clearTimeout(to);
-    }
+    };
+
+    const first = await one(dLat, dLng);
+    if (first.ok) return first;
+    return one(dLng, dLat);
   };
 
-  const first = await one(dLat, dLng);
-  if (first.ok) return first;
-  return one(dLng, dLat);
+  try {
+    return await Promise.race([
+      run(),
+      new Promise<{ ok: false }>((resolve) =>
+        setTimeout(() => resolve({ ok: false }), hardDeadlineMs)
+      ),
+    ]);
+  } catch {
+    return { ok: false };
+  }
 }
 
 /** Polyline codificada (OSRM: `polyline` → 5 dec., `polyline6` → 6 dec.) → [[lat,lng], ...] */

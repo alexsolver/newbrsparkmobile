@@ -43,17 +43,39 @@ export function primeOsrmBaseFromConfig(config: { osrmBaseUrl?: string } | null 
   mem = { url: u, ts: Date.now() };
 }
 
+const CONFIG_FETCH_MS = 8000;
+/** `res.json()` / `res.text()` também podem travar em redes ruins — limite total do pedido de config. */
+const CONFIG_BODY_MS = 5000;
+
+function rejectAfter(ms: number, label: string): Promise<never> {
+  return new Promise((_, rej) => setTimeout(() => rej(new Error(label)), ms));
+}
+
 export async function getOsrmBaseUrl(): Promise<string> {
   if (ENV_OVERRIDE) return normalizeOsrmBaseUrl(ENV_OVERRIDE);
   const now = Date.now();
   if (mem && now - mem.ts < TTL_MS) return mem.url;
   try {
-    const res = await fetch(`${API_BASE}/api/config`, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), CONFIG_FETCH_MS);
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/api/config`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(to);
+    }
     if (!res.ok) throw new Error('config');
-    const j = await res.json();
+    const text = await Promise.race([res.text(), rejectAfter(CONFIG_BODY_MS, 'config_body')]);
+    let j: any;
+    try {
+      j = JSON.parse(text);
+    } catch {
+      throw new Error('config_json');
+    }
     if (typeof j?.osrmBaseUrl === 'string' && j.osrmBaseUrl.trim()) {
       const u = normalizeOsrmBaseUrl(j.osrmBaseUrl);
       mem = { url: u, ts: now };

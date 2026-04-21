@@ -1,7 +1,6 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs').promises;
-const fsSync = require('fs');
 const router = express.Router();
 const prisma = require('../db');
 const authUser = require('../middleware/authUser');
@@ -1443,27 +1442,6 @@ router.post('/dispatch', async (req, res) => {
                 return true;
             });
         }
-        // #region agent log
-        try {
-            const dbgPath = path.join(__dirname, '..', '..', '..', '..', '.cursor', 'debug-e72ba8.log');
-            fsSync.appendFileSync(
-                dbgPath,
-                JSON.stringify({
-                    sessionId: 'e72ba8',
-                    hypothesisId: 'H4',
-                    location: 'checklists.js:POST /dispatch',
-                    message: 'after resolve/dedupe',
-                    data: {
-                        multi,
-                        candIn: multi ? payload.candidateEmails.length : 0,
-                        resolvedLen: resolvedList.length,
-                        willRejectBroadcast: !!(multi && resolvedList.length < 2),
-                    },
-                    timestamp: Date.now(),
-                }) + '\n',
-            );
-        } catch (_a) {}
-        // #endregion
         if (resolvedList.length === 0) {
             const scoped = scopedTenantId ? ' nesta organização' : '';
             return res.status(400).json({
@@ -1487,22 +1465,6 @@ router.post('/dispatch', async (req, res) => {
         }
 
         if (multi && resolvedList.length < 2) {
-            // #region agent log
-            try {
-                const dbgPath = path.join(__dirname, '..', '..', '..', '..', '.cursor', 'debug-e72ba8.log');
-                fsSync.appendFileSync(
-                    dbgPath,
-                    JSON.stringify({
-                        sessionId: 'e72ba8',
-                        hypothesisId: 'H4',
-                        location: 'checklists.js:POST /dispatch',
-                        message: 'reject broadcast: resolved < 2',
-                        data: { resolvedLen: resolvedList.length },
-                        timestamp: Date.now(),
-                    }) + '\n',
-                );
-            } catch (_a) {}
-            // #endregion
             return res.status(400).json({
                 error: 'Indique pelo menos dois técnicos distintos e elegíveis para o modo «primeiro a aceitar» (verifique duplicados ou e-mails fora da organização).',
             });
@@ -1649,22 +1611,6 @@ router.post('/dispatch', async (req, res) => {
             console.error('[DISPATCH] Falha ao enviar push:', pushErr.message);
         }
         
-        // #region agent log
-        try {
-            const dbgPath = path.join(__dirname, '..', '..', '..', '..', '.cursor', 'debug-e72ba8.log');
-            fsSync.appendFileSync(
-                dbgPath,
-                JSON.stringify({
-                    sessionId: 'e72ba8',
-                    hypothesisId: 'H4',
-                    location: 'checklists.js:POST /dispatch',
-                    message: 'dispatch ok',
-                    data: { executionId: execution.id, isBroadcast, resolvedLen: resolvedList.length },
-                    timestamp: Date.now(),
-                }) + '\n',
-            );
-        } catch (_a) {}
-        // #endregion
         res.json({ success: true, task: { id: execution.id, refId: payload.refId, osNumber: execution.osNumber } });
     } catch (err) {
         console.error("POST /api/checklists/dispatch error:", err);
