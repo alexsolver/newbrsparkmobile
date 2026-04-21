@@ -23,6 +23,13 @@ import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryB
 import { pollStaleGpsReminders } from '../src/services/syncService';
 import { NotificationService, preparePushNotificationInfrastructure } from '../src/services/notifications';
 import { PushNotificationResponseBridge } from '../src/components/PushNotificationResponseBridge';
+import { ProviderBroadcastOfferProvider } from '../src/context/ProviderBroadcastOfferContext';
+import {
+  BroadcastOfferSheetModelProvider,
+  ProviderBroadcastOfferSheet,
+} from '../src/components/ProviderBroadcastOfferSheet';
+import { TransitMapExpandedProvider } from '../src/context/TransitMapExpandedContext';
+import { BroadcastOfferRootBridge } from '../src/components/BroadcastOfferRootBridge';
 import { AutomaticTimeGate } from '../src/components/AutomaticTimeGate';
 import { GpsIntegrityGate } from '../src/components/GpsIntegrityGate';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -196,31 +203,39 @@ function MainLayout() {
 
   return (
     <RouteGuard>
-      <View style={{ flex: 1 }}>
-        <PushNotificationResponseBridge />
-        <AppInitializer />
-        {!inAuth && <Header />}
+      <ProviderBroadcastOfferProvider>
+        <BroadcastOfferSheetModelProvider>
+          <TransitMapExpandedProvider>
         <View style={{ flex: 1 }}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              gestureEnabled: true,
-              animation: 'slide_from_right',
-            }}
-          >
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(client)" />
-            <Stack.Screen name="(provider)" />
-            <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="profile" />
-            <Stack.Screen name="provider-os-search" />
-            <Stack.Screen name="work-time" />
-            <Stack.Screen name="ops-chat/[taskId]" />
-            <Stack.Screen name="provider-services/[tenantId]" />
-            <Stack.Screen name="+not-found" options={{ headerShown: true }} />
-          </Stack>
+          <PushNotificationResponseBridge />
+          <BroadcastOfferRootBridge />
+          <AppInitializer />
+          {!inAuth && <Header />}
+          <View style={{ flex: 1 }}>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                gestureEnabled: true,
+                animation: 'slide_from_right',
+              }}
+            >
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(client)" />
+              <Stack.Screen name="(provider)" />
+              <Stack.Screen name="auth" options={{ gestureEnabled: false }} />
+              <Stack.Screen name="profile" />
+              <Stack.Screen name="provider-os-search" />
+              <Stack.Screen name="work-time" />
+              <Stack.Screen name="ops-chat/[taskId]" />
+              <Stack.Screen name="provider-services/[tenantId]" />
+              <Stack.Screen name="+not-found" options={{ headerShown: true }} />
+            </Stack>
+          </View>
+          <ProviderBroadcastOfferSheet />
         </View>
-      </View>
+          </TransitMapExpandedProvider>
+        </BroadcastOfferSheetModelProvider>
+      </ProviderBroadcastOfferProvider>
     </RouteGuard>
   );
 }

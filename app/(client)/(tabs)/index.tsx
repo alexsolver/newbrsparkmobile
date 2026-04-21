@@ -2207,7 +2207,7 @@ export default function DashboardScreen() {
   /** Limite de linhas na aba Concluídas (lista completa continua em memória após sync). */
   const [providerCompletedListCap, setProviderCompletedListCap] = useState(PROVIDER_OS_COMPLETED_INITIAL);
   const [providerTasks, setProviderTasks] = useState<any[]>([]);
-  const { setBroadcastOfferTasks, registerBroadcastOfferHandlers } = useProviderBroadcastOffer();
+  const { setBroadcastOfferTasks } = useProviderBroadcastOffer();
   /** Lista prestador (abas, rota, contagens): OS só em modo «oferta» de claim não entram em Pendentes — aparecem no sheet global. */
   const providerTasksForTabs = useMemo(
     () => providerTasks.filter((t: any) => !t?.broadcastClaimPending),
@@ -3219,121 +3219,7 @@ export default function DashboardScreen() {
   };
   loadDataRef.current = loadData;
 
-  useEffect(() => {
-    registerBroadcastOfferHandlers({
-      onAccept: async (selectedTask: any) => {
-        const taskIdStr = String(selectedTask.id);
-        if (!selectedTask.refId) {
-          Alert.alert('Erro', 'Formulário ausente na OS.');
-          return;
-        }
-        if (isOnline === false) {
-          Alert.alert(
-            'Sem ligação',
-            'Para aceitar esta OS em concorrência é necessário estar online. Verifique a rede e tente de novo.',
-          );
-          return;
-        }
-        try {
-          const res = await apiFetch(`/api/checklists/executions/${encodeURIComponent(taskIdStr)}/claim`, {
-            method: 'POST',
-            body: JSON.stringify({}),
-          });
-          const rawBody = await res.text();
-          let data: Record<string, unknown> = {};
-          try {
-            data = rawBody.trim() ? JSON.parse(rawBody) : {};
-          } catch {
-            data = {
-              error: rawBody.trim().slice(0, 500) || 'Resposta inválida do servidor.',
-            };
-          }
-          const errStr =
-            typeof data.error === 'string'
-              ? data.error.trim()
-              : typeof data.message === 'string'
-                ? String(data.message).trim()
-                : '';
-          const codeNorm = String(data.code ?? '')
-            .trim()
-            .toUpperCase();
-          const isClaimLost =
-            res.status === 409 &&
-            (codeNorm === 'CLAIM_LOST' ||
-              /não está mais disponível|outro.+(técnico|prestador).+já aceitou|claim_lost/i.test(errStr));
-          if (!res.ok) {
-            if (isClaimLost) {
-              Alert.alert(BROADCAST_OS_UNAVAILABLE_TITLE, BROADCAST_OS_UNAVAILABLE_SUBTITLE);
-            } else {
-              const detail =
-                errStr || rawBody.trim().slice(0, 400) || `O servidor recusou o pedido (HTTP ${res.status}).`;
-              Alert.alert(
-                'Não foi possível aceitar',
-                `${detail.replace(/\btécnico\b/gi, 'prestador')}\n\n` +
-                  `(HTTP ${res.status}${codeNorm ? ` · ${codeNorm}` : ''})`,
-              );
-            }
-            loadDataRef.current(false);
-            return;
-          }
-          await appendUniqueStringToStoredArray('@brspark_accepted_tasks', taskIdStr);
-          loadDataRef.current(false);
-        } catch (e: any) {
-          Alert.alert('Erro', e?.message || 'Falha de rede.');
-          return;
-        }
-
-        Alert.alert('OS Aceita!', 'Excelente! Deseja iniciar a execução da atividade agora mesmo?', [
-          { text: 'Agora Não', style: 'cancel', onPress: () => setTaskModalVisible(false) },
-          {
-            text: 'Sim, Iniciar Agora',
-            style: 'default',
-            onPress: async () => {
-              await appendUniqueStringToStoredArray('@brspark_inprogress_tasks', String(selectedTask.id));
-              await enqueueExecutionInProgressFromDashboard(String(selectedTask.id));
-              setInprogressIds((prev) => {
-                const s = new Set(prev);
-                s.add(String(selectedTask.id));
-                return s;
-              });
-              setTaskModalVisible(false);
-              router.push({
-                pathname: '/checklist/[id]',
-                params: { id: selectedTask.refId, taskId: selectedTask.id },
-              } as any);
-            },
-          },
-        ]);
-      },
-      onReject: async (selectedTask: any) => {
-        try {
-          await apiFetch(`/api/operations/tasks/${selectedTask.id}/reject`, {
-            method: 'POST',
-            body: JSON.stringify({
-              reason: 'Recusada pelo prestador na tela de oferta (broadcast).',
-            }),
-          });
-          const rStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
-          let rejArr: string[] = [];
-          try {
-            rejArr = JSON.parse(rStr);
-          } catch {
-            rejArr = [];
-          }
-          if (!Array.isArray(rejArr)) rejArr = [];
-          if (!rejArr.includes(String(selectedTask.id))) {
-            rejArr.push(String(selectedTask.id));
-            await AsyncStorage.setItem('@brspark_rejected_tasks', JSON.stringify(rejArr));
-          }
-          loadDataRef.current(false);
-          Alert.alert('Recusada', 'A atividade foi rejeitada e retirada da sua fila.');
-        } catch (e: any) {
-          Alert.alert('Erro', 'Falha ao rejeitar a atividade: ' + (e?.message || String(e)));
-        }
-      },
-    });
-    return () => registerBroadcastOfferHandlers(null);
-  }, [registerBroadcastOfferHandlers, isOnline, router]);
+  /** Aceitar/recusar oferta broadcast: `BroadcastOfferRootBridge` no `_layout` raiz (ecrã checklist/mapa não desmonta handlers). */
 
   /** Abrir cartão da OS após toque «OK» na notificação push. */
   useEffect(() => {

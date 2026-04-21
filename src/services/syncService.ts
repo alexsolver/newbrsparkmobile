@@ -8,6 +8,7 @@
  *
  * Módulos: financeiro, seguros, estoque, vault, mídia, documentos, manutenção
  */
+import { DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -56,6 +57,7 @@ import {
   compressLocalImageForChecklistSyncUpload,
   isProbablyVideoExt,
 } from './checklistMediaUploadPrep';
+import { BRSPARK_CLOUD_TASKS_UPDATED } from '../constants/deviceEvents';
 
 // ── Push fila offline de assets ───────────────────────────────────────────────
 
@@ -2813,6 +2815,7 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         await AsyncStorage.setItem('@brspark_pull_tasks_ever', '1');
         await purgeExpiredCompletedExecutionCaches();
         console.log(`[pullTasks] 💾 Cache FT + RT (buckets separados) atualizado`);
+        DeviceEventEmitter.emit(BRSPARK_CLOUD_TASKS_UPDATED);
     } else {
         const err = await res.text();
         console.warn(`[pullTasks] ❌ Servidor retornou ${res.status}: ${err}`);

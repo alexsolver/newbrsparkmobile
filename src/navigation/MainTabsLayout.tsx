@@ -37,8 +37,6 @@ import { pushWorkTimePunchOutbox } from '../services/workTimePunchOutbox';
 import { emitWorkTimeJourneyChanged, WORK_TIME_JOURNEY_CHANGED } from '../lib/workTimeJourneyEvents';
 import { CHAT_UNREAD_CHANGED_EVENT } from '../lib/chatUnreadEvents';
 import { userHasCapability } from '../services/auth';
-import { ProviderBroadcastOfferProvider } from '../context/ProviderBroadcastOfferContext';
-import { ProviderBroadcastOfferSheet } from '../components/ProviderBroadcastOfferSheet';
 
 /** Destaque do ícone de ponto no menu — jornada ativa (vermelho) / em intervalo (amarelo). */
 const WORK_TIME_TAB_RED = '#DC2626';
@@ -569,7 +567,6 @@ export function MainTabsLayout({ tabBarVariant }: { tabBarVariant: TabBarPersona
   }, [tabBarVariant]);
 
   return (
-    <ProviderBroadcastOfferProvider>
       <Tabs
         tabBar={(props) => (
           <CustomTabBar {...props} chatUnreadTotal={unreadChat} tabBarVariant={tabBarVariant} />
@@ -646,8 +643,6 @@ export function MainTabsLayout({ tabBarVariant }: { tabBarVariant: TabBarPersona
       <Tabs.Screen name="documents" options={{ href: null }} />
       <Tabs.Screen name="media" options={{ href: null }} />
     </Tabs>
-      <ProviderBroadcastOfferSheet />
-    </ProviderBroadcastOfferProvider>
   );
 }
 

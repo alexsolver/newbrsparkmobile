@@ -1,4 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   View,
   Text,
@@ -21,11 +30,47 @@ import { useProviderBroadcastOffer } from '../context/ProviderBroadcastOfferCont
 import { fetchDrivingLegMetrics } from '../services/osrmClient';
 import { stripFormTemplateTitleLabelPrefix } from '../utils/stripFormTemplateTitleLabelPrefix';
 import { taskOsLabel } from '../utils/taskOsLabel';
-import { tabBarOuterHeight, TAB_BAR_INSETS_BOTTOM_MIN } from './FloatingRadialMenu';
+import { TAB_BAR_INSETS_BOTTOM_MIN } from './FloatingRadialMenu';
+import { useTransitMapExpanded } from '../context/TransitMapExpandedContext';
+
+export type BroadcastOfferSheetMode = 'expanded' | 'minimized';
+
+export type BroadcastOfferSheetModel = {
+  visible: boolean;
+  /** Primeira vez / nova OS: expandido; tocar fora: minimiza até aceitar/rejeitar. */
+  sheetExpanded: boolean;
+  modalKey: string;
+  onDismiss: () => void;
+  renderLayer: (
+    embeddedInTransitModal: boolean,
+    mode: BroadcastOfferSheetMode
+  ) => React.ReactElement | null;
+};
+
+const BroadcastOfferSheetModelContext = createContext<BroadcastOfferSheetModel | null>(null);
+
+export function BroadcastOfferSheetModelProvider({ children }: { children: ReactNode }) {
+  const model = useBroadcastOfferSheetLayer();
+  return (
+    <BroadcastOfferSheetModelContext.Provider value={model}>{children}</BroadcastOfferSheetModelContext.Provider>
+  );
+}
+
+export function useBroadcastOfferSheetModel(): BroadcastOfferSheetModel {
+  const ctx = useContext(BroadcastOfferSheetModelContext);
+  if (!ctx) {
+    throw new Error('useBroadcastOfferSheetModel requires BroadcastOfferSheetModelProvider');
+  }
+  return ctx;
+}
 
 const MAP_H = 118;
-/** Altura máxima da folha em relação à janela (antes ~52%; ScrollView cobre overflow — evita “tela inteira”). */
+/** Android: mapa da oferta mais alto (tab + folha). iOS mantém MAP_H. */
+const MAP_H_ANDROID = 176;
+/** Altura máxima da folha em relação à janela (ScrollView cobre overflow — evita “tela inteira”). */
 const SHEET_MAX_HEIGHT_FRAC = 0.58;
+/** Android: folha um pouco mais alta para caber mapa maior + botões. */
+const SHEET_MAX_HEIGHT_FRAC_ANDROID = 0.64;
 /** Evita spinner infinito se a permissão de local não resolver (bug conhecido em alguns builds iOS). */
 const PERMISSION_MS = 12000;
 /** Evita spinner infinito se o GPS não resolver (simulador / permissões). */
@@ -189,24 +234,26 @@ function useOfferCountdownSeconds(task: any | null): number | null {
   return sec;
 }
 
-export function ProviderBroadcastOfferSheet() {
+function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
   const { colors: C } = useTheme();
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
 
   const sheetMaxHeight = Math.min(
-    windowHeight * SHEET_MAX_HEIGHT_FRAC,
+    windowHeight *
+      (Platform.OS === 'android' ? SHEET_MAX_HEIGHT_FRAC_ANDROID : SHEET_MAX_HEIGHT_FRAC),
     windowHeight - Math.max(insets.top, 8)
   );
+  const mapPreviewHeight = Platform.OS === 'android' ? MAP_H_ANDROID : MAP_H;
   /**
-   * Android: folga acima da tab custom; `tabBarOuterHeight` já inclui o inset inferior (não somar de novo).
-   * iOS: só área segura do home indicator.
+   * Rodapé (Recusar / Aceitar):
+   * Não usar `tabBarOuterHeight` + grande extra — duplicava a “altura da tab” e criava faixa branca enorme
+   * abaixo dos botões. Basta área segura + folga curta sobre gestos / FAB.
    */
-  const footerBottomPad =
-    12 +
-    (Platform.OS === 'android'
-      ? tabBarOuterHeight(insets.bottom)
-      : Math.max(insets.bottom, TAB_BAR_INSETS_BOTTOM_MIN));
+  const footerBottomPadIos = 12 + Math.max(insets.bottom, TAB_BAR_INSETS_BOTTOM_MIN);
+  /** Android: botões pouco acima do rodapé (gestos / tab) — valores moderados para não criar faixa branca. */
+  const footerBottomPadAndroidRoot = 10 + Math.max(insets.bottom, 16) + 16;
+  const footerBottomPadAndroidEmbedded = 10 + Math.max(insets.bottom, 20) + 12;
   const {
     broadcastOfferTasks,
     setBroadcastOfferTasks,
@@ -342,249 +389,478 @@ export function ProviderBroadcastOfferSheet() {
 
   const countdownSec = useOfferCountdownSeconds(task);
   const [busy, setBusy] = useState<'accept' | 'reject' | null>(null);
+  /** Expandido = folha completa; minimizado = só faixa inferior (oferta continua na fila). */
+  const [sheetExpanded, setSheetExpanded] = useState(true);
+  const lastOfferTaskIdRef = useRef<string | null>(null);
 
-  const onDismiss = () => {
+  useEffect(() => {
+    const tid = task?.id != null ? String(task.id) : null;
+    if (tid === null) {
+      lastOfferTaskIdRef.current = null;
+      return;
+    }
+    if (lastOfferTaskIdRef.current !== tid) {
+      lastOfferTaskIdRef.current = tid;
+      setSheetExpanded(true);
+    }
+  }, [task?.id]);
+
+  /** Toque fora (backdrop): minimiza; não remove a oferta. */
+  const onDismiss = useCallback(() => {
     if (busy) return;
-    setBroadcastOfferTasks((prev) => prev.slice(1));
-  };
+    setSheetExpanded(false);
+  }, [busy]);
+
+  const onExpandFromMinimized = useCallback(() => {
+    setSheetExpanded(true);
+  }, []);
+
+  const modalKey = visible && task ? `broadcast-offer-${String(task.id)}` : 'broadcast-offer-hidden';
+
+  const renderLayer = useCallback(
+    (embeddedInTransitModal: boolean, mode: BroadcastOfferSheetMode) => {
+      if (!visible || !task) return null;
+      const footerPad =
+        Platform.OS === 'android'
+          ? embeddedInTransitModal
+            ? footerBottomPadAndroidEmbedded
+            : footerBottomPadAndroidRoot
+          : footerBottomPadIos;
+
+      if (mode === 'minimized') {
+        const bottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 8);
+        return (
+          <View
+            style={[
+              styles.minimizedBar,
+              {
+                backgroundColor: C.cardWhite,
+                paddingBottom: bottomPad,
+                paddingTop: 10,
+                borderColor: C.border,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={onExpandFromMinimized}
+              accessibilityRole="button"
+              accessibilityLabel="Abrir oferta de demanda"
+              style={styles.minimizedBarInner}
+            >
+              <View style={[styles.handle, { backgroundColor: C.border, marginBottom: 8 }]} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    backgroundColor: '#FFF4E8',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="flash" size={20} color="#EA580C" />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: C.textLight }} numberOfLines={1}>
+                    {taskOsLabel(task)}
+                  </Text>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: C.slate }} numberOfLines={1}>
+                    Nova demanda · toque para ver
+                  </Text>
+                </View>
+                {countdownSec != null ? (
+                  <Text
+                    style={{
+                      fontSize: 15,
+                      fontWeight: '900',
+                      color: '#DC2626',
+                      fontVariant: ['tabular-nums'],
+                    }}
+                  >
+                    {formatMmSs(countdownSec)}
+                  </Text>
+                ) : null}
+                <Ionicons name="chevron-up" size={22} color={C.textSecondary} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        );
+      }
+
+      return (
+        <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} android_disableSound />
+          <View
+            style={[
+              styles.sheetWrap,
+              Platform.OS === 'android' ? { elevation: 9999 } : null,
+              { zIndex: 9999 },
+            ]}
+          >
+            <View
+              style={[
+                styles.sheet,
+                {
+                  backgroundColor: C.cardWhite,
+                  height: sheetMaxHeight,
+                  maxHeight: sheetMaxHeight,
+                },
+              ]}
+            >
+              {task ? (
+                <>
+                  <ScrollView
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator
+                    bounces={false}
+                    nestedScrollEnabled
+                    style={styles.sheetScroll}
+                    contentContainerStyle={styles.sheetScrollContent}
+                  >
+                    <View style={[styles.handle, { backgroundColor: C.border }]} />
+
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: C.textLight, marginBottom: 6 }}>
+                      {taskOsLabel(task)}
+                    </Text>
+                    <Text style={{ fontSize: 17, fontWeight: '900', color: C.slate, marginBottom: 4 }}>
+                      Surgiu uma nova demanda para sua área
+                    </Text>
+                    <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 10 }} numberOfLines={2}>
+                      {offerSubtitleLine(task)}
+                    </Text>
+                    {serviceAddressLine ? (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'flex-start',
+                          gap: 8,
+                          marginBottom: 10,
+                          paddingHorizontal: 2,
+                        }}
+                      >
+                        <Ionicons name="location-outline" size={18} color={C.textSecondary} style={{ marginTop: 1 }} />
+                        <Text style={{ fontSize: 13, color: C.slate, fontWeight: '600', flex: 1 }} numberOfLines={4}>
+                          {serviceAddressLine}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    <View style={[styles.mapWrap, { height: mapPreviewHeight, borderColor: C.border }]}>
+                      {dest ? (
+                        <MapView
+                          style={StyleSheet.absoluteFill}
+                          provider={PROVIDER_DEFAULT}
+                          region={mapRegion}
+                          scrollEnabled={false}
+                          zoomEnabled={false}
+                          rotateEnabled={false}
+                          pitchEnabled={false}
+                          toolbarEnabled={false}
+                        >
+                          <Marker coordinate={{ latitude: dest.lat, longitude: dest.lng }} />
+                        </MapView>
+                      ) : (
+                        <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center' }]}>
+                          <Text style={{ color: C.textSecondary, fontSize: 13 }}>Sem coordenadas de destino</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, marginBottom: 10 }}>
+                      {(
+                        [
+                          { k: 'dur', label: 'DURAÇÃO', value: durLabel, color: C.accent ?? '#EA580C' },
+                          { k: 'dist', label: 'DISTÂNCIA', value: distText, color: C.slate },
+                          { k: 'eta', label: 'ETA', value: etaText, color: C.success?.text ?? '#16A34A' },
+                        ] as const
+                      ).map((col) => (
+                        <View
+                          key={col.k}
+                          style={{
+                            flex: 1,
+                            minWidth: 0,
+                            backgroundColor: C.divider,
+                            borderRadius: 12,
+                            paddingVertical: 10,
+                            paddingHorizontal: 6,
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Text style={{ fontSize: 9, fontWeight: '800', color: C.textLight }}>{col.label}</Text>
+                          {metricsLoading && col.k !== 'dur' ? (
+                            <ActivityIndicator style={{ marginTop: 6 }} size="small" color={C.textSecondary} />
+                          ) : (
+                            <Text
+                              numberOfLines={1}
+                              style={{ fontSize: 14, fontWeight: '900', marginTop: 4, color: col.color }}
+                            >
+                              {col.value}
+                            </Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: '#FFF4E8',
+                        borderRadius: 12,
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                        <Ionicons name="flash" size={18} color="#EA580C" />
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: '900',
+                            color: '#EA580C',
+                            letterSpacing: 0.3,
+                          }}
+                          numberOfLines={1}
+                        >
+                          OFERTA DISPONÍVEL
+                        </Text>
+                      </View>
+                      {countdownSec != null ? (
+                        <Text style={{ fontSize: 16, fontWeight: '900', color: '#DC2626', fontVariant: ['tabular-nums'] }}>
+                          {formatMmSs(countdownSec)}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </ScrollView>
+
+                  <View
+                    style={[
+                      styles.sheetFooter,
+                      {
+                        borderTopColor: C.border,
+                        backgroundColor: C.cardWhite,
+                        paddingBottom: footerPad,
+                      },
+                    ]}
+                  >
+                    <View
+                    style={{
+                      flexDirection: 'row',
+                      gap: 10,
+                      paddingTop: Platform.OS === 'android' ? 6 : 12,
+                    }}
+                  >
+                      <TouchableOpacity
+                        disabled={!!busy}
+                        onPress={async () => {
+                          if (!task) return;
+                          setBusy('reject');
+                          try {
+                            await invokeRejectOffer(task);
+                            setBroadcastOfferTasks((prev) => prev.filter((x) => String(x.id) !== String(task.id)));
+                          } catch {
+                            /* handler mostra Alert */
+                          } finally {
+                            setBusy(null);
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 13,
+                          borderRadius: 12,
+                          alignItems: 'center',
+                          borderWidth: 1,
+                          borderColor: C.border,
+                          backgroundColor: C.cardWhite,
+                        }}
+                      >
+                        {busy === 'reject' ? (
+                          <ActivityIndicator size="small" color={C.textSecondary} />
+                        ) : (
+                          <Text style={{ color: C.textSecondary, fontWeight: '800', fontSize: 14 }}>Recusar</Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        disabled={!!busy}
+                        onPress={async () => {
+                          if (!task) return;
+                          setBusy('accept');
+                          try {
+                            await invokeAcceptOffer(task);
+                            setBroadcastOfferTasks((prev) => prev.filter((x) => String(x.id) !== String(task.id)));
+                          } catch {
+                            /* handler mostra Alert */
+                          } finally {
+                            setBusy(null);
+                          }
+                        }}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 13,
+                          borderRadius: 12,
+                          alignItems: 'center',
+                          backgroundColor: C.accent ?? '#EA580C',
+                        }}
+                      >
+                        {busy === 'accept' ? (
+                          <ActivityIndicator size="small" color={C.cardWhite} />
+                        ) : (
+                          <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 14 }}>Aceitar</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      );
+    },
+    [
+      mapPreviewHeight,
+      footerBottomPadAndroidEmbedded,
+      footerBottomPadAndroidRoot,
+      footerBottomPadIos,
+      visible,
+      task,
+      C,
+      insets.bottom,
+      sheetMaxHeight,
+      serviceAddressLine,
+      durLabel,
+      distText,
+      etaText,
+      metricsLoading,
+      countdownSec,
+      busy,
+      dest,
+      mapRegion,
+      onDismiss,
+      onExpandFromMinimized,
+      invokeAcceptOffer,
+      invokeRejectOffer,
+      setBroadcastOfferTasks,
+    ]
+  );
+
+  return { visible, sheetExpanded, modalKey, onDismiss, renderLayer };
+}
+
+/**
+ * Folha global (Modal raiz). Com o mapa de deslocamento em ecrã inteiro, desactiva-se —
+ * iOS e Android: um segundo `Modal` na árvore raiz fica atrás do `Modal` nativo do mapa;
+ * a folha passa a desenhar-se dentro do mapa (`BroadcastOfferSheetEmbedded`).
+ */
+export function ProviderBroadcastOfferSheet() {
+  const { transitMapExpanded } = useTransitMapExpanded();
+  const { visible, sheetExpanded, modalKey, onDismiss, renderLayer } = useBroadcastOfferSheetModel();
+  if (transitMapExpanded) return null;
+  if (!visible) return null;
+
+  /** Minimizado: sem Modal de ecrã inteiro — toques passam à app; só a faixa inferior é interactiva. */
+  if (!sheetExpanded) {
+    return (
+      <View style={styles.floatingMinimizedHost} pointerEvents="box-none" collapsable={false}>
+        {renderLayer(false, 'minimized')}
+      </View>
+    );
+  }
 
   return (
     <Modal
-      visible={visible}
+      key={modalKey}
+      visible
       transparent
       animationType="slide"
       onRequestClose={onDismiss}
       statusBarTranslucent={Platform.OS === 'android'}
       {...(Platform.OS === 'ios' ? { presentationStyle: 'overFullScreen' as const } : {})}
     >
-      <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} android_disableSound />
-        <View
-          style={[
-            styles.sheetWrap,
-            Platform.OS === 'android' ? { elevation: 9999 } : null,
-            { zIndex: 9999 },
-          ]}
-        >
-          <View
-            style={[
-              styles.sheet,
-              {
-                backgroundColor: C.cardWhite,
-                height: sheetMaxHeight,
-                maxHeight: sheetMaxHeight,
-              },
-            ]}
-          >
-            {task ? (
-              <>
-                <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator
-                  bounces={false}
-                  nestedScrollEnabled
-                  style={styles.sheetScroll}
-                  contentContainerStyle={styles.sheetScrollContent}
-                >
-                  <View style={[styles.handle, { backgroundColor: C.border }]} />
-
-              <Text style={{ fontSize: 11, fontWeight: '600', color: C.textLight, marginBottom: 6 }}>
-                {taskOsLabel(task)}
-              </Text>
-              <Text style={{ fontSize: 17, fontWeight: '900', color: C.slate, marginBottom: 4 }}>
-                Surgiu uma nova demanda para sua área
-              </Text>
-              <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 10 }} numberOfLines={2}>
-                {offerSubtitleLine(task)}
-              </Text>
-              {serviceAddressLine ? (
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'flex-start',
-                    gap: 8,
-                    marginBottom: 10,
-                    paddingHorizontal: 2,
-                  }}
-                >
-                  <Ionicons name="location-outline" size={18} color={C.textSecondary} style={{ marginTop: 1 }} />
-                  <Text style={{ fontSize: 13, color: C.slate, fontWeight: '600', flex: 1 }} numberOfLines={4}>
-                    {serviceAddressLine}
-                  </Text>
-                </View>
-              ) : null}
-
-              <View style={[styles.mapWrap, { borderColor: C.border }]}>
-                {dest ? (
-                  <MapView
-                    style={StyleSheet.absoluteFill}
-                    provider={PROVIDER_DEFAULT}
-                    region={mapRegion}
-                    scrollEnabled={false}
-                    zoomEnabled={false}
-                    rotateEnabled={false}
-                    pitchEnabled={false}
-                    toolbarEnabled={false}
-                  >
-                    <Marker coordinate={{ latitude: dest.lat, longitude: dest.lng }} />
-                  </MapView>
-                ) : (
-                  <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center' }]}>
-                    <Text style={{ color: C.textSecondary, fontSize: 13 }}>Sem coordenadas de destino</Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, marginBottom: 10 }}>
-                {(
-                  [
-                    { k: 'dur', label: 'DURAÇÃO', value: durLabel, color: C.accent ?? '#EA580C' },
-                    { k: 'dist', label: 'DISTÂNCIA', value: distText, color: C.slate },
-                    { k: 'eta', label: 'ETA', value: etaText, color: C.success?.text ?? '#16A34A' },
-                  ] as const
-                ).map((col) => (
-                  <View
-                    key={col.k}
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      backgroundColor: C.divider,
-                      borderRadius: 12,
-                      paddingVertical: 10,
-                      paddingHorizontal: 6,
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: 9, fontWeight: '800', color: C.textLight }}>{col.label}</Text>
-                    {metricsLoading && col.k !== 'dur' ? (
-                      <ActivityIndicator style={{ marginTop: 6 }} size="small" color={C.textSecondary} />
-                    ) : (
-                      <Text
-                        numberOfLines={1}
-                        style={{ fontSize: 14, fontWeight: '900', marginTop: 4, color: col.color }}
-                      >
-                        {col.value}
-                      </Text>
-                    )}
-                  </View>
-                ))}
-              </View>
-
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: '#FFF4E8',
-                  borderRadius: 12,
-                  paddingHorizontal: 12,
-                  paddingVertical: 10,
-                  marginBottom: 10,
-                }}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-                  <Ionicons name="flash" size={18} color="#EA580C" />
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      fontWeight: '900',
-                      color: '#EA580C',
-                      letterSpacing: 0.3,
-                    }}
-                    numberOfLines={1}
-                  >
-                    OFERTA DISPONÍVEL
-                  </Text>
-                </View>
-                {countdownSec != null ? (
-                  <Text style={{ fontSize: 16, fontWeight: '900', color: '#DC2626', fontVariant: ['tabular-nums'] }}>
-                    {formatMmSs(countdownSec)}
-                  </Text>
-                ) : null}
-              </View>
-                </ScrollView>
-
-                <View
-                  style={[
-                    styles.sheetFooter,
-                    {
-                      borderTopColor: C.border,
-                      backgroundColor: C.cardWhite,
-                      paddingBottom: footerBottomPad,
-                    },
-                  ]}
-                >
-                  <View style={{ flexDirection: 'row', gap: 10, paddingTop: 12 }}>
-                <TouchableOpacity
-                  disabled={!!busy}
-                  onPress={async () => {
-                    if (!task) return;
-                    setBusy('reject');
-                    try {
-                      await invokeRejectOffer(task);
-                      setBroadcastOfferTasks((prev) => prev.filter((x) => String(x.id) !== String(task.id)));
-                    } catch {
-                      /* handler mostra Alert */
-                    } finally {
-                      setBusy(null);
-                    }
-                  }}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 13,
-                    borderRadius: 12,
-                    alignItems: 'center',
-                    borderWidth: 1,
-                    borderColor: C.border,
-                    backgroundColor: C.cardWhite,
-                  }}
-                >
-                  {busy === 'reject' ? (
-                    <ActivityIndicator size="small" color={C.textSecondary} />
-                  ) : (
-                    <Text style={{ color: C.textSecondary, fontWeight: '800', fontSize: 14 }}>Recusar</Text>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  disabled={!!busy}
-                  onPress={async () => {
-                    if (!task) return;
-                    setBusy('accept');
-                    try {
-                      await invokeAcceptOffer(task);
-                      setBroadcastOfferTasks((prev) => prev.filter((x) => String(x.id) !== String(task.id)));
-                    } catch {
-                      /* handler mostra Alert */
-                    } finally {
-                      setBusy(null);
-                    }
-                  }}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 13,
-                    borderRadius: 12,
-                    alignItems: 'center',
-                    backgroundColor: C.accent ?? '#EA580C',
-                  }}
-                >
-                  {busy === 'accept' ? (
-                    <ActivityIndicator size="small" color={C.cardWhite} />
-                  ) : (
-                    <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 14 }}>Aceitar</Text>
-                  )}
-                </TouchableOpacity>
-                  </View>
-                </View>
-              </>
-            ) : null}
-          </View>
-        </View>
-      </View>
+      {renderLayer(false, 'expanded')}
     </Modal>
   );
 }
 
+/**
+ * Overlay dentro do `Modal` do mapa de deslocamento (iOS + Android).
+ * Sem isto, um `Modal` na raiz compete com o do mapa e fica invisível por baixo.
+ *
+ * iOS: **não** usar `Modal` aninhado aqui — quebra o hit-testing em builds recentes (toques mortos
+ * em botões por baixo, inclusive fora deste ecrã). Usamos `View` em ecrã inteiro + zIndex (igual ao Android).
+ */
+export function BroadcastOfferSheetEmbedded() {
+  const { transitMapExpanded } = useTransitMapExpanded();
+  const { visible, sheetExpanded, renderLayer } = useBroadcastOfferSheetModel();
+  if (!transitMapExpanded || !visible) return null;
+
+  if (!sheetExpanded) {
+    return (
+      <View style={styles.embeddedMinimizedHost} pointerEvents="box-none" collapsable={false}>
+        {renderLayer(true, 'minimized')}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.embeddedRoot} pointerEvents="box-none" collapsable={false}>
+      {renderLayer(true, 'expanded')}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  /** Folha minimizada sobre o dashboard (fora de Modal — toques no resto da tela passam). */
+  floatingMinimizedHost: {
+    ...Platform.select({
+      ios: { zIndex: 200000 },
+      android: { elevation: 200000 },
+      default: {},
+    }),
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  /** Barra compacta — mesmo estilo no mapa embutido (só fundo local). */
+  embeddedMinimizedHost: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100000,
+    elevation: 100000,
+  },
+  minimizedBar: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -2 },
+  },
+  minimizedBarInner: {
+    width: '100%',
+  },
+  /** Cobre todo o `Modal` do mapa de deslocamento — folha acima do conteúdo nativo. */
+  embeddedRoot: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10000,
+    elevation: 10000,
+    ...Platform.select({
+      ios: {
+        /** Acima do MapView e restantes overlays no modal de deslocamento. */
+        zIndex: 999999,
+      },
+      default: {},
+    }),
+  },
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -623,7 +899,6 @@ const styles = StyleSheet.create({
   },
   mapWrap: {
     width: '100%',
-    height: MAP_H,
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,

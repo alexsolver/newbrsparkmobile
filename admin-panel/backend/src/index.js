@@ -1,5 +1,10 @@
 'use strict';
-require('dotenv').config();
+const path = require('path');
+// Sempre carregar admin-panel/backend/.env (não depende do cwd). Em dev, o ficheiro prevalece sobre DATABASE_URL exportada no terminal por engano.
+require('dotenv').config({
+  path: path.join(__dirname, '../.env'),
+  ...(process.env.NODE_ENV === 'production' ? {} : { override: true }),
+});
 
 process.on('uncaughtException', (err) => {
   console.error('[BrSpark] uncaughtException — o processo vai encerrar. Detalhe:', err);
@@ -103,8 +108,6 @@ function mapLaravelCategoriesForApp(json) {
 }
 const aiTechnicianProfilePhotoRoutes = require('./routes/aiTechnicianProfilePhoto');
 
-const path = require('path');
-
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
@@ -145,6 +148,21 @@ app.get('/health', (_req, res) => {
     adminPanel: 'Abra http://localhost:' + (process.env.PORT || 3001) + '/index.html',
   });
 });
+
+/** Entrada do painel — paths absolutos (evita falhas de resolução com espaços no path do disco). */
+const PANEL_ROOT = path.join(__dirname, '../../');
+const PANEL_INDEX = path.join(PANEL_ROOT, 'index.html');
+function sendPanelIndexHtml(res) {
+  res.type('html');
+  res.sendFile(PANEL_INDEX, (err) => {
+    if (err) {
+      console.error('[admin-panel] Falha ao servir index.html:', err.message, '| procurava:', PANEL_INDEX);
+      if (!res.headersSent) res.status(500).send('Painel indisponível (index.html). Verifique se o arranque foi feito a partir de admin-panel/backend e se index.html existe na raiz do painel.');
+    }
+  });
+}
+app.get('/', (_req, res) => sendPanelIndexHtml(res));
+app.get('/index.html', (_req, res) => sendPanelIndexHtml(res));
 
 // ── Public routes ──────────────────────────────────────────
 app.use('/api/auth',    authRoutes);    // admin: POST /api/auth/login | /tenant-login

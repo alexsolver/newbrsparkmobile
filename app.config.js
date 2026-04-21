@@ -66,5 +66,13 @@ module.exports = {
         ...(mapsKey ? { googleMaps: { apiKey: mapsKey } } : {}),
       },
     },
+    /** App Store / EAS: declaração padrão (HTTPS e APIs do SO); evita bloqueio na revisão. */
+    ios: {
+      ...appJson.expo.ios,
+      infoPlist: {
+        ...(appJson.expo.ios?.infoPlist || {}),
+        ITSAppUsesNonExemptEncryption: false,
+      },
+    },
   },
 };

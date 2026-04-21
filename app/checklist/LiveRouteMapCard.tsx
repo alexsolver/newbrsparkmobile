@@ -36,6 +36,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
+import { useTransitMapExpanded } from '../../src/context/TransitMapExpandedContext';
+import { BroadcastOfferSheetEmbedded } from '../../src/components/ProviderBroadcastOfferSheet';
 
 const TRANSIT_MAP_HINTS_KEY = '@brspark_transit_map_hints_v1';
 
@@ -615,6 +617,16 @@ export default function LiveRouteMapCard({
   const [update, setUpdate]           = useState<RouteUpdate | null>(null);
   const [myPos, setMyPos]             = useState<{ lat: number; lng: number } | null>(null);
   const [expanded, setExpanded]       = useState(true);
+  const { setTransitMapExpanded } = useTransitMapExpanded();
+  /** Folha de oferta broadcast: mesmo padrão do chat — aninhar no Modal do mapa (Android). */
+  useEffect(() => {
+    if (!visible) {
+      setTransitMapExpanded(false);
+      return;
+    }
+    setTransitMapExpanded(expanded);
+    return () => setTransitMapExpanded(false);
+  }, [visible, expanded, setTransitMapExpanded]);
   const [coveredPath, setCoveredPath] = useState<number[][]>([]);
   /** Trilha GPS azul no mapa: desligada por defeito; reposta ao iniciar cada deslocamento (`visible` fica ativo). */
   const [showGpsTrail, setShowGpsTrail] = useState(false);
@@ -2366,6 +2378,8 @@ export default function LiveRouteMapCard({
         )}
         {/* Chat aninhado: evita segundo Modal irmão ficar atrás do mapa no Android. */}
         {trackingChatModalEl}
+        {/* Demanda broadcast: overlay dentro deste Modal — não usar segundo Modal na raiz (fica atrás no Android). */}
+        <BroadcastOfferSheetEmbedded />
       </View>
     </Modal>
     </>
