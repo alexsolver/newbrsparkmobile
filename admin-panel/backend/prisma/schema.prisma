@@ -1164,7 +1164,16 @@ model ChecklistExecution {
   routineTaskNumber String?
   templateId  String?
   template    ChecklistTemplate? @relation(fields: [templateId], references: [id])
-  ownerEmail  String   // Email do Técnico/Coordenador
+  /// Null apenas enquanto `assignmentMode=BROADCAST` e `claimStatus=OPEN` (ningém aceitou ainda).
+  ownerEmail  String?
+  /// DIRECT: despacho a um técnico. BROADCAST: vários convidados; primeiro `POST /claim` fica com a OS.
+  assignmentMode String @default("DIRECT")
+  /// Em leilão: OPEN → CLAIMED | CANCELLED | EXPIRED. Em DIRECT costuma ser null.
+  claimStatus    String?
+  /// Lista de e-mails (minúsculas) convidados ao leilão; só usada com BROADCAST+OPEN.
+  broadcastCandidates Json?
+  claimedByUserId String?
+  claimedAt       DateTime?
   assetId     String?  // Equipamento em Manutenção
   status      String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, SYNCED
   responses   Json?    // Respostas nativas das perguntas (null enquanto PENDING)
@@ -1207,6 +1216,7 @@ model ChecklistExecution {
   @@index([ownerEmail])
   @@index([status])
   @@index([ownerEmail, status])
+  @@index([assignmentMode, claimStatus])
 }
 
 /// Auditoria de moderação do chat de acompanhamento (link público + técnico). Retenção: apagar linhas antigas conforme política (TTL operacional).

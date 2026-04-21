@@ -912,6 +912,15 @@
           <input class="form-control" id="d-email" type="text" inputmode="email" autocomplete="off" placeholder="Nome ou e-mail — sugestões ao digitar" />
           <ul id="d-email-suggestions" class="dispatch-tech-suggest-list" role="listbox" aria-label="Técnicos sugeridos"></ul>
         </div>
+        <div id="d-dispatch-candidates-wrap" style="margin-top:10px;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+            <button type="button" id="d-dispatch-add-candidate-btn" class="btn btn-outline btn-sm" onclick="window.addDispatchCandidateFromInput()" style="font-size:11px;">
+              <ion-icon name="person-add-outline" style="vertical-align:-2px"></ion-icon> <span id="d-dispatch-add-candidate-lbl">Adicionar candidato</span>
+            </button>
+            <span id="d-dispatch-broadcast-hint" style="font-size:10px;color:var(--text3);line-height:1.35;">2+ na lista = «primeiro a aceitar».</span>
+          </div>
+          <div id="d-dispatch-candidate-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:6px;"></div>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label" for="d-client-email">E-mail do cliente</label>
@@ -1413,6 +1422,8 @@ window.loadOpsGeofenceAudit = async function (execId) {
 let reopenRevisionTaskId = null;
 let _reopenUsersCache = null;
 let _dispatchSuggestIndex = -1;
+/** @type {string[]} E-mails adicionados ao despacho multi-técnico (leilão). */
+window._dispatchCandidateList = [];
 
 /** Usuários ativos para reabertura e despacho (cache compartilhado). */
 async function ensureOpsActiveUsersCache() {
@@ -1481,9 +1492,84 @@ function renderDispatchTechSuggestions(users) {
   ul.style.display = 'block';
 }
 
-window.selectDispatchTechEmail = function (email) {
+function renderDispatchCandidateChips() {
+  const el = document.getElementById('d-dispatch-candidate-chips');
+  if (!el) return;
+  const list = Array.isArray(window._dispatchCandidateList) ? window._dispatchCandidateList : [];
+  if (!list.length) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = list
+    .map(function (em, i) {
+      const safe = escDispatchSuggest(String(em));
+      return (
+        '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);font-size:11px;">' +
+        '<span>' +
+        safe +
+        '</span>' +
+        '<button type="button" class="btn btn-ghost btn-sm" style="padding:0 4px;min-height:20px;line-height:1" onclick="window.removeDispatchCandidate(' +
+        i +
+        ')" aria-label="Remover"><ion-icon name="close-outline" style="font-size:14px;vertical-align:-2px"></ion-icon></button></span>'
+      );
+    })
+    .join('');
+}
+
+window.removeDispatchCandidate = function (idx) {
+  const i = Number(idx);
+  if (!Array.isArray(window._dispatchCandidateList) || !Number.isFinite(i) || i < 0 || i >= window._dispatchCandidateList.length) return;
+  window._dispatchCandidateList.splice(i, 1);
+  renderDispatchCandidateChips();
+};
+
+function normalizeDispatchCandidateEmails() {
+  const list = Array.isArray(window._dispatchCandidateList) ? window._dispatchCandidateList.slice() : [];
   const input = document.getElementById('d-email');
-  if (input) input.value = email;
+  const extra = input && String(input.value || '').trim();
+  if (extra) {
+    const low = extra.toLowerCase();
+    if (!list.some(function (e) { return String(e).trim().toLowerCase() === low; })) list.push(extra);
+  }
+  return list.map(function (e) { return String(e).trim(); }).filter(Boolean);
+}
+
+window.addDispatchCandidateFromInput = function () {
+  const input = document.getElementById('d-email');
+  const raw = input ? String(input.value || '').trim() : '';
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!raw) {
+    alert(typeof opsT === 'function' ? opsT('ops_dispatch_email_required') : 'Informe o e-mail do técnico.');
+    return;
+  }
+  if (!emailRegex.test(raw)) {
+    alert(typeof opsT === 'function' ? opsT('ops_dispatch_email_invalid') : 'Formato de e-mail inválido.');
+    return;
+  }
+  const low = raw.toLowerCase();
+  if (!Array.isArray(window._dispatchCandidateList)) window._dispatchCandidateList = [];
+  if (window._dispatchCandidateList.some(function (e) { return String(e).trim().toLowerCase() === low; })) {
+    if (input) input.value = '';
+    hideDispatchTechSuggestions();
+    return;
+  }
+  window._dispatchCandidateList.push(raw);
+  if (input) input.value = '';
+  hideDispatchTechSuggestions();
+  renderDispatchCandidateChips();
+};
+
+window.selectDispatchTechEmail = function (email) {
+  const em = String(email || '').trim();
+  if (!em) return;
+  if (!Array.isArray(window._dispatchCandidateList)) window._dispatchCandidateList = [];
+  const low = em.toLowerCase();
+  if (!window._dispatchCandidateList.some(function (e) { return String(e).trim().toLowerCase() === low; })) {
+    window._dispatchCandidateList.push(em);
+    renderDispatchCandidateChips();
+  }
+  const input = document.getElementById('d-email');
+  if (input) input.value = '';
   hideDispatchTechSuggestions();
 };
 
@@ -7606,6 +7692,8 @@ window.openDispatchModal = async function() {
     });
   }
   document.getElementById('d-email').value = '';
+  window._dispatchCandidateList = [];
+  renderDispatchCandidateChips();
   const dClient = document.getElementById('d-client-email');
   if (dClient) dClient.value = '';
   document.getElementById('d-title').value = '';
@@ -8277,21 +8365,28 @@ window.updateDispatchPlannedEndPreview = function() {
 
 window.closeDispatchModal = () => {
   hideDispatchTechSuggestions();
+  window._dispatchCandidateList = [];
+  const chips = document.getElementById('d-dispatch-candidate-chips');
+  if (chips) chips.innerHTML = '';
   document.getElementById('dispatch-modal').style.display = 'none';
 };
 
 window.confirmDispatch = async function() {
-  const email    = document.getElementById('d-email').value.trim();
   const refId    = document.getElementById('d-template').value;
   const title    = document.getElementById('d-title').value.trim();
   const desc     = document.getElementById('d-desc').value.trim();
 
-  if (!email) { alert('Informe o e-mail do técnico.'); return; }
-  
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    alert('Erro: Formato de e-mail inválido. Verifique se você digitou corretamente com o "@" em vez de "#" ou espaços.');
+  const candidateEmails = normalizeDispatchCandidateEmails();
+  if (candidateEmails.length === 0) {
+    alert(typeof opsT === 'function' ? opsT('ops_dispatch_email_required') : 'Informe o e-mail do técnico.');
     return;
+  }
+  for (let i = 0; i < candidateEmails.length; i++) {
+    if (!emailRegex.test(candidateEmails[i])) {
+      alert(typeof opsT === 'function' ? opsT('ops_dispatch_email_invalid') : 'Formato de e-mail inválido.');
+      return;
+    }
   }
 
   const clientEmailEl = document.getElementById('d-client-email');
@@ -8409,7 +8504,9 @@ window.confirmDispatch = async function() {
 
   try {
     const dispatchBody = {
-      ownerEmail: email, refId, title: title || 'Nova OS Designada', description: desc,
+      refId,
+      title: title || 'Nova OS Designada',
+      description: desc,
       metadata: {
         icon: 'build-outline',
         ...(clientEmail ? { clientEmail } : {}),
@@ -8418,6 +8515,11 @@ window.confirmDispatch = async function() {
       scheduledStartAt: schedDt.toISOString(),
       ...locationPayload
     };
+    if (candidateEmails.length >= 2) {
+      dispatchBody.candidateEmails = candidateEmails;
+    } else {
+      dispatchBody.ownerEmail = candidateEmails[0];
+    }
     if (expectedOverride != null) dispatchBody.expectedFormDurationMinutes = expectedOverride;
     const res = await CONFIG.post('/checklists/dispatch', dispatchBody);
     if (res == null) {

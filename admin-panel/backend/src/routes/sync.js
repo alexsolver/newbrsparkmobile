@@ -6,6 +6,7 @@ const { recordSync } = require('../services/cockpitMetrics');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
 const techStockMovementsSearchHandler = require('../lib/techStockMovementsSearchHandler');
 const { canReceiveFieldTasksForEmail } = require('../lib/technicianEligibility');
+const { broadcastCandidateArray, normalizeEmail: normalizeSyncEmail } = require('../lib/fieldTaskExecutionAccess');
 
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
@@ -423,6 +424,10 @@ function mapChecklistExecutionToSyncTask(ex) {
   const routineTaskNumber = ex.routineTaskNumber != null ? String(ex.routineTaskNumber).trim() : '';
   const isRt = routineTaskNumber.length > 0;
 
+  const am = String(ex.assignmentMode || 'DIRECT').toUpperCase();
+  const cs = ex.claimStatus != null ? String(ex.claimStatus).toUpperCase() : '';
+  const broadcastClaimPending = am === 'BROADCAST' && cs === 'OPEN';
+
   return {
     id: ex.id,
     osNumber: ex.osNumber || null,
@@ -460,6 +465,9 @@ function mapChecklistExecutionToSyncTask(ex) {
     plannedFormEndAt,
     startedAt: startedAtIso,
     completedAt: completedAtIso,
+    assignmentMode: ex.assignmentMode || 'DIRECT',
+    claimStatus: ex.claimStatus ?? null,
+    broadcastClaimPending,
   };
 }
 
@@ -495,7 +503,7 @@ router.get('/tasks', async (req, res) => {
       },
     };
 
-    const activeOs = await prisma.checklistExecution.findMany({
+    const activeOsMine = await prisma.checklistExecution.findMany({
       where: {
         ownerEmail: ownerWhere,
         routineTaskNumber: null,
@@ -503,6 +511,30 @@ router.get('/tasks', async (req, res) => {
       },
       include: { template: true, ...revInclude },
     });
+
+    const activeOsBroadcastOpen = await prisma.checklistExecution.findMany({
+      where: {
+        assignmentMode: 'BROADCAST',
+        claimStatus: 'OPEN',
+        routineTaskNumber: null,
+        ownerEmail: null,
+        status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
+      },
+      include: { template: true, ...revInclude },
+    });
+    const emNorm = normalizeSyncEmail(ownerEmail);
+    const activeOsBroadcastMine = activeOsBroadcastOpen.filter((row) => {
+      const arr = broadcastCandidateArray(row.broadcastCandidates);
+      return emNorm && arr.includes(emNorm);
+    });
+
+    const seenFt = new Set();
+    const activeOs = [];
+    for (const row of [...activeOsMine, ...activeOsBroadcastMine]) {
+      if (seenFt.has(row.id)) continue;
+      seenFt.add(row.id);
+      activeOs.push(row);
+    }
 
     const activeRt = await prisma.checklistExecution.findMany({
       where: {

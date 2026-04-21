@@ -12,7 +12,7 @@ import {
 } from '../constants/pushNotifications';
 import { setPendingOpenExecutionFromPush } from '../lib/pushExecutionOpenIntent';
 import { apiFetch } from '../services/auth';
-import { enqueueExecutionStatusPatch } from '../services/syncService';
+import { enqueueExecutionStatusPatch, pullTasks } from '../services/syncService';
 import { BRSPARK_PERSONA_STORAGE_KEY } from '../context/PersonaContext';
 import { getPersonaHomeHref } from '../navigation/personaRouting';
 import {
@@ -121,6 +121,17 @@ async function handleNotificationResponse(
     return;
   }
 
+  /** Leilão: outro técnico aceitou primeiro — atualiza lista local. */
+  if (type === 'os_broadcast_taken') {
+    if (!isDefault) return;
+    Alert.alert(
+      'OS indisponível',
+      'Outro técnico aceitou primeiro esta ordem de serviço.',
+    );
+    void pullTasks().catch(() => {});
+    return;
+  }
+
   /** Despacho novo ou OS reaberta para revisão — mesmas ações (Aceitar / Recusar / OK). */
   if (type !== 'os_dispatched' && type !== 'os_reopened_revision') return;
 
@@ -138,6 +149,27 @@ async function handleNotificationResponse(
   if (action === TECH_PUSH_ACTION_ACCEPT) {
     await stopTechTaskLiveActivityForTask(taskId);
     try {
+      const broadcastOffer = String(data.broadcastOffer || '') === '1';
+      if (broadcastOffer) {
+        const res = await apiFetch(
+          `/api/checklists/executions/${encodeURIComponent(taskId)}/claim`,
+          { method: 'POST', body: JSON.stringify({}) },
+        );
+        if (!res.ok) {
+          const txt = await res.text().catch(() => '');
+          let msg = txt;
+          try {
+            const j = JSON.parse(txt) as { error?: string; message?: string };
+            msg = String(j.error || j.message || txt);
+          } catch {
+            /* use txt */
+          }
+          Alert.alert('OS', String(msg || 'Não foi possível aceitar.').slice(0, 200));
+        } else {
+          void pullTasks().catch(() => {});
+        }
+        return;
+      }
       await enqueueExecutionStatusPatch(taskId, {
         status: 'ACCEPTED',
         timestamp: new Date().toISOString(),
@@ -229,6 +261,10 @@ export function PushNotificationResponseBridge() {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
       const d = raw as Record<string, unknown>;
       const t = String(d.type || '');
+      if (t === 'os_broadcast_taken') {
+        void pullTasks().catch(() => {});
+        return;
+      }
       if (t !== 'os_dispatched' && t !== 'os_reopened_revision') return;
       const taskId = String(d.taskId || '').trim();
       if (!taskId) return;

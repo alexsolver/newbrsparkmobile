@@ -19,6 +19,7 @@ const {
   chatTranslationEnabled,
 } = require('../lib/chatTranslation');
 const { assertTenantAccess, isPlatformAdmin, resolveScopedTenantId } = require('../lib/authorization');
+const { findChecklistExecutionForAppUser } = require('../lib/fieldTaskExecutionAccess');
 
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
@@ -46,40 +47,6 @@ function mergeExecutionWhere(baseWhere, req) {
 /** `tenantId` do painel quando a listagem deve restringir utilizadores (avatares) ao mesmo tenant. */
 function panelTenantIdForUserScope(req) {
   return resolveScopedTenantId(req.authorization);
-}
-
-/**
- * Execução atribuída ao técnico (JWT app) — duas consultas simples em vez de um `OR` grande no Prisma
- * (planos mais estáveis) e compatível com formulário global (`template.tenantId` null) ou sem template.
- * @param {object|undefined} select — campos Prisma `select`; omitir para devolver o registro completo.
- */
-async function findChecklistExecutionForAppUser(prismaClient, executionId, email, tenantId, select) {
-  const id = String(executionId || '').trim();
-  const em = String(email || '').trim();
-  const tid = String(tenantId || '').trim();
-  if (!id || !em) return null;
-
-  const ownerClause = { id, ownerEmail: { equals: em, mode: 'insensitive' } };
-  const opt = select && typeof select === 'object' ? { select } : {};
-
-  if (tid) {
-    const strict = await prismaClient.checklistExecution.findFirst({
-      where: { ...ownerClause, template: { tenantId: tid } },
-      ...opt,
-    });
-    if (strict) return strict;
-  }
-
-  const globalOrNoTpl = await prismaClient.checklistExecution.findFirst({
-    where: {
-      ...ownerClause,
-      OR: [{ template: { tenantId: null } }, { templateId: null }],
-    },
-    ...opt,
-  });
-  if (globalOrNoTpl) return globalOrNoTpl;
-
-  return null;
 }
 
 // ─── POST /api/operations/tasks/:id/reject (app móvel Live Activity / painel) ──

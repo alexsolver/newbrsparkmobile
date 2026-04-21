@@ -25,6 +25,15 @@ const {
 } = require('../lib/formDurationPolicy');
 const { scheduleChecklistTemplateEmbeddingSync } = require('../lib/formAiChecklistTemplateEmbed');
 const { consumeQuota, assertChecklistTemplateCapacity } = require('../lib/planQuotaService');
+const {
+    sameOwnerEmail,
+    canAppUserAccessFieldTaskExecution,
+    isFieldTaskBroadcastOpen,
+    normalizeBroadcastCandidateEmails,
+    normalizeEmail,
+    broadcastCandidateArray,
+} = require('../lib/fieldTaskExecutionAccess');
+const { notifyBroadcastLosers } = require('../lib/fieldTaskBroadcastNotify');
 
 const DUPLICATE_TEMPLATE_TITLE_PT =
     'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
@@ -110,11 +119,6 @@ function execMetaRevisionVisitActive(m) {
 
 function execMetaInOpenRevisionVisit(m) {
     return execMetaReopenRevisionPending(m) || execMetaRevisionVisitActive(m);
-}
-
-function sameOwnerEmail(execEmail, jwtEmail) {
-  if (!execEmail || !jwtEmail) return false;
-  return String(execEmail).trim().toLowerCase() === String(jwtEmail).trim().toLowerCase();
 }
 
 // Imagens nas instruções rich-text do Form Builder (painel admin autenticado)
@@ -667,7 +671,7 @@ router.get('/executions/:taskId', authUser, async (req, res) => {
             where: { id: taskId }
         });
         if (!exec) return res.status(404).json({ error: 'Execução não encontrada' });
-        if (!sameOwnerEmail(exec.ownerEmail, req.user.email)) {
+        if (!canAppUserAccessFieldTaskExecution(exec, req.user.email)) {
             return res.status(403).json({ error: 'Acesso negado a esta execução.' });
         }
         res.json(exec);
@@ -689,8 +693,29 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
             include: { template: true },
         });
         if (!existing) return res.status(404).json({ error: "OS não encontrada" });
-        if (!sameOwnerEmail(existing.ownerEmail, req.user.email)) {
+        if (!canAppUserAccessFieldTaskExecution(existing, req.user.email)) {
             return res.status(403).json({ error: 'Acesso negado a esta OS.' });
+        }
+        if (isFieldTaskBroadcastOpen(existing)) {
+            const allowed = !statusNorm || ['RECEIVED', 'PENDING'].includes(statusNorm);
+            if (!allowed) {
+                return res.status(409).json({
+                    error:
+                        'Aceite a OS online (primeiro a aceitar fica com ela) antes de alterar para este estado.',
+                    code: 'BROADCAST_CLAIM_REQUIRED',
+                });
+            }
+            if (
+                responses &&
+                typeof responses === 'object' &&
+                !Array.isArray(responses) &&
+                Object.keys(responses).length > 0
+            ) {
+                return res.status(409).json({
+                    error: 'Aceite a OS online antes de enviar respostas ou pausas.',
+                    code: 'BROADCAST_CLAIM_REQUIRED',
+                });
+            }
         }
 
         let existingMeta = existing.metadata;
@@ -888,6 +913,96 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
     }
 });
 
+// POST /api/checklists/executions/:taskId/claim — leilão: primeiro JWT a confirmar ganha a OS (só com rede no cliente)
+router.post('/executions/:taskId/claim', authUser, async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const uid = String(req.user?.id || '').trim();
+        const email = normalizeEmail(req.user?.email || '');
+        if (!taskId || !uid || !email) {
+            return res.status(400).json({ error: 'Sessão inválida.' });
+        }
+
+        const out = await prisma.$transaction(async (tx) => {
+            const ex = await tx.checklistExecution.findUnique({
+                where: { id: taskId },
+                include: { template: true },
+            });
+            if (!ex) return { err: 404, body: { error: 'OS não encontrada.' } };
+            if (
+                String(ex.assignmentMode || '').toUpperCase() !== 'BROADCAST' ||
+                String(ex.claimStatus || '').toUpperCase() !== 'OPEN'
+            ) {
+                return { err: 409, body: { error: 'Esta OS não está aberta a concorrência.', code: 'NOT_BROADCAST_OPEN' } };
+            }
+            const candidates = broadcastCandidateArray(ex.broadcastCandidates);
+            if (!candidates.includes(email)) {
+                return { err: 403, body: { error: 'O seu utilizador não está convidado a esta OS.' } };
+            }
+            const st = String(ex.status || '').toUpperCase();
+            if (['COMPLETED', 'SYNCED', 'CANCELLED', 'CANCELED', 'REJECTED'].includes(st)) {
+                return { err: 409, body: { error: 'OS já encerrada.' } };
+            }
+            let meta = ex.metadata && typeof ex.metadata === 'object' && !Array.isArray(ex.metadata) ? { ...ex.metadata } : {};
+            const acceptedTs = new Date().toISOString();
+            meta.acceptedAt = acceptedTs;
+
+            const upd = await tx.checklistExecution.updateMany({
+                where: {
+                    id: taskId,
+                    assignmentMode: 'BROADCAST',
+                    claimStatus: 'OPEN',
+                },
+                data: {
+                    ownerEmail: email,
+                    claimStatus: 'CLAIMED',
+                    claimedByUserId: uid,
+                    claimedAt: new Date(),
+                    status: 'ACCEPTED',
+                    metadata: meta,
+                },
+            });
+            if (upd.count !== 1) {
+                return {
+                    err: 409,
+                    body: { error: 'Outro técnico já aceitou esta OS.', code: 'CLAIM_LOST' },
+                };
+            }
+            const after = await tx.checklistExecution.findUnique({ where: { id: taskId }, include: { template: true } });
+            return { ok: true, execution: after, candidates };
+        });
+
+        if (out.err) {
+            return res.status(out.err).json(out.body);
+        }
+
+        const ex = out.execution;
+        const cand = out.candidates || [];
+        const losers = cand.filter((c) => normalizeEmail(c) !== normalizeEmail(email));
+        const metaTitle =
+            (ex.metadata && typeof ex.metadata === 'object' && ex.metadata.title) || 'OS';
+        await notifyBroadcastLosers(prisma, {
+            winnerEmail: email,
+            loserEmails: losers,
+            executionId: ex.id,
+            templateTenantId: ex.template?.tenantId ?? null,
+            osLabel: String(metaTitle).slice(0, 80),
+        }).catch((e) => console.warn('[claim] notify losers', e));
+
+        return res.json({
+            ok: true,
+            taskId: ex.id,
+            status: ex.status,
+            ownerEmail: ex.ownerEmail,
+            claimStatus: ex.claimStatus,
+            assignmentMode: ex.assignmentMode,
+        });
+    } catch (err) {
+        console.error('[POST /executions/:taskId/claim]', err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 router.post('/executions', authUser, async (req, res) => {
     try {
         let nextRoutineTaskPayload = null;
@@ -910,8 +1025,21 @@ router.post('/executions', authUser, async (req, res) => {
                 where: { id: taskId },
                 include: { template: true },
             });
-            if (existingTask && !sameOwnerEmail(existingTask.ownerEmail, authEmail)) {
+            if (existingTask && !canAppUserAccessFieldTaskExecution(existingTask, authEmail)) {
                 return res.status(403).json({ error: 'Acesso negado a esta OS.' });
+            }
+            if (
+                existingTask &&
+                isFieldTaskBroadcastOpen(existingTask) &&
+                responses &&
+                typeof responses === 'object' &&
+                !Array.isArray(responses) &&
+                Object.keys(responses).length > 0
+            ) {
+                return res.status(409).json({
+                    error: 'Aceite a OS online antes de sincronizar o preenchimento.',
+                    code: 'BROADCAST_CLAIM_REQUIRED',
+                });
             }
             if (submissionId && existingTask) {
                 const dup = await prisma.checklistExecutionRevision.findUnique({
@@ -1220,10 +1348,14 @@ router.post('/executions', authUser, async (req, res) => {
 router.post('/dispatch', async (req, res) => {
     try {
         const payload = req.body;
-        if (!payload || !payload.ownerEmail || !payload.refId) {
-            return res.status(400).json({ error: "ownerEmail and refId are required" });
+        if (!payload || !payload.refId) {
+            return res.status(400).json({ error: 'refId é obrigatório.' });
         }
-        
+        const multi = Array.isArray(payload.candidateEmails) && payload.candidateEmails.length > 0;
+        if (!payload.ownerEmail && !multi) {
+            return res.status(400).json({ error: 'ownerEmail ou candidateEmails é obrigatório.' });
+        }
+
         // Título da OS (painel) ≠ nome do formulário — guardar ambos em metadata.
         const osTitle =
             (payload.title != null && String(payload.title).trim()) || 'Nova OS Designada';
@@ -1243,21 +1375,37 @@ router.post('/dispatch', async (req, res) => {
             /* template not found is OK for ad-hoc */
         }
 
-        // Cada dispatch cria uma OS independente — sem deduplicação automática.
-        // Admin pode cancelar OS via Central de Operações se necessário.
-
-        const assigneeEmail = String(payload.ownerEmail || '').trim();
         const scopedTenantId = loadedTemplate?.tenantId || null;
-        const resolvedOwnerEmail = await resolveFieldTaskAssigneeEmail(
-          prisma,
-          assigneeEmail,
-          scopedTenantId || undefined
-        );
-        if (!resolvedOwnerEmail) {
-          const scoped = scopedTenantId ? ' nesta organização' : '';
-          return res.status(400).json({
-            error: `O e-mail não corresponde a um usuário ativo elegível (contas cliente não recebem OS)${scoped}. A OS não foi criada.`,
-          });
+        const resolvedList = [];
+        if (multi) {
+            for (const raw of payload.candidateEmails) {
+                const r = await resolveFieldTaskAssigneeEmail(
+                    prisma,
+                    String(raw || '').trim(),
+                    scopedTenantId || undefined
+                );
+                if (r) resolvedList.push(r);
+            }
+        } else {
+            const r = await resolveFieldTaskAssigneeEmail(
+                prisma,
+                String(payload.ownerEmail || '').trim(),
+                scopedTenantId || undefined
+            );
+            if (r) resolvedList.push(r);
+        }
+        if (resolvedList.length === 0) {
+            const scoped = scopedTenantId ? ' nesta organização' : '';
+            return res.status(400).json({
+                error: `Nenhum e-mail válido para prestador elegível (ativo)${scoped}. A OS não foi criada.`,
+            });
+        }
+
+        const isBroadcast = resolvedList.length >= 2;
+        if (multi && resolvedList.length < 2) {
+            return res.status(400).json({
+                error: 'Indique pelo menos dois técnicos válidos para o modo «primeiro a aceitar».',
+            });
         }
 
         const scheduledStart = parseScheduledStartAt(payload.scheduledStartAt);
@@ -1319,28 +1467,33 @@ router.post('/dispatch', async (req, res) => {
         const parsedLocationRadius = rawLocationRadius !== null && Number.isFinite(rawLocationRadius) ? rawLocationRadius : null;
 
         const osNumber = await allocateNextFtOsNumber(prisma);
+        const broadcastList = normalizeBroadcastCandidateEmails(resolvedList);
         const execution = await prisma.checklistExecution.create({
             data: {
                 osNumber,
-                templateId: realTemplateId,    // nullable FK — ok if null
-                ownerEmail: resolvedOwnerEmail,
+                templateId: realTemplateId, // nullable FK — ok if null
+                ownerEmail: isBroadcast ? null : resolvedList[0],
+                assignmentMode: isBroadcast ? 'BROADCAST' : 'DIRECT',
+                claimStatus: isBroadcast ? 'OPEN' : null,
+                broadcastCandidates: isBroadcast ? broadcastList : undefined,
                 status: 'PENDING',
-                responses: null,               // deliberately empty until tech fills it
+                responses: null, // deliberately empty until tech fills it
                 scheduledStartAt: scheduledStart,
                 expectedFormDurationMinutes: snapExpectedMin,
                 // Geofencing Location
                 locationLat: parsedLocationLat,
                 locationLng: parsedLocationLng,
                 locationRadius: parsedLocationRadius,
-                locationAddress:  payload.locationAddress  || null,
+                locationAddress: payload.locationAddress || null,
                 locationZoneType: payload.locationZoneType || null,
-                locationPolygon:  payload.locationPolygon  || null,
+                locationPolygon: payload.locationPolygon || null,
                 metadata: {
                     ...(payload.metadata || {}),
                     refId: payload.refId, // keep original for mobile to load schema
                     title: osTitle,
                     ...(formTemplateTitle ? { templateTitle: formTemplateTitle } : {}),
                     description: templateDesc,
+                    ...(isBroadcast ? { dispatchBroadcast: true, broadcastCandidateCount: broadcastList.length } : {}),
                     ...(dispatchFormIcon
                         ? {
                               icon: dispatchFormIcon,
@@ -1357,7 +1510,6 @@ router.post('/dispatch', async (req, res) => {
         // Título/corpo legíveis no Lock Screen: antes o `body` era só o nome do modelo (ex.: «face»),
         // o que parecia «push simples»; incluímos FT-… + modelo + título customizado do painel.
         try {
-            const emailRaw = String(resolvedOwnerEmail || '').trim();
             const osNum = execution.osNumber ? String(execution.osNumber).trim() : '';
             const tplTitle = formTemplateTitle ? String(formTemplateTitle).trim() : '';
             const customOs = String(osTitle || '').trim();
@@ -1366,7 +1518,7 @@ router.post('/dispatch', async (req, res) => {
                 return !t || t === 'nova os designada' || t === 'nova atividade';
             };
 
-            const pushTitle = 'Nova OS atribuída';
+            const pushTitle = isBroadcast ? 'Nova OS — primeiro a aceitar' : 'Nova OS atribuída';
             const parts = [];
             if (osNum) parts.push(osNum);
             if (tplTitle) parts.push(tplTitle);
@@ -1375,17 +1527,23 @@ router.post('/dispatch', async (req, res) => {
                 parts.length > 0
                     ? parts.join(' · ')
                     : 'Abra o app para ver detalhes e aceitar.';
+            if (isBroadcast) {
+                pushBody = `${pushBody.slice(0, 120)} · Toque para aceitar (concorrência).`.slice(0, 180);
+            }
             if (pushBody.length > 180) pushBody = `${pushBody.slice(0, 177)}…`;
 
-            await sendFieldTaskActivityPushToAssignee(prisma, {
-                ownerEmail: emailRaw,
-                templateTenantId: loadedTemplate?.tenantId ?? null,
-                assigneeTenantId: null,
-                executionId: execution.id,
-                pushTitle,
-                pushBody,
-                logLabel: 'DISPATCH',
-            });
+            for (const emailRaw of resolvedList) {
+                await sendFieldTaskActivityPushToAssignee(prisma, {
+                    ownerEmail: String(emailRaw || '').trim(),
+                    templateTenantId: loadedTemplate?.tenantId ?? null,
+                    assigneeTenantId: null,
+                    executionId: execution.id,
+                    pushTitle,
+                    pushBody,
+                    logLabel: 'DISPATCH',
+                    extraData: isBroadcast ? { broadcastOffer: '1' } : {},
+                });
+            }
         } catch (pushErr) {
             console.error('[DISPATCH] Falha ao enviar push:', pushErr.message);
         }

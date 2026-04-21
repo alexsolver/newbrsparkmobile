@@ -15,6 +15,7 @@ const { resolveGlobalLiveActivityBadgeKey, resolveTenantAppDisplayName } = requi
  *   pushBody: string,
  *   pushSubtitle?: string|null,
  *   logLabel?: string,
+ *   extraData?: Record<string, string|undefined> — funde em `data` do Expo (ex.: type alternativo).
  * }} opts
  * @returns {Promise<{ sent: number, skipped?: string }>}
  */
@@ -96,6 +97,13 @@ async function sendFieldTaskActivityPushToAssignee(prisma, opts) {
     String(opts.pushSubtitle || '').trim() ||
     'Deslize para baixo — Aceitar, Recusar ou OK.';
 
+  const baseData = {
+    taskId: executionId,
+    type: 'os_dispatched',
+    appDisplayName,
+    liveActivityBadgeKey,
+  };
+  const extra = opts.extraData && typeof opts.extraData === 'object' ? opts.extraData : {};
   const pushRes = await sendExpoPushToMany(pushTokens, {
     title: String(opts.pushTitle || `Nova atividade · ${appDisplayName}`).slice(0, 120),
     body: String(opts.pushBody || 'Nova atividade na sua lista.').slice(0, 180),
@@ -105,10 +113,8 @@ async function sendFieldTaskActivityPushToAssignee(prisma, opts) {
     categoryId: 'BRSPARK_TECH_ACTIVITY',
     channelId: 'brspark-tecnico',
     data: {
-      taskId: executionId,
-      type: 'os_dispatched',
-      appDisplayName,
-      liveActivityBadgeKey,
+      ...baseData,
+      ...extra,
     },
   });
   if (pushRes && pushRes.ok === false) {

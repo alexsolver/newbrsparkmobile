@@ -3007,6 +3007,7 @@ export default function DashboardScreen() {
             return {
                ...t,
                id: String(t.id),
+               broadcastClaimPending: Boolean((t as any)?.broadcastClaimPending),
                osNumber: t.osNumber ?? null,
                locationAddress: t.locationAddress ?? null,
                locationZoneType: t.locationZoneType ?? t.metadata?.locationZoneType ?? null,
@@ -3032,7 +3033,9 @@ export default function DashboardScreen() {
                    ...t,
                    id: String(t.id),
                    status: eff,
-                   isAccepted: acceptedTasks.includes(String(t.id)),
+                   isAccepted:
+                     acceptedTasks.includes(String(t.id)) ||
+                     String(eff || '').toUpperCase() === 'ACCEPTED',
                  },
                  completedSetForMap,
                  inprogSetForMap,
@@ -3042,7 +3045,9 @@ export default function DashboardScreen() {
                refId: t.refId,
                icon: t.metadata?.icon || t.icon || null,
                iconLibrary: t.metadata?.iconLibrary || null,
-               isAccepted: acceptedTasks.includes(String(t.id)),
+               isAccepted:
+                 acceptedTasks.includes(String(t.id)) ||
+                 String(eff || '').toUpperCase() === 'ACCEPTED',
                pauseReasonSummary: t.metadata?.lastPauseReasonSummary || null,
                lastPauseAt: t.metadata?.lastPauseAt ?? null,
             };
@@ -5912,25 +5917,76 @@ export default function DashboardScreen() {
                                 return;
                               }
 
-                              await appendUniqueStringToStoredArray('@brspark_accepted_tasks', String(selectedTask.id));
-                              try {
-                                const acceptedTs = new Date().toISOString();
-                                await enqueueExecutionStatusPatch(String(selectedTask.id), {
-                                  status: 'ACCEPTED',
-                                  timestamp: acceptedTs,
-                                  metadata: { acceptedAt: acceptedTs },
-                                });
-                                await patchCloudTaskById(String(selectedTask.id), (row) => ({
-                                  ...row,
-                                  status: 'ACCEPTED',
-                                  metadata: { ...(row.metadata || {}), acceptedAt: acceptedTs },
-                                }));
-                              } catch {
-                                /* ignore */
-                              }
+                              const taskIdStr = String(selectedTask.id);
+                              const needClaim = Boolean((selectedTask as any).broadcastClaimPending);
 
-                              setSelectedTask((prev: any) => ({ ...prev, isAccepted: true }));
-                              loadData(false);
+                              if (needClaim) {
+                                if (isOnline === false) {
+                                  Alert.alert(
+                                    'Sem ligação',
+                                    'Para aceitar esta OS em concorrência é necessário estar online. Verifique a rede e tente de novo.',
+                                  );
+                                  return;
+                                }
+                                try {
+                                  const res = await apiFetch(
+                                    `/api/checklists/executions/${encodeURIComponent(taskIdStr)}/claim`,
+                                    { method: 'POST', body: JSON.stringify({}) }
+                                  );
+                                  let data: any = {};
+                                  try {
+                                    data = await res.json();
+                                  } catch {
+                                    data = {};
+                                  }
+                                  if (!res.ok) {
+                                    if (res.status === 409 && data?.code === 'CLAIM_LOST') {
+                                      Alert.alert(
+                                        'OS já atribuída',
+                                        'Outro técnico aceitou primeiro. A lista vai atualizar.'
+                                      );
+                                    } else {
+                                      Alert.alert(
+                                        'Não foi possível aceitar',
+                                        String(data?.error || `Erro ${res.status}`).slice(0, 220)
+                                      );
+                                    }
+                                    loadData(false);
+                                    return;
+                                  }
+                                  await appendUniqueStringToStoredArray('@brspark_accepted_tasks', taskIdStr);
+                                  setSelectedTask((prev: any) => ({
+                                    ...prev,
+                                    isAccepted: true,
+                                    broadcastClaimPending: false,
+                                    status: 'ACCEPTED',
+                                  }));
+                                  loadData(false);
+                                } catch (e: any) {
+                                  Alert.alert('Erro', e?.message || 'Falha de rede.');
+                                  return;
+                                }
+                              } else {
+                                await appendUniqueStringToStoredArray('@brspark_accepted_tasks', taskIdStr);
+                                try {
+                                  const acceptedTs = new Date().toISOString();
+                                  await enqueueExecutionStatusPatch(taskIdStr, {
+                                    status: 'ACCEPTED',
+                                    timestamp: acceptedTs,
+                                    metadata: { acceptedAt: acceptedTs },
+                                  });
+                                  await patchCloudTaskById(taskIdStr, (row) => ({
+                                    ...row,
+                                    status: 'ACCEPTED',
+                                    metadata: { ...(row.metadata || {}), acceptedAt: acceptedTs },
+                                  }));
+                                } catch {
+                                  /* ignore */
+                                }
+
+                                setSelectedTask((prev: any) => ({ ...prev, isAccepted: true }));
+                                loadData(false);
+                              }
 
                               Alert.alert('OS Aceita!', 'Excelente! Deseja iniciar a execução da atividade agora mesmo?', [
                                 { text: 'Agora Não', style: 'cancel', onPress: () => setTaskModalVisible(false) },
