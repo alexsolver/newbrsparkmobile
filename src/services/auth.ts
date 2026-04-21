@@ -549,7 +549,6 @@ export class AuthService {
 
   static async startOtpAuth(params: {
     identifier: string;
-    channel?: 'sms' | 'whatsapp';
     purpose?: 'login' | 'register';
     name?: string;
   }): Promise<{ challengeId: string; channel: string; expiresInSec: number; devCode?: string }> {
@@ -558,7 +557,6 @@ export class AuthService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         identifier: params.identifier.trim(),
-        channel: params.channel,
         purpose: params.purpose || 'login',
         name: params.name,
       }),

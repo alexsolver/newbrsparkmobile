@@ -17,7 +17,6 @@ export default function OtpIdentifierScreen() {
   const [mode, setMode] = useState<FlowMode>(p?.mode === 'register' ? 'register' : 'login');
   const [identifier, setId] = useState('');
   const [name, setName] = useState('');
-  const [channel, setCh] = useState<'sms' | 'whatsapp'>('sms');
   const [load, setLoad] = useState(false);
 
   const s = useMemo(
@@ -53,7 +52,6 @@ export default function OtpIdentifierScreen() {
     try {
       const out = await AuthService.startOtpAuth({
         identifier: identifier.trim(),
-        channel,
         purpose: mode === 'register' ? 'register' : 'login',
         name: mode === 'register' ? name.trim() : undefined,
       });
@@ -113,25 +111,9 @@ export default function OtpIdentifierScreen() {
         style={s.field}
         autoCapitalize="none"
         keyboardType={Platform.OS === 'ios' ? 'default' : 'default'}
-        placeholder="email ou +55 11 99999-9999"
+        placeholder={t('auth.identifierPlaceholder')}
         placeholderTextColor={C.textLight}
       />
-
-      <View style={s.row}>
-        <Text style={{ fontSize: 12, color: C.textSecondary, fontWeight: '700' }}>Canal:</Text>
-        <TouchableOpacity
-          onPress={() => setCh('sms')}
-          style={[s.chip, { flex: 0, paddingVertical: 6, paddingHorizontal: 12 }, channel === 'sms' && s.chipOn]}
-        >
-          <Text style={s.chText}>{t('auth.identifierChannelSms')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setCh('whatsapp')}
-          style={[s.chip, { flex: 0, paddingVertical: 6, paddingHorizontal: 12 }, channel === 'whatsapp' && s.chipOn]}
-        >
-          <Text style={s.chText}>{t('auth.identifierChannelWa')}</Text>
-        </TouchableOpacity>
-      </View>
 
       <TouchableOpacity
         style={[s.main, (load || !identifier.trim()) && s.mainD]}

@@ -53,7 +53,7 @@ type Props = {
   value: unknown;
   onChange: (next: VoiceNoteStoredValue) => void;
   readOnly?: boolean;
-  /** Whisper: pt, en, ... */
+  /** pt-br, en, … (servidor normaliza pt-* → pt para Whisper) */
   transcribeLanguage?: string;
 };
 
@@ -61,7 +61,7 @@ export function ChecklistVoiceNoteField({
   value,
   onChange,
   readOnly,
-  transcribeLanguage = 'pt',
+  transcribeLanguage = 'pt-br',
 }: Props) {
   const parsed = parseVoiceNoteValue(value);
   const [phase, setPhase] = useState<VoiceNoteStoredValue['phase']>(parsed.phase || 'idle');
@@ -109,7 +109,7 @@ export function ChecklistVoiceNoteField({
         patch.mimeType !== undefined ? String(patch.mimeType || '').trim() : pendingMimeType;
       const nextFileName =
         patch.fileName !== undefined ? String(patch.fileName || '').trim() : pendingFileName;
-      const nextLanguage = String(patch.language || transcribeLanguage || 'pt').slice(0, 8);
+      const nextLanguage = String(patch.language || transcribeLanguage || 'pt-br').slice(0, 8);
 
       const next: VoiceNoteStoredValue = {
         transcript: nextTranscript,
@@ -207,7 +207,7 @@ export function ChecklistVoiceNoteField({
       transcribingRef.current = true;
       const fileName = String(opts?.fileName || pendingFileName || 'nota_voz.m4a').trim() || 'nota_voz.m4a';
       const mimeType = String(opts?.mimeType || pendingMimeType || 'audio/m4a').trim() || 'audio/m4a';
-      const language = String(transcribeLanguage || 'pt').slice(0, 8);
+      const language = String(transcribeLanguage || 'pt-br').slice(0, 8);
       setPhase('uploading');
       setErrMsg('');
       emitState({

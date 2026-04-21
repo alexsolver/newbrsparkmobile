@@ -25,11 +25,11 @@
           }
         },
         "CFBundleLocalizations": [
-          "pt",
+          "pt-BR",
           "en",
           "es"
         ],
-        "CFBundleDevelopmentRegion": "pt",
+        "CFBundleDevelopmentRegion": "pt-BR",
         "NSMicrophoneUsageDescription": "O app usa o microfone para gravar notas de voz nas tarefas (transcrição no servidor).",
         "UIBackgroundModes": [
           "location",

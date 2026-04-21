@@ -71,11 +71,6 @@ const M = {
     integ_toast_stripe_saved: 'Integração Stripe salva.',
     integ_alert_didit_key: 'Informe a API key do Didit (cópia em API & Webhooks do consola).',
     integ_toast_didit_saved: 'Integração Didit salva.',
-    integ_alert_twilio_creds: 'Informe Account SID e Auth Token (Twilio).',
-    integ_toast_twilio_saved: 'Integração Twilio salva — OTP SMS/WhatsApp usa estas credenciais.',
-    integ_twilio_cat: 'SMS · WhatsApp · OTP',
-    integ_twilio_desc:
-      'Envio de códigos OTP no registo/login do app (SMS e WhatsApp). As credenciais guardadas aqui têm prioridade sobre variáveis <code>TWILIO_*</code> no servidor. Console Twilio: <a href="https://console.twilio.com/" target="_blank" rel="noopener noreferrer">console.twilio.com</a>.',
   },
   'en-US': {
     integ_pageTitle: 'BrSpark Admin, Integrations',
@@ -143,11 +138,6 @@ const M = {
     integ_toast_stripe_saved: 'Stripe integration saved.',
     integ_alert_didit_key: 'Enter your Didit API key (from the console, API & Webhooks).',
     integ_toast_didit_saved: 'Didit integration saved.',
-    integ_alert_twilio_creds: 'Enter Twilio Account SID and Auth Token.',
-    integ_toast_twilio_saved: 'Twilio saved — app OTP SMS/WhatsApp will use these credentials.',
-    integ_twilio_cat: 'SMS · WhatsApp · OTP',
-    integ_twilio_desc:
-      'OTP codes for app sign-up/sign-in (SMS and WhatsApp). Credentials stored here take priority over server <code>TWILIO_*</code> variables. Twilio console: <a href="https://console.twilio.com/" target="_blank" rel="noopener noreferrer">console.twilio.com</a>.',
   },
 };
 
@@ -198,9 +188,6 @@ export function applyIntegrationsPageI18n() {
   ];
   for (const [id, k] of sec) setText(id, k);
   setText('didit-cat-label', 'integ_didit_cat');
-  setText('integ-cat-twilio', 'integ_twilio_cat');
-  const twDesc = document.getElementById('integ-desc-twilio');
-  if (twDesc) twDesc.innerHTML = integT('integ_twilio_desc');
 }
 
 /** Rótulo «○ Desconectado» / «○ Público» (sem prefixo, só o texto após ○). */

@@ -1124,7 +1124,7 @@ router.post('/me/technician', authUser, async (req, res) => {
   }
 });
 
-// Público — POST /api/otp-auth/start — inicia desafio OTP (SMS, WhatsApp ou e-mail)
+// Público — POST /api/otp-auth/start — inicia desafio OTP (e-mail; telefone apenas com ALLOW_OTP_PLAINTEXT em dev)
 router.post('/otp-auth/start', express.json(), async (req, res) => {
   try {
     const out = await startChallenge(prisma, {

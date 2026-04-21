@@ -96,9 +96,11 @@ async function transcribeAudioWithOpenAiWhisper(opts) {
       buffer,
     },
   ];
-  const lang = String(language || '').trim().toLowerCase().slice(0, 8);
+  let lang = String(language || '').trim().toLowerCase().replace(/_/g, '-').slice(0, 8);
+  // Whisper (ISO 639-1): pt-br / pt_pt → pt; demais mantidos se casarem o padrão
+  if (lang.startsWith('pt')) lang = 'pt';
   if (lang && /^[a-z]{2}(-[a-z]{2,4})?$/i.test(lang)) {
-    parts.splice(1, 0, { name: 'language', value: lang.replace('_', '-') });
+    parts.splice(1, 0, { name: 'language', value: lang });
   }
 
   const body = buildMultipartBody(boundary, parts);

@@ -10566,7 +10566,7 @@ export default function ChecklistEngine() {
                   <ChecklistVoiceNoteField
                     value={vv(field.id)}
                     readOnly={isReadOnly}
-                    transcribeLanguage={String(field.voiceTranscribeLanguage || 'pt').slice(0, 12)}
+                    transcribeLanguage={String(field.voiceTranscribeLanguage || 'pt-br').slice(0, 12)}
                     onChange={(next) => hi(field.id, next)}
                   />
                 </View>

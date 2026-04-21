@@ -73,8 +73,13 @@ function make6Digit() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+function otpDevPlaintextAllowed() {
+  return String(process.env.NODE_ENV) !== 'production' && String(process.env.ALLOW_OTP_PLAINTEXT) === '1';
+}
+
 /**
- * E-mail OTP não depende de Twilio. SMS/WhatsApp usam integração «Twilio» (painel) ou env TWILIO_*.
+ * OTP por e-mail (MailerSend/Nylas/SMTP). SMS/WhatsApp desativados.
+ * Em desenvolvimento, ALLOW_OTP_PLAINTEXT=1 imprime o código em log para telefone.
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {object} opts
  */
@@ -99,54 +104,20 @@ async function sendOtpToChannel(prisma, { channel, target, code, isE164Phone }) 
     return { ok: false, error: String(reason) };
   }
 
-  const { resolveTwilioCredentials } = require('./twilioCredentials');
-  const creds = await resolveTwilioCredentials(prisma);
-  const sid = String(creds.accountSid || '').trim();
-  const token = String(creds.authToken || '').trim();
-
-  if (!sid || !token) {
-    if (String(process.env.NODE_ENV) !== 'production' && String(process.env.ALLOW_OTP_PLAINTEXT) === '1') {
+  if ((channel === 'WHATSAPP' || channel === 'SMS') && isE164Phone) {
+    if (otpDevPlaintextAllowed()) {
       console.log('[otp dev plaintext]', target, code);
       return { ok: true, dev: true, channel: 'log' };
-    }
-    if (String(process.env.NODE_ENV) !== 'production') {
-      console.warn('[otp] Twilio não configurado — a não ser ALLOW_OTP_PLAINTEXT=1, OTP SMS/WhatsApp não é enviado');
     }
     return {
       ok: false,
       error:
-        'Entrega de código indisponível. Configure a integração Twilio em Integrações (ou TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN no servidor).',
+        channel === 'WHATSAPP'
+          ? 'Login e registo por WhatsApp não estão disponíveis. Use um endereço de e-mail.'
+          : 'Login e registo por SMS não estão disponíveis. Use um endereço de e-mail.',
     };
   }
 
-  // eslint-disable-next-line global-require
-  const twilio = require('twilio')(sid, token);
-  if (channel === 'WHATSAPP' && isE164Phone) {
-    const wfrom = String(creds.whatsappFrom || '').trim();
-    if (!wfrom) {
-      return { ok: false, error: 'Canal WhatsApp indisponível. Defina o remetente WhatsApp na integração Twilio ou TWILIO_WHATSAPP_FROM.' };
-    }
-    const body = i18nBrCodeMsg(code);
-    await twilio.messages.create({
-      from: wfrom,
-      to: 'whatsapp:' + String(target).replace(/^whatsapp:/i, ''),
-      body,
-    });
-    return { ok: true, channel: 'whatsapp' };
-  }
-  if (isE164Phone) {
-    const mfrom = String(creds.smsFrom || '').trim();
-    if (!mfrom) {
-      return {
-        ok: false,
-        error:
-          'Número SMS Twilio em falta. Defina «Número SMS (from)» na integração Twilio ou TWILIO_SMS_FROM / TWILIO_PHONE_NUMBER.',
-      };
-    }
-    const body = i18nBrCodeMsg(code);
-    await twilio.messages.create({ to: String(target), from: mfrom, body });
-    return { ok: true, channel: 'sms' };
-  }
   return { ok: false, error: 'Canal inválido.' };
 }
 

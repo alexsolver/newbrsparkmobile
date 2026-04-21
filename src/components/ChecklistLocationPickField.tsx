@@ -402,7 +402,7 @@ export function ChecklistLocationPickField({
           {saved.pin.lat.toFixed(6)}, {saved.pin.lng.toFixed(6)}
         </Text>
         {saved.addressPin ? <Text style={styles.addr}>{saved.addressPin}</Text> : null}
-        <Text style={styles.meta}>{new Date(saved.capturedAt).toLocaleString('pt-PT')}</Text>
+        <Text style={styles.meta}>{new Date(saved.capturedAt).toLocaleString('pt-BR')}</Text>
       </View>
     );
   }

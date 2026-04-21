@@ -104,11 +104,6 @@ async function testIntegration(integration) {
     return testDidit(integration);
   }
 
-  // ── Twilio (SMS/WhatsApp — OTP no app) — GET conta REST ──
-  if (type === 'PUSH' && name === 'Twilio') {
-    return testTwilio(integration);
-  }
-
   // ── Mapas / OSRM (nome "OSRM" mesmo se type na BD não for MAPS — evita "teste não implementado")
   if (isOsrmIntegration(integration)) {
     return testOsrm(integration);
@@ -1015,43 +1010,6 @@ async function testOsrm(integration) {
     return { ok: false, message: (data && data.message) || 'Resposta OSRM Match sem matchings' };
   } catch (e) {
     return { ok: false, message: e.message || 'Falha de rede ao contatar OSRM' };
-  }
-}
-
-/** Valida Account SID + Auth Token com GET /2010-04-01/Accounts/{Sid}.json */
-async function testTwilio(integration) {
-  const meta =
-    integration.metadata && typeof integration.metadata === 'object' ? integration.metadata : {};
-  const sid = String(meta.accountSid || '').trim();
-  const token = String(integration.apiKey || '').trim();
-  if (!sid || !token) {
-    return { ok: false, message: 'Preencha Account SID (metadados) e Auth Token.' };
-  }
-  const auth = Buffer.from(`${sid}:${token}`).toString('base64');
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}.json`;
-  try {
-    const r = await fetch(url, {
-      method: 'GET',
-      headers: { Authorization: `Basic ${auth}` },
-      signal: AbortSignal.timeout(15_000),
-    });
-    const text = await r.text();
-    if (r.ok) {
-      let st = '';
-      try {
-        const j = JSON.parse(text);
-        st = j && j.status ? String(j.status) : '';
-      } catch {
-        /* ignore */
-      }
-      return {
-        ok: true,
-        message: st ? `Twilio OK — conta ${st}` : 'Twilio OK — credenciais válidas.',
-      };
-    }
-    return { ok: false, message: `Twilio HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 240)}` };
-  } catch (e) {
-    return { ok: false, message: e.message || 'Erro de rede ao validar Twilio.' };
   }
 }
 
