@@ -1,9 +1,13 @@
 'use strict';
 
 const { buildEffectiveTenantBranding } = require('./tenantBranding');
+const { APP_MOBILE_MASTER_TENANT_SLUG } = require('./appDefaultTenant');
 
 function getGlobalAppTenantSlug() {
-  return String(process.env.APP_DEFAULT_TENANT_SLUG || 'brspark-app').trim() || 'brspark-app';
+  return (
+    String(process.env.APP_DEFAULT_TENANT_SLUG || APP_MOBILE_MASTER_TENANT_SLUG).trim() ||
+    APP_MOBILE_MASTER_TENANT_SLUG
+  );
 }
 
 function getGlobalAppTenantId() {

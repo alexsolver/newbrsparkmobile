@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Alert, ImageBackground,
-  ActivityIndicator, Linking, Image, Modal, ActionSheetIOS,
+  ActivityIndicator, Linking, Modal, ActionSheetIOS,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
 import { useAuth } from '../../src/hooks/useAuth';
 import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 import {
@@ -286,7 +287,7 @@ export default function LoginScreen() {
       : undefined;
   const { login, loginWithOAuth, register, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
   const { t, i18n } = useTranslation();
-  const { colors: C, appTagline, resolvedLogoUrl, loginBackgroundUrl } = useTheme();
+  const { colors: C, appTagline, loginBackgroundUrl } = useTheme();
   const styles = useMemo(() => createLoginStyles(C), [C]);
 
   const [mode, setMode] = useState<Mode>('LOGIN');
@@ -751,29 +752,13 @@ export default function LoginScreen() {
           {loginBackgroundUrl ? (
             <ImageBackground source={{ uri: loginBackgroundUrl }} style={styles.heroBg} resizeMode="cover">
               <View style={styles.heroOverlay}>
-                {resolvedLogoUrl ? (
-                  <Image source={{ uri: resolvedLogoUrl }} style={styles.logoImage} resizeMode="contain" />
-                ) : (
-                  <Image
-                    source={require('../../assets/logo.png')}
-                    style={styles.logoImage}
-                    resizeMode="contain"
-                  />
-                )}
+                <BrandingLogoImage style={styles.logoImage} resizeMode="contain" />
                 <Text style={[styles.logoSub, { color: '#fff' }]}>{appTagline}</Text>
               </View>
             </ImageBackground>
           ) : (
             <View style={styles.logoBlock}>
-              {resolvedLogoUrl ? (
-                <Image source={{ uri: resolvedLogoUrl }} style={styles.logoImage} resizeMode="contain" />
-              ) : (
-                <Image
-                  source={require('../../assets/logo.png')}
-                  style={styles.logoImage}
-                  resizeMode="contain"
-                />
-              )}
+              <BrandingLogoImage style={styles.logoImage} resizeMode="contain" />
               <Text style={styles.logoSub}>{appTagline}</Text>
             </View>
           )}

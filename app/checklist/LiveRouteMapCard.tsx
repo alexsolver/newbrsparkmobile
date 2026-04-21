@@ -619,7 +619,7 @@ export default function LiveRouteMapCard({
   /** Trilha GPS azul no mapa: desligada por defeito; reposta ao iniciar cada deslocamento (`visible` fica ativo). */
   const [showGpsTrail, setShowGpsTrail] = useState(false);
   const [dynamicRoute, setDynamicRoute] = useState<number[][] | null>(null);
-  /** Comprimento (m) ao longo da linha de referência já "pintado" de laranja; só aumenta (pausa mantém o sítio). */
+  /** Comprimento (m) ao longo da linha de referência já percorrido (pintado a verde no mapa); só aumenta (pausa mantém o sítio). */
   const [routePaintArcM, setRoutePaintArcM] = useState(0);
 
   const [isPaused, setIsPaused] = useState(false);
@@ -1949,9 +1949,10 @@ export default function LiveRouteMapCard({
                 Toque no <Text style={styles.hintStrong}>marcador do destino</Text> (ou nos pontos A/B) para aproximar e ver melhor a rua.
                 {'\n\n'}
                 <Text style={styles.hintStrong}>Rota KML / patrulha:</Text> linha{' '}
-                <Text style={styles.hintStrong}>laranja</Text> = trajeto planejado; linha{' '}
+                <Text style={styles.hintStrong}>verde</Text> = trecho já percorrido na referência; linha{' '}
+                <Text style={styles.hintStrong}>laranja</Text> = trajeto planejado que ainda falta; linha{' '}
                 <Text style={styles.hintStrong}>azul</Text> = percurso GPS registrado; na linha de navegação (OSRM),
-                o trecho já percorrido fica <Text style={styles.hintStrong}>laranja sólido</Text> e o que falta em
+                o trecho já percorrido fica <Text style={styles.hintStrong}>verde sólido</Text> e o que falta em
                 azul tracejado, útil ao pausar para ver onde parou. A cobertura de patrulha estima quanto do
                 trajeto planejado foi percorrido dentro do corredor (tolerância definida no despacho).
                 {'\n\n'}
@@ -2014,7 +2015,7 @@ export default function LiveRouteMapCard({
                 {templateRouteSplit.covered.length >= 2 && (
                   <Polyline
                     coordinates={templateRouteSplit.covered.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-                    strokeColor="#ea580c"
+                    strokeColor="#16a34a"
                     strokeWidth={3}
                     zIndex={810}
                     geodesic
@@ -2023,8 +2024,8 @@ export default function LiveRouteMapCard({
                 {templateRouteSplit.remaining.length >= 2 && (
                   <Polyline
                     coordinates={templateRouteSplit.remaining.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-                    strokeColor="#fdba74"
-                    strokeWidth={2}
+                    strokeColor="#ea580c"
+                    strokeWidth={3}
                     lineDashPattern={Platform.OS === 'android' ? undefined : [12, 8]}
                     zIndex={805}
                     geodesic
@@ -2122,7 +2123,7 @@ export default function LiveRouteMapCard({
             </>
           )}
           
-          {/* Percurso dinâmico (reta imediata + geometria OSRM quando disponível); trecho já percorrido a laranja */}
+          {/* Percurso dinâmico (reta imediata + geometria OSRM quando disponível); trecho já percorrido a verde */}
           {dynamicRoute && dynamicRoute.length >= 2 && (
              <>
                {dynamicRouteSplit ? (
@@ -2130,7 +2131,7 @@ export default function LiveRouteMapCard({
                    {dynamicRouteSplit.covered.length >= 2 && (
                      <Polyline
                        coordinates={dynamicRouteSplit.covered.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-                       strokeColor="#ea580c"
+                       strokeColor="#16a34a"
                        strokeWidth={3}
                        zIndex={1001}
                        geodesic={false}

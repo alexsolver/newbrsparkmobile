@@ -23,6 +23,7 @@ function normalizeOpenAiV1Base(url) {
 /**
  * API key: integração "OpenAI" (AI_LLM) na BD; senão OPENAI_API_KEY no .env.
  * Modelo: metadata.model > baseUrl (quando não é URL — o painel grava o modelo aqui) > OPENAI_MODEL > gpt-4o-mini.
+ * **Copiloto de formulários** (`openAiCopilotJson` em `formAiCopilot.js`): usa por defeito **gpt-4o** (não este `model` da integração). Para outro modelo só no copiloto: env **OPENAI_COPILOT_MODEL** (ex.: `gpt-4.1`, ou `gpt-4o-mini` para forçar barato).
  * Base URL da API: baseUrl se for URL; senão OPENAI_BASE_URL ou api.openai.com.
  *
  * @returns {Promise<{ apiKey: string, model: string, baseUrl: string, source: 'integration'|'env'|'none', embeddingModel: string }>}

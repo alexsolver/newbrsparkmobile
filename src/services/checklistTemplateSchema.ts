@@ -10,7 +10,16 @@ const TEMPLATES_STORAGE_KEY = '@brspark_templates';
  * Tipo canónico do campo (alinha ao motor do checklist): `type` + `fieldType` / `kind` legados.
  */
 export function effectiveSchemaFieldType(f: any): string {
-  const keys = ['type', 'fieldType', 'kind', 'component', 'controlType'] as const;
+  const keys = [
+    'type',
+    'Type',
+    'fieldType',
+    'field_type',
+    'kind',
+    'component',
+    'controlType',
+    'inputType',
+  ] as const;
   const normalized: string[] = [];
   for (const k of keys) {
     const raw = f?.[k];
@@ -33,9 +42,30 @@ export function effectiveSchemaFieldType(f: any): string {
   for (const p of financePrefer) {
     if (normalized.includes(p)) return p;
   }
+  /** `type: number` + `fieldType: currency` → usar moeda (ValueInput), não número simples. */
+  if (normalized.includes('currency')) return 'currency';
   let out = normalized[0] || '';
+
+  const alias: Record<string, string> = {
+    money: 'currency',
+    monetary: 'currency',
+  };
+  if (out && alias[out]) out = alias[out];
+
   /** Modelos antigos gravados com `type: technician_finance` → tratados como só despesas. */
   if (out === 'technician_finance') out = 'technician_finance_expense';
+
+  /** Só `currencyCode` (ex.: tipo não sincronizado / chave `Type` em vez de `type`). */
+  if (!out) {
+    const cc = f?.currencyCode;
+    if (cc != null && String(cc).trim() !== '') return 'currency';
+  }
+
+  /** Schema com `type: number` mas `currencyCode` do builder de moeda. */
+  if (out === 'number' && f?.currencyCode != null && String(f.currencyCode).trim() !== '') {
+    return 'currency';
+  }
+
   return out;
 }
 

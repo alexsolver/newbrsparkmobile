@@ -722,10 +722,17 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
     if (ownerEmail !== undefined && String(ownerEmail).trim() !== '') {
       pendingSyncOwnerEmail = ownerEmail;
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pushSyncQueue',message:'busy coalesce',data:{hypothesisId:'H5',pending:true},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+    // #endregion
     console.log('[SYNC] Sincronização já em andamento — pedido adiado (coalescing).');
     return;
   }
   isSyncing = true;
+  const __tPush0 = Date.now();
+  // #region agent log
+  fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pushSyncQueue',message:'start',data:{hypothesisId:'H3',hasEmail:!!ownerEmail},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+  // #endregion
   try {
     try {
       // 0. Enviar eventos de telemetria primeiro (dados de coleta)
@@ -772,6 +779,9 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
       console.warn('[SYNC] pushSyncQueue interrompido (rede ou dados locais):', e);
     }
   } finally {
+    // #region agent log
+    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pushSyncQueue',message:'end',data:{hypothesisId:'H3',ms:Date.now()-__tPush0,pendingAfter:pendingSyncRequested},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     isSyncing = false;
     if (pendingSyncRequested) {
       pendingSyncRequested = false;
@@ -2668,9 +2678,16 @@ async function removeExecutedCacheEntriesForActiveRemoteTasks(remoteTasks: any[]
 
 export async function pullTasks(ownerEmail?: string): Promise<void> {
   const q = ownerEmail ? `?owner_email=${encodeURIComponent(ownerEmail)}` : '';
+  const __tPull0 = Date.now();
+  // #region agent log
+  fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pullTasks',message:'start',data:{hypothesisId:'H3',hasEmail:!!ownerEmail},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+  // #endregion
   console.log(`[pullTasks] 🔄 Iniciando para email: "${ownerEmail}" | URL: /api/sync/tasks${q}`);
   try {
     const res = await apiFetch(`/api/sync/tasks${q}`);
+    // #region agent log
+    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pullTasks',message:'fetch done',data:{hypothesisId:'H3',status:res.status,ms:Date.now()-__tPull0},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     console.log(`[pullTasks] HTTP status: ${res.status}`);
     if (res.ok) {
         const remoteTasks = await res.json();
@@ -2815,10 +2832,16 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         console.log(`[pullTasks] 💾 Cache FT + RT (buckets separados) atualizado`);
     } else {
         const err = await res.text();
+        // #region agent log
+        fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pullTasks',message:'http not ok',data:{hypothesisId:'H3',status:res.status,ms:Date.now()-__tPull0,errSlice:String(err).slice(0,80)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+        // #endregion
         console.warn(`[pullTasks] ❌ Servidor retornou ${res.status}: ${err}`);
         // Offline-first: never block the user with an alert
     }
   } catch(e) { 
+      // #region agent log
+      fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'syncService.ts:pullTasks',message:'catch',data:{hypothesisId:'H3',ms:Date.now()-__tPull0,msg:String((e as any)?.message||e).slice(0,120)},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+      // #endregion
       console.warn('[pullTasks] ❌ Servidor inalcançável (modo offline):', e);
       // Offline-first: silent fail — data already exists locally
   }
@@ -2838,10 +2861,10 @@ export async function pushTelemetryBatch(): Promise<void> {
     try {
       events = JSON.parse(raw);
     } catch (parseErr) {
-      const backupKey = `${TELEMETRY_KEY}_invalid_${Date.now()}`;
+      const backupKey = `${TELEMETRY_OUTBOX_KEY}_invalid_${Date.now()}`;
       try {
         await AsyncStorage.setItem(backupKey, raw);
-        await AsyncStorage.removeItem(TELEMETRY_KEY);
+        await AsyncStorage.removeItem(TELEMETRY_OUTBOX_KEY);
       } catch {
         /* ignore */
       }
@@ -2876,7 +2899,7 @@ export async function pushTelemetryBatch(): Promise<void> {
 
     if (sent > 0) {
       const remaining = events.slice(sent);
-      await AsyncStorage.setItem(TELEMETRY_KEY, JSON.stringify(remaining));
+      await AsyncStorage.setItem(TELEMETRY_OUTBOX_KEY, JSON.stringify(remaining));
       console.log(`[SYNC] 📡 ${sent} eventos de telemetria enviados. Restam: ${remaining.length}`);
     }
   } catch (e) {
@@ -2955,4 +2978,66 @@ export async function fullSync(ownerEmail?: string): Promise<void> {
     pullAssetNotes(ownerEmail),
   ]);
   await pollStaleGpsReminders();
+  try {
+    await AsyncStorage.setItem(LAST_SUCCESSFUL_FULL_SYNC_AT_MS_KEY, String(Date.now()));
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function getLastSuccessfulFullSyncAtMs(): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_SUCCESSFUL_FULL_SYNC_AT_MS_KEY);
+    if (raw == null || raw === '') return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Contagens locais para o ecrã Cockpit de sincronização (perfil). */
+export async function getLocalSyncHealthSnapshot(ownerEmail?: string): Promise<{
+  lastFullSyncAtMs: number | null;
+  checklistOutboxCount: number;
+  conflictCount: number;
+  genericQueueCount: number;
+  executionStatusOutboxCount: number;
+  telemetryPendingCount: number;
+}> {
+  const lastFullSyncAtMs = await getLastSuccessfulFullSyncAtMs();
+  let checklistOutboxCount = 0;
+  try {
+    const raw = await AsyncStorage.getItem(CHECKLIST_OUTBOX_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    checklistOutboxCount = Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    checklistOutboxCount = 0;
+  }
+  const conflictRows = await getChecklistOutboxConflicts();
+  const genericQueueCount = getSyncQueue(ownerEmail).length;
+  let executionStatusOutboxCount = 0;
+  try {
+    const raw = await AsyncStorage.getItem(EXECUTION_STATUS_OUTBOX_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    executionStatusOutboxCount = Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    executionStatusOutboxCount = 0;
+  }
+  let telemetryPendingCount = 0;
+  try {
+    const raw = await AsyncStorage.getItem(TELEMETRY_OUTBOX_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    telemetryPendingCount = Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    telemetryPendingCount = 0;
+  }
+  return {
+    lastFullSyncAtMs,
+    checklistOutboxCount,
+    conflictCount: conflictRows.length,
+    genericQueueCount,
+    executionStatusOutboxCount,
+    telemetryPendingCount,
+  };
 }

@@ -14,7 +14,9 @@ const M = {
     fb_bc_builder: 'Forms Builder',
     fb_hero_title: 'Forms Builder',
     fb_hero_sub:
-      'Monte o schema do formulário para o app: campos, regras, ícone e navegação por seções. Título e descrição públicos ficam na faixa seguinte.',
+      'Monte o schema do formulário para o app: campos, regras, ícone e navegação por seções. Use o painel retrátil abaixo para título, descrição pública, estado e atalhos do app.',
+    fb_meta_summary_hint: 'Título, descrição, estado e opções do app',
+    fb_meta_summary_fallback: 'Sem título',
     fb_open: 'Abrir formulário',
     fb_open_title: 'Ver formulários salvos',
     fb_new: 'Criar novo',
@@ -26,7 +28,6 @@ const M = {
     fb_preview: 'Pré-visualização no app',
     fb_geofence: 'Cerca global',
     fb_duration: 'Tempo do formulário',
-    fb_form_qa: 'QA do formulário',
     fb_duration_title:
       'Minutos previstos só do preenchimento (sem deslocamento), usados no despacho',
     fb_save: 'Salvar formulário',
@@ -48,6 +49,7 @@ const M = {
 
     fb_tb_text: 'Resposta em texto',
     fb_tb_number: 'Entrada numérica',
+    fb_tb_currency: 'Moeda (valor monetário)',
     fb_tb_email: 'E-mail',
     fb_tb_phone: 'Telefone / celular',
     fb_tb_date: 'Data / hora',
@@ -386,6 +388,19 @@ const M = {
     fb_prop_calc_ph: 'Ex.: field_123 + field_456',
     fb_prop_calc_help:
       'Variáveis: use o ID sublinhado de outros blocos (ex.: field_111 * field_222) ou use "Math.sqrt(field_111)" para fórmulas puras.',
+    fb_prop_calc_insert_field_lbl: 'Inserir campo (no cursor)',
+    fb_prop_calc_field_placeholder: 'Escolher campo…',
+    fb_prop_calc_op_placeholder: 'Inserir operador ou função…',
+    fb_prop_calc_op_group_arith: 'Operadores',
+    fb_prop_calc_op_group_math: 'Math',
+    fb_prop_calc_ops_lbl: 'Operadores e funções',
+    fb_prop_calc_display_lbl: 'Formato do resultado',
+    fb_prop_calc_display_auto:
+      'Automático — moeda se a fórmula só usar IDs de campos «moeda»; caso contrário, número.',
+    fb_prop_calc_display_number: 'Número (preferências do app)',
+    fb_prop_calc_display_currency: 'Moeda (locale do app)',
+    fb_prop_calc_display_percent:
+      'Percentagem — o valor da expressão é tratado como fração (ex.: 0,15 → 15%).',
 
     fb_canvas_panel: 'Canvas do formulário',
     fb_canvas_loading:
@@ -434,6 +449,10 @@ const M = {
     fb_val_empty_title: 'O título do formulário não pode estar vazio.',
     fb_val_empty_labels: 'Há campos sem rótulo (etapas ignoradas). Corrija antes de salvar.',
     fb_val_dup_ids: 'IDs de campo duplicados: {ids}. Corrija antes de salvar.',
+    fb_val_no_operational:
+      'O formulário ainda não tem perguntas operacionais. Adicione pelo menos um campo ou use o copiloto para gerar um rascunho.',
+    fb_val_choice_no_options:
+      'Existem campos de escolha (lista, múltipla ou escala) sem opções definidas. Corrija antes de salvar.',
 
     mdl_field_props_title: 'Propriedades do campo',
     mdl_field_props_close: 'Fechar',
@@ -649,7 +668,7 @@ const M = {
     mdl_copilot_clear_chat: 'Limpar conversa',
     mdl_copilot_preview_title: 'Rever campos sugeridos',
     mdl_copilot_preview_intro:
-      'Marque Incluir para cada linha. Ajuste o tipo, a descrição, instruções por campo (para a IA) e obrigatório. Use Comentários gerais e Reprocessar com instruções para pedir à IA um novo rascunho antes de aplicar no canvas. Etapas (section_break) não podem ser excluídas, o tipo de etapa não é alterável aqui.',
+      'Marque Incluir para cada linha. Ajuste o tipo, a descrição, instruções por campo (só para a IA ao reprocessar) e obrigatório. O resumo do pedido no chat aparece por defeito uma vez em Comentários gerais (não é repetido em cada linha). Use Comentários gerais e Reprocessar com instruções para pedir à IA um novo rascunho antes de aplicar no canvas. Etapas (section_break) não podem ser excluídas, o tipo de etapa não é alterável aqui.',
     mdl_copilot_prev_th_inc: 'Incl.',
     mdl_copilot_prev_th_field: 'Campo / etapa',
     mdl_copilot_prev_th_type: 'Tipo',
@@ -658,26 +677,20 @@ const M = {
     mdl_copilot_prev_th_req: 'Obr.',
     mdl_copilot_prev_notes_lbl: 'Comentários gerais para a IA (opcional)',
     mdl_copilot_prev_notes_hint:
-      'Instruções globais (ex.: tom, LGPD, simplificar etapas). Use com Reprocessar com instruções para a IA reapresentar o formulário; ou preencha só para referência antes de Aplicar no canvas (nesse caso o texto não é enviado à IA, use Reprocessar para enviar).',
+      'Por defeito inclui o contexto da conversa uma vez (pode editar ou apagar). Acrescente instruções globais (tom, LGPD, simplificar etapas). Use com Reprocessar com instruções para a IA reapresentar o formulário; só Aplicar no canvas não envia o texto à IA.',
     mdl_copilot_prev_notes_ph:
       'Ex.: reduzir campos da etapa «Avaliação nutricional»; todos os textos em tom formal; adicionar campo de consentimento LGPD…',
     mdl_copilot_prev_optional: 'Tornar todos opcionais',
     mdl_copilot_prev_reprocess: 'Reprocessar com instruções',
     mdl_copilot_prev_apply: 'Aplicar no canvas',
     mdl_copilot_feedback_applied:
-      '**Concluído:** as alterações desta mensagem **já foram aplicadas** no editor (canvas, configurações do modelo e/ou regras sugeridas). Use **«Desfazer última alteração»** se precisar reverter.',
+      '**Alterações no editor:** esta proposta foi aplicada **só no canvas local** (definições do modelo e/ou regras sugeridas), **sem gravar na nuvem** — quem **guarda** é o botão **Salvar** do construtor. **«Desfazer última alteração»** reverte a última rodada do copiloto.',
     mdl_copilot_feedback_preview:
       '**Estado do painel:** abriu-se a **tabela de revisão** com os campos sugeridos. Confirme com **«Aplicar no canvas»** quando estiver pronto, ou ajuste as linhas antes.',
     fb_copilot_empty_reply: '(A IA não devolveu texto, veja avisos ao lado ou tente de novo.)',
     fb_guided_title: 'Monte seu formulário com ajuda guiada',
     fb_guided_sub:
       'Descreva o objetivo, quem vai preencher e o cenário. O copiloto monta um primeiro rascunho profissional e já sugere estrutura, evidências e próximos passos.',
-    fb_audit_title: 'QA do formulário',
-    fb_audit_sub:
-      'Checagem rápida antes de salvar para evitar formulário vago, técnico demais ou incompleto para o app.',
-    fb_audit_fix_ai: 'Sugerir correção com IA',
-    fb_audit_fix_ai_title:
-      'Pedir ao copiloto para sugerir e, se possível, aplicar a correção deste apontamento',
     mdl_delete_form_title: 'Arquivar formulário?',
     mdl_delete_form_body:
       'O formulário será arquivado e poderá ser restaurado depois pelo histórico/versões. Isso evita perda acidental.',
@@ -749,7 +762,9 @@ const M = {
     fb_bc_builder: 'Forms Builder',
     fb_hero_title: 'Forms Builder',
     fb_hero_sub:
-      'Build the form schema for the app: fields, rules, icon, and section navigation. The public title and description are in the strip below.',
+      'Build the form schema for the app: fields, rules, icon, and section navigation. Use the collapsible panel below for the public title, description, status, and app shortcuts.',
+    fb_meta_summary_hint: 'Title, description, status, and app options',
+    fb_meta_summary_fallback: 'Untitled form',
     fb_open: 'Open form',
     fb_open_title: 'View saved forms',
     fb_new: 'Create new',
@@ -761,7 +776,6 @@ const M = {
     fb_preview: 'App preview',
     fb_geofence: 'Global geofence',
     fb_duration: 'Form duration',
-    fb_form_qa: 'Form QA',
     fb_duration_title:
       'Expected minutes for filling only (excluding travel), used in dispatch',
     fb_save: 'Save form',
@@ -783,6 +797,7 @@ const M = {
 
     fb_tb_text: 'Text answer',
     fb_tb_number: 'Numeric input',
+    fb_tb_currency: 'Currency (money amount)',
     fb_tb_email: 'Email',
     fb_tb_phone: 'Phone / mobile',
     fb_tb_date: 'Date / time',
@@ -1121,6 +1136,19 @@ const M = {
     fb_prop_calc_ph: 'e.g. field_123 + field_456',
     fb_prop_calc_help:
       'Variables: use the underscore ID of other blocks (e.g. field_111 * field_222) or use "Math.sqrt(field_111)" for pure formulas.',
+    fb_prop_calc_insert_field_lbl: 'Insert field (at cursor)',
+    fb_prop_calc_field_placeholder: 'Choose field…',
+    fb_prop_calc_op_placeholder: 'Insert operator or function…',
+    fb_prop_calc_op_group_arith: 'Operators',
+    fb_prop_calc_op_group_math: 'Math',
+    fb_prop_calc_ops_lbl: 'Operators and functions',
+    fb_prop_calc_display_lbl: 'Result display format',
+    fb_prop_calc_display_auto:
+      'Automatic — currency if the formula only references currency field IDs; otherwise number.',
+    fb_prop_calc_display_number: 'Number (app preferences)',
+    fb_prop_calc_display_currency: 'Currency (app locale)',
+    fb_prop_calc_display_percent:
+      'Percent — expression value is a fraction (e.g. 0.15 → 15%).',
 
     fb_canvas_panel: 'Form canvas',
     fb_canvas_loading:
@@ -1169,6 +1197,10 @@ const M = {
     fb_val_empty_title: 'The form title cannot be empty.',
     fb_val_empty_labels: 'Some fields have no label (sections ignored). Fix before saving.',
     fb_val_dup_ids: 'Duplicate field IDs: {ids}. Fix before saving.',
+    fb_val_no_operational:
+      'The form has no operational fields yet. Add at least one field or use the copilot to create a draft.',
+    fb_val_choice_no_options:
+      'Some choice fields (list, multiselect, or scale) are missing options. Fix before saving.',
 
     mdl_field_props_title: 'Field properties',
     mdl_field_props_close: 'Close',
@@ -1384,7 +1416,7 @@ const M = {
     mdl_copilot_clear_chat: 'Clear conversation',
     mdl_copilot_preview_title: 'Review suggested fields',
     mdl_copilot_preview_intro:
-      'Check Include on each row. Adjust type, description, per-field AI instructions, and required. Use General comments and Reprocess with instructions to ask the AI for a new draft before applying to the canvas. Steps (section_break) cannot be removed, step type is not editable here.',
+      'Check Include on each row. Adjust type, description, per-field AI instructions (only when reprocessing), and required. By default, a one-line summary of the chat request appears once under General comments (not repeated on every row). Use General comments and Reprocess with instructions for a new draft before applying to the canvas. Steps (section_break) cannot be removed, step type is not editable here.',
     mdl_copilot_prev_th_inc: 'Inc.',
     mdl_copilot_prev_th_field: 'Field / step',
     mdl_copilot_prev_th_type: 'Type',
@@ -1393,26 +1425,20 @@ const M = {
     mdl_copilot_prev_th_req: 'Req.',
     mdl_copilot_prev_notes_lbl: 'General comments for the AI (optional)',
     mdl_copilot_prev_notes_hint:
-      'Global instructions (e.g. tone, GDPR, simplify steps). Use with Reprocess with instructions for a new draft; or fill only as reference before Apply to canvas (text is not sent to the AI unless you Reprocess).',
+      'By default this includes the conversation context once (you can edit or clear). Add global instructions (tone, GDPR, simplify steps). Reprocess with instructions sends it to the AI; Apply to canvas alone does not.',
     mdl_copilot_prev_notes_ph:
       'e.g. reduce fields in “Nutrition review”; formal tone; add GDPR consent field…',
     mdl_copilot_prev_optional: 'Mark all optional',
     mdl_copilot_prev_reprocess: 'Reprocess with instructions',
     mdl_copilot_prev_apply: 'Apply to canvas',
     mdl_copilot_feedback_applied:
-      '**Done:** changes from this message **have already been applied** in the editor (canvas, model settings, and/or suggested rules). Use **«Undo last change»** if you need to revert.',
+      '**Editor changes:** this proposal was applied **only to the local canvas** (model settings and/or suggested rules), **not saved to the cloud** — use **Save** in the builder to persist. **«Undo last change»** reverts the last copilot round.',
     mdl_copilot_feedback_preview:
       '**Panel state:** the **review table** with suggested fields is open. Confirm with **«Apply to canvas»** when ready, or adjust rows first.',
     fb_copilot_empty_reply: '(The AI returned no text, check side notes or try again.)',
     fb_guided_title: 'Build your form with guided help',
     fb_guided_sub:
       'Describe the goal, who will fill it out, and the scenario. The copilot will create a professional first draft and suggest structure, evidence, and next steps.',
-    fb_audit_title: 'Form QA',
-    fb_audit_sub:
-      'Quick review before saving to catch vague, overly technical, or incomplete forms.',
-    fb_audit_fix_ai: 'Suggest AI fix',
-    fb_audit_fix_ai_title:
-      'Ask the copilot to suggest and, when possible, apply a fix for this issue',
     mdl_delete_form_title: 'Archive form?',
     mdl_delete_form_body:
       'The form will be archived and can be restored later from history/versions. This helps avoid accidental loss.',
@@ -1481,6 +1507,7 @@ const M = {
 };
 M['es-ES'] = { ...M['en-US'] };
 Object.assign(M['es-ES'], {
+  fb_tb_currency: 'Moneda (importe)',
   mdl_forms_sub:
     'Vista en árbol: expanda carpetas, arrastre formularios para mover. Pulse una carpeta para definir dónde crear un modelo nuevo.',
   mdl_forms_filter_non_archived: 'Solo no archivados',
@@ -1554,6 +1581,19 @@ Object.assign(M['es-ES'], {
   fb_vision_detection_ex_catalog_missing:
     'No se cargó el catálogo de ejemplos. Recargue la página del Form Builder (debe existir visionDetectionPromptExamplesData.js).',
   fb_app_nav_scroll_hint: 'Desplace horizontalmente la barra si los controles no caben en pantalla.',
+  fb_prop_calc_insert_field_lbl: 'Insertar campo (en el cursor)',
+  fb_prop_calc_field_placeholder: 'Elegir campo…',
+  fb_prop_calc_op_placeholder: 'Insertar operador o función…',
+  fb_prop_calc_op_group_arith: 'Operadores',
+  fb_prop_calc_op_group_math: 'Math',
+  fb_prop_calc_ops_lbl: 'Operadores y funciones',
+  fb_prop_calc_display_lbl: 'Formato del resultado',
+  fb_prop_calc_display_auto:
+    'Automático — moneda si la fórmula solo usa IDs de campos «moneda»; si no, número.',
+  fb_prop_calc_display_number: 'Número (preferencias de la app)',
+  fb_prop_calc_display_currency: 'Moneda (locale de la app)',
+  fb_prop_calc_display_percent:
+    'Porcentaje — el valor de la expresión es fracción (p. ej. 0,15 → 15%).',
   fb_app_layout_modal_title: 'Diseño en la app',
   fb_app_layout_modal_intro:
     'Defina cómo el técnico abre el formulario en el móvil y, con el menú de pasos, si el orden de las secciones es libre o fijo.',
@@ -1673,7 +1713,6 @@ export function applyChecklistsBuilderChromeI18n() {
   setText('fb-btn-preview-lbl', fbT('fb_preview'));
   setText('fb-btn-geofence-lbl', fbT('fb_geofence'));
   setText('fb-btn-duration-lbl', fbT('fb_duration'));
-  setText('fb-btn-form-qa-lbl', fbT('fb_form_qa'));
   const geoNav = document.getElementById('fb-btn-geofence-nav');
   if (geoNav) geoNav.title = fbT('mdl_geofence_title');
   const durBtn = document.querySelector('[data-fb-action="form-duration"]');
@@ -1700,8 +1739,6 @@ export function applyChecklistsBuilderChromeI18n() {
   applyChecklistsToolboxI18n();
 
   setText('fb-canvas-panel-title', fbT('fb_canvas_panel'));
-  setText('fb-form-audit-title', fbT('fb_audit_title'));
-  setText('fb-form-audit-sub', fbT('fb_audit_sub'));
 
   setText('fb-label-tpl-title', fbT('fb_label_form_title'));
   setText('fb-label-form-active', fbT('fb_label_form_active'));
@@ -1711,6 +1748,12 @@ export function applyChecklistsBuilderChromeI18n() {
     if (typeof window.__fbApplyLocalizedDefaultFormTitle === 'function') {
       window.__fbApplyLocalizedDefaultFormTitle();
     }
+  } catch {
+    /* ignore */
+  }
+  setText('fb-meta-summary-hint', fbT('fb_meta_summary_hint'));
+  try {
+    if (typeof window.fbSyncFormMetaSummary === 'function') window.fbSyncFormMetaSummary();
   } catch {
     /* ignore */
   }

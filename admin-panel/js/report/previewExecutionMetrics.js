@@ -30,6 +30,17 @@ export function normalizeTraversedPathForReport(raw) {
   return out.length ? out : null;
 }
 
+/** Alinhado ao app: trilha em `traversedPath`, `gpsTrack` ou `track`. */
+function traversedPathArrayFromTransitJson(j) {
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return null;
+  return (
+    normalizeTraversedPathForReport(j.traversedPath) ||
+    normalizeTraversedPathForReport(j.gpsTrack) ||
+    normalizeTraversedPathForReport(j.track) ||
+    null
+  );
+}
+
 function collectTransitCandidateValuesForReport(responses) {
   const out = [];
   if (!responses || typeof responses !== 'object' || Array.isArray(responses)) return out;
@@ -76,7 +87,7 @@ export function extractTransitEndpointsForReport(responses) {
           };
         }
       } else if (act === 'CHEGADA') {
-        const pathNorm = normalizeTraversedPathForReport(j.traversedPath);
+        const pathNorm = traversedPathArrayFromTransitJson(j);
         const lat = j.coordinates?.lat ?? j.lat;
         const lng = j.coordinates?.lng ?? j.lng;
         const hasCoord =
@@ -102,6 +113,30 @@ export function extractTransitEndpointsForReport(responses) {
     }
   }
   return { startGPS, endGPS };
+}
+
+/** Maior trilha GPS de qualquer CHEGADA (repetíveis, órfãos). */
+export function scavengeLongestTraversedPathFromReportResponses(responses) {
+  let best = null;
+  let bestN = 0;
+  if (!responses || typeof responses !== 'object' || Array.isArray(responses)) return null;
+  const candidates = collectTransitCandidateValuesForReport(responses);
+  for (const val of candidates) {
+    if (val == null) continue;
+    try {
+      const j =
+        typeof val === 'object' && val !== null && !Array.isArray(val) ? val : JSON.parse(val);
+      if (String(j.action || '').toUpperCase() !== 'CHEGADA') continue;
+      const p = traversedPathArrayFromTransitJson(j);
+      if (p && p.length > bestN) {
+        best = p;
+        bestN = p.length;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return bestN >= 1 ? best : null;
 }
 
 export function computeTransitSecondsFromEndpoints(startGPS, endGPS) {

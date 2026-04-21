@@ -1,7 +1,8 @@
 import '../src/tasks/routeTrackingTask';
 import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
-import { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, ActivityIndicator, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useFonts } from 'expo-font';
 import { useTheme } from '../src/theme/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, getDatabaseOwner, clearLocalDatabase } from '../src/database';
@@ -25,6 +26,7 @@ import { PushNotificationResponseBridge } from '../src/components/PushNotificati
 import { AutomaticTimeGate } from '../src/components/AutomaticTimeGate';
 import { GpsIntegrityGate } from '../src/components/GpsIntegrityGate';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { VECTOR_ICON_FONT_MAP } from '../src/lib/vectorIconFonts';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -223,28 +225,98 @@ function MainLayout() {
   );
 }
 
-export default function RootLayout() {
+/**
+ * `useFonts` só deve dar seguido quando `loaded === true`.
+ * Tratar `error != null` como «pronto» montava a app sem fontes; ao abrir o mapa de deslocamento
+ * (Octicons/vector-icons), o Metro era pedido outra vez e falhava offline — promise rejeitada.
+ */
+function FontLoadingGate({ onRetryLoadFonts }: { onRetryLoadFonts: () => void }) {
+  const [iconFontsLoaded, iconFontError] = useFonts(VECTOR_ICON_FONT_MAP);
+
   useEffect(() => {
     void preparePushNotificationInfrastructure().catch(() => {});
   }, []);
 
+  if (!iconFontsLoaded && !iconFontError) {
+    return (
+      <View style={fontGateStyles.centered}>
+        <ActivityIndicator size="large" color="#6366f1" />
+      </View>
+    );
+  }
+
+  if (iconFontError) {
+    return (
+      <View style={[fontGateStyles.centered, fontGateStyles.errorPad]}>
+        <Text style={fontGateStyles.errorText}>
+          Não foi possível carregar as fontes dos ícones. Em desenvolvimento, confirme que o telemóvel está na mesma
+          rede que o Metro e que o modo avião está desligado. Depois toque em Tentar novamente.
+        </Text>
+        <TouchableOpacity style={fontGateStyles.retryBtn} onPress={onRetryLoadFonts} accessibilityRole="button">
+          <Text style={fontGateStyles.retryLabel}>Tentar novamente</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <I18nextProvider i18n={i18n}>
+      <AuthProvider>
+        <PersonaProvider>
+          <ThemeProvider>
+            <AutomaticTimeGate>
+              <GpsIntegrityGate>
+                <AppProvider>
+                  <MainLayout />
+                </AppProvider>
+              </GpsIntegrityGate>
+            </AutomaticTimeGate>
+          </ThemeProvider>
+        </PersonaProvider>
+      </AuthProvider>
+    </I18nextProvider>
+  );
+}
+
+const fontGateStyles = StyleSheet.create({
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  errorPad: {
+    paddingHorizontal: 24,
+  },
+  errorText: {
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#334155',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  retryBtn: {
+    backgroundColor: '#6366f1',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryLabel: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+});
+
+export default function RootLayout() {
+  const [fontLoadSession, setFontLoadSession] = useState(0);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <I18nextProvider i18n={i18n}>
-        <AuthProvider>
-          <PersonaProvider>
-            <ThemeProvider>
-              <AutomaticTimeGate>
-                <GpsIntegrityGate>
-                  <AppProvider>
-                    <MainLayout />
-                  </AppProvider>
-                </GpsIntegrityGate>
-              </AutomaticTimeGate>
-            </ThemeProvider>
-          </PersonaProvider>
-        </AuthProvider>
-      </I18nextProvider>
+      <FontLoadingGate
+        key={fontLoadSession}
+        onRetryLoadFonts={() => setFontLoadSession((n) => n + 1)}
+      />
     </GestureHandlerRootView>
   );
 }

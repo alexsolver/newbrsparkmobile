@@ -1,14 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   TextInput,
   TextStyle,
-
-  InputAccessoryView,
+  StyleSheet,
   View,
-  Text,
-  TouchableOpacity,
   Keyboard,
-  Platform} from 'react-native';
+} from 'react-native';
 import { getNumberFormat } from '../i18n/formatters';
 
 interface ValueInputProps {
@@ -100,18 +97,14 @@ export function ValueInput({
   onChangeText,
   style,
   placeholder = '0,00',
-  currency = false,
-  currencySymbol,
+  currency: _currency = false,
+  currencySymbol: _currencySymbol,
   editable = true,
   onDraftChange,
   onEditingStateChange,
 }: ValueInputProps) {
   const [focused, setFocused] = useState(false);
   const [rawValue, setRawValue] = useState(value ?? '');
-
-  // Stable ID for InputAccessoryView
-  const nativeIdRef = useRef(`vi-${Math.random().toString(36).slice(2)}`);
-  const inputAccessoryViewID = Platform.OS === 'ios' ? nativeIdRef.current : undefined;
 
   // Sync internal raw when parent value changes externally (form reset, etc.)
   useEffect(() => {
@@ -143,8 +136,37 @@ export function ValueInput({
     onChangeText(canonical);
   };
 
+  const flat = StyleSheet.flatten(style) || {};
+  const {
+    flex,
+    flexGrow,
+    flexShrink,
+    flexBasis,
+    alignSelf,
+    minWidth,
+    minHeight,
+    maxWidth,
+    maxHeight,
+    ...inputStyle
+  } = flat as TextStyle & Record<string, unknown>;
+
+  const wrapperStyle = {
+    alignSelf: (alignSelf as TextStyle['alignSelf']) ?? ('stretch' as const),
+    minHeight: Math.max(typeof minHeight === 'number' ? minHeight : 0, 48),
+    minWidth,
+    maxWidth,
+    maxHeight,
+    flex,
+    flexGrow,
+    flexShrink,
+    flexBasis,
+  };
+
+  // Não usar InputAccessoryView no iOS aqui: o nativo usa position:absolute + largura
+  // da janela e pode cobrir o cartão do checklist e bloquear toques no TextInput.
+  // Teclado decimal: fechar tocando fora (ScrollView) ou mudando de campo.
   return (
-    <>
+    <View style={wrapperStyle}>
       <TextInput
         value={displayValue}
         onChangeText={(t) => {
@@ -156,47 +178,12 @@ export function ValueInput({
         onSubmitEditing={() => Keyboard.dismiss()}
         returnKeyType="done"
         keyboardType="decimal-pad"
-        inputAccessoryViewID={inputAccessoryViewID}
-        style={style}
+        style={[inputStyle, { minHeight: 44, alignSelf: 'stretch', color: '#0f172a' }]}
         placeholder={placeholder}
+        placeholderTextColor="#94a3b8"
         editable={editable}
         selectTextOnFocus
       />
-      {Platform.OS === 'ios' && inputAccessoryViewID && (
-        <InputAccessoryView nativeID={inputAccessoryViewID}>
-          <View
-            style={{
-              backgroundColor: '#F1F5F9',
-              borderTopWidth: 1,
-              borderTopColor: '#CBD5E1',
-              flexDirection: 'row',
-              justifyContent: 'flex-end',
-              alignItems: 'center',
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-            }}
-          >
-            {currencySymbol && (
-              <Text style={{ flex: 1, fontSize: 13, color: '#64748B', fontWeight: '700' }}>
-                {currencySymbol} {displayValue || '0'}
-              </Text>
-            )}
-            <TouchableOpacity
-              onPress={() => Keyboard.dismiss()}
-              style={{
-                backgroundColor: '#191C1D',
-                paddingHorizontal: 20,
-                paddingVertical: 8,
-                borderRadius: 8,
-              }}
-            >
-              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>
-                Concluído ✓
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </InputAccessoryView>
-      )}
-    </>
+    </View>
   );
 }

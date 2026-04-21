@@ -1,0 +1,29 @@
+diff --git a/node_modules/expo-notifications/build/DevicePushTokenAutoRegistration.fx.js b/node_modules/expo-notifications/build/DevicePushTokenAutoRegistration.fx.js
+index 7c39beb..707b71b 100644
+--- a/node_modules/expo-notifications/build/DevicePushTokenAutoRegistration.fx.js
++++ b/node_modules/expo-notifications/build/DevicePushTokenAutoRegistration.fx.js
+@@ -81,7 +81,9 @@ if (ServerRegistrationModule.getRegistrationInfoAsync) {
+     // Verify if persisted registration
+     // has successfully uploaded last known
+     // device push token. If not, retry.
+-    ServerRegistrationModule.getRegistrationInfoAsync().then(__handlePersistedRegistrationInfoAsync);
++    ServerRegistrationModule.getRegistrationInfoAsync().then(__handlePersistedRegistrationInfoAsync, (e) => {
++        console.warn('[expo-notifications] Error encountered while loading persisted registration info for auto token updates.', e);
++    });
+ }
+ else {
+     console.warn(`[expo-notifications] Error encountered while fetching auto-registration state, new tokens will not be automatically registered on server.`, new UnavailabilityError('ServerRegistrationModule', 'getRegistrationInfoAsync'));
+diff --git a/node_modules/expo-notifications/ios/EXNotifications/ServerRegistration/ServerRegistrationModule.swift b/node_modules/expo-notifications/ios/EXNotifications/ServerRegistration/ServerRegistrationModule.swift
+index 2590be0..ebbd7d4 100644
+--- a/node_modules/expo-notifications/ios/EXNotifications/ServerRegistration/ServerRegistrationModule.swift
++++ b/node_modules/expo-notifications/ios/EXNotifications/ServerRegistration/ServerRegistrationModule.swift
+@@ -111,7 +111,8 @@ open class ServerRegistrationModule: Module {
+   private func registrationSetQuery(_ registration: String) -> CFDictionary {
+     return registrationSearchQueryMerging([
+       kSecValueData: dataFromString(registration),
+-      kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
++      // Matches installation ID; readable after first unlock when app wakes in background.
++      kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+     ])
+   }
+ 

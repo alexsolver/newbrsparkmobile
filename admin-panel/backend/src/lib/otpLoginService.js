@@ -250,7 +250,11 @@ async function verifyChallenge(
 
   const defaultTenantId = await resolveAppDefaultTenantId();
   if (!defaultTenantId) {
-    return { ok: false, error: 'Configuração do servidor: APP_DEFAULT_TENANT_SLUG em falta.', status: 500 };
+    return {
+      ok: false,
+      error: 'Configuração do servidor: tenant master BrSpark (slug brspark) não encontrada.',
+      status: 503,
+    };
   }
 
   let user = await prisma.user.findUnique({

@@ -31,6 +31,12 @@ const FIELD_SPECS = [
   },
   { type: 'text', tier: 'core', proposalsDefault: true, descPt: 'Texto livre.' },
   { type: 'number', tier: 'core', proposalsDefault: true, descPt: 'Valor numérico.' },
+  {
+    type: 'currency',
+    tier: 'core',
+    proposalsDefault: true,
+    descPt: 'Moeda (formatação pt-BR, valor canónico numérico no envio).',
+  },
   { type: 'phone', tier: 'core', proposalsDefault: true, descPt: 'Telefone.' },
   { type: 'email', tier: 'core', proposalsDefault: true, descPt: 'E-mail.' },
   { type: 'date', tier: 'core', proposalsDefault: true, descPt: 'Data/hora.' },
@@ -140,7 +146,8 @@ const FIELD_SPECS = [
     tier: 'advanced',
     proposalsDefault: false,
     contextFlag: 'allowCalculated',
-    descPt: 'Valor calculado por fórmula (configurar no builder).',
+    descPt:
+      'Valor calculado por fórmula (calcFormula). Formato de exibição: calcDisplayFormat auto | number | currency | percent (no app).',
   },
   {
     type: 'image_annotation',
@@ -398,11 +405,12 @@ function applyDefaultTypeIconsToSchemaItems(schemaData) {
  * @returns {string}
  */
 function formatAutomaticIconRulesForPrompt() {
-  return `### Ícones automáticos (obrigatório)
-- Para **cada** campo e **cada** etapa (\`section_break\`) no schema: defina **sempre** \`icon\` (Ionicons em kebab-case, preferir sufixo \`-outline\` quando existir), \`iconLibrary\`: \`Ionicons\` e \`iconColor\` (hex legível, ex.: #6366f1, #0f766e, #c2410c). Escolha pelo **tipo** e **rótulo** (ex.: foto → camera-outline; assinatura → pencil-outline; lista → list-outline).
-- **Varie** \`iconColor\` entre etapas para distinguir secções no app; mantenha coerência dentro da mesma etapa.
-- Em **schemaPatch**: em **todo** \`add_field.field\` novo inclua os três campos; em \`update_field.patch\` preencha ícones ausentes quando alterar rótulo/tipo ou quando o usuário pedir melhoria visual.
-- **Ícone da tarefa / formulário** (lista de modelos no painel): alinhado ao título ou sector (ex.: vistoria → clipboard-outline; visita → business-outline). No **Copiloto** use **templateMetadataPatch** \`{ "icon": "<nome Ionicons>" }\` (ou omita para não alterar). Na **geração directa** de formulário (JSON raiz com title/schemaData), inclua no mesmo objecto raiz \`metadata\`: \`{ "icon": "<nome Ionicons>" }\`.`;
+  return `### Ícones no formulário (obrigatório — copiloto e geração)
+- **Etapa** (\`section_break\`) e **cada campo** operacional: **sempre** \`icon\` (Ionicons kebab-case, preferir \`-outline\`), \`iconLibrary\`: \`Ionicons\` e \`iconColor\` (hex legível). **Nunca** omita ícone em \`add_field\`; em \`update_field\`, se o item ficar sem ícone visível no schema, **preencha** ícone/cor.
+- Escolha pelo **tipo** e **rótulo** (ex.: foto → camera-outline; assinatura → pencil-outline; etapa «Dados» → person-outline; etapa «Riscos» → warning-outline).
+- **Varie** \`iconColor\` entre etapas para distinguir secções no telemóvel; coerência dentro da mesma etapa.
+- **Ícone do modelo na lista** (tarefa no painel): quando criar fluxo novo ou renomear forte, **templateMetadataPatch** \`{ "icon": "<nome Ionicons>" }\`; em micro-ajuste pontual pode omitir **só** o ícone do modelo se não alterar o tema (nunca omita ícones de **campos/etapas** tocados).
+- Na **geração directa** de JSON (objecto raiz com schemaData), inclua \`metadata.icon\` coerente quando aplicável.`;
 }
 
 /**

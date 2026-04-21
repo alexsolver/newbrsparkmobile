@@ -4,9 +4,12 @@ const prisma = require('../db');
 const { parseFormContextFromOptions } = require('./formAiContext');
 const { buildFilledFormsRagContext } = require('./formAiExecutionRag');
 const { buildTemplateLibraryRagContext, buildCopilotRetrievalQuery } = require('./formAiTemplateLibraryRag');
-const { runFormCopilot } = require('./formAiCopilot');
+const { runCopilotBrainTurn } = require('./copilotNext/runBrainTurn');
 const { normalizeTemplateTitle } = require('./templateTitleUnique');
-const { fetchDocumentationForCopilot } = require('./formAiDocumentationFetch');
+const {
+  fetchMultipleReferenceUrlsForCopilot,
+  normalizeHttpsReferenceUrls,
+} = require('./formAiDocumentationFetch');
 
 /**
  * Executa uma rodada completa do Copiloto (RAG execução + RAG biblioteca + LLM).
@@ -15,7 +18,7 @@ const { fetchDocumentationForCopilot } = require('./formAiDocumentationFetch');
  *   admin?: { tenantId?: string | null } | null,
  *   onProgress?: (ev: { step: string, message: string, ts?: number }) => void,
  * }} input
- * @returns {Promise<{ out: Awaited<ReturnType<typeof runFormCopilot>>, ragMeta: object, ragLibraryMeta: object }>}
+ * @returns {Promise<{ out: Awaited<ReturnType<typeof runCopilotBrainTurn>>, ragMeta: object, ragLibraryMeta: object }>}
  */
 async function executeCopilotChatSession(input) {
   const startedAt = Date.now();
@@ -140,7 +143,7 @@ async function executeCopilotChatSession(input) {
 
   let documentationFetchedText = '';
   let documentationFetchWarning = '';
-  /** @type {{ attempted: boolean, ok: boolean, chars: number, error: string | null, url: string | null, finalUrl?: string }} */
+  /** @type {{ attempted: boolean, ok: boolean, chars: number, error: string | null, url: string | null, urls?: string[], items?: unknown[], referenceCount?: number, finalUrl?: string }} */
   const documentationFetch = {
     attempted: false,
     ok: false,
@@ -148,24 +151,41 @@ async function executeCopilotChatSession(input) {
     error: null,
     url: null,
   };
-  const docUrl =
+
+  const refFromArray = [];
+  if (Array.isArray(body.referenceUrls)) {
+    for (const x of body.referenceUrls) {
+      if (x != null && String(x).trim()) refFromArray.push(String(x).trim().slice(0, 2048));
+    }
+  }
+  const legacyDoc =
     typeof body.documentationUrl === 'string' ? String(body.documentationUrl).trim().slice(0, 2048) : '';
-  if (docUrl) {
+  if (legacyDoc) refFromArray.unshift(legacyDoc);
+  const urlsNormalized = normalizeHttpsReferenceUrls(refFromArray, 5);
+
+  if (urlsNormalized.length > 0) {
     documentationFetch.attempted = true;
-    documentationFetch.url = docUrl;
-    prog('docs', 'A carregar documentação da URL…');
+    documentationFetch.url = urlsNormalized[0];
+    documentationFetch.urls = urlsNormalized;
+    documentationFetch.referenceCount = urlsNormalized.length;
+    prog('docs', `A carregar ${urlsNormalized.length} referência(ões) web…`);
     const t0 = Date.now();
-    const r = await fetchDocumentationForCopilot(docUrl);
+    const multi = await fetchMultipleReferenceUrlsForCopilot(urlsNormalized, (i, n) => {
+      prog('docs', `A carregar referência ${i}/${n}…`);
+    });
     meta.timings.docsMs = Date.now() - t0;
-    if (r.ok && r.text) {
-      documentationFetchedText = r.text;
-      documentationFetch.ok = true;
-      documentationFetch.chars = r.text.length;
-      documentationFetch.finalUrl = r.finalUrl || docUrl;
-    } else {
-      documentationFetch.ok = false;
-      documentationFetch.error = r.error || 'Falha desconhecida.';
-      documentationFetchWarning = `Documentação: não foi possível carregar a URL — ${documentationFetch.error}`;
+    documentationFetchedText = multi.combinedText || '';
+    documentationFetch.items = multi.items;
+    documentationFetch.ok = multi.items.some((it) => it && it.ok);
+    documentationFetch.chars = documentationFetchedText.length;
+    if (multi.warnings && multi.warnings.length) {
+      documentationFetchWarning = `Referências web: ${multi.warnings.join(' | ')}`;
+    }
+    if (!documentationFetch.ok && urlsNormalized.length === 1 && multi.items && multi.items[0]) {
+      documentationFetch.error = multi.items[0].error || 'Falha ao carregar.';
+      if (!documentationFetchWarning) {
+        documentationFetchWarning = `Referência: não foi possível carregar — ${documentationFetch.error}`;
+      }
     }
   }
 
@@ -175,7 +195,11 @@ async function executeCopilotChatSession(input) {
   let llmError = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      out = await runFormCopilot({
+      const preferredMode =
+        typeof body.copilotMode === 'string' && String(body.copilotMode).trim()
+          ? String(body.copilotMode).trim()
+          : 'auto';
+      out = await runCopilotBrainTurn({
         messages,
         schemaData,
         formContext,
@@ -190,6 +214,7 @@ async function executeCopilotChatSession(input) {
         templateSiblingTitles,
         documentationFetchedText: documentationFetchedText || undefined,
         documentationFetchWarning: documentationFetchWarning || undefined,
+        preferredMode,
       });
       llmError = null;
       break;

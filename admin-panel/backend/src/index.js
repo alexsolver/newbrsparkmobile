@@ -1,84 +1,18 @@
 'use strict';
 require('dotenv').config();
 
-// #region agent log
-(function agentDebugRuntime() {
-  const fs = require('fs');
-  const logPath =
-    '/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/.cursor/debug-a2145a.log';
-  const ingest = 'http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc';
-  function dbg(payload) {
-    const line = JSON.stringify({
-      sessionId: 'a2145a',
-      timestamp: Date.now(),
-      ...payload,
-    });
-    try {
-      fs.appendFileSync(logPath, line + '\n');
-    } catch (_) { /* ignore */ }
-    fetch(ingest, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a2145a' },
-      body: JSON.stringify({ sessionId: 'a2145a', timestamp: Date.now(), ...payload }),
-    }).catch(() => {});
-  }
-  dbg({
-    hypothesisId: 'H5',
-    location: 'index.js:boot',
-    message: 'process_start',
-    data: {
-      pid: process.pid,
-      ppid: process.ppid,
-      cwd: process.cwd(),
-      execArgv: process.execArgv,
-    },
-  });
-  process.on('uncaughtException', (err) => {
-    dbg({
-      hypothesisId: 'H1',
-      location: 'index.js:uncaughtException',
-      message: err && err.message,
-      data: { name: err && err.name, stack: err && String(err.stack).slice(0, 4000) },
-    });
-  });
-  process.on('unhandledRejection', (reason) => {
-    const r = reason && typeof reason === 'object' ? reason : { _: String(reason) };
-    dbg({
-      hypothesisId: 'H2',
-      location: 'index.js:unhandledRejection',
-      message: r.message || String(reason),
-      data: { stack: r.stack && String(r.stack).slice(0, 4000) },
-    });
-  });
-  for (const sig of ['SIGTERM', 'SIGINT', 'SIGUSR2']) {
-    process.on(sig, () => {
-      dbg({
-        hypothesisId: 'H3',
-        location: 'index.js:signal',
-        message: sig,
-        data: {},
-      });
-    });
-  }
-  process.on('exit', (code) => {
-    try {
-      fs.appendFileSync(
-        logPath,
-        JSON.stringify({
-          sessionId: 'a2145a',
-          hypothesisId: 'H4',
-          location: 'index.js:exit',
-          message: 'exit',
-          data: { code },
-          timestamp: Date.now(),
-        }) + '\n',
-      );
-    } catch (_) { /* ignore */ }
-  });
-})();
-// #endregion
+process.on('uncaughtException', (err) => {
+  console.error('[BrSpark] uncaughtException — o processo vai encerrar. Detalhe:', err);
+  if (err && err.stack) console.error(err.stack);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[BrSpark] unhandledRejection:', reason);
+  if (reason && reason.stack) console.error(reason.stack);
+});
 
 const express = require('express');
+require('express-async-errors');
 const cors    = require('cors');
 const morgan  = require('morgan');
 
@@ -729,37 +663,6 @@ app.use((err, _req, res, _next) => {
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
-    // #region agent log
-    (function () {
-      const fs = require('fs');
-      const logPath =
-        '/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/.cursor/debug-a2145a.log';
-      const line =
-        JSON.stringify({
-          sessionId: 'a2145a',
-          hypothesisId: 'H5',
-          location: 'index.js:listen',
-          message: 'server_listening',
-          data: { port: PORT, pid: process.pid },
-          timestamp: Date.now(),
-        }) + '\n';
-      try {
-        fs.appendFileSync(logPath, line);
-      } catch (_) { /* ignore */ }
-      fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a2145a' },
-        body: JSON.stringify({
-          sessionId: 'a2145a',
-          hypothesisId: 'H5',
-          location: 'index.js:listen',
-          message: 'server_listening',
-          data: { port: PORT, pid: process.pid },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    })();
-    // #endregion
     console.log(`\n🚀 BrSpark Admin API running on http://0.0.0.0:${PORT} (LAN: use o IP da máquina na mesma porta)`);
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`   Database:    ${process.env.DATABASE_URL?.split('@')[1] || 'Not configured'}\n`);
@@ -808,30 +711,6 @@ app.use((err, _req, res, _next) => {
   });
 
   server.on('error', (err) => {
-    // #region agent log
-    (function () {
-      const fs = require('fs');
-      const logPath =
-        '/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/.cursor/debug-a2145a.log';
-      const errno = /** @type {NodeJS.ErrnoException} */ (err);
-      const payload = {
-        sessionId: 'a2145a',
-        hypothesisId: 'H6',
-        location: 'index.js:server.error',
-        message: 'server_listen_error',
-        data: { code: errno.code, message: errno.message },
-        timestamp: Date.now(),
-      };
-      try {
-        fs.appendFileSync(logPath, JSON.stringify(payload) + '\n');
-      } catch (_) { /* ignore */ }
-      fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'a2145a' },
-        body: JSON.stringify(payload),
-      }).catch(() => {});
-    })();
-    // #endregion
     if (/** @type {NodeJS.ErrnoException} */ (err).code === 'EADDRINUSE') {
       console.error(
         `\n[BrSpark] Porta ${PORT} já está em uso — provavelmente outro \`node src/index.js\` ou \`npm run dev\` nesta máquina.\n` +

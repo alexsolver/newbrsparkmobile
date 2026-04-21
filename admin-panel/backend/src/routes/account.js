@@ -19,6 +19,7 @@ const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmai
 const { startChallenge, verifyChallenge } = require('../lib/otpLoginService');
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
 const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
+const { resolveAppDefaultTenantId } = require('../lib/appDefaultTenant');
 
 function buildSafeTenantForApp(tenant) {
   if (!tenant) return null;
@@ -145,25 +146,6 @@ async function buildSafeAppUserPayloadAsync(user) {
 const visionRouter = require('./vision');
 router.use('/vision', visionRouter);
 
-/**
- * Tenant onde novos usuários do app móvel são cadastrados (consumidor / prestador individual).
- * Defina APP_DEFAULT_TENANT_SLUG (ex.: brspark-app) ou APP_DEFAULT_TENANT_ID.
- * Se vazio, mantém o modo legado: um Tenant novo por registro (TENANT_ADMIN).
- */
-async function resolveAppDefaultTenantId() {
-  const idRaw = (process.env.APP_DEFAULT_TENANT_ID || '').trim();
-  if (idRaw) {
-    const t = await prisma.tenant.findUnique({ where: { id: idRaw } });
-    return t ? t.id : null;
-  }
-  const slugRaw = (process.env.APP_DEFAULT_TENANT_SLUG || '').trim();
-  if (!slugRaw) return null;
-  const t = await prisma.tenant.findFirst({
-    where: { slug: { equals: slugRaw, mode: 'insensitive' } },
-  });
-  return t ? t.id : null;
-}
-
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -216,10 +198,10 @@ function issuePasswordResetToken(user) {
 }
 
 // ─── POST /api/register ─────────────────────────────────────────────────────
-// Público — registro no app: tenant padrão (USER) ou modo legado (Tenant + TENANT_ADMIN)
+// Público — registro no app: tenant master BrSpark (slug brspark), papel USER; override opcional via env.
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, phone, defaultLang = 'pt-BR', deviceId } = req.body;
+    const { name, email, password, phone, deviceId } = req.body;
     if (!name || !email || !password)
       return res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios.' });
     if (password.length < 6)
@@ -228,108 +210,63 @@ router.post('/register', async (req, res) => {
     const emailNorm = String(email).trim().toLowerCase();
     const hash = await bcrypt.hash(password, 10);
     const defaultTenantId = await resolveAppDefaultTenantId();
-
-    let tenant;
-    let user;
-
-    if (defaultTenantId) {
-      tenant = await prisma.tenant.findUnique({ where: { id: defaultTenantId } });
-      if (!tenant) {
-        return res.status(500).json({
-          error:
-            'Configuração inválida: tenant padrão do app não encontrado. Entre em contato com o suporte.',
-        });
-      }
-      if (tenant.status === 'SUSPENDED' || tenant.status === 'CANCELLED') {
-        return res.status(403).json({ error: 'Novos registros estão temporariamente indisponíveis.' });
-      }
-
-      const existingUser = await prisma.user.findUnique({
-        where: { email_tenantId: { email: emailNorm, tenantId: defaultTenantId } },
+    if (!defaultTenantId) {
+      return res.status(503).json({
+        error:
+          'Registo indisponível: não foi encontrada a tenant master BrSpark. Confirme o seed/migrações (slug brspark) ou contacte o suporte.',
       });
-      if (existingUser) {
-        return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
-      }
-
-      const seat = await assertTechnicianSeatForNewUser(prisma, defaultTenantId, 'USER');
-      if (!seat.ok) {
-        return res.status(403).json({ error: seat.error, code: seat.code || 'PLAN_MAX_TECHNICIANS' });
-      }
-
-      const result = await prisma.$transaction(async (tx) => {
-        const u = await tx.user.create({
-          data: {
-            name: String(name).trim(),
-            email: emailNorm,
-            password: hash,
-            tenantId: defaultTenantId,
-            phone: phone != null && String(phone).trim() ? String(phone).trim() : null,
-            role: 'USER',
-          },
-        });
-        await tx.auditLog.create({
-          data: {
-            tenantId: defaultTenantId,
-            userId: u.id,
-            action: 'USER_REGISTER',
-            resource: emailNorm,
-            category: 'AUTH',
-          },
-        });
-        return u;
-      });
-      user = result;
-      if (user) {
-        deliverBrsparkLaravelEvent({
-          type: EVENT_TYPES.USER_CREATED,
-          idempotencyKey: `user-${user.id}-register`,
-          payload: { userId: user.id, tenantId: user.tenantId, email: user.email, source: 'password' },
-        }).catch((e) => console.warn('[register] sync webhook', e));
-      }
-    } else {
-      const existing = await prisma.tenant.findUnique({ where: { email: emailNorm } });
-      if (existing) return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
-
-      const baseSlug = emailNorm.split('@')[0].replace(/[^a-z0-9]/g, '-') || 'conta';
-      let slug = baseSlug;
-      let suffix = 0;
-      while (await prisma.tenant.findUnique({ where: { slug } })) {
-        suffix++;
-        slug = `${baseSlug}-${suffix}`;
-      }
-
-      const result = await prisma.$transaction(async (tx) => {
-        const t = await tx.tenant.create({
-          data: {
-            name: String(name).trim(),
-            slug,
-            email: emailNorm,
-            ownerName: String(name).trim(),
-            phone: phone != null && String(phone).trim() ? String(phone).trim() : null,
-            defaultLang,
-            status: 'TRIAL',
-          },
-        });
-
-        const u = await tx.user.create({
-          data: {
-            name: String(name).trim(),
-            email: emailNorm,
-            password: hash,
-            tenantId: t.id,
-            role: 'TENANT_ADMIN',
-          },
-        });
-
-        await tx.auditLog.create({
-          data: { tenantId: t.id, userId: u.id, action: 'USER_REGISTER', resource: emailNorm, category: 'AUTH' },
-        });
-
-        return { tenant: t, user: u };
-      });
-      tenant = result.tenant;
-      user = result.user;
     }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: defaultTenantId } });
+    if (!tenant) {
+      return res.status(500).json({
+        error:
+          'Configuração inválida: tenant do app não encontrada. Entre em contato com o suporte.',
+      });
+    }
+    if (tenant.status === 'SUSPENDED' || tenant.status === 'CANCELLED') {
+      return res.status(403).json({ error: 'Novos registros estão temporariamente indisponíveis.' });
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { email_tenantId: { email: emailNorm, tenantId: defaultTenantId } },
+    });
+    if (existingUser) {
+      return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+    }
+
+    const seat = await assertTechnicianSeatForNewUser(prisma, defaultTenantId, 'USER');
+    if (!seat.ok) {
+      return res.status(403).json({ error: seat.error, code: seat.code || 'PLAN_MAX_TECHNICIANS' });
+    }
+
+    const user = await prisma.$transaction(async (tx) => {
+      const u = await tx.user.create({
+        data: {
+          name: String(name).trim(),
+          email: emailNorm,
+          password: hash,
+          tenantId: defaultTenantId,
+          phone: phone != null && String(phone).trim() ? String(phone).trim() : null,
+          role: 'USER',
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          tenantId: defaultTenantId,
+          userId: u.id,
+          action: 'USER_REGISTER',
+          resource: emailNorm,
+          category: 'AUTH',
+        },
+      });
+      return u;
+    });
+    deliverBrsparkLaravelEvent({
+      type: EVENT_TYPES.USER_CREATED,
+      idempotencyKey: `user-${user.id}-register`,
+      payload: { userId: user.id, tenantId: user.tenantId, email: user.email, source: 'password' },
+    }).catch((e) => console.warn('[register] sync webhook', e));
 
     const newSessionId = crypto.randomUUID();
     await prisma.user.update({
@@ -480,9 +417,9 @@ router.post('/login/oauth', async (req, res) => {
     if (!candidates.length) {
       const defaultTenantId = await resolveAppDefaultTenantId();
       if (!defaultTenantId) {
-        return res.status(404).json({
+        return res.status(503).json({
           error:
-            'Nenhuma conta com este e-mail. Crie uma conta no app ou peça ao administrador para configurar APP_DEFAULT_TENANT_SLUG.',
+            'Conta social indisponível: não foi encontrada a tenant master BrSpark (slug brspark). Confirme o seed ou contacte o suporte.',
         });
       }
 

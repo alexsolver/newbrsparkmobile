@@ -1,5 +1,7 @@
 'use strict';
 
+const { $Enums } = require('@prisma/client');
+
 /**
  * Cockpit Metrics Service
  * Agregador em memória para evitar gargalos (locks/sobrecarga) no banco de dados.
@@ -68,6 +70,63 @@ async function aggregateOperationsBoard(prisma) {
   return { total, pending, progress, completed, cancelled, errors };
 }
 
+/**
+ * Resumo de integrações (todas) e armazenamento em nuvem (type STORAGE — qualquer fornecedor).
+ */
+async function aggregateIntegrationAndStorage(prisma) {
+  const integrations = { total: 0, active: 0, errorOrDisconnected: 0 };
+  const cloudStorage = {
+    providers: 0,
+    activeOk: 0,
+    issues: 0,
+    lastTestedAt: null,
+    /** none | ok | warning | error */
+    health: 'none',
+  };
+  try {
+    const all = await prisma.integration.findMany({
+      select: { type: true, status: true, lastTestedAt: true, apiKey: true },
+    });
+    integrations.total = all.length;
+    for (const row of all) {
+      if (row.status === 'ACTIVE') integrations.active += 1;
+      if (row.status === 'ERROR' || row.status === 'DISCONNECTED') {
+        integrations.errorOrDisconnected += 1;
+      }
+    }
+
+    const storageEnum = $Enums?.IntType?.STORAGE ?? 'STORAGE';
+    const storageRows = all.filter((r) => {
+      const t = r?.type;
+      return t === storageEnum || String(t) === 'STORAGE';
+    });
+    cloudStorage.providers = storageRows.length;
+    let latestTest = null;
+    for (const r of storageRows) {
+      if (r.status === 'ERROR' || r.status === 'DISCONNECTED') cloudStorage.issues += 1;
+      const hasKey = r.apiKey && String(r.apiKey).trim().length > 0;
+      if (r.status === 'ACTIVE' && hasKey) cloudStorage.activeOk += 1;
+      if (r.lastTestedAt && (!latestTest || r.lastTestedAt > latestTest)) {
+        latestTest = r.lastTestedAt;
+      }
+    }
+    cloudStorage.lastTestedAt = latestTest ? latestTest.toISOString() : null;
+
+    if (cloudStorage.providers === 0) {
+      cloudStorage.health = 'none';
+    } else if (cloudStorage.issues > 0) {
+      cloudStorage.health = 'error';
+    } else if (cloudStorage.activeOk >= 1) {
+      cloudStorage.health = 'ok';
+    } else {
+      cloudStorage.health = 'warning';
+    }
+  } catch (e) {
+    console.warn('[Cockpit] aggregateIntegrationAndStorage:', e.message);
+  }
+  return { integrations, cloudStorage };
+}
+
 const getMetrics = async (prisma) => {
   let pendingTasks = 0;
   let onDevicesTasks = 0;
@@ -81,6 +140,16 @@ const getMetrics = async (prisma) => {
     cancelled: 0,
     errors: 0,
   };
+  let integrationSnapshot = {
+    integrations: { total: 0, active: 0, errorOrDisconnected: 0 },
+    cloudStorage: {
+      providers: 0,
+      activeOk: 0,
+      issues: 0,
+      lastTestedAt: null,
+      health: 'none',
+    },
+  };
 
   try {
     activeUsers = await prisma.user.count({ where: { isActive: true } });
@@ -88,8 +157,14 @@ const getMetrics = async (prisma) => {
     onDevicesTasks = await prisma.checklistExecution.count({ where: { status: { in: ['RECEIVED', 'ACCEPTED', 'IN_PROGRESS'] } } });
     historicalSyncs = await prisma.checklistExecution.count({ where: { status: { in: ['COMPLETED', 'SYNCED'] } } });
     operationsBoard = await aggregateOperationsBoard(prisma);
-  } catch(e) {
-    console.warn('[Cockpit] Failed to fetch DB stats:', e.message);
+  } catch (e) {
+    console.warn('[Cockpit] Failed to fetch DB stats (core):', e.message);
+  }
+
+  try {
+    integrationSnapshot = await aggregateIntegrationAndStorage(prisma);
+  } catch (e) {
+    console.warn('[Cockpit] Failed to fetch integration snapshot:', e.message);
   }
 
   const uptimeSeconds = Math.floor((Date.now() - metrics.startTime) / 1000);
@@ -112,6 +187,7 @@ const getMetrics = async (prisma) => {
       onDevicesTasks,
       historicalSyncs
     },
+    integrationSnapshot,
     timestamp: new Date().toISOString()
   };
 };

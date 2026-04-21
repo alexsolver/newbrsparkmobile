@@ -190,6 +190,16 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const dotColor =
     isOnline === null ? C.connectivity.checking : isOnline ? C.connectivity.online : C.connectivity.offline;
 
+  const dbgHeaderLogRef = useRef(0);
+  useEffect(() => {
+    const now = Date.now();
+    if (now - dbgHeaderLogRef.current < 2500) return;
+    dbgHeaderLogRef.current = now;
+    // #region agent log
+    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'Header.tsx:aura',message:'header connectivity',data:{hypothesisId:'H4',isOnline,gpsIssue,dotOffline:isOnline===false},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
+  }, [isOnline, gpsIssue]);
+
   const isAssetDetail = segments[0] === 'asset' && segments.length > 1 && segments[1] !== 'new';
   const isProfile = segments[0] === 'profile';
   const pStr = String(pathname || '');

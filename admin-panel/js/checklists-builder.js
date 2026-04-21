@@ -818,6 +818,49 @@ window.__fbApplyLocalizedDefaultFormTitle = function () {
     currentFormTitle = nt;
 };
 
+const FB_FORM_META_DETAILS_LS = 'fb-form-meta-details-open';
+
+/** Atualiza o texto do `<summary>` do painel retrátil (título do formulário ou fallback i18n). */
+window.fbSyncFormMetaSummary = function () {
+    const primary = document.getElementById('fb-meta-summary-primary');
+    const summaryEl = document.getElementById('fb-form-meta-summary');
+    const titleEl = document.getElementById('tpl-title');
+    if (!primary) return;
+    let text = titleEl ? String(titleEl.value || '').trim() : '';
+    if (!text) {
+        try {
+            text =
+                typeof window.fbT === 'function'
+                    ? window.fbT('fb_meta_summary_fallback')
+                    : fbStr('fb_meta_summary_fallback', null, 'Sem título');
+        } catch (e) {
+            text = '…';
+        }
+    }
+    primary.textContent = text;
+    if (summaryEl) summaryEl.title = text;
+};
+
+/** Lembra aberto/fechado do painel de meta do formulário (mais espaço para o canvas quando fechado). */
+window.fbInitFormMetaDetails = function () {
+    const det = document.getElementById('fb-form-meta-details');
+    if (!det) return;
+    try {
+        const v = localStorage.getItem(FB_FORM_META_DETAILS_LS);
+        if (v === '1') det.open = true;
+        if (v === '0') det.open = false;
+    } catch (e) {
+        /* ignore */
+    }
+    det.addEventListener('toggle', function () {
+        try {
+            localStorage.setItem(FB_FORM_META_DETAILS_LS, det.open ? '1' : '0');
+        } catch (e2) {
+            /* ignore */
+        }
+    });
+};
+
 let currentFormDesc = '';
 let currentFormIcon = '';
 /** Biblioteca do ícone do modelo (`metadata.iconLibrary`) — paridade com o app e com `renderWebIcon`. */
@@ -830,7 +873,6 @@ let builderBrowseFolderId = null;
 window.formsFinderPathIds = [];
 /** Lista plana de pastas (GET /template-folders) */
 let builderFolders = [];
-let lastSemanticAudit = [];
 
 let iconPickerCallback = null;
 let currentIconLib = 'Ionicons';
@@ -1367,6 +1409,35 @@ function validateChecklistLightBeforeSave() {
             )
         );
     }
+    const operational = (fields || []).filter(function (f) {
+        return f && f.type && String(f.type) !== 'section_break';
+    });
+    if (!operational.length) {
+        out.push(
+            fbStr(
+                'fb_val_no_operational',
+                null,
+                'O formulário ainda não tem perguntas operacionais. Adicione pelo menos um campo ou use o copiloto para gerar um rascunho.'
+            )
+        );
+    } else {
+        const choiceWithoutOptions = operational.some(function (f) {
+            const type = String(f.type || '');
+            return (
+                (type === 'dropdown' || type === 'multiselect' || type === 'opinion_scale') &&
+                !String(f.options || f.likertLabels || '').trim()
+            );
+        });
+        if (choiceWithoutOptions) {
+            out.push(
+                fbStr(
+                    'fb_val_choice_no_options',
+                    null,
+                    'Existem campos de escolha (lista, múltipla ou escala) sem opções definidas. Corrija antes de salvar.'
+                )
+            );
+        }
+    }
     return out.length ? out : null;
 }
 
@@ -1411,6 +1482,9 @@ window.initBuilderDirtyTracking = function () {
             if (t.id === 'fb-toolbox-filter') return;
             if (t.id === 'tpl-title' || t.id === 'tpl-desc') {
                 if (window.scheduleBuilderDirtyRecompute) window.scheduleBuilderDirtyRecompute();
+                if (t.id === 'tpl-title' && typeof window.fbSyncFormMetaSummary === 'function') {
+                    window.fbSyncFormMetaSummary();
+                }
             }
         },
         true
@@ -1516,6 +1590,7 @@ if (!window.__fieldPropertiesModalEscapeHook) {
 const iconMap = {
     'text': '<ion-icon name="text-outline"></ion-icon>',
     'number': '<ion-icon name="keypad-outline"></ion-icon>',
+    'currency': '<ion-icon name="cash-outline"></ion-icon>',
     'email': '<ion-icon name="mail-outline"></ion-icon>',
     'phone': '<ion-icon name="call-outline"></ion-icon>',
     'date': '<ion-icon name="calendar-outline"></ion-icon>',
@@ -2083,10 +2158,23 @@ function installNativePaletteDropOnCanvas() {
                     return;
                 }
             }
-            const nTransit =
-                type === 'transit_start' ? fields.filter((ff) => ff && ff.type === 'transit_start').length : 0;
-            const newField = createNewFieldFromToolboxType(type, rawText, nTransit);
-            fields.splice(Math.max(0, Math.min(insertAt, fields.length)), 0, newField);
+            const safeInsertAt = Math.max(0, Math.min(insertAt, fields.length));
+            if (type === 'transit_start') {
+                const nTransit = fields.filter((ff) => ff && ff.type === 'transit_start').length;
+                const startField = createNewFieldFromToolboxType(type, rawText, nTransit);
+                const endField = createNewFieldFromToolboxType(
+                    'transit_end',
+                    fbStr('fb_tool_transit_end', null, 'Fim deslocamento'),
+                );
+                fields.splice(safeInsertAt, 0, startField, endField);
+                fixTransitDisplacementViolations(fields);
+                renderCanvas();
+                selectField(startField.id);
+                return;
+            }
+            const newField = createNewFieldFromToolboxType(type, rawText);
+            fields.splice(safeInsertAt, 0, newField);
+            fixTransitDisplacementViolations(fields);
             renderCanvas();
             selectField(newField.id);
         },
@@ -2128,9 +2216,19 @@ function absorbStrayPaletteItemsIntoFields() {
         cy = 0;
     }
     const insertAt = computePaletteDropInsertFieldsIndex(b, cy);
-    const nTransit = t === 'transit_start' ? fields.filter((ff) => ff && ff.type === 'transit_start').length : 0;
-    const newField = createNewFieldFromToolboxType(t, rawText, nTransit);
-    fields.splice(Math.max(0, Math.min(insertAt, fields.length)), 0, newField);
+    const safeInsertAt = Math.max(0, Math.min(insertAt, fields.length));
+    if (t === 'transit_start') {
+        const nTransit = fields.filter((ff) => ff && ff.type === 'transit_start').length;
+        const startField = createNewFieldFromToolboxType(t, rawText, nTransit);
+        const endField = createNewFieldFromToolboxType(
+            'transit_end',
+            fbStr('fb_tool_transit_end', null, 'Fim deslocamento'),
+        );
+        fields.splice(safeInsertAt, 0, startField, endField);
+    } else {
+        const newField = createNewFieldFromToolboxType(t, rawText);
+        fields.splice(safeInsertAt, 0, newField);
+    }
     fixTransitDisplacementViolations(fields);
     if (node.parentNode) node.parentNode.removeChild(node);
     return true;
@@ -2147,6 +2245,7 @@ function defaultLabelForNewToolboxField(type, rawText) {
     if (type === 'vision_ai_analysis') return 'Visão de IA Análise';
     if (type === 'technician_finance_expense') return 'Despesas do técnico';
     if (type === 'technician_finance_revenue') return 'Receitas do técnico';
+    if (type === 'currency') return 'Valor (moeda)';
     if (type === 'form_complete_button') return 'Concluir';
     return rawText;
 }
@@ -2177,6 +2276,8 @@ function createNewFieldFromToolboxType(type, rawText, existingTransitStartCount)
         icon: '',
         allowTechnicianComment: false,
         allowMediaDescription: false,
+        ...(type === 'currency' ? { currencyCode: 'BRL' } : {}),
+        ...(type === 'calculated' ? { calcDisplayFormat: 'auto' } : {}),
         ...(type === 'section_break' ? { sectionFillMode: 'list' } : {}),
         ...(type === 'facial_recognition'
           ? {
@@ -2411,21 +2512,25 @@ function normalizeFieldsRequireSections(fieldArr) {
  */
 function transitDisplacementSchemaErrorMessage(fieldArr) {
     if (!fieldArr || !fieldArr.length) return null;
-    let seenStart = false;
+    let openStarts = 0;
     for (const f of fieldArr) {
         if (!f) continue;
-        if (f.type === 'transit_start') seenStart = true;
-        if (f.type === 'transit_end' && !seenStart) {
-            return fbStr(
-                'fb_alert_transit_end',
-                null,
-                'O campo «Finalizar deslocamento» não pode ficar antes de «Iniciar deslocamento».'
-            );
+        if (f.type === 'transit_start') {
+            openStarts++;
+            continue;
+        }
+        if (f.type === 'transit_end') {
+            if (openStarts <= 0) {
+                return fbStr(
+                    'fb_alert_transit_end',
+                    null,
+                    'O campo «Finalizar deslocamento» não pode ficar antes de «Iniciar deslocamento».'
+                );
+            }
+            openStarts--;
         }
     }
-    const hasStart = fieldArr.some((f) => f && f.type === 'transit_start');
-    const hasEnd = fieldArr.some((f) => f && f.type === 'transit_end');
-    if (hasStart && !hasEnd) {
+    if (openStarts > 0) {
         return fbStr(
             'fb_alert_transit_start',
             null,
@@ -2436,36 +2541,74 @@ function transitDisplacementSchemaErrorMessage(fieldArr) {
 }
 
 /**
- * Corrige ordem: qualquer transit_end sem transit_start antes passa a ficar depois do primeiro transit_start.
+ * Corrige ordem: garante que não exista `transit_end` antes de um `transit_start`
+ * correspondente e que cada `transit_start` tenha um `transit_end` depois.
  * @param {Array<{ type?: string }>} fieldArr mutável
  * @returns {boolean} true se alterou
  */
 function fixTransitDisplacementViolations(fieldArr) {
     if (!fieldArr || !fieldArr.length) return false;
     let changed = false;
+
+    // 1) Nunca permitir transit_end "abrindo" sem transit_start anterior.
     let guard = 0;
     while (guard++ < 64) {
-        let seenStart = false;
+        let openStarts = 0;
         let bad = -1;
         for (let i = 0; i < fieldArr.length; i++) {
             const f = fieldArr[i];
             if (!f) continue;
-            if (f.type === 'transit_start') seenStart = true;
-            if (f.type === 'transit_end' && !seenStart) {
-                bad = i;
-                break;
+            if (f.type === 'transit_start') openStarts++;
+            else if (f.type === 'transit_end') {
+                if (openStarts <= 0) {
+                    bad = i;
+                    break;
+                }
+                openStarts--;
             }
         }
         if (bad < 0) break;
         const [endField] = fieldArr.splice(bad, 1);
         const firstStart = fieldArr.findIndex((f) => f && f.type === 'transit_start');
         if (firstStart < 0) {
+            // sem start, devolve e encerra
             fieldArr.splice(bad, 0, endField);
             break;
         }
         let ins = firstStart + 1;
         while (ins < fieldArr.length && fieldArr[ins] && fieldArr[ins].type === 'transit_start') ins++;
         fieldArr.splice(ins, 0, endField);
+        changed = true;
+    }
+
+    // 2) Se houver start(s) sem end correspondente abaixo, cria o(s) end(s) faltante(s).
+    let starts = 0;
+    let ends = 0;
+    for (const f of fieldArr) {
+        if (!f) continue;
+        if (f.type === 'transit_start') starts++;
+        else if (f.type === 'transit_end') ends++;
+    }
+    if (starts > ends) {
+        const missing = starts - ends;
+        let insertAfter = -1;
+        for (let i = fieldArr.length - 1; i >= 0; i--) {
+            if (fieldArr[i] && fieldArr[i].type === 'transit_start') {
+                insertAfter = i;
+                break;
+            }
+        }
+        const insertAt = insertAfter >= 0 ? insertAfter + 1 : fieldArr.length;
+        const toAdd = [];
+        for (let i = 0; i < missing; i++) {
+            toAdd.push(
+                createNewFieldFromToolboxType(
+                    'transit_end',
+                    fbStr('fb_tool_transit_end', null, 'Fim deslocamento'),
+                ),
+            );
+        }
+        fieldArr.splice(insertAt, 0, ...toAdd);
         changed = true;
     }
     return changed;
@@ -2478,6 +2621,75 @@ function countTransitStartsBeforeGlobalIndex(fieldArr, globalIndex) {
         if (fieldArr[i] && fieldArr[i].type === 'transit_start') n++;
     }
     return n;
+}
+
+/**
+ * Remove em par um campo de deslocamento e seu correspondente.
+ * - Se apagar `transit_start`, remove o `transit_end` correspondente à frente.
+ * - Se apagar `transit_end`, remove o `transit_start` correspondente atrás.
+ * @param {Array<{id?: string, type?: string}>} fieldArr
+ * @param {string} id
+ * @returns {boolean} true quando removeu via lógica de par
+ */
+function removeTransitPairByFieldId(fieldArr, id) {
+    if (!Array.isArray(fieldArr) || !id) return false;
+    const idx = fieldArr.findIndex((f) => f && f.id === id);
+    if (idx < 0) return false;
+    const cur = fieldArr[idx];
+    if (!cur || (cur.type !== 'transit_start' && cur.type !== 'transit_end')) return false;
+
+    let pairIdx = -1;
+    if (cur.type === 'transit_start') {
+        let depth = 0;
+        for (let i = idx + 1; i < fieldArr.length; i++) {
+            const t = fieldArr[i] && fieldArr[i].type;
+            if (t === 'transit_start') depth++;
+            else if (t === 'transit_end') {
+                if (depth === 0) {
+                    pairIdx = i;
+                    break;
+                }
+                depth--;
+            }
+        }
+        if (pairIdx < 0) {
+            for (let i = idx + 1; i < fieldArr.length; i++) {
+                if (fieldArr[i] && fieldArr[i].type === 'transit_end') {
+                    pairIdx = i;
+                    break;
+                }
+            }
+        }
+    } else {
+        let depth = 0;
+        for (let i = idx - 1; i >= 0; i--) {
+            const t = fieldArr[i] && fieldArr[i].type;
+            if (t === 'transit_end') depth++;
+            else if (t === 'transit_start') {
+                if (depth === 0) {
+                    pairIdx = i;
+                    break;
+                }
+                depth--;
+            }
+        }
+        if (pairIdx < 0) {
+            for (let i = idx - 1; i >= 0; i--) {
+                if (fieldArr[i] && fieldArr[i].type === 'transit_start') {
+                    pairIdx = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    const toRemove = [idx];
+    if (pairIdx >= 0 && pairIdx !== idx) toRemove.push(pairIdx);
+    toRemove.sort((a, b) => b - a);
+    toRemove.forEach((rm) => {
+        fieldArr.splice(rm, 1);
+    });
+    return true;
 }
 
 function ensureCanvasSchemaHasSection() {
@@ -2544,6 +2756,8 @@ function buildCanvasFieldElement(f) {
             ? `<div style="display:flex; align-items:center; background:#f3e8ff; color:#6b21a8; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:800;" title="Várias respostas">M×</div>`
             : '';
 
+    const typeOptions = buildCanvasInlineTypeOptionsHtml(f.type);
+    const typeLocked = f.type === 'transit_start' || f.type === 'transit_end';
     div.innerHTML = `
                 <div class="canvas-drag-handle" title="Arrastar para reordenar" aria-label="Arrastar para reordenar"><ion-icon name="reorder-two-outline" style="font-size:22px;"></ion-icon></div>
                 <div class="canvas-item-main">
@@ -2555,7 +2769,20 @@ function buildCanvasFieldElement(f) {
                             <input type="text" class="canvas-item-title-input" style="background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--text1); font-weight:bold; font-size:14.5px; outline:none; flex:1; min-width:0; width:100%; cursor:text;" value="${escapeHtmlLogic(f.label)}" onfocus="this.style.borderBottomColor='#cbd5e1'; window.selectField('${f.id}', { skipPropertiesIfSame: true, fromCanvasTitleFocus: true });" onblur="this.style.borderBottomColor='transparent'" oninput="window.handleInlineLabelUpdate(event, '${f.id}')" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" />
                         </div>
                         <div class="canvas-item-tags">${multiTag}${condTag}</div>
-                        <div class="canvas-item-meta" style="font-size:11px; color:var(--text3); margin-top:6px; letter-spacing:0.5px;">ID: ${f.id} | TYPE: ${f.type.toUpperCase()}</div>
+                        <div class="canvas-item-meta" style="font-size:11px; color:var(--text3); margin-top:6px; letter-spacing:0.3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                          <span>ID: ${f.id}</span>
+                          <span>|</span>
+                          <span>TYPE:</span>
+                          <select
+                            class="canvas-item-type-select"
+                            style="font-size:11px; padding:2px 6px; border-radius:6px; border:1px solid #cbd5e1; background:#fff; color:#334155; max-width:220px;"
+                            onchange="window.handleInlineFieldTypeUpdate(event, '${f.id}')"
+                            onclick="event.stopPropagation();"
+                            onmousedown="event.stopPropagation();"
+                            title="${typeLocked ? 'Tipo fixo para manter integridade do deslocamento' : 'Alterar tipo do campo no canvas'}"
+                            ${typeLocked ? 'disabled' : ''}
+                          >${typeOptions}</select>
+                        </div>
                     </div>
                 </div>
                 <div class="canvas-item-toolbar" onclick="event.stopPropagation();">
@@ -2578,6 +2805,36 @@ function buildCanvasFieldElement(f) {
     };
 
     return div;
+}
+
+function buildCanvasInlineTypeOptionsHtml(currentType) {
+    const cur = String(currentType || '').trim();
+    const list = Array.isArray(COPILOT_PREVIEW_FIELD_TYPE_LABELS) && COPILOT_PREVIEW_FIELD_TYPE_LABELS.length
+        ? COPILOT_PREVIEW_FIELD_TYPE_LABELS
+        : [
+              ['text', 'Texto'],
+              ['number', 'Número'],
+              ['yes_no', 'Sim / Não'],
+              ['dropdown', 'Lista (uma)'],
+              ['multiselect', 'Lista (várias)'],
+              ['date', 'Data / hora'],
+              ['email', 'E-mail'],
+              ['phone', 'Telefone'],
+              ['photo', 'Foto'],
+              ['file_upload', 'Anexo'],
+              ['signature', 'Assinatura'],
+          ];
+    const filtered = list.filter(function (pair) {
+        return String(pair[0] || '') !== 'section_break';
+    });
+    return filtered
+        .map(function (pair) {
+            const t = String(pair[0] || '').trim();
+            const lbl = String(pair[1] || t).trim();
+            const sel = t === cur ? ' selected' : '';
+            return '<option value="' + escapeHtmlLogic(t) + '"' + sel + '>' + escapeHtmlLogic(lbl) + '</option>';
+        })
+        .join('');
 }
 
 /** Remove estilos inline que o Sortable deixa no cartão (largura estreita → layout “comprimido”). */
@@ -2957,6 +3214,101 @@ window.toggleInlineRequired = function(e, id) {
     }
 };
 
+window.handleInlineFieldTypeUpdate = function (e, id) {
+    if (e) e.stopPropagation();
+    const f = fields.find(function (x) {
+        return x && x.id === id;
+    });
+    if (!f) return;
+    const oldType = String(f.type || '').trim();
+    if (oldType === 'transit_start' || oldType === 'transit_end') {
+        if (e && e.target) e.target.value = oldType;
+        fbAlert(
+            'fb_alert_transit_type_locked',
+            null,
+            'Os campos «Iniciar deslocamento» e «Finalizar deslocamento» têm tipo fixo e não podem ser alterados.'
+        );
+        return;
+    }
+    const nextType = e && e.target ? String(e.target.value || '').trim() : '';
+    if (!nextType || nextType === String(f.type || '')) return;
+    if (nextType === 'section_break') return;
+
+    const riskyTypes = new Set([
+        'repeatable_matrix',
+        'vision_checklist',
+        'vision_ai_analysis',
+        'lookup_select',
+        'image_annotation',
+        'materials_consumption',
+        'materials_receipt',
+        'technician_finance_expense',
+        'technician_finance_revenue',
+        'geofence_check',
+        'transit_start',
+        'transit_end',
+        'calculated',
+        'opinion_scale',
+        'signature_summary',
+    ]);
+    const riskyTransition = riskyTypes.has(oldType) || riskyTypes.has(nextType);
+    if (riskyTransition) {
+        const ok = window.confirm(
+            'Trocar este tipo pode descartar configurações avançadas do campo atual (ex.: matriz, visão IA, lookup, fórmulas, deslocamento, geofence).\n\nDeseja continuar?'
+        );
+        if (!ok) {
+            if (e && e.target) e.target.value = oldType;
+            return;
+        }
+    }
+
+    const idx = fields.findIndex(function (x) {
+        return x && x.id === id;
+    });
+    if (idx < 0) return;
+
+    const old = fields[idx];
+    const nTransitStart =
+        nextType === 'transit_start'
+            ? fields.filter(function (x) {
+                  return x && x.type === 'transit_start' && x.id !== id;
+              }).length
+            : 0;
+    const rebuilt = createNewFieldFromToolboxType(nextType, old.label || 'Campo', nTransitStart);
+
+    // Preserva identidade e dados úteis do campo anterior.
+    rebuilt.id = old.id;
+    rebuilt.label = old.label;
+    rebuilt.required = !!old.required && nextType !== 'leitura';
+    if (old.description != null && String(old.description).trim()) rebuilt.description = String(old.description);
+    if (old.defaultValue != null && String(old.defaultValue).trim()) rebuilt.defaultValue = String(old.defaultValue);
+    if (old.allowTechnicianComment === true) rebuilt.allowTechnicianComment = true;
+    if (old.allowMediaDescription === true) rebuilt.allowMediaDescription = true;
+    if (old.icon) rebuilt.icon = old.icon;
+    if (old.iconLibrary) rebuilt.iconLibrary = old.iconLibrary;
+    if (old.iconColor) rebuilt.iconColor = old.iconColor;
+    if (Array.isArray(old.rules) && old.rules.length) rebuilt.rules = JSON.parse(JSON.stringify(old.rules));
+
+    // Mantém opções quando continua em campo de opções.
+    const nextIsOptions = nextType === 'dropdown' || nextType === 'multiselect';
+    const oldIsOptions = old.type === 'dropdown' || old.type === 'multiselect';
+    if (nextIsOptions && oldIsOptions && old.options != null && String(old.options).trim()) {
+        rebuilt.options = String(old.options);
+    }
+
+    fields[idx] = rebuilt;
+    window.renderCanvas();
+    if (selectedFieldId === id) {
+        window.selectField(id, { skipPropertiesIfSame: true });
+        if (window.fieldPropertiesModalOpen && typeof window.renderProperties === 'function') {
+            window.renderProperties();
+        }
+    }
+    if (typeof window.renderMobilePreview === 'function') {
+        window.renderMobilePreview();
+    }
+};
+
 /**
  * @param {string} id
  * @param {{ skipPropertiesIfSame?: boolean; fromCanvasTitleFocus?: boolean }} [opts]
@@ -3123,13 +3475,16 @@ window.deleteField = function(id) {
     flushReadingQuillToBoundField();
     if (typeof window.destroyFieldReadingEditor === 'function') window.destroyFieldReadingEditor();
     flushQuillToBoundField();
-    fields = fields.filter(f => f.id !== id);
+    if (!removeTransitPairByFieldId(fields, id)) {
+        fields = fields.filter(f => f.id !== id);
+    }
     if (fields.length === 0) {
         fields.push(createDefaultSectionField(fields));
     } else {
         normalizeFieldsRequireSections(fields);
     }
-    if(selectedFieldId === id) selectedFieldId = null;
+    fixTransitDisplacementViolations(fields);
+    if (!fields.some((f) => f && f.id === selectedFieldId)) selectedFieldId = null;
     renderCanvas();
     renderProperties();
 };
@@ -3219,6 +3574,21 @@ function renderProperties() {
             <div style="font-size:10px; color:#78350f; line-height:1.45;">
                 ${tfHelp}
             </div>
+        </div>`;
+    }
+
+    if (f.type === 'currency') {
+        const cur = String(f.currencyCode || 'BRL').toUpperCase();
+        extraProps += `
+        <div class="prop-group" style="background:#ecfdf5; border:1px solid #6ee7b7; padding:12px; border-radius:8px; margin-top:16px;">
+            <label class="prop-label" style="color:#047857;"><ion-icon name="cash-outline" style="vertical-align:-2px;"></ion-icon> Moeda (símbolo no app)</label>
+            <select class="prop-input" onchange="window.handleFieldUpdate('currencyCode', this.value)" style="font-size:13px;">
+                <option value="BRL"${cur === 'BRL' ? ' selected' : ''}>BRL — Real (R$)</option>
+                <option value="USD"${cur === 'USD' ? ' selected' : ''}>USD — Dólar ($)</option>
+                <option value="EUR"${cur === 'EUR' ? ' selected' : ''}>EUR — Euro (€)</option>
+                <option value="GBP"${cur === 'GBP' ? ' selected' : ''}>GBP — Libra (£)</option>
+            </select>
+            <div style="font-size:10px; color:#047857; margin-top:6px; line-height:1.35">O app usa o componente de valor monetário (teclado decimal, formatação local). O valor guardado é numérico canónico.</div>
         </div>`;
     }
 
@@ -3778,12 +4148,76 @@ function renderProperties() {
             <textarea class="prop-input" style="height:60px; font-size:12px;" onkeyup="window.handleFieldUpdate('options', this.value)">${f.options || ''}</textarea>
         </div>`;
     } else if (f.type === 'calculated') {
+        const calcDisp = String(f.calcDisplayFormat || 'auto');
+        const lblDisp = escapeHtmlLogic(fbStr('fb_prop_calc_display_lbl', null, 'Formato do resultado'));
+        const optAuto = escapeHtmlLogic(fbStr('fb_prop_calc_display_auto', null, 'Automático'));
+        const optNum = escapeHtmlLogic(fbStr('fb_prop_calc_display_number', null, 'Número'));
+        const optCur = escapeHtmlLogic(fbStr('fb_prop_calc_display_currency', null, 'Moeda'));
+        const optPct = escapeHtmlLogic(fbStr('fb_prop_calc_display_percent', null, 'Percentagem'));
         const calcPh = escapeHtmlAttr(fbStr('fb_prop_calc_ph', null, 'Ex.: field_123 + field_456'));
+        const calcFieldRows = fields.filter((x) => x && x.type !== 'section_break' && x.id !== f.id);
+        const fieldOptsHtml = calcFieldRows
+            .map((x) => {
+                const vid = escapeHtmlAttr(x.id);
+                const shortLabel = escapeHtmlLogic(String((x.label || x.id || '').slice(0, 56)));
+                const sid = escapeHtmlLogic(x.id);
+                return `<option value="${vid}">${shortLabel} · ${sid}</option>`;
+            })
+            .join('');
+        const lblField = escapeHtmlLogic(fbStr('fb_prop_calc_insert_field_lbl', null, 'Inserir campo (no cursor)'));
+        const phField = escapeHtmlLogic(fbStr('fb_prop_calc_field_placeholder', null, 'Escolher campo…'));
+        const phOp = escapeHtmlLogic(fbStr('fb_prop_calc_op_placeholder', null, 'Inserir operador ou função…'));
+        const gArith = escapeHtmlLogic(fbStr('fb_prop_calc_op_group_arith', null, 'Operadores'));
+        const gMath = escapeHtmlLogic(fbStr('fb_prop_calc_op_group_math', null, 'Math'));
+        const lblOps = escapeHtmlLogic(fbStr('fb_prop_calc_ops_lbl', null, 'Operadores e funções'));
+        const arithOps = [
+            ['+', '+'],
+            ['-', '\u2212'],
+            ['*', '\u00d7'],
+            ['/', '\u00f7'],
+            ['(', '('],
+            [')', ')'],
+            [',', ','],
+        ];
+        const mathOps = [
+            ['Math.sqrt(', 'Math.sqrt( \u2026 )'],
+            ['Math.abs(', 'Math.abs( \u2026 )'],
+            ['Math.round(', 'Math.round( \u2026 )'],
+            ['Math.min(', 'Math.min( \u2026 , \u2026 )'],
+            ['Math.max(', 'Math.max( \u2026 , \u2026 )'],
+            ['Math.pow(', 'Math.pow( base, exp )'],
+        ];
+        let opOptsHtml = `<option value="">${phOp}</option>`;
+        opOptsHtml += `<optgroup label="${gArith}">`;
+        arithOps.forEach(([v, lab]) => {
+            opOptsHtml += `<option value="${escapeHtmlAttr(v)}">${escapeHtmlLogic(lab)}</option>`;
+        });
+        opOptsHtml += `</optgroup><optgroup label="${gMath}">`;
+        mathOps.forEach(([v, lab]) => {
+            opOptsHtml += `<option value="${escapeHtmlAttr(v)}">${escapeHtmlLogic(lab)}</option>`;
+        });
+        opOptsHtml += `</optgroup>`;
         extraProps = `
         <div class="prop-group" style="background:#f5f3ff; border:1px solid #8b5cf6; padding:12px; border-radius:8px; margin-top:16px;">
             <label class="prop-label" style="color:#7c3aed;"><ion-icon name="calculator"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_calc_title', null, 'Expressão matemática do sistema'))}</label>
-            <input class="prop-input" type="text" placeholder="${calcPh}" value="${escapeHtmlAttr(f.calcFormula || '')}" onkeyup="window.handleFieldUpdate('calcFormula', this.value)" />
+            <label class="prop-label" style="color:#6d28d9; font-size:10px; margin-bottom:4px;">${lblField}</label>
+            <select class="prop-input" style="font-size:12px; margin-bottom:10px;" onchange="window.onCalcFormulaInsertPick(this)">
+                <option value="">${phField}</option>
+                ${fieldOptsHtml}
+            </select>
+            <label class="prop-label" style="color:#6d28d9; font-size:10px; margin-bottom:4px;">${lblOps}</label>
+            <select class="prop-input" style="font-size:12px; margin-bottom:10px;" onchange="window.onCalcFormulaInsertPick(this)">
+                ${opOptsHtml}
+            </select>
+            <input id="prop-calc-formula-input" class="prop-input" type="text" placeholder="${calcPh}" value="${escapeHtmlAttr(f.calcFormula || '')}" oninput="window.handleFieldUpdate('calcFormula', this.value)" />
             <div style="font-size:10px; color:#7c3aed; margin-top:4px; line-height:1.2;">${escapeHtmlLogic(fbStr('fb_prop_calc_help', null, 'Variáveis: use o ID sublinhado de outros blocos (ex.: field_111 * field_222) ou use "Math.sqrt(field_111)" para fórmulas puras.'))}</div>
+            <label class="prop-label" style="color:#6d28d9; font-size:10px; margin-top:10px; margin-bottom:4px;">${lblDisp}</label>
+            <select class="prop-input" style="font-size:12px;" onchange="window.handleFieldUpdate('calcDisplayFormat', this.value)">
+                <option value="auto" ${calcDisp === 'auto' ? 'selected' : ''}>${optAuto}</option>
+                <option value="number" ${calcDisp === 'number' ? 'selected' : ''}>${optNum}</option>
+                <option value="currency" ${calcDisp === 'currency' ? 'selected' : ''}>${optCur}</option>
+                <option value="percent" ${calcDisp === 'percent' ? 'selected' : ''}>${optPct}</option>
+            </select>
         </div>`;
     } else if (f.type === 'signature_summary') {
         const ids = new Set(Array.isArray(f.summarySourceFieldIds) ? f.summarySourceFieldIds : []);
@@ -4102,6 +4536,36 @@ window.handleFieldUpdate = function(key, val) {
         if (sf && (sf.type === 'leitura' || sf.type === 'form_complete_button')) return;
     }
     updateField(key, val);
+};
+
+/** Insere texto na expressão do campo calculado (cursor ou fim). */
+window.insertIntoCalcFormula = function (token) {
+    var t = String(token || '');
+    if (!t) return;
+    var el = document.getElementById('prop-calc-formula-input');
+    if (!el) return;
+    var cf = fields.find(function (x) {
+        return x.id === selectedFieldId;
+    });
+    if (!cf || cf.type !== 'calculated') return;
+    var start = typeof el.selectionStart === 'number' ? el.selectionStart : el.value.length;
+    var end = typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+    var v = el.value;
+    var next = v.slice(0, start) + t + v.slice(end);
+    el.value = next;
+    var pos = start + t.length;
+    el.focus();
+    try {
+        el.setSelectionRange(pos, pos);
+    } catch (e) { /* ignore */ }
+    window.handleFieldUpdate('calcFormula', next);
+};
+
+window.onCalcFormulaInsertPick = function (sel) {
+    if (!sel) return;
+    var v = sel.value;
+    if (v) window.insertIntoCalcFormula(v);
+    sel.selectedIndex = 0;
 };
 
 window.updateVisionStructuredPrompt = function (text) {
@@ -5029,300 +5493,68 @@ window.brsparkCopilotSendQuickAction = async function (text) {
     if (!prompt) return;
     const inp = document.getElementById('ai-copilot-input');
     if (inp) inp.value = '';
+    window.__brsparkCopilotShowStartScreen = false;
+    updateCopilotStartScreenUi();
     await brsparkCopilotPostChatRound(prompt);
 };
 
-function buildAuditCopilotPrompt(item) {
-    if (!item || item.severity === 'ok') return '';
-    var title = String(item.title || '').trim();
-    var detail = String(item.detail || '').trim();
-    var base =
-        'O QA do formulário encontrou este ponto:\n' +
-        '- Título: ' +
-        title +
-        '\n' +
-        '- Detalhe: ' +
+function syncCopilotTroubleshootPanel() {
+    const sel = document.getElementById('copilot-journey-mode');
+    const panel = document.getElementById('copilot-troubleshoot-panel');
+    if (!panel) return;
+    const v = sel && sel.value ? String(sel.value) : 'auto';
+    panel.hidden = v !== 'troubleshoot';
+}
+
+/**
+ * Envia um pedido estruturado de troubleshooting (jornada + texto obrigatório).
+ */
+window.brsparkCopilotSendTroubleshootBundle = async function () {
+    const selSym = document.getElementById('copilot-ts-symptom');
+    const ta = document.getElementById('copilot-ts-detail');
+    const modeEl = document.getElementById('copilot-journey-mode');
+    if (modeEl) modeEl.value = 'troubleshoot';
+    syncCopilotTroubleshootPanel();
+    const detail = ta ? String(ta.value || '').trim() : '';
+    if (!detail) {
+        fbAlert(null, null, 'Descreva o que observa no campo «O que observa».');
+        if (ta) {
+            try {
+                ta.focus();
+            } catch (eF) {
+                /* ignore */
+            }
+        }
+        return;
+    }
+    const opt = selSym && selSym.options[selSym.selectedIndex];
+    const catLabel = opt ? String(opt.text || '').trim() : '';
+    const catVal = selSym && selSym.value ? String(selSym.value) : '';
+    const msg =
+        '[Diagnóstico guiado — troubleshooting]\n' +
+        'Categoria: ' +
+        catVal +
+        (catLabel ? ' (' + catLabel + ')' : '') +
+        '\n\n' +
+        'O que observo:\n' +
         detail +
         '\n\n' +
-        'Analise o formulário atual no canvas e proponha a melhor correção possível dentro do BrSpark. Se der para corrigir agora com segurança, devolva schemaPatch/settingsPatch/logicSuggestions para aplicar a melhoria. No replyText, explique em pt-BR o que você vai ajustar.';
-    var titleKey = normalizeFieldLabelKey(title);
-    if (titleKey.indexOf('rotulo repetido') >= 0) {
-        return (
-            base +
-            '\n\nPriorize renomear, diferenciar ou consolidar perguntas duplicadas/quase iguais para evitar confusão no app.'
-        );
-    }
-    if (titleKey.indexOf('descricoes orientando') >= 0) {
-        return (
-            base +
-            '\n\nPriorize enriquecer descrições curtas dos campos atuais, com linguagem simples para uso no celular.'
-        );
-    }
-    if (titleKey.indexOf('icone do modelo') >= 0) {
-        return (
-            base +
-            '\n\nPriorize sugerir um ícone coerente com o objetivo do formulário. Se fizer sentido, ajuste também título e descrição pública.'
-        );
-    }
-    if (titleKey.indexOf('listas sem opcoes') >= 0) {
-        return (
-            base +
-            '\n\nPriorize preencher opções concretas nos campos de escolha que estiverem vazios.'
-        );
-    }
-    if (titleKey.indexOf('muitos campos estao obrigatorios') >= 0) {
-        return (
-            base +
-            '\n\nPriorize reduzir obrigatoriedades excessivas e manter obrigatório apenas o essencial.'
-        );
-    }
-    if (titleKey.indexOf('mais secoes') >= 0) {
-        return (
-            base +
-            '\n\nPriorize reorganizar o formulário em etapas claras, sem perder conteúdo importante.'
-        );
-    }
-    if (titleKey.indexOf('evidencia para o processo') >= 0) {
-        return (
-            base +
-            '\n\nPriorize sugerir evidências práticas como foto, assinatura, localização ou anexo nos pontos críticos do fluxo.'
-        );
-    }
-    if (titleKey.indexOf('descricao publica') >= 0) {
-        return (
-            base +
-            '\n\nPriorize criar uma descrição pública objetiva e útil para o catálogo.'
-        );
-    }
-    if (titleKey.indexOf('titulo claro') >= 0) {
-        return (
-            base +
-            '\n\nPriorize definir um título mais claro, específico e profissional para o modelo.'
-        );
-    }
-    if (titleKey.indexOf('nao tem perguntas') >= 0) {
-        return (
-            base +
-            '\n\nPriorize montar um primeiro rascunho útil no canvas, com seções e campos coerentes com o contexto atual.'
-        );
-    }
-    return base;
-}
-
-window.brsparkAuditAskCopilotFix = async function (index) {
-    var items = Array.isArray(lastSemanticAudit) ? lastSemanticAudit : [];
-    var item = items[index];
-    if (!item || item.severity === 'ok') return;
-    var prompt = buildAuditCopilotPrompt(item);
-    if (!prompt) return;
-    var panel = document.getElementById('ai-copilot-panel');
-    if (panel && !panel.classList.contains('is-open')) {
-        window.toggleAiCopilotPanel();
-    }
-    await window.brsparkCopilotSendQuickAction(prompt);
+        'Analise o canvas e as definições atuais. Devolva **uxLayer** com hipóteses rankeadas em `troubleshoot.hypotheses` e, se for seguro, **schemaPatch** / **logicSuggestions** / **settingsPatch**.';
+    if (ta) ta.value = '';
+    window.__brsparkCopilotShowStartScreen = false;
+    updateCopilotStartScreenUi();
+    await brsparkCopilotPostChatRound(msg);
 };
 
-function buildFormSemanticAudit() {
-    const issues = [];
-    const titleInput = document.getElementById('tpl-title');
-    const descInput = document.getElementById('tpl-desc');
-    const operational = (fields || []).filter(function (f) {
-        return f && f.type && String(f.type) !== 'section_break';
-    });
-    const sections = (fields || []).filter(function (f) {
-        return f && String(f.type) === 'section_break';
-    });
-    const title = normalizeTemplateTitleBuilder(titleInput ? titleInput.value : currentFormTitle);
-    const desc = String(descInput ? descInput.value : currentFormDesc || '').trim();
-    const contextBlob = [title, desc, collectCopilotFormContext().objective || ''].join(' ').toLowerCase();
-    if (!title) {
-        issues.push({
-            severity: 'error',
-            title: 'Defina um título claro',
-            detail: 'O formulário ainda está sem título. Isso dificulta encontrar o modelo e reduz a qualidade das sugestões da IA.',
-        });
-    }
-    if (operational.length === 0) {
-        issues.push({
-            severity: 'error',
-            title: 'O formulário ainda não tem perguntas',
-            detail: 'Crie pelo menos um campo operacional ou use o copiloto para gerar um primeiro rascunho.',
-        });
-    }
-    if (sections.length < 2 && operational.length >= 8) {
-        issues.push({
-            severity: 'warning',
-            title: 'Considere dividir em mais seções',
-            detail: 'Há muitas perguntas em uma estrutura pouco segmentada. Seções claras ajudam um usuário leigo a preencher no celular.',
-        });
-    }
-    const duplicateLabels = new Map();
-    operational.forEach(function (f) {
-        const key = normalizeFieldLabelKey(f.label);
-        if (!key) return;
-        duplicateLabels.set(key, (duplicateLabels.get(key) || 0) + 1);
-    });
-    const duplicateNames = Array.from(duplicateLabels.entries())
-        .filter(function (entry) {
-            return entry[1] > 1;
-        })
-        .map(function (entry) {
-            return entry[0];
-        });
-    if (duplicateNames.length) {
-        issues.push({
-            severity: 'warning',
-            title: 'Há perguntas com rótulo repetido',
-            detail: 'Perguntas muito parecidas confundem o técnico. Revise rótulos duplicados ou quase iguais.',
-        });
-    }
-    const requiredCount = operational.filter(function (f) {
-        return !!f.required;
-    }).length;
-    if (operational.length >= 4 && requiredCount / operational.length >= 0.7) {
-        issues.push({
-            severity: 'warning',
-            title: 'Muitos campos estão obrigatórios',
-            detail: 'Para uso em campo, costuma funcionar melhor deixar apenas o essencial como obrigatório.',
-        });
-    }
-    const unlabeledDescriptions = operational.filter(function (f) {
-        return !String(f.description || '').trim();
-    }).length;
-    if (operational.length >= 6 && unlabeledDescriptions >= Math.max(3, Math.round(operational.length * 0.45))) {
-        issues.push({
-            severity: 'warning',
-            title: 'Faltam descrições orientando o preenchimento',
-            detail: 'Descrições curtas ajudam usuários leigos a entender o que responder no celular sem treinamento prévio.',
-        });
-    }
-    const choiceWithoutOptions = operational.some(function (f) {
-        const type = String(f.type || '');
-        return (
-            (type === 'dropdown' || type === 'multiselect' || type === 'opinion_scale') &&
-            !String(f.options || f.likertLabels || '').trim()
-        );
-    });
-    if (choiceWithoutOptions) {
-        issues.push({
-            severity: 'error',
-            title: 'Existem listas sem opções definidas',
-            detail: 'Campos de escolha precisam de opções concretas para evitar dúvidas e erros no app.',
-        });
-    }
-    const hasEvidence = operational.some(function (f) {
-        return ['photo', 'photo_stamped', 'file_upload', 'signature', 'image_annotation'].includes(String(f.type || ''));
-    });
-    if (
-        !hasEvidence &&
-        /(vistoria|inspe|auditoria|campo|manuten|seguran|qualidade|checklist|clin)/.test(contextBlob)
-    ) {
-        issues.push({
-            severity: 'warning',
-            title: 'Pode faltar evidência para o processo',
-            detail: 'Para esse tipo de fluxo, normalmente vale incluir foto, anexo, assinatura ou localização em pontos críticos.',
-        });
-    }
-    if (!String(currentFormIcon || '').trim()) {
-        issues.push({
-            severity: 'warning',
-            title: 'Defina um ícone do modelo',
-            detail: 'O ícone ajuda o usuário a reconhecer rapidamente o formulário na lista do painel e do app.',
-        });
-    }
-    if (!desc) {
-        issues.push({
-            severity: 'warning',
-            title: 'Adicione uma descrição pública',
-            detail: 'Uma descrição objetiva deixa claro o propósito do formulário para quem for reutilizá-lo.',
-        });
-    }
-    if (issues.length === 0) {
-        issues.push({
-            severity: 'ok',
-            title: 'Estrutura consistente',
-            detail: 'Nenhum risco relevante encontrado na checagem rápida. Ainda assim, vale abrir a pré-visualização no app antes de publicar.',
-        });
-    }
-    return issues;
-}
-
-function renderBuilderAuditPanel() {
-    const list = document.getElementById('fb-form-audit-list');
-    if (!list) return;
-    lastSemanticAudit = buildFormSemanticAudit();
-    list.innerHTML = '';
-    lastSemanticAudit.forEach(function (item, idx) {
-        const row = document.createElement('div');
-        row.className = 'fb-form-audit-item';
-        row.setAttribute('data-severity', item.severity || 'warning');
-        const title = document.createElement('strong');
-        title.textContent = item.title || 'Observação';
-        const detail = document.createElement('span');
-        detail.textContent = item.detail || '';
-        const actions = document.createElement('div');
-        actions.style.marginTop = '10px';
-        actions.style.display = 'flex';
-        actions.style.justifyContent = 'flex-end';
-        if (item.severity !== 'ok') {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'btn btn-outline btn-sm';
-            btn.textContent = fbStr('fb_audit_fix_ai', null, 'Sugerir correção com IA');
-            btn.title = fbStr(
-                'fb_audit_fix_ai_title',
-                null,
-                'Pedir ao copiloto para sugerir e, se possível, aplicar a correção deste apontamento'
-            );
-            btn.onclick = function () {
-                void window.brsparkAuditAskCopilotFix(idx);
-            };
-            actions.appendChild(btn);
-        }
-        row.appendChild(title);
-        row.appendChild(detail);
-        row.appendChild(actions);
-        list.appendChild(row);
-    });
-}
+(function initCopilotTroubleshootUi() {
+    const j = document.getElementById('copilot-journey-mode');
+    if (j) j.addEventListener('change', syncCopilotTroubleshootPanel);
+    syncCopilotTroubleshootPanel();
+})();
 
 function renderGuidedBuilderPanel() {
     /* reservado — criação guiada no modal foi removida; canvas abre direto em branco */
 }
-
-window.brsparkRunFormSemanticAudit = function (showAlert) {
-    renderBuilderAuditPanel();
-    if (showAlert) window.openFormSemanticAuditModal();
-    if (!showAlert) return lastSemanticAudit;
-    const relevant = (lastSemanticAudit || []).filter(function (item) {
-        return item && item.severity !== 'ok';
-    });
-    if (!relevant.length) {
-        alert('QA do formulário: nenhum alerta importante encontrado.');
-        return lastSemanticAudit;
-    }
-    alert(
-        'QA do formulário:\n\n' +
-            relevant
-                .slice(0, 6)
-                .map(function (item, idx) {
-                    return String(idx + 1) + '. ' + item.title + ' — ' + item.detail;
-                })
-                .join('\n')
-    );
-    return lastSemanticAudit;
-};
-
-window.openFormSemanticAuditModal = function () {
-    renderBuilderAuditPanel();
-    const modal = document.getElementById('fb-form-audit-modal');
-    if (modal) modal.style.display = 'flex';
-};
-
-window.closeFormSemanticAuditModal = function () {
-    const modal = document.getElementById('fb-form-audit-modal');
-    if (modal) modal.style.display = 'none';
-};
 
 window.saveChecklist = async function() {
     const btn = document.getElementById('fb-save-schema-btn');
@@ -5376,25 +5608,6 @@ window.saveChecklist = async function() {
 
         if (!normalizeTemplateTitleBuilder(currentFormTitle)) {
             fbAlert('fb_val_empty_title', null, 'O título do formulário não pode estar vazio.');
-            setSync('idle');
-            btn.innerHTML = oldText;
-            btn.disabled = false;
-            return;
-        }
-
-        const semanticAudit = buildFormSemanticAudit().filter(function (item) {
-            return item && item.severity === 'error';
-        });
-        if (semanticAudit.length) {
-            renderBuilderAuditPanel();
-            alert(
-                'Antes de salvar, corrija estes pontos:\n\n' +
-                    semanticAudit
-                        .map(function (item, idx) {
-                            return String(idx + 1) + '. ' + item.title + ' — ' + item.detail;
-                        })
-                        .join('\n')
-            );
             setSync('idle');
             btn.innerHTML = oldText;
             btn.disabled = false;
@@ -6743,6 +6956,7 @@ window.loadChecklist = function(id) {
         // Fix: Restore inputs correctly
         document.getElementById('tpl-title').value = currentFormTitle;
         document.getElementById('tpl-desc').value = currentFormDesc;
+        if (typeof window.fbSyncFormMetaSummary === 'function') window.fbSyncFormMetaSummary();
         syncFbFormActiveToggleUi();
         updateCurrentTemplateVersionBadge();
         syncBuilderTaskIconDom();
@@ -6751,7 +6965,6 @@ window.loadChecklist = function(id) {
         fixTransitDisplacementViolations(fields);
         selectedFieldId = null;
         renderGuidedBuilderPanel();
-        renderBuilderAuditPanel();
         renderCanvas();
         renderProperties();
         if (typeof window.syncBuilderPersistBaseline === 'function') window.syncBuilderPersistBaseline();
@@ -6797,6 +7010,7 @@ window.confirmCreateNewChecklist = function () {
     // Update the title input so saveChecklist reads the correct name
     document.getElementById('tpl-title').value = title;
     document.getElementById('tpl-desc').value = '';
+    if (typeof window.fbSyncFormMetaSummary === 'function') window.fbSyncFormMetaSummary();
     currentFormIcon = '';
     currentFormIconLibrary = 'Ionicons';
     const tiNew = document.getElementById('tpl-icon');
@@ -6807,7 +7021,6 @@ window.confirmCreateNewChecklist = function () {
     syncFbFormActiveToggleUi();
     updateCurrentTemplateVersionBadge();
     renderGuidedBuilderPanel();
-    renderBuilderAuditPanel();
 
     renderCanvas();
     renderProperties();
@@ -7004,6 +7217,7 @@ function renderMobilePreview() {
         if(f.type === 'email') inputMock = `<input type="email" placeholder="usuario@email.com" disabled style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#0f172a;">`;
         if(f.type === 'phone') inputMock = `<input type="tel" placeholder="(11) 99999-9999" disabled style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#0f172a;">`;
         if(f.type === 'number') inputMock = `<input type="number" placeholder="123" disabled style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#0f172a;">`;
+        if(f.type === 'currency') inputMock = `<div style="width:100%;box-sizing:border-box;border:1px solid #10b981; border-radius:8px; padding:12px; background:#ecfdf5; font-size:15px; color:#047857; font-weight:700;">R$ 0,00</div>`;
         if(f.type === 'date') inputMock = `<input type="date" disabled style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1; border-radius:8px; padding:12px; background:#f8fafc; font-size:15px; color:#0f172a;">`;
         if(f.type === 'checkbox') inputMock = `<div style="display:flex; gap:12px;"><label style="background:#f1f5f9; padding:10px 20px; border-radius:24px; font-size:13px; font-weight:600; color:#475569"><input type="radio" disabled checked> Sim</label><label style="background:#f1f5f9; padding:10px 20px; border-radius:24px; font-size:13px; font-weight:600; color:#475569"><input type="radio" disabled> Não</label></div>`;
         if(f.type === 'yes_no') inputMock = `<div style="display:flex; gap:12px;"><label style="background:#f1f5f9; padding:10px 20px; border-radius:24px; font-size:13px; font-weight:600; color:#475569"><input type="radio" disabled checked> Sim</label><label style="background:#f1f5f9; padding:10px 20px; border-radius:24px; font-size:13px; font-weight:600; color:#475569"><input type="radio" disabled> Não</label></div>`;
@@ -7953,6 +8167,27 @@ function collectCopilotFormContext() {
     return out;
 }
 
+/** URLs https (até 5) a partir do textarea do copiloto ou do campo legado de uma linha. */
+function parseCopilotReferenceUrlsFromInput() {
+    const ta = document.getElementById('copilot-ctx-ref-urls');
+    const legacy = document.getElementById('copilot-ctx-doc-url');
+    let raw = '';
+    if (ta && String(ta.value || '').trim()) {
+        raw = String(ta.value);
+    } else if (legacy && String(legacy.value || '').trim()) {
+        raw = String(legacy.value);
+    }
+    const lines = raw.split(/[\r\n]+/);
+    const out = [];
+    for (let i = 0; i < lines.length && out.length < 5; i++) {
+        const line = String(lines[i] || '').trim();
+        if (/^https:\/\//i.test(line)) {
+            out.push(line.slice(0, 2048));
+        }
+    }
+    return out;
+}
+
 if (typeof window.__brsparkCopilotFocusedField === 'undefined') window.__brsparkCopilotFocusedField = null;
 
 window.refreshCopilotCanvasFocusChip = function () {
@@ -8293,6 +8528,45 @@ function updateCopilotExcelUi() {
     }
 }
 
+function hasVisibleCopilotMessages() {
+    const msgs = window.__brsparkCopilotMessages || [];
+    return msgs.some(function (m) {
+        return m && (m.role === 'user' || m.role === 'assistant') && !m.hiddenFromUi;
+    });
+}
+
+function updateCopilotStartScreenUi() {
+    const showStart = !!window.__brsparkCopilotShowStartScreen;
+    const composer = document.querySelector('#ai-copilot-panel .ai-copilot-composer-bar');
+    const journey = document.querySelector('#ai-copilot-panel .ai-copilot-journey-row');
+    const quick = document.getElementById('ai-copilot-quick-actions');
+    if (composer) composer.style.display = showStart ? 'none' : '';
+    if (journey) journey.style.display = showStart ? 'none' : '';
+    if (quick) quick.style.display = showStart ? 'none' : '';
+}
+
+window.brsparkCopilotAdvanceToChat = function () {
+    window.__brsparkCopilotShowStartScreen = false;
+    updateCopilotStartScreenUi();
+    renderCopilotMessages();
+    const inp = document.getElementById('ai-copilot-input');
+    if (inp) {
+        try {
+            inp.focus();
+        } catch (eF) {
+            /* ignore */
+        }
+    }
+};
+
+window.brsparkCopilotGenerateFromContext = async function () {
+    window.__brsparkCopilotShowStartScreen = false;
+    updateCopilotStartScreenUi();
+    const msg =
+        'Com base no contexto, links e arquivos de referência já carregados, gere agora um `schemaPatch` robusto para montar/adequar o formulário no canvas (com tipos inferidos automaticamente e evidências onde necessário). Evite resposta consultiva.';
+    await brsparkCopilotPostChatRound(msg, { hideUserBubble: true });
+};
+
 function renderCopilotMessages() {
     const root = document.getElementById('ai-copilot-messages');
     if (!root) return;
@@ -8305,13 +8579,40 @@ function renderCopilotMessages() {
         const empty = document.createElement('div');
         empty.className = 'ai-copilot-empty';
         const t1 = document.createElement('strong');
-        t1.textContent = 'Conversa com o Copiloto';
+        t1.textContent = 'Início do Copiloto';
         empty.appendChild(t1);
         const t2 = document.createElement('span');
         t2.textContent =
-            'Em formulário novo, descreva o caso (área, quem preenche, objetivo). O Copiloto age como especialista do domínio e propõe um **primeiro rascunho amplo** (seções, muitos campos — em geral opcionais — e listas com opções), além de recursos quando fizer sentido (foto com carimbo, código de barras, GPS, etc.). Pode focar um campo no canvas para refinar. Use «Desfazer última alteração» se precisar. Opcional: anexe arquivos em «Avançado».';
+            'Preencha contexto, links e arquivos no painel de opções. Depois, gere o rascunho inicial e siga no chat para ajustes finos.';
         empty.appendChild(t2);
+
+        const actions = document.createElement('div');
+        actions.style.display = 'flex';
+        actions.style.flexWrap = 'wrap';
+        actions.style.gap = '8px';
+        actions.style.marginTop = '12px';
+
+        const btnGenerate = document.createElement('button');
+        btnGenerate.type = 'button';
+        btnGenerate.className = 'btn btn-primary btn-sm';
+        btnGenerate.textContent = 'Gerar e abrir chat';
+        btnGenerate.onclick = function () {
+            window.brsparkCopilotGenerateFromContext();
+        };
+        actions.appendChild(btnGenerate);
+
+        const btnAdvance = document.createElement('button');
+        btnAdvance.type = 'button';
+        btnAdvance.className = 'btn btn-outline btn-sm';
+        btnAdvance.textContent = 'Avançar para chat';
+        btnAdvance.onclick = function () {
+            window.brsparkCopilotAdvanceToChat();
+        };
+        actions.appendChild(btnAdvance);
+
+        empty.appendChild(actions);
         root.appendChild(empty);
+        updateCopilotStartScreenUi();
         return;
     }
     visible.forEach(function (m) {
@@ -8340,6 +8641,7 @@ function renderCopilotMessages() {
             /* ignore */
         }
     }
+    updateCopilotStartScreenUi();
 }
 
 function renderCopilotRichText(raw) {
@@ -8409,75 +8711,86 @@ function brsparkCopilotCountOperationalFields() {
     return n;
 }
 
-/**
- * Primeira mensagem automática quando o copiloto abre com canvas vazio e conversa limpa (entrevista de requisitos).
- */
-async function brsparkCopilotMaybeAutoDiscoveryInterview() {
-    try {
-        const p = document.getElementById('ai-copilot-panel');
-        if (!p || !p.classList.contains('is-open')) return;
-        if ((window.__brsparkCopilotThinkingCount || 0) > 0) return;
-        if (window.__brsparkCopilotExcelBusy) return;
-        if (window.__brsparkCopilotSpreadsheetSummary && String(window.__brsparkCopilotSpreadsheetSummary).trim()) return;
-        if (window.__brsparkCopilotReferenceSummaries && window.__brsparkCopilotReferenceSummaries.length) return;
-        var msgs = window.__brsparkCopilotMessages || [];
-        if (msgs.length) return;
-        if (brsparkCopilotCountOperationalFields() > 0) return;
-        if (!brsparkAdminBearerToken()) return;
-        var seed =
-            'Quero criar um formulário novo. Cumprimente em breve; em seguida, peça só o mínimo de contexto necessário e, **assim que souber o tipo de formulário e o público**, entregue **logo** um primeiro rascunho **denso** no schemaPatch (várias section_break, muitos campos típicos do setor, maioria opcional, opções preenchidas em escolhas). Use clarifyOptions só para bifurcações inevitáveis — não substitua um rascunho completo por perguntas genéricas.';
-        await brsparkCopilotPostChatRound(seed, { hideUserBubble: true });
-        var inpAfter = document.getElementById('ai-copilot-input');
-        if (inpAfter) {
-            try {
-                inpAfter.focus();
-            } catch (eFa) {
-                /* ignore */
-            }
-        }
-    } catch (e) {
-        console.warn('[checklists-builder] auto discovery:', e && e.message ? e.message : e);
-    }
-}
-
 function buildCopilotInsightCards(data) {
     if (!data || typeof data !== 'object') return [];
     const cards = [];
     const schemaData = Array.isArray(data.schemaData) ? data.schemaData : [];
+    const mode = data.copilotMode != null ? String(data.copilotMode).trim() : '';
+    const ux = data.uxLayer && typeof data.uxLayer === 'object' ? data.uxLayer : null;
+
+    if (mode && mode !== 'auto') {
+        const labels = {
+            create: 'Jornada: criar / expandir',
+            refine: 'Jornada: ajuste fino',
+            troubleshoot: 'Jornada: resolver problema',
+            rules: 'Jornada: regras e automações',
+            import_assist: 'Jornada: importação e ficheiros',
+            explain: 'Jornada: só explicação',
+        };
+        const line = labels[mode] || 'Jornada: ' + mode;
+        cards.push({ title: 'Modo', lines: [line] });
+    }
+
+    if (ux && ux.headline) {
+        cards.push({
+            title: 'Em resumo',
+            lines: [String(ux.headline)],
+        });
+    }
+    if (ux && Array.isArray(ux.bullets) && ux.bullets.length) {
+        cards.push({
+            title: 'O que muda no processo',
+            lines: ux.bullets.slice(0, 10),
+        });
+    }
+    if (ux && ux.troubleshoot && Array.isArray(ux.troubleshoot.hypotheses) && ux.troubleshoot.hypotheses.length) {
+        const lines = ux.troubleshoot.hypotheses.slice(0, 4).map(function (h) {
+            if (!h || typeof h !== 'object') return '';
+            const t = h.title != null ? String(h.title).trim() : '';
+            const r = h.recommendedFix != null ? String(h.recommendedFix).trim() : '';
+            if (t && r) return t + ' — ' + r;
+            return t || r || '';
+        });
+        cards.push({
+            title: 'Diagnóstico (hipóteses)',
+            lines: lines.filter(Boolean),
+        });
+    }
+
     if (schemaData.length) {
         const sectionCount = schemaData.filter(function (f) {
             return f && String(f.type || '') === 'section_break';
         }).length;
         const fieldCount = schemaData.length - sectionCount;
         cards.push({
-            title: 'O que a IA montou',
+            title: 'Estrutura no canvas após aplicar',
             lines: [
                 fieldCount > 0
-                    ? 'Estrutura proposta com ' + fieldCount + ' campo(s) em ' + Math.max(sectionCount, 1) + ' etapa(s).'
-                    : 'A IA analisou o pedido, mas ainda não propôs campos novos.',
+                    ? fieldCount + ' campo(s) em ' + Math.max(sectionCount, 1) + ' etapa(s).'
+                    : 'Ainda sem campos novos no resultado desta mensagem.',
             ],
         });
     }
     if (Array.isArray(data.warnings) && data.warnings.length) {
         cards.push({
-            title: 'Riscos ou lacunas',
+            title: 'Avisos',
             lines: data.warnings.slice(0, 4),
         });
     }
     if (Array.isArray(data.clarifyOptions) && data.clarifyOptions.length) {
         cards.push({
-            title: 'O que ainda precisa decidir',
+            title: 'Decisões pendentes',
             lines: data.clarifyOptions.slice(0, 3).map(function (item) {
                 return item && item.question ? item.question : '';
             }).filter(Boolean),
         });
-    } else {
+    } else if (!ux || (!ux.headline && !(ux.bullets && ux.bullets.length))) {
         cards.push({
-            title: 'Próximo passo sugerido',
+            title: 'Próximo passo',
             lines: [
                 schemaData.length
-                    ? 'Revise o canvas, ajuste os campos principais e rode o QA do formulário antes de salvar.'
-                    : 'Use uma ação rápida ou descreva o processo com mais detalhes para gerar o primeiro rascunho.',
+                    ? 'Confirme a pré-visualização se aparecer, ajuste o canvas e rode o QA do formulário.'
+                    : 'Escolha uma jornada acima, uma ação rápida ou descreva o processo com detalhe.',
             ],
         });
     }
@@ -8572,16 +8885,22 @@ window.toggleAiCopilotPanel = function () {
         brsparkCopilotSyncSideMenuUi();
         applyBuilderToolboxModeUi();
         renderGuidedBuilderPanel();
-        renderBuilderAuditPanel();
         renderCopilotMessages();
         updateCopilotExcelUi();
         refreshCopilotThinkingDom();
         window.refreshCopilotCanvasFocusChip();
+        syncCopilotTroubleshootPanel();
+        if (!hasVisibleCopilotMessages()) {
+            window.__brsparkCopilotShowStartScreen = true;
+            brsparkCopilotSetSideMenuOpen(true);
+            copilotSetContextDetailsOpen(true);
+        }
+        updateCopilotStartScreenUi();
         if (window.__brsparkCopilotClarifyOptions && window.__brsparkCopilotClarifyOptions.length) {
             brsparkCopilotSetSideMenuOpen(true);
         }
         const inpFocus = document.getElementById('ai-copilot-input');
-        if (inpFocus) {
+        if (inpFocus && !window.__brsparkCopilotShowStartScreen) {
             try {
                 requestAnimationFrame(function () {
                     inpFocus.focus();
@@ -8590,9 +8909,6 @@ window.toggleAiCopilotPanel = function () {
                 /* ignore */
             }
         }
-        setTimeout(function () {
-            void brsparkCopilotMaybeAutoDiscoveryInterview();
-        }, 0);
     }
 };
 
@@ -8608,6 +8924,7 @@ window.brsparkCopilotClear = function () {
         window.brsparkCopilotCloseSchemaPreview(false);
     }
     window.__brsparkCopilotMessages = [];
+    window.__brsparkCopilotShowStartScreen = true;
     renderCopilotMessages();
     window.__brsparkCopilotLast = null;
     window.__brsparkCopilotLogicLast = null;
@@ -8632,6 +8949,7 @@ window.brsparkCopilotClear = function () {
     if (telemetry) telemetry.textContent = '';
     renderCopilotInsights(null);
     renderGuidedBuilderPanel();
+    updateCopilotStartScreenUi();
 };
 
 window.brsparkCopilotClearSpreadsheet = function () {
@@ -8975,6 +9293,7 @@ var COPILOT_PREVIEW_FIELD_TYPE_LABELS = [
     ['voice_note', 'Nota de voz'],
     ['text', 'Texto'],
     ['number', 'Número'],
+    ['currency', 'Moeda'],
     ['phone', 'Telefone'],
     ['email', 'E-mail'],
     ['date', 'Data / hora'],
@@ -9131,33 +9450,38 @@ function brsparkCopilotBuildInterviewPreviewContext() {
     return parts.join(' | ').trim();
 }
 
+/**
+ * Texto inicial de «Comentários gerais» no modal de revisão: contexto da entrevista **uma vez**,
+ * para não repetir URL/resumo em cada linha «Instruções p/ IA».
+ * @returns {string}
+ */
+function brsparkCopilotBuildDefaultPreviewGeneralNote() {
+    var interview = brsparkCopilotBuildInterviewPreviewContext();
+    if (!interview) return '';
+    return 'Contexto do pedido (pode editar ou apagar):\n' + interview;
+}
+
+/**
+ * Instruções por campo no modal: por defeito vazio — o contexto global vai em «Comentários gerais».
+ * Só pré-preenche dicas curtas para tipos Visão IA onde ajuda o reprocessamento.
+ * @param {{ type?: string, label?: string, description?: string }} row
+ */
 function brsparkCopilotBuildDefaultPreviewAiNote(row) {
     if (!row || String(row.type || '').trim() === 'section_break') return '';
-    var interview = brsparkCopilotBuildInterviewPreviewContext();
     var label = String(row.label || '').trim();
     var description = String(row.description || '').trim();
     var type = String(row.type || '').trim();
+    var interview = brsparkCopilotBuildInterviewPreviewContext();
     var blob = normalizeFieldLabelKey([label, description, interview].join(' '));
-    var parts = [];
-    if (interview) {
-        parts.push('Considere o contexto da entrevista: ' + interview + '.');
-    }
-    if (label) {
-        parts.push('Ao revisar o campo "' + label + '", mantenha aderência a esse cenário.');
-    }
-    if (description) {
-        parts.push('Leve em conta também a descrição proposta: "' + description.slice(0, 220) + '".');
-    }
     if (type === 'vision_ai_analysis' || type === 'vision_checklist') {
         if (blob.indexOf('epi') >= 0 || blob.indexOf('equipamento de protecao') >= 0) {
-            parts.push('Deixe explícito que a IA deve avaliar presença, uso correto e condição visual dos EPIs esperados.');
-        } else {
-            parts.push('Detalhe o que a IA deve observar na imagem e quais evidências caracterizam conformidade ou não conformidade.');
+            return 'Pedir à IA para avaliar presença, uso e condição dos EPIs esperados na imagem.'
+                .slice(0, 1200);
         }
-    } else if (type === 'photo' || type === 'photo_stamped' || type === 'image_annotation') {
-        parts.push('Se este campo pedir evidência visual, alinhe a captura aos itens e sinais citados na entrevista.');
+        return 'Pedir à IA critérios claros de conformidade / não conformidade no que se observa na imagem.'
+            .slice(0, 1200);
     }
-    return parts.join(' ').trim().slice(0, 1200);
+    return '';
 }
 
 function brsparkCopilotCollectNewFieldPreviewRows(prevFields, proposedSchema) {
@@ -9258,7 +9582,7 @@ function brsparkCopilotOpenSchemaPreviewModal(data) {
     var genTa = document.getElementById('copilot-schema-preview-general-note');
     if (!tbody || !modal) return;
     tbody.innerHTML = '';
-    if (genTa) genTa.value = '';
+    if (genTa) genTa.value = brsparkCopilotBuildDefaultPreviewGeneralNote();
     rows.forEach(function (r) {
         var isSec = r.type === 'section_break';
         var tr = document.createElement('tr');
@@ -9285,7 +9609,8 @@ function brsparkCopilotOpenSchemaPreviewModal(data) {
         var aiTa = document.createElement('textarea');
         aiTa.className = 'copilot-prev-ai-note';
         aiTa.rows = 2;
-        aiTa.placeholder = 'Instruções para a IA sobre este campo (opcional)';
+        aiTa.placeholder =
+            'Opcional: instrução só para este campo ao usar «Reprocessar com instruções». O contexto do chat entra em Comentários gerais.';
         aiTa.value = r.aiNote || brsparkCopilotBuildDefaultPreviewAiNote(r);
         aiCell.appendChild(aiTa);
         var reqCell = document.createElement('td');
@@ -9551,9 +9876,8 @@ function brsparkCopilotApplyChatResponse(data) {
     renderCopilotClarifyCards();
 
     const hasClarify = window.__brsparkCopilotClarifyOptions.length > 0;
-    if (!hasClarify) {
-        brsparkCopilotEnsureTaskBrandingFromResponse(data);
-    }
+    /* Comparação com o estado atual **antes** de brsparkCopilotEnsureTaskBrandingFromResponse:
+     esse fallback preenche ícone/título do modelo e faria metadataChanged/titleChanged sem patch da IA. */
 
     let schemaChanged = false;
     if (!hasClarify && Array.isArray(data.schemaData)) {
@@ -9612,7 +9936,21 @@ function brsparkCopilotApplyChatResponse(data) {
     } else {
         window.__brsparkCopilotLogicLast = Array.isArray(data.logicSuggestions) ? data.logicSuggestions : [];
     }
-    const hasLog = !hasClarify && !useSchemaPreview && window.__brsparkCopilotLogicLast.length > 0;
+    const hasLog =
+        !hasClarify &&
+        !useSchemaPreview &&
+        Array.isArray(window.__brsparkCopilotLogicLast) &&
+        window.__brsparkCopilotLogicLast.some(function (s) {
+            const monId = s && s.monitorFieldId ? String(s.monitorFieldId) : '';
+            if (!monId) return false;
+            return fields.some(function (f) {
+                return f && String(f.id || '') === monId;
+            });
+        });
+
+    if (!hasClarify) {
+        brsparkCopilotEnsureTaskBrandingFromResponse(data);
+    }
 
     let assistantContent = String(data.replyText || '').trim();
     if (!assistantContent) {
@@ -9635,7 +9973,7 @@ function brsparkCopilotApplyChatResponse(data) {
                 fbStr(
                     'mdl_copilot_feedback_applied',
                     null,
-                    '**Concluído:** as alterações desta mensagem **já foram aplicadas** no editor (canvas, definições do modelo e/ou regras sugeridas). Use **«Desfazer última alteração»** se precisar reverter.',
+                    '**Alterações no editor:** esta proposta foi aplicada **só no canvas local** (definições do modelo e/ou regras sugeridas), **sem gravar na nuvem** — use **Salvar** no construtor para persistir. **«Desfazer última alteração»** reverte a última rodada do copiloto.',
                 );
         }
     }
@@ -9704,12 +10042,33 @@ function brsparkCopilotApplyChatResponse(data) {
         }
         if (data.documentationFetch) {
             const d = data.documentationFetch;
+            const nUrls =
+                typeof d.referenceCount === 'number'
+                    ? d.referenceCount
+                    : Array.isArray(d.urls)
+                      ? d.urls.length
+                      : d.url
+                        ? 1
+                        : 0;
             if (d.attempted && d.ok && typeof d.chars === 'number' && d.chars > 0) {
                 parts.push(
-                    'Documentação: conteúdo carregado da URL indicada (aprox. ' + d.chars + ' caracteres).'
+                    'Referências web: ' +
+                        (nUrls > 1 ? nUrls + ' URLs' : '1 URL') +
+                        ' carregada(s) (aprox. ' +
+                        d.chars +
+                        ' caracteres no contexto da IA).'
                 );
             } else if (d.attempted && !d.ok && d.error) {
-                parts.push('Documentação: não foi possível carregar a URL — ' + d.error);
+                parts.push('Referências web: não foi possível carregar — ' + d.error);
+            } else if (d.attempted && Array.isArray(d.items) && d.items.length && !d.ok) {
+                const okOne = d.items.some(function (it) {
+                    return it && it.ok;
+                });
+                if (okOne && typeof d.chars === 'number' && d.chars > 0) {
+                    parts.push(
+                        'Referências web: conteúdo parcial (aprox. ' + d.chars + ' caracteres); alguns links falharam.'
+                    );
+                }
             }
         }
         foot.textContent = parts.join(' ');
@@ -9729,7 +10088,6 @@ function brsparkCopilotApplyChatResponse(data) {
         telemetry.textContent = telemetryParts.join(' · ');
     }
     renderGuidedBuilderPanel();
-    renderBuilderAuditPanel();
 }
 
 /**
@@ -9778,13 +10136,30 @@ async function brsparkCopilotPostChatRound(userText, opts) {
     };
     if (tid) chatPayload.templateId = tid;
 
-    const docUrlEl = document.getElementById('copilot-ctx-doc-url');
-    const documentationUrl = docUrlEl ? String(docUrlEl.value || '').trim() : '';
-    if (documentationUrl) chatPayload.documentationUrl = documentationUrl.slice(0, 2048);
+    const refUrls = parseCopilotReferenceUrlsFromInput();
+    if (refUrls.length) {
+        chatPayload.referenceUrls = refUrls;
+    }
+
+    const modeEl = document.getElementById('copilot-journey-mode');
+    const copilotMode =
+        modeEl && modeEl.value ? String(modeEl.value).trim().toLowerCase() : 'auto';
+    chatPayload.copilotMode = copilotMode;
 
     beginCopilotThinking('A IA está pensando…');
+    const COPILOT_CHAT_TIMEOUT_MS = 420000;
+    const ac = new AbortController();
+    const to = setTimeout(function () {
+        try {
+            ac.abort(new Error('Timeout do copiloto'));
+        } catch (eAb) {
+            /* ignore */
+        }
+    }, COPILOT_CHAT_TIMEOUT_MS);
     try {
-        const useStream = window.__brsparkCopilotUseStream !== false;
+        // Robustez por padrão: usa resposta JSON normal (não-stream).
+        // Stream continua disponível se habilitado explicitamente em runtime.
+        const useStream = window.__brsparkCopilotUseStream === true;
         const chatUrl =
             brsparkApiBase() +
             '/checklists/ai/session/chat' +
@@ -9797,6 +10172,7 @@ async function brsparkCopilotPostChatRound(userText, opts) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(chatPayload),
+            signal: ac.signal,
         });
 
         let data = {};
@@ -9816,6 +10192,7 @@ async function brsparkCopilotPostChatRound(userText, opts) {
             let buf = '';
             let finalPayload = null;
             let streamErr = null;
+            let shouldStopStream = false;
             while (true) {
                 const step = await reader.read();
                 if (step.done) break;
@@ -9845,11 +10222,24 @@ async function brsparkCopilotPostChatRound(userText, opts) {
                             copilotSetThinkingMessage(ev.message);
                         } else if (ev.type === 'result' && ev.payload) {
                             finalPayload = ev.payload;
+                            shouldStopStream = true;
+                            break;
                         } else if (ev.type === 'error') {
                             streamErr = new Error(ev.error || 'Falha no copiloto IA.');
                             if (ev.code === 'NO_OPENAI_KEY') streamErr.code = 'NO_OPENAI_KEY';
+                            shouldStopStream = true;
+                            break;
                         }
                     }
+                    if (shouldStopStream) break;
+                }
+                if (shouldStopStream) {
+                    try {
+                        await reader.cancel();
+                    } catch (eCancel) {
+                        /* ignore */
+                    }
+                    break;
                 }
             }
             if (buf.trim()) {
@@ -9892,12 +10282,16 @@ async function brsparkCopilotPostChatRound(userText, opts) {
         console.error(e);
         const ragFootErr = document.getElementById('copilot-rag-footnote');
         if (ragFootErr) ragFootErr.textContent = '';
+        const isAbort = !!(e && (e.name === 'AbortError' || /timeout/i.test(String(e.message || ''))));
         window.__brsparkCopilotMessages.push({
             role: 'assistant',
-            content: 'Erro: ' + (e.message || e),
+            content: isAbort
+                ? 'Erro: a IA demorou além do limite de 420s. Tente novamente (ou reduza o tamanho do arquivo/contexto).'
+                : 'Erro: ' + (e.message || e),
         });
         renderCopilotMessages();
     } finally {
+        clearTimeout(to);
         endCopilotThinking();
     }
 }
@@ -9910,10 +10304,12 @@ window.brsparkCopilotSend = async function () {
     }
     const inp = document.getElementById('ai-copilot-input');
     let text = inp ? String(inp.value || '').trim() : '';
+    let autoPrompt = false;
     if (!text) {
         if (window.__brsparkCopilotSpreadsheetSummary && String(window.__brsparkCopilotSpreadsheetSummary).trim()) {
+            autoPrompt = true;
             text =
-                'Com base na planilha em contexto e no formulário atual no canvas, sugira próximos passos e melhorias úteis.';
+                'Com base na planilha em contexto e no formulário atual no canvas, aplique melhorias concretas agora: devolva `schemaPatch` (e `logicSuggestions` se necessário), inferindo automaticamente os tipos de campo. Não responda apenas com próximos passos.';
         } else {
             fbAlert(
                 'fb_alert_copilot_write_or_attach',
@@ -9924,7 +10320,9 @@ window.brsparkCopilotSend = async function () {
         }
     }
     if (inp) inp.value = '';
-    await brsparkCopilotPostChatRound(text);
+    window.__brsparkCopilotShowStartScreen = false;
+    updateCopilotStartScreenUi();
+    await brsparkCopilotPostChatRound(text, autoPrompt ? { hideUserBubble: true } : undefined);
     const inpAfter = document.getElementById('ai-copilot-input');
     if (inpAfter) {
         try {
@@ -10023,11 +10421,26 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
                 const fd = new FormData();
                 fd.append('file', file);
                 fd.append('options', JSON.stringify(opts));
-                const res = await fetch(brsparkApiBase() + '/checklists/ai/analyze-from-file', {
-                    method: 'POST',
-                    headers: { Authorization: 'Bearer ' + token },
-                    body: fd,
-                });
+                const FILE_ANALYZE_TIMEOUT_MS = 300000;
+                const acAnalyze = new AbortController();
+                const toAnalyze = setTimeout(function () {
+                    try {
+                        acAnalyze.abort(new Error('Timeout da análise de arquivo'));
+                    } catch (eAb) {
+                        /* ignore */
+                    }
+                }, FILE_ANALYZE_TIMEOUT_MS);
+                let res;
+                try {
+                    res = await fetch(brsparkApiBase() + '/checklists/ai/analyze-from-file', {
+                        method: 'POST',
+                        headers: { Authorization: 'Bearer ' + token },
+                        body: fd,
+                        signal: acAnalyze.signal,
+                    });
+                } finally {
+                    clearTimeout(toAnalyze);
+                }
                 let data = {};
                 try {
                     data = await res.json();
@@ -10080,11 +10493,13 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
             var nOk = newPieces.length;
             var msgRound =
                 nOk === 1
-                    ? 'Acabei de enviar um arquivo para análise (o resumo está no contexto do sistema). Apresente um resumo curto da estrutura em tópicos, sugira um nome único e um ícone Ionicons para o modelo no painel, e três passos práticos para montar o formulário no canvas.'
+                    ? 'Acabei de enviar um arquivo para análise (o resumo está no contexto do sistema). NÃO responda só com resumo/dicas. Gere agora um `schemaPatch` completo para montar o formulário no canvas (section_break + campos + tipos inferidos + evidências), com `templateTitlePatch` e `templateMetadataPatch.icon` quando fizer sentido. Se houver regras úteis, inclua `logicSuggestions`.'
                     : 'Acabei de enviar ' +
                       nOk +
-                      ' arquivos de referência para análise (os resumos estão no contexto do sistema). Apresente um resumo curto de cada origem em tópicos, indique convergências ou conflitos entre eles, sugira um nome único e um ícone Ionicons para o modelo no painel, e três passos práticos para montar o formulário no canvas.';
-            await brsparkCopilotPostChatRound(msgRound);
+                      ' arquivos de referência para análise (os resumos estão no contexto do sistema). NÃO responda só com resumo/dicas. Gere agora um `schemaPatch` completo para montar o formulário no canvas, consolidando convergências e conflitos entre as fontes, com tipos inferidos automaticamente e evidências nos campos críticos. Inclua `templateTitlePatch` e `templateMetadataPatch.icon` quando fizer sentido.';
+            window.__brsparkCopilotShowStartScreen = false;
+            updateCopilotStartScreenUi();
+            await brsparkCopilotPostChatRound(msgRound, { hideUserBubble: true });
         } else {
             if (statusEl) statusEl.textContent = errors.length ? 'Erro: ' + errors.join(' | ') : 'Nenhum arquivo analisado.';
             if (errors.length) {
@@ -10152,6 +10567,7 @@ window.brsparkCopilotApplyPatch = function (opts) {
             currentFormTitle = nt;
             var ttEl = document.getElementById('tpl-title');
             if (ttEl) ttEl.value = currentFormTitle;
+            if (typeof window.fbSyncFormMetaSummary === 'function') window.fbSyncFormMetaSummary();
         }
     }
     renderCanvas();
@@ -10180,6 +10596,7 @@ window.brsparkCopilotUndo = function () {
         currentFormTitle = String(entry.formTitle);
         const tt = document.getElementById('tpl-title');
         if (tt) tt.value = currentFormTitle;
+        if (typeof window.fbSyncFormMetaSummary === 'function') window.fbSyncFormMetaSummary();
     }
     renderCanvas();
     renderProperties();
@@ -10214,9 +10631,8 @@ window.brsparkCopilotSuggestLogic = async function () {
                         userGoal: goal,
                         formContext: collectCopilotFormContext(),
                     };
-                    const docUrlEl = document.getElementById('copilot-ctx-doc-url');
-                    const documentationUrl = docUrlEl ? String(docUrlEl.value || '').trim() : '';
-                    if (documentationUrl) payload.documentationUrl = documentationUrl.slice(0, 2048);
+                    const refUrls = parseCopilotReferenceUrlsFromInput();
+                    if (refUrls.length) payload.referenceUrls = refUrls;
                     return payload;
                 })()
             ),

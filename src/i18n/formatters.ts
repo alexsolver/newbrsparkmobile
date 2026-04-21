@@ -60,6 +60,12 @@ export function getNumberFormat(): NumberFormatPrefs {
   return { decimals: 2, style };
 }
 
+/** Decimal com preferências do utilizador (alinhado a `ValueInput` / campos número). */
+export function formatDecimalNumber(amount: number): string {
+  const fmt = getNumberFormat();
+  return applyStyle(amount, fmt.decimals, fmt.style);
+}
+
 function applyStyle(value: number, decimals: number, style: NumberFormatStyle): string {
   if (style === 'locale') {
     const loc = getCurrentLanguage();

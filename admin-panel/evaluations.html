@@ -46,6 +46,17 @@
     .eval-quick-step__t { font-size:14px; font-weight:700; color:var(--text); line-height:1.35; margin-bottom:6px; }
     .eval-quick-step__d { font-size:12px; color:var(--text3); line-height:1.45; }
     @media (max-width:900px) { .eval-quick-guide { grid-template-columns:1fr; } }
+    .eval-copilot-callout {
+      margin: 0 0 20px;
+      padding: 14px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      background: linear-gradient(165deg, rgba(99, 102, 241, 0.08), var(--surface2));
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text2);
+    }
+    .eval-copilot-callout a { color: var(--accent); font-weight: 700; }
     .eval-notify-channels label { display:flex; align-items:flex-start; gap:10px; margin-bottom:10px; font-size:13px; color:var(--text2); cursor:pointer; }
     .eval-notify-channels input { margin-top:3px; }
     .eval-notify-channels .is-disabled { opacity:.55; cursor:not-allowed; }
@@ -105,6 +116,14 @@
           <div class="eval-quick-step__t" id="ev-g3-title">Disputas</div>
           <div class="eval-quick-step__d" id="ev-g3-desc">Se o técnico pedir revisão, analise a conversa e decida: manter, ajustar nota ou invalidar.</div>
         </div>
+      </div>
+
+      <div class="eval-copilot-callout" role="note" aria-label="Formulários internos">
+        <strong>Copiloto de formulários (testes internos):</strong>
+        para avaliar jornadas da IA, troubleshooting guiado e sugestões de campos, abra o
+        <a href="checklists.html">Forms Builder</a>, abra o painel Copiloto e escolha a jornada
+        (ou o fluxo «Problema no app» com categoria de sintoma). Esta página continua dedicada às
+        <strong>avaliações dos clientes</strong> após a OS.
       </div>
 
       <div class="eval-tab-bar">

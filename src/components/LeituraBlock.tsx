@@ -34,6 +34,13 @@ const tagsStyles: MixedStyleRecord = {
   ul: { marginBottom: 10, paddingLeft: 4 },
   ol: { marginBottom: 10, paddingLeft: 4 },
   li: { marginBottom: 4 },
+  strong: { fontWeight: '800' },
+  b: { fontWeight: '800' },
+  em: { fontStyle: 'italic' },
+  i: { fontStyle: 'italic' },
+  u: { textDecorationLine: 'underline' },
+  s: { textDecorationLine: 'line-through' },
+  br: { marginBottom: 0 },
   blockquote: {
     borderLeftWidth: 3,
     borderLeftColor: '#e2e8f0',
@@ -45,6 +52,13 @@ const tagsStyles: MixedStyleRecord = {
   img: { borderRadius: 8 },
   div: {},
   span: {},
+};
+
+/** Alinhamento Quill (`ql-align-*`) no render nativo. */
+const quillClassesStyles: MixedStyleRecord = {
+  'ql-align-center': { textAlign: 'center' },
+  'ql-align-right': { textAlign: 'right' },
+  'ql-align-justify': { textAlign: 'justify' },
 };
 
 type LeituraBlockProps = {
@@ -75,6 +89,7 @@ export function LeituraBlock({ contentHtml }: LeituraBlockProps) {
         contentWidth={contentWidth}
         source={baseUrl ? { html: safe, baseUrl } : { html: safe }}
         tagsStyles={tagsStyles}
+        classesStyles={quillClassesStyles}
         baseStyle={styles.htmlBase}
         ignoredDomTags={['script', 'iframe', 'object', 'embed', 'form', 'input', 'select', 'textarea', 'button']}
         enableExperimentalMarginCollapsing

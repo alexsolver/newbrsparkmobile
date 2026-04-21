@@ -605,7 +605,7 @@ export class AuthService {
     return d.user;
   }
 
-  /** Registro — POST /api/register (cria Tenant + User automaticamente) */
+  /** Registro — POST /api/register (utilizador USER na tenant master BrSpark) */
   static async register(params: {
     name: string;
     email: string;

@@ -1,0 +1,12 @@
+{
+  "watch": ["src", "prisma"],
+  "ext": "js,cjs,json",
+  "delay": 1000,
+  "ignore": [
+    "**/node_modules/**",
+    "**/.git/**",
+    "**/backups/**",
+    "**/public/**",
+    "prisma/migrations/**"
+  ]
+}

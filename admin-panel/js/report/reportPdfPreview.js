@@ -20,6 +20,7 @@ import {
   transitPctDeltaVsPlanned,
   normalizeTraversedPathForReport,
   resolveProductivityFromTask,
+  scavengeLongestTraversedPathFromReportResponses,
 } from './previewExecutionMetrics.js';
 import {
   collectSectionTimingRowsForPreview,
@@ -966,7 +967,8 @@ function patrolRasterFitBounds(refLatLng, traversedLatLng) {
   if (trB) {
     const trSpan = Math.max(trB.dlat, trB.dlng);
     const refSpan = refB ? Math.max(refB.dlat, refB.dlng) : 0;
-    if (refB && refSpan > trSpan * 4) {
+    /** Só a KML inteira: prioriza a trilha real no enquadramento (zoom, menos área vazia). */
+    if (refB && refSpan > trSpan * 1.75) {
       b = trB;
     } else if (refB) {
       b = unionBboxPdf(trB, refB);
@@ -989,7 +991,7 @@ function patrolRasterFitBounds(refLatLng, traversedLatLng) {
     maxLng: b.maxLng,
   };
 
-  const pad = 1.24;
+  const pad = 1.1;
   const clat = (b.minLat + b.maxLat) / 2;
   const clng = (b.minLng + b.maxLng) / 2;
   let dlat = (b.maxLat - b.minLat) * pad;
@@ -1032,7 +1034,7 @@ function pickPatrolOsmZoomFit3x3(clat, clng, core) {
   ) {
     return 14;
   }
-  const margin = 1.16;
+  const margin = 1.08;
   let latSpan = Math.max(0, core.maxLat - core.minLat);
   let lngSpan = Math.max(0, core.maxLng - core.minLng);
   const minSpanDeg = 0.00042;
@@ -1049,7 +1051,7 @@ function pickPatrolOsmZoomFit3x3(clat, clng, core) {
     maxLng: midLng + hLng,
   };
   const eps = 1e-7;
-  for (let z = 18; z >= 9; z -= 1) {
+  for (let z = 18; z >= 6; z -= 1) {
     const { x: cx, y: cy } = lngLatToOsmTile(clng, clat, z);
     const tb = patrolDisplayedTileBounds(cx, cy, z);
     if (
@@ -1061,7 +1063,7 @@ function pickPatrolOsmZoomFit3x3(clat, clng, core) {
       return z;
     }
   }
-  return 9;
+  return 6;
 }
 
 /** Tile XYZ (Slippy Map) — mesmos tiles que o site OSM. */
@@ -1202,7 +1204,7 @@ function buildPatrolOsmRasterMapHtml(th, refLatLng, traversedLatLng, zoneType) {
           ? `Azul: trilha GPS do deslocamento · ▶ início · ■ fim. Sem rota de referência KML (desloc. livre ou ponto). Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.`
           : `Laranja: rota de referência (KML) · Azul: trilha GPS · ▶ início · ■ fim. Cartografia: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" style="color:${th.colorAccent};font-weight:700">© OpenStreetMap contributors</a>.`;
   return `
-    <div style="position:relative;width:100%;border-bottom:1px solid ${th.colorBorder};background:#d9dde0;overflow:hidden">
+    <div style="position:relative;width:100%;max-width:min(100%, 420px);max-height:420px;margin:0 auto;page-break-inside:avoid;break-inside:avoid;-webkit-column-break-inside:avoid;border-bottom:1px solid ${th.colorBorder};background:#d9dde0;overflow:hidden;box-sizing:border-box">
       <div style="display:flex;flex-wrap:wrap;width:100%;line-height:0;font-size:0">${imgs.join('')}</div>
       ${overlay}
     </div>
@@ -2171,7 +2173,30 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
     lab: t.status || '—',
   };
 
-  const { startGPS: stPrev, endGPS: enPrev } = extractTransitEndpointsForReport(responses);
+  const { startGPS: stPrev, endGPS: enPrev0 } = extractTransitEndpointsForReport(responses);
+  let enPrev = enPrev0;
+  const scavPrev = scavengeLongestTraversedPathFromReportResponses(responses);
+  if (scavPrev && scavPrev.length) {
+    const cur =
+      enPrev0 && enPrev0.traversedPath
+        ? normalizeTraversedPathForReport(enPrev0.traversedPath) || []
+        : [];
+    if (scavPrev.length > cur.length) {
+      const last = scavPrev[scavPrev.length - 1];
+      enPrev = {
+        ...(enPrev0 && typeof enPrev0 === 'object' ? enPrev0 : {}),
+        traversedPath: scavPrev,
+        lat:
+          enPrev0 != null && Number.isFinite(Number(enPrev0.lat))
+            ? Number(enPrev0.lat)
+            : Number(last[0]),
+        lng:
+          enPrev0 != null && enPrev0.lng != null && Number.isFinite(Number(enPrev0.lng))
+            ? Number(enPrev0.lng)
+            : Number(last[1]),
+      };
+    }
+  }
 
   const zoneTypeLabel =
     ZONE_LABEL_PDF[t.locationZoneType] ||

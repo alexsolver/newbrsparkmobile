@@ -51,6 +51,20 @@ class RouteTrackingService {
   private maxAccuracyMForPatrol = 55;
   private lastPatrolComputeAt = 0;
 
+  /** Comprimento total da polilinha de referência (m). */
+  private totalRouteLenM = 0;
+  /**
+   * Arco (m) ao longo da polilinha até à projeção do GPS na **primeira** amostra após `start` / `rebaseline`.
+   * O % mede quanto se avançou em **metros** até ao fim da linha a partir dessa base — não o índice de segmento
+   * (vértices irregulares geravam ~95% sem percorrer o trajeto).
+   */
+  private sessionBaselineArcM: number | null = null;
+  /** Maior arco (m) já atingido nesta sessão (monótono). */
+  private furthestArcM = 0;
+  private lastLat: number | null = null;
+  private lastLng: number | null = null;
+  private lastEmittedUpdate: RouteUpdate | null = null;
+
   on(event: string, fn: Listener) {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set());
     this.listeners.get(event)!.add(fn);
@@ -71,25 +85,34 @@ class RouteTrackingService {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  private distanceToRoute(lat: number, lng: number): { dist: number; idx: number } {
-    if (!this.route || this.route.length < 2) return { dist: 0, idx: 0 };
-    let minDist = Infinity,
-      closestIdx = 0;
-    for (let i = 0; i < this.route.length - 1; i++) {
-      const [aL, aG] = this.route[i],
-        [bL, bG] = this.route[i + 1];
-      const dx = bG - aG,
-        dy = bL - aL,
-        len2 = dx * dx + dy * dy;
+  /** Projeção do ponto na polilinha: distância (m), arco desde o 1.º vértice (m), índice do segmento. */
+  private projectToRoute(lat: number, lng: number): { distM: number; arcM: number; idx: number } {
+    const poly = this.route;
+    if (!poly || poly.length < 2) return { distM: Infinity, arcM: 0, idx: 0 };
+    let bestDist = Infinity;
+    let bestArc = 0;
+    let bestIdx = 0;
+    let arcBefore = 0;
+    for (let i = 0; i < poly.length - 1; i++) {
+      const [aL, aG] = poly[i];
+      const [bL, bG] = poly[i + 1];
+      const segLen = this.haversine(aL, aG, bL, bG);
+      const dx = bG - aG;
+      const dy = bL - aL;
+      const len2 = dx * dx + dy * dy;
       let t = len2 > 0 ? ((lng - aG) * dx + (lat - aL) * dy) / len2 : 0;
       t = Math.max(0, Math.min(1, t));
-      const d = this.haversine(lat, lng, aL + t * dy, aG + t * dx);
-      if (d < minDist) {
-        minDist = d;
-        closestIdx = i;
+      const pL = aL + t * dy;
+      const pG = aG + t * dx;
+      const d = this.haversine(lat, lng, pL, pG);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+        bestArc = arcBefore + t * segLen;
       }
+      arcBefore += segLen;
     }
-    return { dist: minDist, idx: closestIdx };
+    return { distM: bestDist, arcM: bestArc, idx: bestIdx };
   }
 
   private deviationThreshold = DEFAULT_DEVIATION_M;
@@ -108,8 +131,23 @@ class RouteTrackingService {
     const lng = loc.coords.longitude;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-    const { dist, idx } = this.distanceToRoute(lat, lng);
-    const progressPercent = Math.round((idx / Math.max(this.route.length - 1, 1)) * 100);
+    const { distM: dist, arcM, idx } = this.projectToRoute(lat, lng);
+
+    if (this.sessionBaselineArcM === null) {
+      this.sessionBaselineArcM = arcM;
+      this.furthestArcM = arcM;
+    } else {
+      this.furthestArcM = Math.max(this.furthestArcM, arcM);
+    }
+    const base = this.sessionBaselineArcM;
+    const furthest = this.furthestArcM;
+    const remaining = Math.max(this.totalRouteLenM - base, 0);
+    const denom = Math.max(remaining, 1e-3);
+    let progressPercent = Math.round(((furthest - base) / denom) * 100);
+    progressPercent = Math.max(0, Math.min(100, progressPercent));
+
+    this.lastLat = lat;
+    this.lastLng = lng;
 
     this.traversedPath.push([lat, lng]);
 
@@ -164,6 +202,8 @@ class RouteTrackingService {
         typeof acc === 'number' && Number.isFinite(acc) && acc >= 0 ? acc : null,
     };
 
+    this.lastEmittedUpdate = update;
+
     this.emit(event, update);
     this.emit('update', update);
     this.emit('traversed_update', this.traversedPath);
@@ -177,9 +217,24 @@ class RouteTrackingService {
     if (this._active) await this.stop();
 
     this.route = routeCoords;
+    let totLen = 0;
+    for (let i = 0; i < this.route.length - 1; i++) {
+      totLen += this.haversine(
+        this.route[i][0],
+        this.route[i][1],
+        this.route[i + 1][0],
+        this.route[i + 1][1],
+      );
+    }
+    this.totalRouteLenM = totLen;
     this.traversedPath = [];
     this.patrolSamples = [];
     this.lastPatrolComputeAt = 0;
+    this.sessionBaselineArcM = null;
+    this.furthestArcM = 0;
+    this.lastLat = null;
+    this.lastLng = null;
+    this.lastEmittedUpdate = null;
     this.maxAccuracyMForPatrol =
       opts?.maxAccuracyM != null && Number.isFinite(opts.maxAccuracyM) ? opts.maxAccuracyM : 55;
     this.deviationThreshold = deviationThresholdMeters;
@@ -284,6 +339,12 @@ class RouteTrackingService {
     this.usingBackgroundTask = false;
     this.route = [];
     this.patrolSamples = [];
+    this.totalRouteLenM = 0;
+    this.sessionBaselineArcM = null;
+    this.furthestArcM = 0;
+    this.lastLat = null;
+    this.lastLng = null;
+    this.lastEmittedUpdate = null;
   }
 
   pause() {
@@ -294,6 +355,47 @@ class RouteTrackingService {
   resume() {
     this._paused = false;
     this.emit('status_changed', { status: 'ACTIVE' });
+  }
+
+  /**
+   * Redefine a linha de base do % (ex.: ao tocar «Iniciar deslocamento»).
+   * Emite já um `update` com 0% para a UI não ficar com o valor antigo até ao próximo fix GPS.
+   * Passe `overrideLat`/`overrideLng` quando acabou de obter o fix do SAIDA (mais fiável que o último ponto do tracker).
+   */
+  rebaselineSessionProgress(overrideLat?: number, overrideLng?: number) {
+    if (!this._active) return;
+    this.sessionBaselineArcM = null;
+    this.furthestArcM = 0;
+
+    const lat =
+      overrideLat != null && Number.isFinite(overrideLat) ? overrideLat : this.lastLat;
+    const lng =
+      overrideLng != null && Number.isFinite(overrideLng) ? overrideLng : this.lastLng;
+
+    if (lat != null && lng != null && this.route.length >= 2) {
+      const { distM, arcM, idx } = this.projectToRoute(lat, lng);
+      this.sessionBaselineArcM = arcM;
+      this.furthestArcM = arcM;
+      this.lastLat = lat;
+      this.lastLng = lng;
+      const prev = this.lastEmittedUpdate;
+      const event: RouteEvent = distM > this.deviationThreshold ? 'ROUTE_DEVIATION' : 'ROUTE_ON_TRACK';
+      const update: RouteUpdate = {
+        event,
+        distanceFromRoute: Math.round(distM),
+        progressPercent: 0,
+        currentLat: lat,
+        currentLng: lng,
+        closestPointIndex: idx,
+        speedMps: prev?.speedMps ?? null,
+        courseDeg: prev?.courseDeg ?? null,
+        horizontalAccuracyM: prev?.horizontalAccuracyM ?? null,
+        ...(prev?.patrolCoveragePercent != null ? { patrolCoveragePercent: prev.patrolCoveragePercent } : {}),
+      };
+      this.lastEmittedUpdate = update;
+      this.emit(event, update);
+      this.emit('update', update);
+    }
   }
 
   isActive() {

@@ -1162,6 +1162,21 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <View style={styles.listSeparator} />
+          <TouchableOpacity
+            style={styles.listItem}
+            onPress={() => router.push('/profile/sync-cockpit' as any)}
+          >
+            <View style={[styles.listIconBox, { backgroundColor: '#EFF6FF' }]}>
+              <Ionicons name="analytics-outline" size={18} color="#1D4ED8" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.listItemText}>{t('profile.syncCockpitTitle')}</Text>
+              <Text style={styles.listItemSub}>{t('profile.syncCockpitRow')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
+          </TouchableOpacity>
+
+          <View style={styles.listSeparator} />
           <View style={[styles.listItem, { alignItems: 'flex-start', paddingVertical: 12 }]}>
             <View style={[styles.listIconBox, { backgroundColor: '#FEF3C7' }]}>
               <Ionicons name="warning-outline" size={18} color="#B45309" />

@@ -108,6 +108,11 @@ const M = {
     ops_dispatch_email_lbl: 'E-mail do técnico *',
     ops_dispatch_email_ph: 'Nome ou e-mail, sugestões ao digitar',
     ops_dispatch_suggest_aria: 'Técnicos sugeridos',
+    ops_dispatch_client_email_lbl: 'E-mail do cliente',
+    ops_dispatch_client_email_ph: 'Opcional — contacto do cliente final',
+    ops_dispatch_client_email_hint:
+      'Guardado na OS para integrações e chat cliente ↔ técnico quando aplicável.',
+    ops_dispatch_client_email_invalid: 'Se preencher o e-mail do cliente, use um formato válido (ex.: nome@dominio.com).',
     ops_dispatch_template_lbl: 'Formulário / template *',
     ops_dispatch_template_ph: 'Selecionar formulário…',
     ops_dispatch_title_lbl: 'Título da OS',
@@ -284,6 +289,11 @@ const M = {
     ops_dispatch_email_lbl: 'Technician email *',
     ops_dispatch_email_ph: 'Name or email, suggestions as you type',
     ops_dispatch_suggest_aria: 'Suggested technicians',
+    ops_dispatch_client_email_lbl: 'Client email',
+    ops_dispatch_client_email_ph: 'Optional — end customer contact',
+    ops_dispatch_client_email_hint:
+      'Stored on the work order for integrations and client ↔ technician chat when applicable.',
+    ops_dispatch_client_email_invalid: 'If you enter a client email, use a valid format (e.g. name@domain.com).',
     ops_dispatch_template_lbl: 'Form / template *',
     ops_dispatch_template_ph: 'Select a form…',
     ops_dispatch_title_lbl: 'Work order title',
@@ -613,6 +623,11 @@ export function applyOperationsModalsStaticI18n() {
   if (dEmail) dEmail.setAttribute('placeholder', opsT('ops_dispatch_email_ph'));
   const sug = document.getElementById('d-email-suggestions');
   if (sug) sug.setAttribute('aria-label', opsT('ops_dispatch_suggest_aria'));
+
+  setLabelFor('d-client-email', 'ops_dispatch_client_email_lbl');
+  const dClientEmail = document.getElementById('d-client-email');
+  if (dClientEmail) dClientEmail.setAttribute('placeholder', opsT('ops_dispatch_client_email_ph'));
+  setHtml('d-hint-client-email', 'ops_dispatch_client_email_hint');
 
   setLabelFor('d-template', 'ops_dispatch_template_lbl');
   const dTpl = document.getElementById('d-template');

@@ -2,6 +2,8 @@
 
 const MAX_BYTES = 400_000;
 const MAX_CHARS_OUT = 28_000;
+/** Texto combinado máximo quando várias URLs são carregadas para o copiloto. */
+const MAX_CHARS_COMBINED_REFERENCES = 36_000;
 
 /**
  * @param {string} hostname
@@ -36,11 +38,40 @@ function htmlToPlainText(html) {
 }
 
 /**
- * Obtém texto de uma página de documentação (HTTPS público) para contexto do copiloto.
+ * @param {unknown} rawList
+ * @param {number} [maxUrls]
+ * @returns {string[]}
+ */
+function normalizeHttpsReferenceUrls(rawList, maxUrls = 5) {
+  const out = [];
+  const seen = new Set();
+  const arr = Array.isArray(rawList) ? rawList : [];
+  for (const raw of arr) {
+    if (out.length >= maxUrls) break;
+    const s = raw != null ? String(raw).trim() : '';
+    if (!s || !s.startsWith('https://')) continue;
+    let u;
+    try {
+      u = new URL(s);
+    } catch {
+      continue;
+    }
+    if (u.protocol !== 'https:') continue;
+    const key = u.href.split('#')[0].toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s.slice(0, 2048));
+  }
+  return out;
+}
+
+/**
+ * Obtém texto de uma página (HTTPS público) para contexto do copiloto.
  * @param {string} rawUrl
+ * @param {{ maxCharsOut?: number }} [opts]
  * @returns {Promise<{ ok: boolean, text: string, error: string | null, finalUrl?: string }>}
  */
-async function fetchDocumentationForCopilot(rawUrl) {
+async function fetchDocumentationForCopilot(rawUrl, opts = {}) {
   const trimmed = String(rawUrl || '').trim();
   if (!trimmed) {
     return { ok: false, text: '', error: null };
@@ -89,8 +120,12 @@ async function fetchDocumentationForCopilot(rawUrl) {
     } else {
       body = htmlToPlainText(body);
     }
-    if (body.length > MAX_CHARS_OUT) {
-      body = body.slice(0, MAX_CHARS_OUT) + '\n…[truncado pelo painel]';
+    const cap =
+      typeof opts.maxCharsOut === 'number' && opts.maxCharsOut > 500
+        ? Math.min(opts.maxCharsOut, MAX_CHARS_OUT)
+        : MAX_CHARS_OUT;
+    if (body.length > cap) {
+      body = body.slice(0, cap) + '\n…[truncado pelo painel]';
     }
     return { ok: true, text: body, error: null, finalUrl: res.url || trimmed };
   } catch (e) {
@@ -103,6 +138,74 @@ async function fetchDocumentationForCopilot(rawUrl) {
   }
 }
 
+/**
+ * Carrega várias URLs (documentação, checklist público, norma, etc.), com teto global de caracteres.
+ * @param {string[]} urls
+ * @param {{ onProgress?: (i: number, n: number, url: string) => void }} [hook]
+ * @returns {Promise<{ combinedText: string, items: { url: string, ok: boolean, chars: number, error: string | null, finalUrl?: string }[], warnings: string[] }>}
+ */
+async function fetchMultipleReferenceUrlsForCopilot(urls, hook) {
+  const list = normalizeHttpsReferenceUrls(urls, 5);
+  const items = [];
+  const warnings = [];
+  let combined = '';
+  let remaining = MAX_CHARS_COMBINED_REFERENCES;
+
+  const n = list.length;
+  for (let i = 0; i < list.length; i++) {
+    const url = list[i];
+    try {
+      hook?.(i + 1, n, url);
+    } catch (_) {
+      /* ignore */
+    }
+    const perCap = Math.max(2000, Math.floor(remaining / Math.max(1, n - i)));
+    const r = await fetchDocumentationForCopilot(url, { maxCharsOut: perCap });
+    const finalU = r.finalUrl || url;
+    const header = `\n\n---\n## Fonte web (${i + 1}/${n})\nURL pedida: ${url}\nURL final: ${finalU}\n---\n`;
+    let body = '';
+    if (r.ok && r.text) {
+      body = r.text;
+      items.push({
+        url,
+        ok: true,
+        chars: r.text.length,
+        error: null,
+        finalUrl: finalU,
+      });
+    } else {
+      const err = r.error || 'Falha ao obter conteúdo.';
+      body = '[Não foi possível ler o conteúdo: ' + err + ']';
+      warnings.push(`${url}: ${err}`);
+      items.push({
+        url,
+        ok: false,
+        chars: 0,
+        error: err,
+        finalUrl: finalU,
+      });
+    }
+    const piece = header + body;
+    if (piece.length <= remaining) {
+      combined += piece;
+      remaining -= piece.length;
+    } else {
+      combined += piece.slice(0, remaining) + '\n…[truncado — limite global de referências]';
+      remaining = 0;
+      break;
+    }
+  }
+
+  return {
+    combinedText: combined.trim(),
+    items,
+    warnings,
+  };
+}
+
 module.exports = {
   fetchDocumentationForCopilot,
+  normalizeHttpsReferenceUrls,
+  fetchMultipleReferenceUrlsForCopilot,
+  MAX_CHARS_COMBINED_REFERENCES,
 };

@@ -9,7 +9,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
-  View, Text, Image, ScrollView, TouchableOpacity, StyleSheet,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Animated, ActivityIndicator, Platform, Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { getDeviceRegion } from '../../src/i18n';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
 import { ThemedSwitch } from '../../src/components/ThemedSwitch';
 import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 
@@ -102,7 +103,7 @@ async function requestOsLocationPermissions(isTechnician: boolean, consents: Con
 export default function OnboardingScreen() {
   const { t, i18n } = useTranslation();
   const { user, userRole, loading: authLoading } = useAuth();
-  const { colors: C, resolvedLogoUrl, appDisplayName, appTagline } = useTheme();
+  const { colors: C, appDisplayName, appTagline } = useTheme();
   /** Alinha com PersonaContext: modo prestador = TECHNICIAN + capability (backend já limita elegibilidade). */
   const isTechnician = useMemo(
     () => userRole === 'TECHNICIAN' && canUseProviderMode(user),
@@ -291,21 +292,11 @@ export default function OnboardingScreen() {
           return (
             <View style={s.slideContent}>
               <View style={s.heroLogoWrap}>
-                {resolvedLogoUrl ? (
-                  <Image
-                    source={{ uri: resolvedLogoUrl }}
-                    style={s.heroLogoImg}
-                    resizeMode="contain"
-                    accessibilityLabel={t('consentFlow.a11yLogo')}
-                  />
-                ) : (
-                  <Image
-                    source={require('../../assets/logo.png')}
-                    style={s.heroLogoImg}
-                    resizeMode="contain"
-                    accessibilityLabel={t('consentFlow.a11yLogo')}
-                  />
-                )}
+                <BrandingLogoImage
+                  style={s.heroLogoImg}
+                  resizeMode="contain"
+                  accessibilityLabel={t('consentFlow.a11yLogo')}
+                />
               </View>
               <Text style={[s.heroBrandName, { color: C.primary }]}>{appDisplayName}</Text>
               <Text style={[s.heroBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text>
@@ -342,21 +333,11 @@ export default function OnboardingScreen() {
         return (
           <View style={s.slideContent}>
             <View style={s.heroLogoWrap}>
-              {resolvedLogoUrl ? (
-                <Image
-                  source={{ uri: resolvedLogoUrl }}
-                  style={s.heroLogoImg}
-                  resizeMode="contain"
-                  accessibilityLabel={t('consentFlow.a11yLogo')}
-                />
-              ) : (
-                <Image
-                  source={require('../../assets/logo.png')}
-                  style={s.heroLogoImg}
-                  resizeMode="contain"
-                  accessibilityLabel={t('consentFlow.a11yLogo')}
-                />
-              )}
+              <BrandingLogoImage
+                style={s.heroLogoImg}
+                resizeMode="contain"
+                accessibilityLabel={t('consentFlow.a11yLogo')}
+              />
             </View>
             <Text style={[s.heroBrandName, { color: C.primary }]}>{appDisplayName}</Text>
             <Text style={[s.heroBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text>

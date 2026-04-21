@@ -149,6 +149,62 @@
     .err-ts { color: #888; }
     .err-dev { color: #facc15; }
     .err-msg { color: #f87171; }
+
+    /* Modal detalhe do card */
+    .stat-card.cp-card-clickable { cursor: pointer; }
+    .stat-card.cp-card-clickable:focus-visible {
+      outline: 2px solid var(--accent-cyan);
+      outline-offset: 2px;
+    }
+    .cp-modal-root {
+      position: fixed; inset: 0; z-index: 10050;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px; box-sizing: border-box;
+    }
+    .cp-modal-root[hidden] { display: none !important; }
+    .cp-modal-backdrop {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.65);
+      cursor: pointer;
+    }
+    .cp-modal-panel {
+      position: relative; z-index: 1;
+      width: 100%; max-width: 520px; max-height: min(80vh, 640px);
+      background: var(--surface-dash); border: 1px solid var(--border-dash);
+      border-radius: 14px; box-shadow: 0 24px 48px rgba(0,0,0,0.45);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .cp-modal-head {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+      padding: 16px 18px; border-bottom: 1px solid var(--border-dash);
+    }
+    .cp-modal-title { margin: 0; font-size: 16px; font-weight: 800; color: #fff; line-height: 1.35; }
+    .cp-modal-close {
+      flex-shrink: 0; width: 36px; height: 36px; border: none; border-radius: 8px;
+      background: rgba(255,255,255,0.08); color: var(--text-muted); font-size: 22px; line-height: 1;
+      cursor: pointer;
+    }
+    .cp-modal-close:hover { background: rgba(255,255,255,0.12); color: #fff; }
+    .cp-modal-body {
+      padding: 14px 18px 18px; overflow-y: auto; font-size: 13px; line-height: 1.5; color: var(--text-muted);
+    }
+    .cp-modal-row {
+      display: flex; justify-content: space-between; gap: 12px; padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .cp-modal-row:last-of-type { border-bottom: none; }
+    .cp-modal-row--focus .cp-modal-v { color: #fde68a; }
+    .cp-modal-k { color: #94a3b8; font-weight: 600; }
+    .cp-modal-v { color: #e2e8f0; font-weight: 700; text-align: right; word-break: break-word; }
+    .cp-modal-empty { margin: 0; font-size: 13px; color: #94a3b8; }
+    .cp-modal-pre {
+      margin: 12px 0 0; padding: 12px; border-radius: 8px;
+      background: #0a0c12; border: 1px solid var(--border-dash);
+      font-size: 11px; line-height: 1.45; color: #a5b4fc; overflow-x: auto;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .cp-modal-foot {
+      margin: 0; padding: 0 18px 14px; font-size: 11px; color: #64748b;
+    }
   </style>
 </head>
 <body>
@@ -169,7 +225,7 @@
           <ion-icon name="planet-outline"></ion-icon>
           <span id="mpc-hero-title">Cockpit global — operações</span>
         </h1>
-        <p class="page-hero-sub" id="mpc-hero-sub">Visão em tempo quase real de sincronização, quadro global de OS/RT (todas as empresas), pipeline e telemetria.</p>
+        <p class="page-hero-sub" id="mpc-hero-sub">Visão em tempo quase real de sincronização, quadro global de FT/RT (todas as empresas), pipeline e telemetria.</p>
       </header>
 
       <div class="data-toolbar cockpit-toolbar">
@@ -181,10 +237,10 @@
       <section class="data-shell fade-in cockpit-shell" aria-label="Painel operacional">
     <div class="dash-container">
 
-  <div class="section-title" id="cp-sec-board"><ion-icon name="git-branch-outline"></ion-icon> Quadro OS e RT — todas as empresas</div>
-  <p id="cp-board-intro" style="margin:-8px 0 16px;font-size:12px;color:var(--text-muted);line-height:1.45">Totais no banco (FT e tarefas de rotina), sem limite de linhas — equivalente ao resumo que existia na Central de operações.</p>
+  <div class="section-title" id="cp-sec-board"><ion-icon name="git-branch-outline"></ion-icon> Quadro FT e RT — todas as empresas</div>
+  <p id="cp-board-intro" style="margin:-8px 0 16px;font-size:12px;color:var(--text-muted);line-height:1.45">Totais no banco.</p>
   <div class="grid-ops-board" aria-label="Resumo global do quadro">
-    <div class="stat-card" style="border-top:3px solid var(--accent-amber)">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="board-total" style="border-top:3px solid var(--accent-amber)">
       <div class="card-top">
         <span class="card-title" id="cp-ct-total">Total no quadro</span>
         <ion-icon name="git-branch-outline" class="card-icon amber"></ion-icon>
@@ -192,7 +248,7 @@
       <div class="card-value amber"><span id="ops-board-total">0</span></div>
       <div class="card-footer" id="cp-cf-total">FT + RT (todas)</div>
     </div>
-    <div class="stat-card" style="border-top:3px solid var(--accent-amber)">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="board-pending" style="border-top:3px solid var(--accent-amber)">
       <div class="card-top">
         <span class="card-title" id="cp-ct-pending">Não iniciadas</span>
         <ion-icon name="hourglass-outline" class="card-icon amber"></ion-icon>
@@ -200,7 +256,7 @@
       <div class="card-value amber"><span id="ops-board-pending">0</span></div>
       <div class="card-footer" id="cp-cf-pending">Status PENDING</div>
     </div>
-    <div class="stat-card" style="border-top:3px solid var(--accent-blue)">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="board-progress" style="border-top:3px solid var(--accent-blue)">
       <div class="card-top">
         <span class="card-title" id="cp-ct-progress">Em campo</span>
         <ion-icon name="construct-outline" class="card-icon blue"></ion-icon>
@@ -208,7 +264,7 @@
       <div class="card-value blue"><span id="ops-board-progress">0</span></div>
       <div class="card-footer" id="cp-cf-progress">Recebida / aceita / em execução / pausa</div>
     </div>
-    <div class="stat-card" style="border-top:3px solid var(--accent-green)">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="board-completed" style="border-top:3px solid var(--accent-green)">
       <div class="card-top">
         <span class="card-title" id="cp-ct-completed">Concluídas</span>
         <ion-icon name="checkmark-circle-outline" class="card-icon green"></ion-icon>
@@ -216,7 +272,7 @@
       <div class="card-value green"><span id="ops-board-completed">0</span></div>
       <div class="card-footer" id="cp-cf-completed">Concluída ou sincronizada</div>
     </div>
-    <div class="stat-card" style="border-top:3px solid #64748b">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="board-cancelled" style="border-top:3px solid #64748b">
       <div class="card-top">
         <span class="card-title" id="cp-ct-cancelled">Canceladas</span>
         <ion-icon name="close-circle-outline" class="card-icon" style="color:#94a3b8"></ion-icon>
@@ -224,7 +280,7 @@
       <div class="card-value" style="color:#94a3b8"><span id="ops-board-cancelled">0</span></div>
       <div class="card-footer" id="cp-cf-cancelled">Status CANCELLED</div>
     </div>
-    <div class="stat-card" style="border-top:3px solid var(--accent-red)">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="board-errors" style="border-top:3px solid var(--accent-red)">
       <div class="card-top">
         <span class="card-title" id="cp-ct-errors">Erros</span>
         <ion-icon name="warning-outline" class="card-icon red"></ion-icon>
@@ -237,7 +293,7 @@
   <!-- ROW 1: NETWORK & INFRAHEALTH -->
   <div class="section-title" id="cp-sec-net"><ion-icon name="hardware-chip-outline"></ion-icon> Rede (ingress) e saúde do núcleo</div>
   <div class="grid-4">
-    <div class="stat-card">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="net-rpm">
       <div class="card-top">
         <span class="card-title" id="cp-ct-rpm">Taxa de sync (tempo real)</span>
         <ion-icon name="swap-vertical-outline" class="card-icon cyan"></ion-icon>
@@ -246,7 +302,7 @@
       <div class="card-footer" id="cp-cf-rpm">Throughput em tempo real</div>
     </div>
 
-    <div class="stat-card">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="net-volume">
       <div class="card-top">
         <span class="card-title" id="cp-ct-volume">Largura de banda (entrada)</span>
         <ion-icon name="cloud-download-outline" class="card-icon blue"></ion-icon>
@@ -255,7 +311,7 @@
       <div class="card-footer" id="cp-cf-volume">Volume da sessão atual</div>
     </div>
 
-    <div class="stat-card">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="net-failures">
       <div class="card-top">
         <span class="card-title" id="cp-ct-failures">Falhas de eventos</span>
         <ion-icon name="warning-outline" class="card-icon red"></ion-icon>
@@ -267,7 +323,7 @@
       </div>
     </div>
     
-    <div class="stat-card">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="net-uptime">
       <div class="card-top">
         <span class="card-title" id="cp-ct-uptime">Uptime do núcleo</span>
         <ion-icon name="server-outline" class="card-icon green"></ion-icon>
@@ -277,23 +333,46 @@
     </div>
   </div>
 
+  <!-- Integrações + armazenamento em nuvem (fornecedor configurável) -->
+  <div class="section-title" id="cp-sec-integ-storage" style="margin-top: 24px;"><ion-icon name="link-outline"></ion-icon> Integrações e armazenamento em nuvem</div>
+  <div class="grid-2">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="integ" style="border-top:3px solid #8b5cf6">
+      <div class="card-top">
+        <span class="card-title" id="cp-ct-integ">Integrações</span>
+        <ion-icon name="settings-outline" class="card-icon" style="color:#a78bfa"></ion-icon>
+      </div>
+      <div class="card-value" style="color:#c4b5fd"><span id="metric-integ-fraction">0 / 0</span></div>
+      <div class="card-footer" id="cp-cf-integ">Ativas / total no painel de Integrações</div>
+      <div class="card-footer" id="cp-integ-issues-line" style="display:none;margin-top:6px;font-size:11px;color:var(--accent-red);"></div>
+    </div>
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="storage" style="border-top:3px solid var(--accent-cyan)">
+      <div class="card-top">
+        <span class="card-title" id="cp-ct-storage">Armazenamento em nuvem</span>
+        <ion-icon name="cloud-upload-outline" class="card-icon cyan"></ion-icon>
+      </div>
+      <div class="card-value cyan"><span id="metric-storage-status">—</span></div>
+      <div class="card-footer" id="cp-cf-storage">Último teste de conexão (área Integrações)</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:8px;" id="metric-storage-tested">—</div>
+    </div>
+  </div>
+
   <!-- ROW 2: FIELD OPERATIONS & WORKFORCE -->
   <div class="section-title" id="cp-sec-fsm" style="margin-top: 24px;"><ion-icon name="people-outline"></ion-icon> Operações de campo (FSM)</div>
   <div class="grid-3">
     
-    <div class="stat-card" style="border-top: 3px solid var(--accent-amber);">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="fsm-devices" style="border-top: 3px solid var(--accent-amber);">
       <div class="card-top"><span class="card-title" id="cp-ct-devices">Pipeline: nos dispositivos</span><ion-icon name="phone-portrait-outline" class="card-icon amber"></ion-icon></div>
       <div class="card-value amber"><span id="metric-os-devices">0</span><small>OS</small></div>
       <div class="card-footer" id="cp-cf-devices">Em andamento / aguardando sync</div>
     </div>
 
-    <div class="stat-card" style="border-top: 3px solid var(--border-dash);">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="fsm-queue" style="border-top: 3px solid var(--border-dash);">
       <div class="card-top"><span class="card-title" id="cp-ct-queue">Pipeline: fila na nuvem</span><ion-icon name="cloud-offline-outline" class="card-icon text-muted"></ion-icon></div>
       <div class="card-value text-muted" style="color: var(--text-muted);"><span id="metric-os-queue">0</span><small>OS</small></div>
       <div class="card-footer" id="cp-cf-queue">Aguardando download (não reivindicadas)</div>
     </div>
 
-    <div class="stat-card" style="border-top: 3px solid var(--accent-green);">
+    <div class="stat-card cp-card-clickable" tabindex="0" data-cp-card="fsm-done" style="border-top: 3px solid var(--accent-green);">
       <div class="card-top"><span class="card-title" id="cp-ct-done">Histórico finalizado</span><ion-icon name="checkmark-done-outline" class="card-icon green"></ion-icon></div>
       <div class="card-value green"><span id="metric-os-done">0</span></div>
       <div class="card-footer" id="cp-cf-done">Total OS fechadas com sucesso (DB)</div>
@@ -335,6 +414,18 @@
     </div>
       </section>
     </div>
+  </div>
+</div>
+
+<div id="cp-modal-root" class="cp-modal-root" hidden aria-hidden="true">
+  <div class="cp-modal-backdrop" id="cp-modal-backdrop" aria-hidden="true"></div>
+  <div class="cp-modal-panel" role="dialog" aria-modal="true" aria-labelledby="cp-modal-title">
+    <div class="cp-modal-head">
+      <h2 id="cp-modal-title" class="cp-modal-title">—</h2>
+      <button type="button" id="cp-modal-close" class="cp-modal-close" aria-label="Fechar">×</button>
+    </div>
+    <div class="cp-modal-body" id="cp-modal-body"></div>
+    <p class="cp-modal-foot" id="cp-modal-foot"></p>
   </div>
 </div>
 

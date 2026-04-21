@@ -1,17 +1,18 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, FlatList, NativeScrollEvent, NativeSyntheticEvent, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, FlatList, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
 
 const { width: W } = Dimensions.get('window');
 
 export default function WelcomeOtpOnboarding() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { colors: C, resolvedLogoUrl, appTagline, appDisplayName } = useTheme();
+  const { colors: C, appTagline, appDisplayName } = useTheme();
   const [i, setI] = useState(0);
   const listRef = useRef<FlatList>(null);
   const slides = useMemo(
@@ -67,11 +68,7 @@ export default function WelcomeOtpOnboarding() {
   return (
     <SafeAreaView style={s.root} edges={['top', 'bottom']}>
       <View style={s.top}>
-        {resolvedLogoUrl ? (
-          <Image source={{ uri: resolvedLogoUrl }} style={s.logo} resizeMode="contain" />
-        ) : (
-          <Image source={require('../../assets/logo.png')} style={s.logo} resizeMode="contain" />
-        )}
+        <BrandingLogoImage style={s.logo} resizeMode="contain" />
         <Text style={s.sub}>{appTagline || 'BrSpark'}</Text>
         <Text style={{ fontSize: 11, color: C.textLight, marginTop: 4 }}>{appDisplayName}</Text>
       </View>

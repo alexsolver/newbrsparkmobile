@@ -163,6 +163,8 @@ function defaultFieldShell(type, label) {
             'Discordo totalmente\nDiscordo\nNeutro\nConcordo\nConcordo totalmente',
         }
       : {}),
+    ...(t === 'currency' ? { currencyCode: 'BRL' } : {}),
+    ...(t === 'calculated' ? { calcDisplayFormat: 'auto' } : {}),
   };
 }
 
@@ -202,6 +204,9 @@ function normalizeSchemaItem(raw, usedIds) {
     base.defaultValue = String(raw.defaultValue).trim();
   }
   if (raw.allowTechnicianComment === true) base.allowTechnicianComment = true;
+  if (type === 'currency' && raw.currencyCode != null && String(raw.currencyCode).trim()) {
+    base.currencyCode = String(raw.currencyCode).trim().slice(0, 12).toUpperCase();
+  }
   if (raw.icon != null && String(raw.icon).trim()) {
     base.icon = String(raw.icon).trim();
     base.iconLibrary = raw.iconLibrary != null ? String(raw.iconLibrary).trim() || 'Ionicons' : 'Ionicons';
@@ -300,6 +305,14 @@ function normalizeSchemaItem(raw, usedIds) {
     if (raw.lookupApiPath != null) {
       const p = String(raw.lookupApiPath).trim().slice(0, 240);
       base.lookupApiPath = p ? (p.startsWith('/') ? p : `/${p}`) : '';
+    }
+  }
+  if (type === 'calculated') {
+    if (raw.calcFormula != null) base.calcFormula = String(raw.calcFormula).trim();
+    const cdf = raw.calcDisplayFormat ?? raw.calc_display_format;
+    if (cdf != null) {
+      const v = String(cdf).trim().toLowerCase();
+      if (['auto', 'number', 'currency', 'percent'].includes(v)) base.calcDisplayFormat = v;
     }
   }
   if (type === 'repeatable_matrix') {

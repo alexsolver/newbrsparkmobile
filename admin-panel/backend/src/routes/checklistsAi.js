@@ -15,7 +15,10 @@ const { generateSchemaFromCanonical, analyzeSpreadsheetStructure } = require('..
 const { suggestLogicRules } = require('../lib/formAiCopilot');
 const { parseFormContextFromOptions } = require('../lib/formAiContext');
 const { executeCopilotChatSession } = require('../lib/formAiCopilotSession');
-const { fetchDocumentationForCopilot } = require('../lib/formAiDocumentationFetch');
+const {
+  fetchMultipleReferenceUrlsForCopilot,
+  normalizeHttpsReferenceUrls,
+} = require('../lib/formAiDocumentationFetch');
 
 const router = express.Router();
 
@@ -290,7 +293,7 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
 
 /**
  * POST /api/checklists/ai/session/chat
- * JSON: { messages, schemaData?, formContext?, spreadsheetSummary?, templateId?, skipTemplateLibraryRag?, skipTemplateEmbeddings?, documentationUrl? }
+ * JSON: { messages, schemaData?, formContext?, spreadsheetSummary?, templateId?, skipTemplateLibraryRag?, skipTemplateEmbeddings?, documentationUrl?, referenceUrls?: string[], copilotMode?: "auto"|"create"|"refine"|"troubleshoot"|"rules"|"import_assist"|"explain" }
  */
 router.post('/ai/session/chat', adminAuthThenPanel, async (req, res) => {
   try {
@@ -359,7 +362,7 @@ router.post('/ai/session/chat-stream', adminAuthThenPanel, async (req, res) => {
 
 /**
  * POST /api/checklists/ai/suggest-logic
- * JSON: { schemaData: [], userGoal: string, formContext?: {}, documentationUrl?: string }
+ * JSON: { schemaData: [], userGoal: string, formContext?: {}, documentationUrl?: string, referenceUrls?: string[] }
  */
 router.post('/ai/suggest-logic', adminAuthThenPanel, async (req, res) => {
   try {
@@ -382,21 +385,30 @@ router.post('/ai/suggest-logic', adminAuthThenPanel, async (req, res) => {
       error: null,
       url: null,
     };
-    const docUrl =
+
+    const refFromArray = [];
+    if (Array.isArray(body.referenceUrls)) {
+      for (const x of body.referenceUrls) {
+        if (x != null && String(x).trim()) refFromArray.push(String(x).trim().slice(0, 2048));
+      }
+    }
+    const legacyDoc =
       typeof body.documentationUrl === 'string' ? String(body.documentationUrl).trim().slice(0, 2048) : '';
-    if (docUrl) {
+    if (legacyDoc) refFromArray.unshift(legacyDoc);
+    const urlsNormalized = normalizeHttpsReferenceUrls(refFromArray, 5);
+
+    if (urlsNormalized.length > 0) {
       documentationFetch.attempted = true;
-      documentationFetch.url = docUrl;
-      const r = await fetchDocumentationForCopilot(docUrl);
-      if (r.ok && r.text) {
-        documentationFetchedText = r.text;
-        documentationFetch.ok = true;
-        documentationFetch.chars = r.text.length;
-        documentationFetch.finalUrl = r.finalUrl || docUrl;
-      } else {
-        documentationFetch.ok = false;
-        documentationFetch.error = r.error || 'Falha desconhecida.';
-        documentationFetchWarning = `Documentação: não foi possível carregar a URL — ${documentationFetch.error}`;
+      documentationFetch.url = urlsNormalized[0];
+      documentationFetch.urls = urlsNormalized;
+      documentationFetch.referenceCount = urlsNormalized.length;
+      const multi = await fetchMultipleReferenceUrlsForCopilot(urlsNormalized);
+      documentationFetchedText = multi.combinedText || '';
+      documentationFetch.items = multi.items;
+      documentationFetch.ok = multi.items.some((it) => it && it.ok);
+      documentationFetch.chars = documentationFetchedText.length;
+      if (multi.warnings && multi.warnings.length) {
+        documentationFetchWarning = `Referências web: ${multi.warnings.join(' | ')}`;
       }
     }
 

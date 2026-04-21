@@ -78,17 +78,6 @@
       outline: 2px solid var(--primary, #4f46e5);
       outline-offset: 2px;
     }
-    .fb-form-audit-panel {
-      border: 1px solid var(--color-border);
-      border-radius: 12px;
-      background: var(--color-surface);
-      padding: 14px;
-      margin-bottom: 12px;
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-    }
-    .fb-form-audit-panel[hidden] {
-      display: none !important;
-    }
     /* Lista de formulários: mover pasta (details) sem marcador nativo */
     .fb-form-move-details > summary {
       list-style: none;
@@ -96,26 +85,6 @@
     .fb-form-move-details > summary::-webkit-details-marker {
       display: none;
     }
-    .fb-form-audit-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-    .fb-form-audit-head h3 {
-      margin: 0;
-      font-size: 15px;
-      font-weight: 800;
-      color: var(--text1);
-    }
-    .fb-form-audit-head p {
-      margin: 4px 0 0;
-      font-size: 12px;
-      color: var(--text3);
-      line-height: 1.45;
-    }
-    .fb-form-audit-list,
     .ai-copilot-quick-actions {
       display: flex;
       flex-wrap: wrap;
@@ -123,35 +92,6 @@
     }
     .ai-copilot-quick-actions .btn {
       min-height: 34px;
-    }
-    .fb-form-audit-list {
-      flex-direction: column;
-    }
-    .fb-form-audit-item {
-      border: 1px solid var(--color-border);
-      border-radius: 10px;
-      padding: 10px 12px;
-      background: var(--color-surface-low);
-    }
-    .fb-form-audit-item[data-severity="error"] {
-      border-color: var(--color-danger-border, #fecaca);
-      background: var(--color-danger-bg, #fef2f2);
-    }
-    .fb-form-audit-item[data-severity="warning"] {
-      border-color: var(--color-warning-border, #fde68a);
-      background: var(--color-warning-bg, #fffbeb);
-    }
-    .fb-form-audit-item strong {
-      display: block;
-      font-size: 12px;
-      color: var(--text1);
-      margin-bottom: 3px;
-    }
-    .fb-form-audit-item span {
-      display: block;
-      font-size: 12px;
-      color: var(--text2);
-      line-height: 1.45;
     }
     .fb-toolbox-panes {
       flex: 1;
@@ -1063,6 +1003,65 @@
     .ai-copilot-insights[hidden] {
       display: none !important;
     }
+    .ai-copilot-journey-row {
+      padding: 0 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .ai-copilot-journey-row label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text3, #64748b);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .ai-copilot-journey-row select {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border, #e2e8f0);
+      background: var(--color-surface-low, #f8fafc);
+      font-size: 12px;
+      color: var(--text1, #0f172a);
+    }
+    .ai-copilot-ts-panel {
+      margin: 0 12px 12px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      background: linear-gradient(165deg, rgba(99, 102, 241, 0.06) 0%, var(--color-surface-low, #f8fafc) 100%);
+    }
+    .ai-copilot-ts-panel[hidden] {
+      display: none !important;
+    }
+    .ai-copilot-ts-panel .ai-copilot-ts-intro {
+      font-size: 12px;
+      color: var(--text2, #475569);
+      margin: 0 0 10px;
+      line-height: 1.45;
+    }
+    .ai-copilot-ts-panel label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text3, #64748b);
+      margin-bottom: 4px;
+    }
+    .ai-copilot-ts-panel select,
+    .ai-copilot-ts-panel textarea {
+      width: 100%;
+      margin-bottom: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border, #e2e8f0);
+      font-size: 12px;
+      font-family: inherit;
+    }
+    .ai-copilot-ts-panel .btn {
+      width: 100%;
+      justify-content: center;
+    }
     .ai-copilot-insight-card {
       border: 1px solid rgba(148, 163, 184, 0.28);
       border-radius: 12px;
@@ -1644,6 +1643,68 @@
         grid-template-columns: minmax(220px, 1fr) minmax(0, 1fr);
       }
     }
+    /* Painel retrátil: título, descrição, ativo, chips do app — menos altura para o canvas */
+    .fb-form-meta-details {
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--card);
+    }
+    .fb-form-meta-details > summary {
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      cursor: pointer;
+      user-select: none;
+      min-height: 40px;
+    }
+    .fb-form-meta-details > summary::-webkit-details-marker {
+      display: none;
+    }
+    .fb-form-meta-details .fb-meta-chevron {
+      flex-shrink: 0;
+      font-size: 18px;
+      color: var(--text2);
+      transition: transform 0.18s ease;
+    }
+    .fb-form-meta-details[open] > summary .fb-meta-chevron {
+      transform: rotate(90deg);
+    }
+    .fb-form-meta-details .fb-meta-summary-primary {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .fb-form-meta-details .fb-meta-summary-hint {
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--text3);
+      max-width: 42%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    @media (max-width: 640px) {
+      .fb-form-meta-details .fb-meta-summary-hint {
+        display: none;
+      }
+    }
+    .fb-form-meta-panel-inner .fb-template-strip {
+      border-bottom: 1px solid var(--border);
+    }
+    .fb-form-meta-panel-inner .fb-form-active-row {
+      margin: 0 14px 0;
+      border-radius: 10px;
+    }
+    .fb-form-meta-panel-inner .formbuilder-app-nav-strip {
+      border-bottom: none;
+    }
     .fb-builder-shell.data-shell {
       flex: 1;
       min-height: 0;
@@ -1680,7 +1741,7 @@
           <ion-icon name="list-circle-outline" style="color:var(--accent)"></ion-icon>
           <span id="fb-hero-heading-text">Forms Builder</span>
         </h1>
-        <p class="page-hero-sub">Monte o schema do formulário para o app: campos, regras, ícone e navegação por seções. Título e descrição públicos ficam na faixa seguinte.</p>
+        <p class="page-hero-sub">Monte o schema do formulário para o app: campos, regras, ícone e navegação por seções. Use o painel retrátil abaixo para título, descrição pública, estado e atalhos do app.</p>
       </header>
 
       <div class="data-toolbar fb-toolbar fb-toolbar-below-hero">
@@ -1702,80 +1763,80 @@
         </div>
       </div>
 
-    <div class="fb-template-strip">
-       <div style="min-width:0; display:flex; flex-direction:column; gap:4px;">
-          <label id="fb-label-tpl-title" class="prop-label" for="tpl-title">Título do formulário</label>
-          <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-            <input type="hidden" id="tpl-icon" value="">
-            <input type="hidden" id="tpl-icon-library" value="Ionicons">
-            <button type="button" id="tpl-form-icon-trigger" title="Ícone do formulário — clique para escolher" aria-label="Escolher ícone do formulário"
-              onclick="window.openTemplateFormIconPicker(event)"
-              style="width:44px;height:44px;flex-shrink:0;border-radius:10px;display:flex;justify-content:center;align-items:center;cursor:pointer;background:var(--color-bg);border:1px dashed var(--color-border);padding:0;transition:border-color 0.2s,background 0.2s;">
-              <ion-icon name="images-outline" style="font-size:22px;color:var(--color-text-light);"></ion-icon>
-            </button>
-            <input id="tpl-title" type="text" class="prop-input" placeholder="Ex: Vistoria Cautelar" style="font-weight:700; font-size:15px; flex:1; min-width:0;" value="">
+    <details class="fb-form-meta-details" id="fb-form-meta-details">
+      <summary id="fb-form-meta-summary" title="">
+        <ion-icon class="fb-meta-chevron" name="chevron-forward-outline" aria-hidden="true"></ion-icon>
+        <span id="fb-meta-summary-primary" class="fb-meta-summary-primary">…</span>
+        <span id="fb-meta-summary-hint" class="fb-meta-summary-hint">Título, descrição, estado e opções do app</span>
+      </summary>
+      <div class="fb-form-meta-panel-inner">
+        <div class="fb-template-strip">
+          <div style="min-width:0; display:flex; flex-direction:column; gap:4px;">
+            <label id="fb-label-tpl-title" class="prop-label" for="tpl-title">Título do formulário</label>
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              <input type="hidden" id="tpl-icon" value="">
+              <input type="hidden" id="tpl-icon-library" value="Ionicons">
+              <button type="button" id="tpl-form-icon-trigger" title="Ícone do formulário — clique para escolher" aria-label="Escolher ícone do formulário"
+                onclick="window.openTemplateFormIconPicker(event)"
+                style="width:44px;height:44px;flex-shrink:0;border-radius:10px;display:flex;justify-content:center;align-items:center;cursor:pointer;background:var(--color-bg);border:1px dashed var(--color-border);padding:0;transition:border-color 0.2s,background 0.2s;">
+                <ion-icon name="images-outline" style="font-size:22px;color:var(--color-text-light);"></ion-icon>
+              </button>
+              <input id="tpl-title" type="text" class="prop-input" placeholder="Ex: Vistoria Cautelar" style="font-weight:700; font-size:15px; flex:1; min-width:0;" value="">
+            </div>
           </div>
-       </div>
-       <div style="min-width:0;">
-          <label id="fb-label-tpl-desc" class="prop-label" for="tpl-desc">Descrição Pública</label>
-          <input id="tpl-desc" type="text" class="prop-input" placeholder="O que seus parceiros farão com este doc?" style="font-size:13px;">
-       </div>
-    </div>
-
-    <div class="fb-form-active-row" style="display:flex;align-items:flex-start;gap:10px;margin:10px 0 0;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);">
-      <input type="checkbox" id="fb-form-active" checked style="margin-top:2px;flex-shrink:0;width:18px;height:18px;cursor:pointer;" onchange="window.onFbFormActiveToggle && window.onFbFormActiveToggle(this.checked)" />
-      <div style="min-width:0;">
-        <label for="fb-form-active" id="fb-label-form-active" class="prop-label" style="margin:0;font-weight:700;cursor:pointer;">Formulário ativo</label>
-        <div id="fb-hint-form-active" style="font-size:11px;color:var(--text3);line-height:1.45;margin-top:4px;">Inativo: não aparece no despacho de OS nem na lista pública de modelos da API (só no builder com «incluir arquivados»).</div>
-      </div>
-    </div>
-
-    <div class="formbuilder-app-nav-strip">
-      <div class="formbuilder-app-nav-main-row">
-        <div class="formbuilder-app-nav-scroll" id="fb-app-nav-scroll">
-        <div class="formbuilder-app-nav-row" id="app-section-start-radios">
-          <button
-            type="button"
-            id="fb-app-layout-open-btn"
-            class="btn btn-ghost btn-sm fb-app-layout-open-btn"
-            aria-haspopup="dialog"
-            aria-controls="fb-app-layout-dialog"
-            onclick="window.openAppLayoutModal && window.openAppLayoutModal()"
-          >
-            <ion-icon name="map-outline" style="font-size:16px; color:var(--accent); flex-shrink:0;"></ion-icon>
-            <span class="fb-app-layout-open-btn__line" id="fb-app-layout-summary">Layout - 1ª etapa - clássico</span>
-          </button>
-          <button
-            type="button"
-            id="fb-btn-geofence-nav"
-            class="btn btn-ghost btn-sm fb-app-nav-chip-btn"
-            onclick="window.configureGlobalSettings && window.configureGlobalSettings()"
-          >
-            <ion-icon name="settings-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
-            <span id="fb-btn-geofence-lbl">Cerca global</span>
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm fb-app-nav-chip-btn"
-            data-fb-action="form-duration"
-            onclick="window.openExpectedFormDurationModal && window.openExpectedFormDurationModal()"
-          >
-            <ion-icon name="time-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
-            <span id="fb-btn-duration-lbl">Tempo do formulário</span>
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm fb-app-nav-chip-btn"
-            data-fb-action="form-qa"
-            onclick="window.openFormSemanticAuditModal && window.openFormSemanticAuditModal()"
-          >
-            <ion-icon name="shield-checkmark-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
-            <span id="fb-btn-form-qa-lbl">QA do formulário</span>
-          </button>
+          <div style="min-width:0;">
+            <label id="fb-label-tpl-desc" class="prop-label" for="tpl-desc">Descrição Pública</label>
+            <input id="tpl-desc" type="text" class="prop-input" placeholder="O que seus parceiros farão com este doc?" style="font-size:13px;">
+          </div>
         </div>
+
+        <div class="fb-form-active-row" style="display:flex;align-items:flex-start;gap:10px;margin:8px 0 0;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);">
+          <input type="checkbox" id="fb-form-active" checked style="margin-top:2px;flex-shrink:0;width:18px;height:18px;cursor:pointer;" onchange="window.onFbFormActiveToggle && window.onFbFormActiveToggle(this.checked)" />
+          <div style="min-width:0;">
+            <label for="fb-form-active" id="fb-label-form-active" class="prop-label" style="margin:0;font-weight:700;cursor:pointer;">Formulário ativo</label>
+            <div id="fb-hint-form-active" style="font-size:11px;color:var(--text3);line-height:1.45;margin-top:4px;">Inativo: não aparece no despacho de OS nem na lista pública de modelos da API (só no builder com «incluir arquivados»).</div>
+          </div>
+        </div>
+
+        <div class="formbuilder-app-nav-strip">
+          <div class="formbuilder-app-nav-main-row">
+            <div class="formbuilder-app-nav-scroll" id="fb-app-nav-scroll">
+            <div class="formbuilder-app-nav-row" id="app-section-start-radios">
+              <button
+                type="button"
+                id="fb-app-layout-open-btn"
+                class="btn btn-ghost btn-sm fb-app-layout-open-btn"
+                aria-haspopup="dialog"
+                aria-controls="fb-app-layout-dialog"
+                onclick="window.openAppLayoutModal && window.openAppLayoutModal()"
+              >
+                <ion-icon name="map-outline" style="font-size:16px; color:var(--accent); flex-shrink:0;"></ion-icon>
+                <span class="fb-app-layout-open-btn__line" id="fb-app-layout-summary">Layout - 1ª etapa - clássico</span>
+              </button>
+              <button
+                type="button"
+                id="fb-btn-geofence-nav"
+                class="btn btn-ghost btn-sm fb-app-nav-chip-btn"
+                onclick="window.configureGlobalSettings && window.configureGlobalSettings()"
+              >
+                <ion-icon name="settings-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
+                <span id="fb-btn-geofence-lbl">Cerca global</span>
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm fb-app-nav-chip-btn"
+                data-fb-action="form-duration"
+                onclick="window.openExpectedFormDurationModal && window.openExpectedFormDurationModal()"
+              >
+                <ion-icon name="time-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
+                <span id="fb-btn-duration-lbl">Tempo do formulário</span>
+              </button>
+            </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </details>
 
     <section class="data-shell fade-in fb-builder-shell" aria-labelledby="fb-page-title">
     <div class="fb-builder-inner">
@@ -1797,15 +1858,16 @@
               <div id="fb-pane-basic" class="fb-toolbox-pane" role="tabpanel" aria-labelledby="fb-toolbox-tab-basic" data-fb-toolbox-pane="basic">
            <div class="toolbox-item" data-type="text"><ion-icon name="text-outline" style="margin-right:6px; font-size:16px"></ion-icon>Resposta em Texto</div>
            <div class="toolbox-item" data-type="number"><ion-icon name="keypad-outline" style="margin-right:6px; font-size:16px"></ion-icon>Input Numérico</div>
+           <div class="toolbox-item" data-type="currency"><ion-icon name="cash-outline" style="margin-right:6px; font-size:16px"></ion-icon>Moeda (R$ / valor)</div>
            <div class="toolbox-item" data-type="email"><ion-icon name="mail-outline" style="margin-right:6px; font-size:16px"></ion-icon>E-mail</div>
            <div class="toolbox-item" data-type="phone"><ion-icon name="call-outline" style="margin-right:6px; font-size:16px"></ion-icon>Telefone / Celular</div>
            <div class="toolbox-item" data-type="date"><ion-icon name="calendar-outline" style="margin-right:6px; font-size:16px"></ion-icon>Data / Hora</div>
            <div class="toolbox-item" data-type="checkbox"><ion-icon name="checkbox-outline" style="margin-right:6px; font-size:16px"></ion-icon>Caixa de Seleção</div>
            <div class="toolbox-item" data-type="yes_no"><ion-icon name="toggle-outline" style="margin-right:6px; font-size:16px"></ion-icon>Sim / Não (Toggle)</div>
            <div class="toolbox-item" data-type="leitura" style="border-left: 3px solid #4338ca;"><ion-icon name="book-outline" style="margin-right:6px; font-size:16px; color:#4338ca;"></ion-icon>Leitura</div>
-           <div class="toolbox-item" data-type="form_complete_button" style="border-left: 3px solid #059669;"><ion-icon name="checkmark-done-outline" style="margin-right:6px; font-size:16px; color:#059669;"></ion-icon>Botão concluir (FT / OS)</div>
               </div>
               <div id="fb-pane-premium" class="fb-toolbox-pane" role="tabpanel" aria-labelledby="fb-toolbox-tab-premium" data-fb-toolbox-pane="premium" hidden>
+           <div class="toolbox-item" data-type="form_complete_button" style="border-left: 3px solid #059669;"><ion-icon name="checkmark-done-outline" style="margin-right:6px; font-size:16px; color:#059669;"></ion-icon>Botão concluir (FT / OS)</div>
            <div class="toolbox-item" data-type="dropdown" style="border-left: 3px solid #6366f1;"><ion-icon name="list-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Lista (Dropdown)</div>
            <div class="toolbox-item" data-type="multiselect" style="border-left: 3px solid #6366f1;"><ion-icon name="list-circle-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Múltipla Escolha</div>
            <div class="toolbox-item" data-type="rating" style="border-left: 3px solid #6366f1;"><ion-icon name="star-outline" style="margin-right:6px; font-size:16px; color:#6366f1;"></ion-icon>Avaliação (Estrelas)</div>
@@ -1860,22 +1922,6 @@
       </div>
     </div>
     </section>
-    </div>
-  </div>
-</div>
-
-<div id="fb-form-audit-modal" style="display:none; position:fixed; inset:0; z-index:1000001; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.closeFormSemanticAuditModal()">
-  <div style="background:white; width:min(760px,94vw); max-height:min(88vh,760px); overflow:auto; padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
-    <div class="fb-form-audit-head">
-      <div>
-        <h3 id="fb-form-audit-title">QA do formulário</h3>
-        <p id="fb-form-audit-sub">Checagem rápida antes de salvar para evitar formulário vago, técnico demais ou incompleto para o app.</p>
-      </div>
-      <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkRunFormSemanticAudit(true)">Atualizar análise</button>
-    </div>
-    <div id="fb-form-audit-list" class="fb-form-audit-list"></div>
-    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:18px;">
-      <button type="button" class="btn btn-ghost" onclick="window.closeFormSemanticAuditModal()">Fechar</button>
     </div>
   </div>
 </div>
@@ -2203,12 +2249,53 @@
     <div class="ai-copilot-col-chat">
       <div class="ai-copilot-chat-scroll">
         <div id="ai-copilot-insights" class="ai-copilot-insights" hidden></div>
+        <div class="ai-copilot-journey-row">
+          <label for="copilot-journey-mode">Jornada do copiloto</label>
+          <select id="copilot-journey-mode" aria-label="Modo de jornada do copiloto">
+            <option value="auto">Automática — a IA interpreta o pedido</option>
+            <option value="create">Criar ou expandir o formulário</option>
+            <option value="refine">Ajustar campos existentes</option>
+            <option value="troubleshoot">Problema no app / algo não funciona</option>
+            <option value="rules">Regras e automações (mostrar, ocultar, API)</option>
+            <option value="import_assist">Apoio com ficheiros / importação</option>
+            <option value="explain">Só explicar (sem alterar o canvas)</option>
+          </select>
+        </div>
+        <div id="copilot-troubleshoot-panel" class="ai-copilot-ts-panel" hidden>
+          <p class="ai-copilot-ts-intro" id="copilot-ts-intro-txt">
+            Passo a passo: escolha o tipo de sintoma e descreva o que vê no técnico ou no editor. O copiloto rankeia hipóteses e sugere correções.
+          </p>
+          <label for="copilot-ts-symptom">Tipo de problema</label>
+          <select id="copilot-ts-symptom" aria-label="Tipo de problema no formulário ou app">
+            <option value="visibility_show_hide">Campo ou secção não aparece / aparece no momento errado</option>
+            <option value="validation_required">Validação, obrigatoriedade ou bloqueio a gravar</option>
+            <option value="logic_rules">Regra (mostrar/ocultar/obrigar) não faz o esperado</option>
+            <option value="gps_geofence">GPS, cerca ou localização</option>
+            <option value="api_fetch">Preenchimento por API ou busca externa</option>
+            <option value="offline_sync">Offline ou sincronização</option>
+            <option value="other">Outro</option>
+          </select>
+          <label for="copilot-ts-detail">O que observa (obrigatório)</label>
+          <textarea
+            id="copilot-ts-detail"
+            rows="3"
+            maxlength="4000"
+            placeholder="Ex.: quando marco «Conforme» em Inspeção, a foto de não conformidade continua a pedir-se…"
+          ></textarea>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            id="copilot-ts-send-btn"
+            onclick="window.brsparkCopilotSendTroubleshootBundle()"
+          >
+            Pedir diagnóstico ao copiloto
+          </button>
+        </div>
         <div id="ai-copilot-quick-actions" class="ai-copilot-quick-actions">
           <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Quero um primeiro rascunho profissional e simples para celular.')">Primeiro rascunho</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Simplifique o formulário para um usuário leigo no celular e reduza termos técnicos.')">Simplificar</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Adicione evidências úteis como fotos, assinatura, localização e comentários onde fizer sentido.')">Adicionar evidências</button>
           <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Gere uma versão enxuta, mais curta e rápida de preencher.')">Versão enxuta</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkRunFormSemanticAudit(true)">Rodar QA do formulário</button>
         </div>
         <div id="ai-copilot-messages"></div>
         <div id="ai-copilot-thinking" role="status" aria-live="polite" aria-atomic="true">
@@ -2267,9 +2354,19 @@
               <textarea id="copilot-ctx-objective" class="prop-input" rows="3" placeholder="Ex.: vistoria em campo com foto de evidência, leitura do patrimônio por etiqueta, chegada só perto do cliente… O Copiloto infere carimbo, barras, GPS, cerca e deslocamento a partir disto e da conversa." style="font-size:12px; margin-bottom:8px;"></textarea>
               <p style="font-size:11px;color:var(--color-text-light);margin:0 0 8px;line-height:1.45;">Não é preciso marcar recursos à mão: a IA sugere e combina com você conforme o caso de uso.</p>
               <div class="copilot-doc-url-strip" style="padding:10px 0 0; margin-top:10px; border-top:1px solid var(--color-border);">
-                <label for="copilot-ctx-doc-url" class="prop-label" style="font-size:11px;">URL da documentação da API (opcional)</label>
-                <p style="font-size:10px;color:var(--color-text-light);margin:0 0 6px;line-height:1.45;">HTTPS público. O servidor descarrega o conteúdo <strong>uma vez por mensagem</strong> e envia à IA (ex.: CEP ViaCEP → regra «Buscar na API»). Rede interna e <code>localhost</code> na URL são bloqueados.</p>
-                <input type="url" id="copilot-ctx-doc-url" class="prop-input" inputmode="url" autocomplete="off" placeholder="https://viacep.com.br/" style="font-size:12px; margin-bottom:0;" />
+                <label for="copilot-ctx-ref-urls" class="prop-label" style="font-size:11px;">Links web de referência (opcional)</label>
+                <p style="font-size:10px;color:var(--color-text-light);margin:0 0 6px;line-height:1.45;">
+                  <strong>Uma linha por URL</strong> (só <code>https://</code>, até <strong>5</strong> links). O servidor descarrega o texto <strong>uma vez por mensagem</strong> e envia à IA: pode ser documentação, norma PDF/HTML, checklist público, página de produto, etc. A IA usa esse texto como base e complementa com conhecimento geral do domínio (sem pesquisa web em tempo real). Rede interna e <code>localhost</code> são bloqueados.
+                </p>
+                <textarea
+                  id="copilot-ctx-ref-urls"
+                  class="prop-input"
+                  rows="3"
+                  spellcheck="false"
+                  autocomplete="off"
+                  placeholder="https://exemplo.gov/documentacao&#10;https://docs.exemplo.com/api"
+                  style="font-size:12px; margin-bottom:0; font-family: ui-monospace, monospace; resize: vertical; min-height: 72px;"
+                ></textarea>
               </div>
             </div>
             <div class="copilot-excel-strip" style="padding:12px 0 4px; margin-top:10px; border-top:1px solid var(--color-border);">
@@ -2310,7 +2407,7 @@
   <div class="copilot-preview-dialog" onclick="event.stopPropagation()">
     <div class="copilot-preview-head">
       <h3 id="copilot-schema-preview-title"><ion-icon name="list-circle-outline" style="color:#6366f1"></ion-icon> <span id="copilot-schema-preview-heading">Revisar campos sugeridos</span></h3>
-      <p id="copilot-preview-intro">Marque <strong>Incluir</strong> para cada linha. Ajuste o <strong>tipo</strong>, a <strong>descrição</strong>, <strong>instruções por campo</strong> (para a IA) e <strong>obrigatório</strong>. Use <strong>Comentários gerais</strong> e <strong>Reprocessar com instruções</strong> para pedir à IA um novo rascunho antes de aplicar no canvas. Etapas (<code>section_break</code>) não podem ser excluídas — o tipo de etapa não é alterável aqui.</p>
+      <p id="copilot-preview-intro">Marque <strong>Incluir</strong> para cada linha. Ajuste o <strong>tipo</strong>, a <strong>descrição</strong>, instruções por campo (só para a IA ao reprocessar) e <strong>obrigatório</strong>. O resumo do pedido no chat entra por defeito uma vez em <strong>Comentários gerais</strong> (não é repetido em cada linha). Use <strong>Comentários gerais</strong> e <strong>Reprocessar com instruções</strong> para pedir à IA um novo rascunho antes de aplicar no canvas. Etapas (<code>section_break</code>) não podem ser excluídas — o tipo de etapa não é alterável aqui.</p>
     </div>
     <div class="copilot-preview-scroll">
       <table class="copilot-preview-table">
@@ -2329,7 +2426,7 @@
     </div>
     <div class="copilot-preview-general-notes">
       <label class="prop-label" for="copilot-schema-preview-general-note" style="font-size:11px;margin-bottom:4px;">Comentários gerais para a IA (opcional)</label>
-      <p id="copilot-preview-notes-hint" style="font-size:10px;color:var(--color-text-light);margin:0 0 8px;line-height:1.45;">Instruções globais (ex.: tom, LGPD, simplificar etapas). Use com <strong>Reprocessar com instruções</strong> para a IA reapresentar o formulário; ou preencha só para referência antes de <strong>Aplicar no canvas</strong> (neste caso o texto não é enviado à IA — use Reprocessar para enviar).</p>
+      <p id="copilot-preview-notes-hint" style="font-size:10px;color:var(--color-text-light);margin:0 0 8px;line-height:1.45;">Por defeito inclui o <strong>contexto da conversa</strong> uma vez (pode editar ou apagar). Acrescente instruções globais (tom, LGPD, simplificar etapas). <strong>Reprocessar com instruções</strong> envia à IA; só <strong>Aplicar no canvas</strong> não envia.</p>
       <textarea id="copilot-schema-preview-general-note" placeholder="Ex.: reduzir campos da etapa «Avaliação nutricional»; todos os textos em tom formal; adicionar campo de consentimento LGPD…"></textarea>
     </div>
     <div class="copilot-preview-foot">
@@ -2405,6 +2502,7 @@
   if (window.bindAppSectionNavRadios) window.bindAppSectionNavRadios();
   if (window.syncAppSectionNavRadios) window.syncAppSectionNavRadios();
   if (typeof window.initBuilderDirtyTracking === 'function') window.initBuilderDirtyTracking();
+  if (typeof window.fbInitFormMetaDetails === 'function') window.fbInitFormMetaDetails();
 </script>
 </body>
 </html>

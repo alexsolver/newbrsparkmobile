@@ -30,15 +30,16 @@
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^4.18.3",
+    "express-async-errors": "^3.1.1",
     "express-validator": "^7.0.1",
     "jsonwebtoken": "^9.0.2",
     "mammoth": "^1.12.0",
     "morgan": "^1.10.0",
     "multer": "^2.1.1",
     "pdf-parse": "^1.1.1",
+    "prisma": "^5.10.0",
     "tesseract.js": "^7.0.0",
-    "twilio": "^5.4.2",
-    "prisma": "^5.10.0"
+    "twilio": "^5.4.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"

@@ -381,6 +381,50 @@ export function collectSectionTimingRowsForPreview(sectionBreaks, responses) {
 }
 
 /**
+ * Nota de voz guarda `localUri` para o ficheiro de áudio — não confundir com visão IA
+ * (senão o relatório tenta `<img src="…m4a">` → «Foto indisponível»).
+ * @param {Record<string, unknown>|null|undefined} o
+ */
+function looksLikeVoiceNotePayload(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return false;
+  if (Array.isArray(o.answers) && o.answers.length > 0) return false;
+  const mt = String(o.mediaMimeType || o.mimeType || '')
+    .toLowerCase()
+    .split(';')[0]
+    .trim();
+  if (mt.startsWith('audio/')) return true;
+  const fn = String(o.fileName || '').toLowerCase();
+  if (/\.(m4a|mp3|wav|aac|ogg|opus|caf|flac)(\?|$)/i.test(fn)) return true;
+  const lu = String(o.localUri || '').split('?')[0].toLowerCase();
+  if (/(m4a|mp3|wav|aac|ogg|opus)(\?|$)/i.test(lu)) return true;
+  const ph = String(o.phase || o.status || '').toLowerCase();
+  if (
+    ph &&
+    (ph.includes('pending_transcription') ||
+      ph === 'recording' ||
+      ph === 'uploading' ||
+      ph === 'done' ||
+      ph === 'error' ||
+      ph === 'idle')
+  ) {
+    if (Object.prototype.hasOwnProperty.call(o, 'transcript')) return true;
+  }
+  /* Concluída: só transcrição + URL de áudio (registos antigos sem `phase`). */
+  if (
+    typeof o.transcript === 'string' &&
+    o.transcript.trim() !== '' &&
+    !(Array.isArray(o.answers) && o.answers.length > 0)
+  ) {
+    const mt0 = String(o.mediaMimeType || o.mimeType || '').toLowerCase();
+    if (mt0.startsWith('image/') || mt0.startsWith('video/')) return false;
+    const path0 = String(o.localUri || '').split('?')[0].toLowerCase();
+    if (/\.(jpe?g|png|gif|webp|heic)(\?|$)/i.test(path0)) return false;
+    return true;
+  }
+  return false;
+}
+
+/**
  * HTML para PDF / pré-visualização: `vision_checklist` e `vision_ai_analysis`.
  * Se existir `gridSlotUris` com mais de uma URI (Gemini, grelha), mostra miniaturas por célula antes da imagem composta (`localUri`).
  * @param {unknown} val
@@ -390,6 +434,7 @@ export function collectSectionTimingRowsForPreview(sectionBreaks, responses) {
  */
 function looksLikeVisionPayloadObject(o) {
   if (!o || typeof o !== 'object' || Array.isArray(o)) return false;
+  if (looksLikeVoiceNotePayload(o)) return false;
   /* Foto com anotações usa `imageUri` + `strokes` — não confundir com visão IA. */
   if (Array.isArray(o.strokes) || Array.isArray(o.annotations)) return false;
   const keys = [
@@ -441,6 +486,12 @@ function collectVisionHttpsUriCandidates(o) {
   for (const k of keys) {
     if (Object.prototype.hasOwnProperty.call(o, k)) out.push(o[k]);
   }
+  /** Grelha 1×1/2×2: a URL pública pode estar só em `gridSlotUris` (composto ainda local). */
+  if (Array.isArray(o.gridSlotUris)) {
+    for (const u of o.gridSlotUris) {
+      out.push(u);
+    }
+  }
   return out;
 }
 
@@ -473,6 +524,7 @@ function parseVisionPayloadCandidate(val) {
 export function buildVisionChecklistReportHtml(val, fieldType, escHtml) {
   const o = parseVisionPayloadCandidate(val);
   if (!o || typeof o !== 'object') return null;
+  if (looksLikeVoiceNotePayload(o)) return null;
 
   let html = '';
   const st = String(o.status || '').toLowerCase();

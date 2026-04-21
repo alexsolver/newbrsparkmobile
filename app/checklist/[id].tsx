@@ -58,6 +58,7 @@ import { computePatrolCompliance } from '../../src/services/patrolRouteMetrics';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { FieldHelpInstructions, isFieldInstructionsVisible } from '../../src/components/FieldHelpInstructions';
 import { LeituraBlock } from '../../src/components/LeituraBlock';
+import { ValueInput } from '../../src/components/ValueInput';
 import { ChecklistImageAnnotationField } from '../../src/components/ChecklistImageAnnotationField';
 import {
   ChecklistLookupSelectField,
@@ -80,6 +81,7 @@ import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { fetchExecutionOpsChat, getOpsChatAckStorageKey } from '../../src/services/executionOpsChat';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
+import { applyChecklistTextMask, uiValueForChecklistMask } from '../../src/checklist/applyTextMask';
 import {
   enqueueExecutionStatusPatch,
   pushSyncQueue,
@@ -120,6 +122,10 @@ import { ChecklistTechnicianRevenueField } from '../../src/components/ChecklistT
 import { useAuth } from '../../src/hooks/useAuth';
 import { evaluateBusinessCondition } from '../../src/lib/businessRuleCondition';
 import { effectiveSchemaFieldType } from '../../src/services/checklistTemplateSchema';
+import {
+  formatCalculatedResultDisplay,
+  resolveCalcDisplayMode,
+} from '../../src/checklist/calculatedFieldFormat';
 
 /** Ícone + cor por categoria no picker de pausa (alinhado ao checklist laranja + hierarquia visual). */
 const PAUSE_PICKER_CAT_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -1438,14 +1444,39 @@ function resolveSummarySourceValue(
   return direct;
 }
 
+/** Resposta trivial (ex.: «.» de regra antiga) não deve esconder o HTML rico do form builder. */
+function isLeituraResponseNoise(s: string): boolean {
+  if (!s) return true;
+  if (s.length === 1 && !/[<>]/.test(s)) return true;
+  if (/^[.,;:\s\-–—()[\]'"]+$/u.test(s)) return true;
+  return false;
+}
+
+/** Evita tratar «3 < 5» ou fragmentos com «<» como HTML. */
+function looksLikeHtmlMarkup(s: string): boolean {
+  const t = s.trim();
+  if (!/[<>]/.test(t)) return false;
+  return /<\/?[a-z][a-z0-9]*\b/i.test(t) || /&#?\w+;/.test(t);
+}
+
 /**
  * HTML mostrado no bloco Leitura: valor em `responses` (ex.: regra «Definir valor»)
  * substitui o `contentHtml` estático do schema. Texto sem tags vira um `<p>` com entidades escapadas.
  */
 function effectiveLeituraContentHtml(responseVal: unknown, schemaContentHtml?: string): string | undefined {
+  const schemaRaw = schemaContentHtml != null ? String(schemaContentHtml) : '';
+  const schemaTrim = schemaRaw.trim();
   const trimmed = responseVal == null ? '' : String(responseVal).trim();
-  if (trimmed) {
-    if (/[<>]/.test(trimmed)) return trimmed;
+
+  if (!trimmed) {
+    return schemaTrim ? schemaRaw : undefined;
+  }
+
+  if (isLeituraResponseNoise(trimmed)) {
+    return schemaTrim ? schemaRaw : undefined;
+  }
+
+  if (!/[<>]/.test(trimmed)) {
     const escaped = trimmed
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -1453,7 +1484,17 @@ function effectiveLeituraContentHtml(responseVal: unknown, schemaContentHtml?: s
       .replace(/"/g, '&quot;');
     return `<p>${escaped}</p>`;
   }
-  return schemaContentHtml;
+
+  if (!looksLikeHtmlMarkup(trimmed)) {
+    const escaped = trimmed
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    return `<p>${escaped}</p>`;
+  }
+
+  return trimmed;
 }
 
 function collectLeituraFieldIds(schemaData: any[] | undefined): Set<string> {
@@ -2522,6 +2563,15 @@ function isMultiItemFilled(val: any, fieldType: string): boolean {
   if (typeof val === 'number') return Number.isFinite(val);
   if (typeof val === 'boolean') return true;
   return true;
+}
+
+/** Símbolo exibido no acessório iOS do campo moeda (schema: currencyCode). */
+function checklistCurrencySymbol(field: any): string {
+  const c = String(field?.currencyCode || 'BRL').toUpperCase();
+  if (c === 'USD') return '$';
+  if (c === 'EUR') return '€';
+  if (c === 'GBP') return '£';
+  return 'R$';
 }
 
 function parseJsonMatrixRows(raw: unknown): Record<string, unknown>[] {
@@ -3902,6 +3952,9 @@ export default function ChecklistEngine() {
               if (acc != null && Number.isFinite(acc) && acc > 0) {
                 accuracyMeters = acc;
               }
+              if (label === 'SAIDA' && lat !== 0 && lng !== 0) {
+                routeTracker.rebaselineSessionProgress(lat, lng);
+              }
               /** Geocodificação reversa síncrona só na cerca; início/fim de deslocamento enriquece em segundo plano. */
               if (isGeofenceCheck) {
                 try {
@@ -5139,23 +5192,6 @@ export default function ChecklistEngine() {
       console.error(err);
       setLoading(false);
     }
-  };
-
-  const applyMask = (rawValue: string, mask?: string) => {
-    if (!mask) return rawValue;
-    const clean = String(rawValue).replace(/[^A-Za-z0-9]/g, '');
-    let result = '';
-    let cleanIdx = 0;
-    for (let i = 0; i < mask.length; i++) {
-        if (cleanIdx >= clean.length) break;
-        if (mask[i] === '#') {
-           result += clean[cleanIdx];
-           cleanIdx++;
-        } else {
-           result += mask[i];
-        }
-    }
-    return result;
   };
 
   const updateLocalCloudTaskFields = useCallback(
@@ -6921,7 +6957,8 @@ export default function ChecklistEngine() {
 
   useEffect(() => {
      const rules = getAllRules();
-     if (rules.length === 0) return;
+     const schemaData = template?.schemaData;
+     const leituraIds = collectLeituraFieldIds(schemaData);
 
      const draftKey = resolvedTaskId ? `@draft_tsk_${resolvedTaskId}` : `@draft_chk_${id}`;
 
@@ -6930,11 +6967,14 @@ export default function ChecklistEngine() {
 
         let hasChanges = false;
         const nextResponses = { ...prev };
+        const activeSetValueLeitura = new Set<string>();
 
         rules.forEach((rule: any) => {
            if (evaluateCondition(rule.condFieldId, rule.condOperator, rule.condValue, nextResponses)) {
               rule.actions?.forEach((action: any) => {
                  if (action.type === 'SET_VALUE' && action.targetId) {
+                    const tid = String(action.targetId);
+                    if (leituraIds.has(tid)) activeSetValueLeitura.add(tid);
                     const currentVal = nextResponses[action.targetId];
                     const targetVal = action.value || '';
                     if (currentVal !== targetVal) {
@@ -6946,11 +6986,18 @@ export default function ChecklistEngine() {
            }
         });
 
+        for (const lid of leituraIds) {
+           if (!activeSetValueLeitura.has(lid) && Object.prototype.hasOwnProperty.call(nextResponses, lid)) {
+              delete nextResponses[lid];
+              hasChanges = true;
+           }
+        }
+
         if (!hasChanges) return prev;
         void AsyncStorage.setItem(draftKey, JSON.stringify(nextResponses));
         return nextResponses;
      });
-  }, [responses, template, ruleTick]);
+  }, [responses, template, ruleTick, id, resolvedTaskId]);
 
   const isFieldVisible = (field: any, checkSectionBreak = false) => {
       const visT = effectiveSchemaFieldType(field);
@@ -8500,7 +8547,7 @@ export default function ChecklistEngine() {
         }}
       />
 
-      {/* Opção D: Barra de progresso de rota (visível só para rotas ativas) */}
+      {/* Opção D: % = progresso ao longo da linha desde o início desta sessão de GPS (ver routeTrackingService). */}
       <RouteProgressBar />
 
       {/* Mapa ao vivo durante deslocamento de rota/ponto */}
@@ -8711,6 +8758,8 @@ export default function ChecklistEngine() {
 
       <ScrollView
         style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={[
           styles.scroll,
           {
@@ -9178,7 +9227,11 @@ export default function ChecklistEngine() {
           const renderFieldList = (fields: any[], scope: SectionRepeatScope | null) =>
             fields.map((fieldArg: any) => {
           const effFormT = effectiveSchemaFieldType(fieldArg);
-          const field = effFormT ? { ...fieldArg, type: effFormT } : fieldArg;
+          /** Não usar `effFormT ? … : fieldArg`: `''` é falsy e deixa `type` indefinido → só o rótulo renderiza. */
+          const field = { ...fieldArg, type: effFormT || fieldArg?.type || '' };
+          const fieldTextMask = String(field.textMask ?? field.text_mask ?? '').trim();
+          /** Com máscara em campo número: iOS → number-pad (só dígitos; o valor continua a mostrar R$); Android → default. */
+          const numberKeyboardWithMask = !fieldTextMask ? 'numeric' : Platform.OS === 'ios' ? 'number-pad' : 'default';
           const vv = (fid: string) => getScopedFieldValue(responses, scope, fid);
           const hi = (fid: string, v: any) => handleInput(fid, v, scope);
           if (!isFieldVisible(field)) return null;
@@ -9211,7 +9264,7 @@ export default function ChecklistEngine() {
                      {renderFieldIcon(field)}
                  </View>
               ) : null}
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
                   {field.type === 'form_complete_button' ? null : (
                   <Text
                     style={[
@@ -9320,7 +9373,11 @@ export default function ChecklistEngine() {
                                 value={String(rowVal ?? '')}
                                 editable={validatingFieldId !== field.id}
                                 onChangeText={(val) => {
-                                  const masked = applyMask(val, field.textMask);
+                                  const masked = applyChecklistTextMask(
+                                    uiValueForChecklistMask(val, field.textMask ?? field.text_mask, effectiveSchemaFieldType(fieldArg)),
+                                    field.textMask ?? field.text_mask,
+                                    effectiveSchemaFieldType(fieldArg),
+                                  );
                                   const next = [...rows];
                                   next[idx] = masked;
                                   hi(field.id, next);
@@ -9359,11 +9416,15 @@ export default function ChecklistEngine() {
                     keyboardType={field.type === 'email' ? 'email-address' : field.type === 'phone' ? 'phone-pad' : 'default'}
                     value={vv(field.id) || ''}
                     editable={validatingFieldId !== field.id}
-                    onChangeText={(val) => hi(field.id, applyMask(val, field.textMask))}
+                    onChangeText={(val) => hi(field.id, applyChecklistTextMask(
+                                    uiValueForChecklistMask(val, field.textMask ?? field.text_mask, effectiveSchemaFieldType(fieldArg)),
+                                    field.textMask ?? field.text_mask,
+                                    effectiveSchemaFieldType(fieldArg),
+                                  ))}
                     onEndEditing={() => handleApiValidation(field.id)}
                   />
                 ))}
-              {field.type === 'number' &&
+              {(field.type === 'number' || field.type === 'currency') &&
                 (fieldAllowsMultiple(field) ? (
                   <View style={{ gap: 10 }}>
                     {(() => {
@@ -9375,20 +9436,45 @@ export default function ChecklistEngine() {
                         <>
                           {rows.map((rowVal: any, idx: number) => (
                             <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              {field.type === 'currency' ? (
+                                <ValueInput
+                                  style={[styles.input, { flex: 1 }]}
+                                  placeholder="0,00"
+                                  value={String(rowVal ?? '')}
+                                  editable={validatingFieldId !== field.id}
+                                  currency
+                                  currencySymbol={checklistCurrencySymbol(field)}
+                                  onChangeText={(v) => {
+                                    const next = [...rows];
+                                    next[idx] = v;
+                                    hi(field.id, next);
+                                  }}
+                                  onEditingStateChange={(editing) => {
+                                    if (!editing) void handleApiValidation(field.id);
+                                  }}
+                                />
+                              ) : (
                               <TextInput
                                 style={[styles.input, { flex: 1 }]}
                                 placeholder="0"
-                                keyboardType="numeric"
+                                keyboardType={numberKeyboardWithMask}
+                                autoCapitalize="none"
+                                autoCorrect={false}
                                 value={String(rowVal ?? '')}
                                 editable={validatingFieldId !== field.id}
                                 onChangeText={(val) => {
-                                  const masked = applyMask(val, field.textMask);
+                                  const masked = applyChecklistTextMask(
+                                    uiValueForChecklistMask(val, field.textMask ?? field.text_mask, effectiveSchemaFieldType(fieldArg)),
+                                    field.textMask ?? field.text_mask,
+                                    effectiveSchemaFieldType(fieldArg),
+                                  );
                                   const next = [...rows];
                                   next[idx] = masked;
                                   hi(field.id, next);
                                 }}
                                 onEndEditing={() => handleApiValidation(field.id)}
                               />
+                              )}
                               {rows.length > 1 ? (
                                 <TouchableOpacity
                                   onPress={() => {
@@ -9414,14 +9500,33 @@ export default function ChecklistEngine() {
                       );
                     })()}
                   </View>
+                ) : field.type === 'currency' ? (
+                  <ValueInput
+                    style={styles.input}
+                    placeholder="0,00"
+                    value={vv(field.id) || ''}
+                    editable={validatingFieldId !== field.id}
+                    currency
+                    currencySymbol={checklistCurrencySymbol(field)}
+                    onChangeText={(v) => hi(field.id, v)}
+                    onEditingStateChange={(editing) => {
+                      if (!editing) void handleApiValidation(field.id);
+                    }}
+                  />
                 ) : (
                   <TextInput
                     style={styles.input}
                     placeholder="0"
-                    keyboardType="numeric"
+                    keyboardType={numberKeyboardWithMask}
+                    autoCapitalize="none"
+                    autoCorrect={false}
                     value={vv(field.id) || ''}
                     editable={validatingFieldId !== field.id}
-                    onChangeText={(val) => hi(field.id, applyMask(val, field.textMask))}
+                    onChangeText={(val) => hi(field.id, applyChecklistTextMask(
+                                    uiValueForChecklistMask(val, field.textMask ?? field.text_mask, effectiveSchemaFieldType(fieldArg)),
+                                    field.textMask ?? field.text_mask,
+                                    effectiveSchemaFieldType(fieldArg),
+                                  ))}
                     onEndEditing={() => handleApiValidation(field.id)}
                   />
                 ))}
@@ -9800,10 +9905,12 @@ export default function ChecklistEngine() {
                  if(vv(field.id) !== result) {
                      setTimeout(() => hi(field.id, result), 0);
                  }
+                 const dispMode = resolveCalcDisplayMode(field, field.calcFormula || '', schema);
+                 const displayText = formatCalculatedResultDisplay(result, dispMode);
                  
                  return (
                    <View style={[styles.input, {backgroundColor:'#f5f3ff', borderColor:'#c4b5fd'}]}>
-                      <Text style={{color:'#7c3aed', fontFamily:'monospace', fontWeight:'bold'}}>Resultado: {result}</Text>
+                      <Text style={{color:'#7c3aed', fontFamily:'monospace', fontWeight:'bold'}}>Resultado: {displayText}</Text>
                    </View>
                  );
               })()}

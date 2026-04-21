@@ -8,6 +8,26 @@ const { normalizeSchemaItem } = require('./formAiNormalize');
 
 const MAX_OPS = 30;
 const MAX_FIELDS = 250;
+const MAX_FIELD_DESCRIPTION_CHARS = 500;
+
+/**
+ * O campo `description` no builder é «Instruções ao técnico». O LLM às vezes despeja
+ * metaprompt / contexto de entrevista / placeholders — isso não deve ir para o app.
+ * @param {string} raw
+ * @returns {{ text: string, wasMeta: boolean }}
+ */
+function sanitizeCopilotFieldDescriptionForTechnician(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return { text: '', wasMeta: false };
+  const t = s.slice(0, MAX_FIELD_DESCRIPTION_CHARS);
+  const low = t.toLowerCase();
+  const wasMeta =
+    /\[pergunta\s/i.test(t) ||
+    /considere o contexto da entrevista/i.test(low) ||
+    (/ao revisar o campo/i.test(low) && /(aderência|cenário)/i.test(t)) ||
+    /^entrevista:\s*https?:\/\//i.test(t.trim());
+  return { text: wasMeta ? '' : t, wasMeta };
+}
 
 /**
  * @param {object[]} schemaData
@@ -16,6 +36,7 @@ const MAX_FIELDS = 250;
  */
 function applySchemaPatch(schemaData, patch) {
   const warnings = [];
+  let strippedMetaDescriptions = 0;
   if (!Array.isArray(schemaData)) {
     warnings.push('schemaData inválido.');
     return { schemaData: [], warnings };
@@ -34,6 +55,19 @@ function applySchemaPatch(schemaData, patch) {
   const usedIds = new Set();
   for (const f of data) {
     if (f.id) usedIds.add(String(f.id));
+  }
+
+  /**
+   * `description` = instruções ao técnico no app; remover metaprompt do LLM.
+   * @param {object} field
+   */
+  function finalizeDescriptionOnField(field) {
+    if (!field || field.description == null) return;
+    const raw = String(field.description);
+    if (!raw.trim()) return;
+    const { text, wasMeta } = sanitizeCopilotFieldDescriptionForTechnician(raw);
+    if (wasMeta) strippedMetaDescriptions += 1;
+    field.description = text;
   }
 
   /**
@@ -78,7 +112,14 @@ function applySchemaPatch(schemaData, patch) {
       cur.requireOnlineValidation = p.requireOnlineValidation;
     }
     if (p.calcFormula != null) cur.calcFormula = String(p.calcFormula).trim();
+    if (p.calcDisplayFormat != null && cur.type === 'calculated') {
+      const v = String(p.calcDisplayFormat).trim().toLowerCase();
+      if (['auto', 'number', 'currency', 'percent'].includes(v)) cur.calcDisplayFormat = v;
+    }
     if (p.textMask != null) cur.textMask = String(p.textMask).trim();
+    if (p.currencyCode != null && cur.type === 'currency') {
+      cur.currencyCode = String(p.currencyCode).trim().slice(0, 12).toUpperCase();
+    }
     if (p.allowTechnicianComment === true || p.allowTechnicianComment === false) {
       cur.allowTechnicianComment = p.allowTechnicianComment;
     }
@@ -218,6 +259,7 @@ function applySchemaPatch(schemaData, patch) {
       }
       if (p.likertLabels != null) cur.likertLabels = String(p.likertLabels).slice(0, 2000);
     }
+    finalizeDescriptionOnField(cur);
   }
 
   const slice = ops.slice(0, MAX_OPS);
@@ -232,6 +274,7 @@ function applySchemaPatch(schemaData, patch) {
       }
       const n = normalizeSchemaItem(fieldRaw, usedIds);
       if (!n) continue;
+      finalizeDescriptionOnField(n);
       const afterId = raw.afterId != null ? String(raw.afterId).trim() : '';
       if (!afterId) {
         data.push(n);
@@ -301,11 +344,18 @@ function applySchemaPatch(schemaData, patch) {
     }
   }
 
+  if (strippedMetaDescriptions > 0) {
+    warnings.push(
+      'Uma ou mais «instruções ao técnico» (campo description) foram limpas por conterem metatexto do copiloto (entrevista, URLs ou instruções ao modelo). Use o chat para esse contexto, não o campo do técnico.'
+    );
+  }
+
   return { schemaData: data, warnings };
 }
 
 module.exports = {
   applySchemaPatch,
+  sanitizeCopilotFieldDescriptionForTechnician,
   MAX_OPS,
   MAX_FIELDS,
 };

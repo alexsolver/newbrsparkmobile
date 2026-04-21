@@ -864,10 +864,16 @@ function parseProviderTaskLocationPolygon(t: any): number[][] | null {
 }
 
 /**
- * Coordenadas do ponto de destino no mapa (1.º vértice em rota/trecho; senão o mesmo critério que `parseCoordLatLng`).
+ * Coordenadas do ponto de destino no mapa.
+ * Prioriza `locationLat`/`locationLng` (destino do atendimento); em rota/trecho sem coords explícitas,
+ * usa o 1.º vértice da geometria.
  * Não usar `Number(t.locationLat)` com valores null — em JS `Number(null)` é 0 e abria o mapa sem local real.
  */
 function providerTaskMapTargetCoords(t: any): { lat: number; lng: number } | null {
+  const explicit = parseCoordLatLng(t);
+  if (explicit && !isTriviallyEmptyMapCoords(explicit.lat, explicit.lng)) {
+    return explicit;
+  }
   const z = String(t?.locationZoneType || '').toLowerCase();
   const poly = parseProviderTaskLocationPolygon(t);
   if ((z === 'route' || z === 'segment') && poly && poly.length >= 1) {
@@ -885,9 +891,7 @@ function providerTaskMapTargetCoords(t: any): { lat: number; lng: number } | nul
       return { lat: la, lng: ln };
     }
   }
-  const c = parseCoordLatLng(t);
-  if (!c || isTriviallyEmptyMapCoords(c.lat, c.lng)) return null;
-  return c;
+  return null;
 }
 
 /** Abre apps de mapa num par lat/lng (Waze / Google / Apple no iOS; geo: no Android). */
@@ -951,6 +955,23 @@ function providerTaskSegmentPolygonEndpoints(
   const b = parsePt(poly[poly.length - 1]);
   if (!a || !b) return null;
   return { a, b };
+}
+
+/** Distância mínima (m) entre destino explícito e A/B para exibir pin extra no mapa compacto (evita duplicar). */
+const PROVIDER_MINI_MAP_SEGMENT_DEST_DISTINCT_M = 50;
+
+/**
+ * Em trecho, `locationLat`/`Lng` do atendimento quando não coincide com os extremos da geometria (ex.: loja fora do eixo).
+ */
+function providerTaskSegmentServiceDestinationDistinctFromLegs(
+  t: any,
+  ends: { a: { lat: number; lng: number }; b: { lat: number; lng: number } },
+): { lat: number; lng: number } | null {
+  const c = parseCoordLatLng(t);
+  if (!c || isTriviallyEmptyMapCoords(c.lat, c.lng)) return null;
+  if (haversineMeters(c, ends.a) <= PROVIDER_MINI_MAP_SEGMENT_DEST_DISTINCT_M) return null;
+  if (haversineMeters(c, ends.b) <= PROVIDER_MINI_MAP_SEGMENT_DEST_DISTINCT_M) return null;
+  return c;
 }
 
 function providerTaskMetaString(meta: Record<string, unknown>, keys: string[]): string {
@@ -1042,8 +1063,15 @@ function providerTaskMiniMapInitialRegion(t: any): {
   const poly = providerTaskMiniMapPolygonCoords(t);
   const pts = line ?? poly;
   if (pts && pts.length >= 2) {
-    const lats = pts.map((p) => p.latitude);
-    const lngs = pts.map((p) => p.longitude);
+    const explicit = parseCoordLatLng(t);
+    const lats = [
+      ...pts.map((p) => p.latitude),
+      ...(explicit && !isTriviallyEmptyMapCoords(explicit.lat, explicit.lng) ? [explicit.lat] : []),
+    ];
+    const lngs = [
+      ...pts.map((p) => p.longitude),
+      ...(explicit && !isTriviallyEmptyMapCoords(explicit.lat, explicit.lng) ? [explicit.lng] : []),
+    ];
     const minLat = Math.min(...lats);
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
@@ -3232,11 +3260,17 @@ export default function DashboardScreen() {
     if (!user?.email) return;
     if (isOnline === false) {
       reconnectOnlineRef.current = false;
+      // #region agent log
+      fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'index.tsx:reconnect',message:'mark offline',data:{hypothesisId:'H2',reconnectRef:false},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       return;
     }
     if (isOnline !== true) return;
     const prev = reconnectOnlineRef.current;
     reconnectOnlineRef.current = true;
+    // #region agent log
+    fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6542e6'},body:JSON.stringify({sessionId:'6542e6',location:'index.tsx:reconnect',message:'online branch',data:{hypothesisId:'H2',prev,willRunBurst:prev===false},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     if (prev !== false) return;
     let cancelled = false;
     void (async () => {
@@ -4649,7 +4683,7 @@ export default function DashboardScreen() {
                 });
                 const osMapZoneVisual = getLocationZoneTypeVisual(order.locationZoneType);
                 const zoneChrome = resolveLocationZoneChrome(order.locationZoneType, C, themeDark);
-                /** Mesmo ponto que o mapinha / OSRM (inclui 1.º vértice de rota/trecho) — alinhado a pendentes e em andamento. */
+                /** Mesmo ponto que o mapinha / OSRM: destino explícito da OS ou 1.º vértice da geometria em rota/trecho. */
                 const providerCardMapDest = providerTaskMapTargetCoords(order);
                 const etaChipMinutes = providerTaskEtaMinutes(order);
                 const showProviderEtaChip =
@@ -6163,6 +6197,9 @@ export default function DashboardScreen() {
                     const polyCoords = providerTaskMiniMapPolygonCoords(mini);
                     const lineCoords = providerTaskMiniMapPolylineCoords(mini);
                     const segmentEnds = providerTaskSegmentPolygonEndpoints(mini);
+                    const segmentServiceDest = segmentEnds
+                      ? providerTaskSegmentServiceDestinationDistinctFromLegs(mini, segmentEnds)
+                      : null;
                     const pin = providerTaskMapTargetCoords(mini)!;
                     const pinTitle = (
                       providerTaskServiceLocationName(mini) ||
@@ -6223,6 +6260,22 @@ export default function DashboardScreen() {
                                 <Text style={{ color: C.cardWhite, fontSize: 14, fontWeight: '900' }}>B</Text>
                               </View>
                             </Marker>
+                            {segmentServiceDest ? (
+                              <Marker
+                                coordinate={{
+                                  latitude: segmentServiceDest.lat,
+                                  longitude: segmentServiceDest.lng,
+                                }}
+                                tracksViewChanges={false}
+                                title={pinTitle}
+                                description={pinDesc || undefined}
+                                accessibilityLabel={t('home.mapMarkerServiceDestination')}
+                              >
+                                <View style={[segPinStyle, { backgroundColor: MEDIA_TAG_COLORS.WARRANTY }]}>
+                                  <Ionicons name="flag" size={17} color={C.cardWhite} />
+                                </View>
+                              </Marker>
+                            ) : null}
                           </>
                         ) : (
                           <Marker
