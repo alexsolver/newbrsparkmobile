@@ -1,0 +1,21 @@
+---
+description: Quando o utilizador pedir deploy/commit para produção, executar o script completo.
+alwaysApply: false
+---
+
+# Deploy para produção (BrsparkMobile)
+
+Quando o pedido for para **colocar código em produção**, **commit para produção**, **deploy**, **subir para o servidor**, ou equivalente:
+
+1. Na raiz do repositório **BrsparkMobile**, executar (ajustar `BRSPARK_SSH_KEY` se a chave não estiver em `~/Downloads/alex.pem`):
+
+   ```bash
+   export BRSPARK_SSH_KEY="${HOME}/Downloads/alex.pem"
+   ./scripts/deploy-production.sh all
+   ```
+
+2. O script já faz: rsync do **admin-panel** e **Laravel (BrsparkWeb/backend)**, `npm ci` no Node, **Prisma migrate** com recuperação automática de falhas típicas (P3009), `php artisan migrate --force` no Laravel, caches e **PM2 restart**.
+
+3. Se o comando falhar, analisar a saída (SSH, Prisma, Artisan) e propor correção; não deixar o utilizador com passos manuais salvo migração SQL impossível de reaplicar sem intervenção na BD.
+
+4. Não expor segredos de `.env` na resposta. Chaves `.pem` não são commitadas (gitignore).

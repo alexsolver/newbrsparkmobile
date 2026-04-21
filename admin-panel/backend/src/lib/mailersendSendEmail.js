@@ -1,13 +1,12 @@
 'use strict';
 
 const { normalizeTo } = require('./nylasSendEmail');
-
-const DEFAULT_API_BASE = 'https://api.mailersend.com/v1';
+const { resolveMailerSendConfig } = require('./mailersendCredentials');
 
 /**
  * Envia e-mail transacional via MailerSend (`POST /v1/email`).
  *
- * Requer token de API e remetente num domínio verificado no MailerSend.
+ * Credenciais: integração «MailerSend» no painel e/ou MAILERSEND_API_TOKEN + MAILERSEND_FROM_EMAIL (domínio verificado).
  *
  * @param {object} opts
  * @param {string|string[]|{ email: string, name?: string }} opts.to
@@ -19,18 +18,17 @@ const DEFAULT_API_BASE = 'https://api.mailersend.com/v1';
  */
 async function sendEmailViaMailerSend(opts) {
   const { to, subject, text, html, replyTo } = opts || {};
-  const token = String(process.env.MAILERSEND_API_TOKEN || '').trim();
-  const fromEmail = String(process.env.MAILERSEND_FROM_EMAIL || '').trim();
-  const fromName = String(
-    process.env.MAILERSEND_FROM_NAME || process.env.MAILERSEND_FROM || 'BrSpark',
-  ).trim() || 'BrSpark';
+  const cfg = await resolveMailerSendConfig();
+  const token = cfg.token;
+  const fromEmail = cfg.fromEmail;
+  const fromName = cfg.fromName;
 
   if (!token || !fromEmail) {
     return {
       ok: false,
       skipped: true,
       reason:
-        'MailerSend sem token ou remetente. Defina MAILERSEND_API_TOKEN e MAILERSEND_FROM_EMAIL no servidor (domínio verificado no MailerSend).',
+        'MailerSend sem token ou remetente. Configure Integrações → MailerSend (API token) e defina MAILERSEND_FROM_EMAIL no servidor (domínio verificado), ou MAILERSEND_API_TOKEN + MAILERSEND_FROM_EMAIL no .env.',
     };
   }
 
@@ -46,7 +44,7 @@ async function sendEmailViaMailerSend(opts) {
     return { ok: false, skipped: false, error: 'Corpo do e-mail vazio (html ou text).' };
   }
 
-  const rawBase = String(process.env.MAILERSEND_API_BASE || DEFAULT_API_BASE).trim().replace(/\/+$/, '');
+  const rawBase = String(cfg.baseUrl || '').trim().replace(/\/+$/, '');
   const base = /\/v1$/i.test(rawBase) ? rawBase : `${rawBase}/v1`;
   const url = `${base}/email`;
 

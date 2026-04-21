@@ -6,8 +6,8 @@ const {
   testIntegration,
   normalizeComprefaceBaseUrl,
   normalizeGoogleGenerativeLanguageBaseUrl,
-  normalizeMailerSendApiBaseUrl,
 } = require('../lib/integrationTester');
+const { normalizeMailerSendApiBaseUrl } = require('../lib/mailersendCredentials');
 const { normalizeOsrmBaseUrl } = require('../lib/osrmBaseUrl');
 const { normalizeNylasApiUri } = require('../lib/nylasCredentials');
 const { normalizeMoondreamBaseUrl } = require('../lib/visionMoondreamAnalyze');

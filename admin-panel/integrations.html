@@ -200,6 +200,8 @@
           <div class="int-fields" id="fields-mailersend">
             <input class="form-control" id="url-mailersend" placeholder="URL base da API (padrão: https://api.mailersend.com/v1)" value="https://api.mailersend.com/v1" />
             <input class="form-control" id="key-mailersend" type="password" placeholder="API token (Bearer) — MailerSend" />
+            <input class="form-control" id="from-mailersend" placeholder="E-mail remetente (domínio verificado no MailerSend) — obrigatório para OTP e convites" autocomplete="off" />
+            <input class="form-control" id="name-mailersend" placeholder="Nome do remetente (opcional, ex: BrSpark)" autocomplete="off" />
           </div>
           <div class="int-actions">
             <button class="btn btn-primary btn-sm" onclick="void window.saveMailerSend()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
@@ -226,6 +228,30 @@
             <button class="btn btn-primary btn-sm" onclick="saveNylas()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
             <button class="btn btn-success btn-sm" id="test-nylas" style="display:none" onclick="testInt('nylas')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
             <button class="btn btn-danger btn-sm" id="del-nylas" style="display:none" onclick="deleteIntByName('Nylas')">Remover</button>
+          </div>
+        </div>
+
+        <!-- Twilio (SMS / WhatsApp — OTP no app) -->
+        <div class="int-card" id="card-twilio">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#F22F46;color:#fff;font-weight:900;font-size:14px">T</div>
+            <div><div class="int-name">Twilio</div><div class="int-cat" id="integ-cat-twilio">SMS · WhatsApp · OTP</div></div>
+            <span class="int-status inactive" id="status-twilio" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc" id="integ-desc-twilio">
+            Envio de códigos OTP no registo/login do app (SMS e WhatsApp). As credenciais guardadas aqui têm prioridade sobre variáveis <code>TWILIO_*</code> no servidor. Console Twilio:
+            <a href="https://console.twilio.com/" target="_blank" rel="noopener noreferrer">console.twilio.com</a>.
+          </div>
+          <div class="int-fields" id="fields-twilio">
+            <input class="form-control" id="sid-twilio" placeholder="Account SID (começa por AC…)" autocomplete="off" />
+            <input class="form-control" id="token-twilio" type="password" placeholder="Auth Token" autocomplete="off" />
+            <input class="form-control" id="sms-twilio" placeholder="Número SMS (from), E.164 — ex: +5511999999999" autocomplete="off" />
+            <input class="form-control" id="wa-twilio" placeholder="WhatsApp (from) — ex: whatsapp:+14155238886" autocomplete="off" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="void window.saveTwilio()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-twilio" style="display:none" onclick="testInt('twilio')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-twilio" style="display:none" onclick="deleteIntByName('Twilio')">Remover</button>
           </div>
         </div>
 
@@ -572,6 +598,7 @@
     'SMTP Genérico':       { slug:'smtp' },
     'MailerSend':          { slug:'mailersend' },
     'Nylas':               { slug:'nylas' },
+    'Twilio':              { slug:'twilio' },
     'Dropbox':             { slug:'dropbox' },
     'Cloudflare R2':       { slug:'cloudflare-r2' },
     'Amazon S3':           { slug:'amazon-s3' },
@@ -737,6 +764,11 @@
       }
     }
     if (keyMs) keyMs.value = '';
+    const fromMs = document.getElementById('from-mailersend');
+    const nameMs = document.getElementById('name-mailersend');
+    const msMeta = msRow?.metadata && typeof msRow.metadata === 'object' ? msRow.metadata : {};
+    if (fromMs) fromMs.value = msMeta.mailersendFromEmail != null ? String(msMeta.mailersendFromEmail) : '';
+    if (nameMs) nameMs.value = msMeta.mailersendFromName != null ? String(msMeta.mailersendFromName) : '';
 
     const urlCf = document.getElementById('url-compreface');
     const prefixCf = document.getElementById('prefix-compreface');
@@ -812,6 +844,17 @@
       const wid = m && typeof m === 'object' && m.workflowId != null ? String(m.workflowId) : '';
       wfDidit.value = wid;
     }
+
+    const sidT = document.getElementById('sid-twilio');
+    const tokT = document.getElementById('token-twilio');
+    const smsT = document.getElementById('sms-twilio');
+    const waT = document.getElementById('wa-twilio');
+    const tw = activeInts['Twilio'];
+    const twMeta = tw?.metadata && typeof tw.metadata === 'object' ? tw.metadata : {};
+    if (sidT) sidT.value = twMeta.accountSid != null ? String(twMeta.accountSid) : '';
+    if (tokT) tokT.value = '';
+    if (smsT) smsT.value = twMeta.smsFrom != null ? String(twMeta.smsFrom) : '';
+    if (waT) waT.value = twMeta.whatsappFrom != null ? String(twMeta.whatsappFrom) : '';
 
     let count = 0;
     Object.entries(CARD_MAP).forEach(([name, { slug }]) => {
@@ -935,12 +978,52 @@
     loadIntegrations();
   };
 
+  // Twilio — Account SID em metadata; Auth Token em apiKey; remetentes SMS/WhatsApp em metadata
+  window.saveTwilio = async () => {
+    if (!canManageIntegrations) return;
+    const sid = document.getElementById('sid-twilio')?.value.trim() || '';
+    const token = document.getElementById('token-twilio')?.value.trim() || '';
+    const sms = document.getElementById('sms-twilio')?.value.trim() || '';
+    const wa = document.getElementById('wa-twilio')?.value.trim() || '';
+    if (!sid || !token) {
+      alert(integT('integ_alert_twilio_creds'));
+      return;
+    }
+    const metadata = { accountSid: sid };
+    if (sms) metadata.smsFrom = sms;
+    if (wa) metadata.whatsappFrom = wa;
+    const body = {
+      type: 'PUSH',
+      name: 'Twilio',
+      status: 'ACTIVE',
+      apiKey: token,
+      description:
+        'OTP login/registo no app (SMS/WhatsApp). Esta integração substitui TWILIO_* no .env quando preenchida.',
+      metadata,
+    };
+    if (activeInts['Twilio']) await CONFIG.del(`/integrations/${activeInts['Twilio'].id}`);
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) {
+      loadIntegrations();
+      showToast(integT('integ_toast_twilio_saved'), true);
+    } else {
+      alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
+    }
+  };
+
   // MailerSend — API REST (Bearer); baseUrl = raiz da API (ex.: https://api.mailersend.com/v1)
   window.saveMailerSend = async () => {
     if (!canManageIntegrations) return;
     const url = document.getElementById('url-mailersend')?.value.trim() || 'https://api.mailersend.com/v1';
     const key = document.getElementById('key-mailersend')?.value.trim() || '';
+    const fromE = document.getElementById('from-mailersend')?.value.trim() || '';
+    const fromN = document.getElementById('name-mailersend')?.value.trim() || '';
     if (!key) return alert(integT('integ_alert_mailersend_token'));
+    const metadata = {};
+    if (fromE) {
+      metadata.mailersendFromEmail = fromE;
+      if (fromN) metadata.mailersendFromName = fromN;
+    }
     const body = {
       type: 'EMAIL',
       name: 'MailerSend',
@@ -948,6 +1031,7 @@
       baseUrl: url,
       apiKey: key,
       description: 'Integração MailerSend (REST API — mailersend.com).',
+      ...(Object.keys(metadata).length ? { metadata } : {}),
     };
     if (activeInts['MailerSend']) await CONFIG.del(`/integrations/${activeInts['MailerSend'].id}`);
     const res = await CONFIG.post('/integrations', body);

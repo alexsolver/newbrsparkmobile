@@ -22,6 +22,7 @@ const {
   MOONDREAM_INTEGRATION_NAME,
   normalizeMoondreamBaseUrl,
 } = require('./visionMoondreamAnalyze');
+const { normalizeMailerSendApiBaseUrl } = require('./mailersendCredentials');
 
 /** PNG 1×1 para POST de teste (mesmo contrato multipart do app). */
 const VISION_CHECKLIST_PROBE_PNG = Buffer.from(
@@ -101,6 +102,11 @@ async function testIntegration(integration) {
   // ── Didit (KYC / didit.me) — GET sessão inexistente (404 = chave OK) ──
   if (type === 'WEBHOOK' && name === 'Didit') {
     return testDidit(integration);
+  }
+
+  // ── Twilio (SMS/WhatsApp — OTP no app) — GET conta REST ──
+  if (type === 'PUSH' && name === 'Twilio') {
+    return testTwilio(integration);
   }
 
   // ── Mapas / OSRM (nome "OSRM" mesmo se type na BD não for MAPS — evita "teste não implementado")
@@ -373,32 +379,6 @@ async function testDeepSeek({ apiKey, baseUrl }) {
     if (r.status === 401) return { ok: false, message: 'API Key inválida (401 Unauthorized)' };
     return { ok: false, message: `HTTP ${r.status}` };
   } catch (e) { return { ok: false, message: `Erro de rede: ${e.message}` }; }
-}
-
-/**
- * Raiz da API REST MailerSend (mailersend.com) — padrão https://api.mailersend.com/v1
- * Ignora valores legados tipo smtp.mailersend.net:587 guardados como baseUrl.
- * @param {string|null|undefined} raw
- * @returns {string}
- */
-function normalizeMailerSendApiBaseUrl(raw) {
-  const def = 'https://api.mailersend.com/v1';
-  const s0 = String(raw || '').trim();
-  if (!s0) return def;
-  if (/smtp\.mailersend\.net/i.test(s0) || /^[\w.-]+:\d{2,5}$/.test(s0)) return def;
-  let s = s0.replace(/\/+$/, '');
-  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
-  try {
-    const u = new URL(s);
-    const host = (u.hostname || '').toLowerCase();
-    if (!host.endsWith('mailersend.com')) return def;
-    let p = (u.pathname || '').replace(/\/+$/, '');
-    if (!p || p === '/') p = '/v1';
-    if (!/\/v\d+/i.test(p)) p = `${p}/v1`.replace(/\/+/g, '/');
-    return `${u.protocol}//${u.host}${p}`;
-  } catch {
-    return def;
-  }
 }
 
 /** Teste real: GET /v1/domains com Bearer (documentação developers.mailersend.com). */
@@ -1038,9 +1018,45 @@ async function testOsrm(integration) {
   }
 }
 
+/** Valida Account SID + Auth Token com GET /2010-04-01/Accounts/{Sid}.json */
+async function testTwilio(integration) {
+  const meta =
+    integration.metadata && typeof integration.metadata === 'object' ? integration.metadata : {};
+  const sid = String(meta.accountSid || '').trim();
+  const token = String(integration.apiKey || '').trim();
+  if (!sid || !token) {
+    return { ok: false, message: 'Preencha Account SID (metadados) e Auth Token.' };
+  }
+  const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}.json`;
+  try {
+    const r = await fetch(url, {
+      method: 'GET',
+      headers: { Authorization: `Basic ${auth}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    const text = await r.text();
+    if (r.ok) {
+      let st = '';
+      try {
+        const j = JSON.parse(text);
+        st = j && j.status ? String(j.status) : '';
+      } catch {
+        /* ignore */
+      }
+      return {
+        ok: true,
+        message: st ? `Twilio OK — conta ${st}` : 'Twilio OK — credenciais válidas.',
+      };
+    }
+    return { ok: false, message: `Twilio HTTP ${r.status}: ${text.replace(/\s+/g, ' ').slice(0, 240)}` };
+  } catch (e) {
+    return { ok: false, message: e.message || 'Erro de rede ao validar Twilio.' };
+  }
+}
+
 module.exports = {
   testIntegration,
   normalizeComprefaceBaseUrl,
   normalizeGoogleGenerativeLanguageBaseUrl,
-  normalizeMailerSendApiBaseUrl,
 };

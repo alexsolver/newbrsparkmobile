@@ -14,7 +14,8 @@ cd "$ROOT"
 export PATH="$ROOT/node_modules/.bin:$PATH"
 
 if [[ "${BRSPARK_SKIP_DEV_TUNNEL:-}" == "1" ]]; then
-  exec node scripts/checkLocalDbReachable.js && exec nodemon src/index.js
+  # Sem `exec` no primeiro comando — senão o processo termina após o check e o nodemon nunca corre.
+  node scripts/checkLocalDbReachable.js && exec nodemon src/index.js
 fi
 
 IFS='|' read -r MODE DB_HOST LOCAL_PORT < <(node << 'NODE'

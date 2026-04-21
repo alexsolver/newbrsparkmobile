@@ -74,28 +74,57 @@ function make6Digit() {
 }
 
 /**
- * @param {object} prisma
+ * E-mail OTP não depende de Twilio. SMS/WhatsApp usam integração «Twilio» (painel) ou env TWILIO_*.
+ * @param {import('@prisma/client').PrismaClient} prisma
  * @param {object} opts
  */
-async function sendOtpToChannel({ channel, target, code, isE164Phone }) {
-  const sid = String(process.env.TWILIO_ACCOUNT_SID || '').trim();
-  const token = String(process.env.TWILIO_AUTH_TOKEN || '').trim();
+async function sendOtpToChannel(prisma, { channel, target, code, isE164Phone }) {
+  if (channel === 'EMAIL' && String(target).includes('@')) {
+    const { sendTransactionalEmailWithFallback } = require('./transactionalEmailSend');
+    const { send, provider } = await sendTransactionalEmailWithFallback({
+      to: target,
+      subject: 'Seu código de acesso',
+      text: i18nBrCodeMsgPlain(code),
+      html: i18nBrCodeMsgHtml(code),
+    });
+    if (send && send.ok) {
+      return { ok: true, channel: 'email', provider };
+    }
+    const reason =
+      (send && send.skipped && send.reason) ||
+      (send && send.error) ||
+      (provider === 'none'
+        ? 'Nenhum envio de e-mail configurado (MailerSend ou Nylas).'
+        : 'Falha ao enviar o código por e-mail.');
+    return { ok: false, error: String(reason) };
+  }
+
+  const { resolveTwilioCredentials } = require('./twilioCredentials');
+  const creds = await resolveTwilioCredentials(prisma);
+  const sid = String(creds.accountSid || '').trim();
+  const token = String(creds.authToken || '').trim();
+
   if (!sid || !token) {
     if (String(process.env.NODE_ENV) !== 'production' && String(process.env.ALLOW_OTP_PLAINTEXT) === '1') {
       console.log('[otp dev plaintext]', target, code);
       return { ok: true, dev: true, channel: 'log' };
     }
     if (String(process.env.NODE_ENV) !== 'production') {
-      console.warn('[otp] Twilio não configurado — a não ser ALLOW_OTP_PLAINTEXT=1, OTP não é enviado');
+      console.warn('[otp] Twilio não configurado — a não ser ALLOW_OTP_PLAINTEXT=1, OTP SMS/WhatsApp não é enviado');
     }
-    return { ok: false, error: 'Entrega de código indisponível. Configure Twilio (SMS/WhatsApp).' };
+    return {
+      ok: false,
+      error:
+        'Entrega de código indisponível. Configure a integração Twilio em Integrações (ou TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN no servidor).',
+    };
   }
+
   // eslint-disable-next-line global-require
   const twilio = require('twilio')(sid, token);
   if (channel === 'WHATSAPP' && isE164Phone) {
-    const wfrom = String(process.env.TWILIO_WHATSAPP_FROM || '').trim();
+    const wfrom = String(creds.whatsappFrom || '').trim();
     if (!wfrom) {
-      return { ok: false, error: 'Canal WhatsApp indisponível. Defina TWILIO_WHATSAPP_FROM.' };
+      return { ok: false, error: 'Canal WhatsApp indisponível. Defina o remetente WhatsApp na integração Twilio ou TWILIO_WHATSAPP_FROM.' };
     }
     const body = i18nBrCodeMsg(code);
     await twilio.messages.create({
@@ -106,23 +135,17 @@ async function sendOtpToChannel({ channel, target, code, isE164Phone }) {
     return { ok: true, channel: 'whatsapp' };
   }
   if (isE164Phone) {
-    const mfrom = String(process.env.TWILIO_SMS_FROM || process.env.TWILIO_PHONE_NUMBER || '').trim();
+    const mfrom = String(creds.smsFrom || '').trim();
     if (!mfrom) {
-      return { ok: false, error: 'Número SMS Twilio (TWILIO_SMS_FROM) em falta.' };
+      return {
+        ok: false,
+        error:
+          'Número SMS Twilio em falta. Defina «Número SMS (from)» na integração Twilio ou TWILIO_SMS_FROM / TWILIO_PHONE_NUMBER.',
+      };
     }
     const body = i18nBrCodeMsg(code);
     await twilio.messages.create({ to: String(target), from: mfrom, body });
     return { ok: true, channel: 'sms' };
-  }
-  if (channel === 'EMAIL' && String(target).includes('@')) {
-    const { sendTransactionalEmailWithFallback } = require('./transactionalEmailSend');
-    await sendTransactionalEmailWithFallback({
-      to: target,
-      subject: 'Seu código de acesso',
-      text: i18nBrCodeMsgPlain(code),
-      html: i18nBrCodeMsgHtml(code),
-    });
-    return { ok: true, channel: 'email' };
   }
   return { ok: false, error: 'Canal inválido.' };
 }
@@ -195,7 +218,7 @@ async function startChallenge(prisma, { identifier, channelPref, purpose, nameIf
   const sendTarget =
     chChannel === 'EMAIL' && parsed.type === 'email' ? parsed.displayEmail : isE164 ? parsed.e164 : parsed.key;
 
-  const out = await sendOtpToChannel({
+  const out = await sendOtpToChannel(prisma, {
     channel: chChannel,
     target: sendTarget,
     code,
