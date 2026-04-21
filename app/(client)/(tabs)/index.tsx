@@ -58,6 +58,7 @@ import { tabBarOuterHeight } from '../../../src/components/FloatingRadialMenu';
 import { TaskMetadataGlyph } from '../../../src/components/TaskMetadataGlyph';
 import { ProviderOsListCardStudio } from '../../../src/components/ProviderOsListCardStudio';
 import { useAppContext } from '../../../src/context/AppContext';
+import { useProviderBroadcastOffer } from '../../../src/context/ProviderBroadcastOfferContext';
 import { API_BASE, apiFetch, userHasCapability, isB2CConsumerUser } from '../../../src/services/auth';
 import { getOsrmBaseUrl } from '../../../src/services/osrmConfig';
 import { fetchTravelDurationsFromOrigin, fetchStitchedDrivingRouteLatLng } from '../../../src/services/osrmClient';
@@ -84,6 +85,10 @@ import {
   peekPendingOpenExecutionFromPush,
   takePendingOpenExecutionFromPush,
 } from '../../../src/lib/pushExecutionOpenIntent';
+import {
+  BROADCAST_OS_UNAVAILABLE_SUBTITLE,
+  BROADCAST_OS_UNAVAILABLE_TITLE,
+} from '../../../src/constants/broadcastOsMessages';
 import { taskOsLabel } from '../../../src/utils/taskOsLabel';
 import { stripFormTemplateTitleLabelPrefix } from '../../../src/utils/stripFormTemplateTitleLabelPrefix';
 import {
@@ -2202,6 +2207,12 @@ export default function DashboardScreen() {
   /** Limite de linhas na aba Concluídas (lista completa continua em memória após sync). */
   const [providerCompletedListCap, setProviderCompletedListCap] = useState(PROVIDER_OS_COMPLETED_INITIAL);
   const [providerTasks, setProviderTasks] = useState<any[]>([]);
+  const { setBroadcastOfferTasks, registerBroadcastOfferHandlers } = useProviderBroadcastOffer();
+  /** Lista prestador (abas, rota, contagens): OS só em modo «oferta» de claim não entram em Pendentes — aparecem no sheet global. */
+  const providerTasksForTabs = useMemo(
+    () => providerTasks.filter((t: any) => !t?.broadcastClaimPending),
+    [providerTasks]
+  );
   const [inprogressIds, setInprogressIds] = useState<Set<string>>(new Set());
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   /** IDs em `@brspark_accepted_tasks` (aceite local); a aba «Iniciadas» usa `inprogressIds` / estado IN_PROGRESS. */
@@ -2217,6 +2228,8 @@ export default function DashboardScreen() {
   /** Qual modo está a ser calculado (spinner nos chips — não confundir com providerSortMode até terminar) */
   const [osrmOptimizingMode, setOsrmOptimizingMode] = useState<null | 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE'>(null);
   const lastOsrmPendingKeyRef = useRef<string>('');
+  /** Ref atualizado após cada render — handlers da oferta broadcast chamam sync sem depender de identidade de `loadData`. */
+  const loadDataRef = useRef<(triggerSync?: boolean) => void>(() => {});
   /** Evita que o toque curto dispare logo após toque longo (Recentes / Antigas). */
   const skipReceiptTapAfterLongPress = useRef(false);
   /** Evita vários `loadData(true)` ao abrir OS a partir de push enquanto a lista ainda não traz o id. */
@@ -2316,9 +2329,17 @@ export default function DashboardScreen() {
     };
   }, [mode]);
 
+  useEffect(() => {
+    if (String(userRole || '').toUpperCase() !== 'TECHNICIAN' || mode !== 'PROVIDER') {
+      setBroadcastOfferTasks([]);
+      return;
+    }
+    setBroadcastOfferTasks(providerTasks.filter((t: any) => Boolean(t?.broadcastClaimPending)));
+  }, [userRole, mode, providerTasks, setBroadcastOfferTasks]);
+
   /** Pendentes com coordenadas, na mesma ordem da lista quando “Rota” está ativa (mapa alinhado à timeline). */
   const routeMapTasksOrdered = useMemo(() => {
-    const base = providerTasks.filter((t) => {
+    const base = providerTasksForTabs.filter((t) => {
       const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
       if (!providerTabMatchesTask(providerTab, s)) return false;
       return parseCoordLatLng(t) != null;
@@ -2328,7 +2349,7 @@ export default function DashboardScreen() {
       return providerIniciadasListPauseAtTop(ordered, completedIds, inprogressIds, acceptedIds);
     }
     return ordered;
-  }, [providerTasks, completedIds, inprogressIds, acceptedIds, providerTab, providerSortMode, osrmDurations]);
+  }, [providerTasksForTabs, completedIds, inprogressIds, acceptedIds, providerTab, providerSortMode, osrmDurations]);
 
   /** Coordenadas só para o pin (polilinha usa coords reais). Separa pins < ~50 m para não esconder 2 atrás do 1. */
   const routeMapMarkerCoords = useMemo(() => {
@@ -2342,14 +2363,14 @@ export default function DashboardScreen() {
     let pending = 0;
     let inProgress = 0;
     let completed = 0;
-    for (const task of providerTasks) {
+    for (const task of providerTasksForTabs) {
       const s = effectiveProviderTaskStatus(task, completedIds, inprogressIds, acceptedIds);
       if (providerTabMatchesTask('PENDING', s)) pending += 1;
       else if (providerTabMatchesTask('IN_PROGRESS', s)) inProgress += 1;
       else if (providerTabMatchesTask('COMPLETED', s)) completed += 1;
     }
     return { pending, inProgress, completed };
-  }, [providerTasks, completedIds, inprogressIds, acceptedIds]);
+  }, [providerTasksForTabs, completedIds, inprogressIds, acceptedIds]);
 
   useEffect(() => {
     setProviderCompletedListCap(PROVIDER_OS_COMPLETED_INITIAL);
@@ -2383,7 +2404,7 @@ export default function DashboardScreen() {
   }, [stepProviderTab]);
 
   const providerOsListSorted = useMemo(() => {
-    const filtered = providerTasks.filter((t) => {
+    const filtered = providerTasksForTabs.filter((t) => {
       const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
       return providerTabMatchesTask(providerTab, s);
     });
@@ -2392,7 +2413,7 @@ export default function DashboardScreen() {
       return providerIniciadasListPauseAtTop(sorted, completedIds, inprogressIds, acceptedIds);
     }
     return sorted;
-  }, [providerTasks, completedIds, inprogressIds, acceptedIds, providerTab, providerSortMode, osrmDurations]);
+  }, [providerTasksForTabs, completedIds, inprogressIds, acceptedIds, providerTab, providerSortMode, osrmDurations]);
 
   const providerOsFlatData = useMemo(() => {
     if (providerTab !== 'COMPLETED') return providerOsListSorted;
@@ -2574,7 +2595,7 @@ export default function DashboardScreen() {
   }, [showRouteMap, routeMapTasksOrdered]);
 
   const handleOptimizeRoute = async (mode: 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE') => {
-    const pendentesAll = providerTasks.filter((t) => {
+    const pendentesAll = providerTasksForTabs.filter((t) => {
       const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
       return providerTabMatchesTask(providerTab, s);
     });
@@ -2658,7 +2679,7 @@ export default function DashboardScreen() {
   const onSortRoutePress = (mode: 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE') => {
       if (providerSortMode === mode) return;
 
-      const pendentesIds = providerTasks
+      const pendentesIds = providerTasksForTabs
         .filter((t) => {
           const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
           return providerTabMatchesTask(providerTab, s);
@@ -2682,7 +2703,7 @@ export default function DashboardScreen() {
               const { status } = await Location.requestForegroundPermissionsAsync();
               if (status !== 'granted') return;
               const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-              const pendentesAll = providerTasks.filter((t) => {
+              const pendentesAll = providerTasksForTabs.filter((t) => {
                 const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
                 return providerTabMatchesTask(providerTab, s);
               });
@@ -3196,6 +3217,123 @@ export default function DashboardScreen() {
     });
     return loadDataChainRef.current;
   };
+  loadDataRef.current = loadData;
+
+  useEffect(() => {
+    registerBroadcastOfferHandlers({
+      onAccept: async (selectedTask: any) => {
+        const taskIdStr = String(selectedTask.id);
+        if (!selectedTask.refId) {
+          Alert.alert('Erro', 'Formulário ausente na OS.');
+          return;
+        }
+        if (isOnline === false) {
+          Alert.alert(
+            'Sem ligação',
+            'Para aceitar esta OS em concorrência é necessário estar online. Verifique a rede e tente de novo.',
+          );
+          return;
+        }
+        try {
+          const res = await apiFetch(`/api/checklists/executions/${encodeURIComponent(taskIdStr)}/claim`, {
+            method: 'POST',
+            body: JSON.stringify({}),
+          });
+          const rawBody = await res.text();
+          let data: Record<string, unknown> = {};
+          try {
+            data = rawBody.trim() ? JSON.parse(rawBody) : {};
+          } catch {
+            data = {
+              error: rawBody.trim().slice(0, 500) || 'Resposta inválida do servidor.',
+            };
+          }
+          const errStr =
+            typeof data.error === 'string'
+              ? data.error.trim()
+              : typeof data.message === 'string'
+                ? String(data.message).trim()
+                : '';
+          const codeNorm = String(data.code ?? '')
+            .trim()
+            .toUpperCase();
+          const isClaimLost =
+            res.status === 409 &&
+            (codeNorm === 'CLAIM_LOST' ||
+              /não está mais disponível|outro.+(técnico|prestador).+já aceitou|claim_lost/i.test(errStr));
+          if (!res.ok) {
+            if (isClaimLost) {
+              Alert.alert(BROADCAST_OS_UNAVAILABLE_TITLE, BROADCAST_OS_UNAVAILABLE_SUBTITLE);
+            } else {
+              const detail =
+                errStr || rawBody.trim().slice(0, 400) || `O servidor recusou o pedido (HTTP ${res.status}).`;
+              Alert.alert(
+                'Não foi possível aceitar',
+                `${detail.replace(/\btécnico\b/gi, 'prestador')}\n\n` +
+                  `(HTTP ${res.status}${codeNorm ? ` · ${codeNorm}` : ''})`,
+              );
+            }
+            loadDataRef.current(false);
+            return;
+          }
+          await appendUniqueStringToStoredArray('@brspark_accepted_tasks', taskIdStr);
+          loadDataRef.current(false);
+        } catch (e: any) {
+          Alert.alert('Erro', e?.message || 'Falha de rede.');
+          return;
+        }
+
+        Alert.alert('OS Aceita!', 'Excelente! Deseja iniciar a execução da atividade agora mesmo?', [
+          { text: 'Agora Não', style: 'cancel', onPress: () => setTaskModalVisible(false) },
+          {
+            text: 'Sim, Iniciar Agora',
+            style: 'default',
+            onPress: async () => {
+              await appendUniqueStringToStoredArray('@brspark_inprogress_tasks', String(selectedTask.id));
+              await enqueueExecutionInProgressFromDashboard(String(selectedTask.id));
+              setInprogressIds((prev) => {
+                const s = new Set(prev);
+                s.add(String(selectedTask.id));
+                return s;
+              });
+              setTaskModalVisible(false);
+              router.push({
+                pathname: '/checklist/[id]',
+                params: { id: selectedTask.refId, taskId: selectedTask.id },
+              } as any);
+            },
+          },
+        ]);
+      },
+      onReject: async (selectedTask: any) => {
+        try {
+          await apiFetch(`/api/operations/tasks/${selectedTask.id}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({
+              reason: 'Recusada pelo prestador na tela de oferta (broadcast).',
+            }),
+          });
+          const rStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
+          let rejArr: string[] = [];
+          try {
+            rejArr = JSON.parse(rStr);
+          } catch {
+            rejArr = [];
+          }
+          if (!Array.isArray(rejArr)) rejArr = [];
+          if (!rejArr.includes(String(selectedTask.id))) {
+            rejArr.push(String(selectedTask.id));
+            await AsyncStorage.setItem('@brspark_rejected_tasks', JSON.stringify(rejArr));
+          }
+          loadDataRef.current(false);
+          Alert.alert('Recusada', 'A atividade foi rejeitada e retirada da sua fila.');
+        } catch (e: any) {
+          Alert.alert('Erro', 'Falha ao rejeitar a atividade: ' + (e?.message || String(e)));
+        }
+      },
+    });
+    return () => registerBroadcastOfferHandlers(null);
+  }, [registerBroadcastOfferHandlers, isOnline, router]);
 
   /** Abrir cartão da OS após toque «OK» na notificação push. */
   useEffect(() => {
@@ -3206,6 +3344,9 @@ export default function DashboardScreen() {
     const found = providerTasks.find((t: any) => String(t.id) === String(tid));
     if (found) {
       takePendingOpenExecutionFromPush();
+      if ((found as any).broadcastClaimPending) {
+        return;
+      }
       selectProviderTab('PENDING');
       setSelectedTask(found);
       setTaskModalVisible(true);
@@ -5933,22 +6074,47 @@ export default function DashboardScreen() {
                                     `/api/checklists/executions/${encodeURIComponent(taskIdStr)}/claim`,
                                     { method: 'POST', body: JSON.stringify({}) }
                                   );
-                                  let data: any = {};
+                                  const rawBody = await res.text();
+                                  let data: Record<string, unknown> = {};
                                   try {
-                                    data = await res.json();
+                                    data = rawBody.trim() ? JSON.parse(rawBody) : {};
                                   } catch {
-                                    data = {};
+                                    data = {
+                                      error:
+                                        rawBody.trim().slice(0, 500) ||
+                                        'Resposta inválida do servidor.',
+                                    };
                                   }
+                                  const errStr =
+                                    typeof data.error === 'string'
+                                      ? data.error.trim()
+                                      : typeof data.message === 'string'
+                                        ? String(data.message).trim()
+                                        : '';
+                                  const codeNorm = String(data.code ?? '')
+                                    .trim()
+                                    .toUpperCase();
+                                  const isClaimLost =
+                                    res.status === 409 &&
+                                    (codeNorm === 'CLAIM_LOST' ||
+                                      /não está mais disponível|outro.+(técnico|prestador).+já aceitou|claim_lost/i.test(
+                                        errStr
+                                      ));
                                   if (!res.ok) {
-                                    if (res.status === 409 && data?.code === 'CLAIM_LOST') {
+                                    if (isClaimLost) {
                                       Alert.alert(
-                                        'OS já atribuída',
-                                        'Outro técnico aceitou primeiro. A lista vai atualizar.'
+                                        BROADCAST_OS_UNAVAILABLE_TITLE,
+                                        BROADCAST_OS_UNAVAILABLE_SUBTITLE
                                       );
                                     } else {
+                                      const detail =
+                                        errStr ||
+                                        rawBody.trim().slice(0, 400) ||
+                                        `O servidor recusou o pedido (HTTP ${res.status}).`;
                                       Alert.alert(
                                         'Não foi possível aceitar',
-                                        String(data?.error || `Erro ${res.status}`).slice(0, 220)
+                                        `${detail.replace(/\btécnico\b/gi, 'prestador')}\n\n` +
+                                          `(HTTP ${res.status}${codeNorm ? ` · ${codeNorm}` : ''})`
                                       );
                                     }
                                     loadData(false);

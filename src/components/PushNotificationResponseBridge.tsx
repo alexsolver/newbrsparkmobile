@@ -10,6 +10,10 @@ import {
   TECH_PUSH_ACTION_OPEN,
   TECH_PUSH_ACTION_REJECT,
 } from '../constants/pushNotifications';
+import {
+  BROADCAST_OS_UNAVAILABLE_SUBTITLE,
+  BROADCAST_OS_UNAVAILABLE_TITLE,
+} from '../constants/broadcastOsMessages';
 import { setPendingOpenExecutionFromPush } from '../lib/pushExecutionOpenIntent';
 import { apiFetch } from '../services/auth';
 import { enqueueExecutionStatusPatch, pullTasks } from '../services/syncService';
@@ -121,13 +125,10 @@ async function handleNotificationResponse(
     return;
   }
 
-  /** Leilão: outro técnico aceitou primeiro — atualiza lista local. */
+  /** Leilão: outro prestador aceitou primeiro — atualiza lista local. */
   if (type === 'os_broadcast_taken') {
     if (!isDefault) return;
-    Alert.alert(
-      'OS indisponível',
-      'Outro técnico aceitou primeiro esta ordem de serviço.',
-    );
+    Alert.alert(BROADCAST_OS_UNAVAILABLE_TITLE, BROADCAST_OS_UNAVAILABLE_SUBTITLE);
     void pullTasks().catch(() => {});
     return;
   }
@@ -157,14 +158,27 @@ async function handleNotificationResponse(
         );
         if (!res.ok) {
           const txt = await res.text().catch(() => '');
-          let msg = txt;
+          let msg = txt.trim();
+          let code = '';
           try {
-            const j = JSON.parse(txt) as { error?: string; message?: string };
-            msg = String(j.error || j.message || txt);
+            const j = JSON.parse(txt) as { error?: string; message?: string; code?: string };
+            msg = String(j.error || j.message || txt).trim();
+            code = String(j.code || '').trim();
           } catch {
             /* use txt */
           }
-          Alert.alert('OS', String(msg || 'Não foi possível aceitar.').slice(0, 200));
+          const isLost =
+            res.status === 409 &&
+            (code.toUpperCase() === 'CLAIM_LOST' ||
+              /não está mais disponível|já aceitou|outro (técnico|prestador)/i.test(msg));
+          if (isLost) {
+            Alert.alert(BROADCAST_OS_UNAVAILABLE_TITLE, BROADCAST_OS_UNAVAILABLE_SUBTITLE);
+          } else {
+            const text =
+              (msg || `Não foi possível aceitar (HTTP ${res.status}).`) +
+              (code ? `\n\n(${code})` : '');
+            Alert.alert('Não foi possível aceitar', text.replace(/\btécnico\b/gi, 'prestador'));
+          }
         } else {
           void pullTasks().catch(() => {});
         }

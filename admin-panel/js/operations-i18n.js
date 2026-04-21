@@ -55,6 +55,13 @@ const M = {
     ops_submission_badge: '{n}ª submissão',
     ops_api_unexpected:
       'A API devolveu um formato inesperado ao carregar o quadro. Abra o console (F12) ou confirme se você está logado.',
+    ops_load_failed:
+      'Não foi possível carregar o quadro (rede ou API). Confirme se o backend está no ar e tente «Atualizar».',
+    ops_hint_all_filtered:
+      'Nenhuma execução corresponde aos filtros atuais (técnico, busca ou nota de voz). Limpe os campos ou ajuste o escopo «Apenas OS / RT / todas».',
+    ops_hint_api_zero:
+      'A API não devolveu execuções. Se você esperava ver OS, verifique o filtro «Apenas OS (FT) / Apenas RT / todas» acima — no modo «Apenas RT» as OS comuns não aparecem.',
+    ops_hint_clear_filters: 'Limpar filtros',
     ops_detail_pdf_preset_default: 'Padrão (todos os blocos)',
     ops_modal_close_aria: 'Fechar',
     ops_btn_cancel: 'Cancelar',
@@ -110,6 +117,11 @@ const M = {
     ops_dispatch_email_required: 'Indique pelo menos um e-mail de técnico (adicione à lista ou preencha o campo).',
     ops_dispatch_email_invalid: 'Formato de e-mail inválido. Use «nome@domínio.com».',
     ops_dispatch_broadcast_hint: '2 ou mais na lista = modo «primeiro a aceitar» (leilão).',
+    ops_dispatch_broadcast_expires_lbl: 'Prazo para aceitar a oferta (opcional)',
+    ops_dispatch_broadcast_expires_need_two:
+      'Disponível quando houver dois ou mais técnicos na lista (modo «primeiro a aceitar»). Adicione candidatos acima.',
+    ops_dispatch_broadcast_expires_hint:
+      'Opcional. Fim da janela em que o prestador pode aceitar (UTC no servidor; o app mostra contagem regressiva). Só aplica com 2+ técnicos.',
     ops_dispatch_add_candidate_btn: 'Adicionar candidato',
     ops_dispatch_suggest_aria: 'Técnicos sugeridos',
     ops_dispatch_client_email_lbl: 'E-mail do cliente',
@@ -240,6 +252,13 @@ const M = {
     ops_submission_badge: 'Submission #{n}',
     ops_api_unexpected:
       'The API returned an unexpected format while loading the board. Check the console (F12) or sign in again.',
+    ops_load_failed:
+      'Could not load the board (network or API). Make sure the backend is running and click Refresh.',
+    ops_hint_all_filtered:
+      'No executions match the current filters (technician, search, or voice). Clear the fields or change the OS / RT / All scope.',
+    ops_hint_api_zero:
+      'The API returned no executions. If you expected work orders, check «FT only / RT only / All» — RT-only mode hides regular OS.',
+    ops_hint_clear_filters: 'Clear filters',
     ops_detail_pdf_preset_default: 'Default (all blocks)',
     ops_modal_close_aria: 'Close',
     ops_btn_cancel: 'Cancel',
@@ -295,6 +314,11 @@ const M = {
     ops_dispatch_email_required: 'Enter at least one technician email (add to the list or fill the field).',
     ops_dispatch_email_invalid: 'Invalid email format. Use name@domain.com.',
     ops_dispatch_broadcast_hint: 'Two or more in the list = «first to accept» (broadcast) mode.',
+    ops_dispatch_broadcast_expires_lbl: 'Offer acceptance deadline (optional)',
+    ops_dispatch_broadcast_expires_need_two:
+      'Available once there are two or more technicians in the list («first to accept»). Add candidates above.',
+    ops_dispatch_broadcast_expires_hint:
+      'Optional. End of the window when the provider may accept (UTC on the server; the app shows a countdown). Only applies with 2+ technicians.',
     ops_dispatch_add_candidate_btn: 'Add candidate',
     ops_dispatch_suggest_aria: 'Suggested technicians',
     ops_dispatch_client_email_lbl: 'Client email',
@@ -632,6 +656,7 @@ export function applyOperationsModalsStaticI18n() {
   const sug = document.getElementById('d-email-suggestions');
   if (sug) sug.setAttribute('aria-label', opsT('ops_dispatch_suggest_aria'));
   setHtml('d-dispatch-broadcast-hint', 'ops_dispatch_broadcast_hint');
+  setLabelFor('d-broadcast-claim-expires', 'ops_dispatch_broadcast_expires_lbl');
   const addCandLbl = document.getElementById('d-dispatch-add-candidate-lbl');
   if (addCandLbl) addCandLbl.textContent = opsT('ops_dispatch_add_candidate_btn');
 
@@ -735,12 +760,20 @@ export function applyOperationsModalsStaticI18n() {
   const dispFoot = document.querySelectorAll('#dispatch-modal .modal-footer button');
   if (dispFoot[0]) dispFoot[0].textContent = opsT('ops_btn_cancel');
   if (dispFoot[1]) {
-    dispFoot[1].textContent = '';
+    const primary = dispFoot[1];
+    primary.setAttribute('type', 'button');
+    primary.id = 'ops-dispatch-submit';
+    primary.setAttribute('data-ops-action', 'dispatch-send');
+    primary.textContent = '';
     const ic = document.createElement('ion-icon');
     ic.setAttribute('name', 'rocket-outline');
     ic.setAttribute('style', 'color:var(--accent);vertical-align:-2px');
-    dispFoot[1].appendChild(ic);
-    dispFoot[1].appendChild(document.createTextNode(` ${opsT('ops_dispatch_send')}`));
+    primary.appendChild(ic);
+    primary.appendChild(document.createTextNode(` ${opsT('ops_dispatch_send')}`));
+  }
+
+  if (typeof window !== 'undefined' && typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') {
+    window.syncDispatchBroadcastOfferExpiresUi();
   }
 }
 
@@ -834,6 +867,9 @@ export function applyOperationsStaticI18n() {
   }
 
   set('ops-board-title', opsT('ops_board_title'));
+
+  const hintClearBtn = document.getElementById('ops-board-hint-clear');
+  if (hintClearBtn) hintClearBtn.textContent = opsT('ops_hint_clear_filters');
 
   set('ops-h-pending', opsT('ops_col_pending'));
   set('ops-h-progress', opsT('ops_col_progress'));

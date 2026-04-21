@@ -141,6 +141,11 @@
     #dispatch-modal button ion-icon {
       pointer-events: none;
     }
+    /* Rodapé por cima de qualquer vazamento de camada (ex.: Leaflet no corpo do modal). */
+    #dispatch-modal .modal-footer {
+      position: relative;
+      z-index: 5;
+    }
     /*
       Escolha de submissão: <dialog showModal> usa a "top layer" do browser (acima de Leaflet, mapas
       no despacho, etc.). Evita overlay invisível a roubar cliques em algumas OS.
@@ -181,7 +186,7 @@
       margin: 4px 0 0;
       padding: 4px 0;
       list-style: none;
-      z-index: 80;
+      z-index: 4;
       max-height: 220px;
       overflow-y: auto;
       background: var(--surface);
@@ -650,6 +655,10 @@
           </div>
         </div>
         <div id="ops-trunc-banner" class="fade-in" role="status" aria-live="polite" style="display:none;margin:0 20px 12px;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--amber, #f59e0b);background:rgba(245,158,11,0.12);font-size:12px;font-weight:600;color:var(--text);line-height:1.45"></div>
+        <div id="ops-board-hint" class="fade-in" role="status" aria-live="polite" style="display:none;margin:0 20px 12px;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid #bae6fd;background:rgba(14,165,233,0.08);font-size:12px;font-weight:600;color:var(--text);line-height:1.5">
+          <span id="ops-board-hint-text"></span>
+          <button type="button" class="btn btn-ghost btn-sm" id="ops-board-hint-clear" style="margin-left:10px;display:none" onclick="window.clearOpsUiFilters && window.clearOpsUiFilters()"></button>
+        </div>
 
         <div class="data-table-head">
           <h2 id="ops-board-title" class="data-table-title">Quadro de OS e RT</h2>
@@ -909,7 +918,7 @@
       <div class="form-group">
         <label class="form-label" for="d-email">E-mail do Técnico *</label>
         <div class="dispatch-tech-suggest-wrap">
-          <input class="form-control" id="d-email" type="text" inputmode="email" autocomplete="off" placeholder="Nome ou e-mail — sugestões ao digitar" />
+          <input class="form-control" id="d-email" type="text" inputmode="email" autocomplete="off" placeholder="Nome ou e-mail — sugestões ao digitar" oninput="if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') window.syncDispatchBroadcastOfferExpiresUi();" />
           <ul id="d-email-suggestions" class="dispatch-tech-suggest-list" role="listbox" aria-label="Técnicos sugeridos"></ul>
         </div>
         <div id="d-dispatch-candidates-wrap" style="margin-top:10px;">
@@ -920,6 +929,11 @@
             <span id="d-dispatch-broadcast-hint" style="font-size:10px;color:var(--text3);line-height:1.35;">2+ na lista = «primeiro a aceitar».</span>
           </div>
           <div id="d-dispatch-candidate-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:6px;"></div>
+        </div>
+        <div id="d-broadcast-claim-expires-wrap" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border,#e2e8f0);">
+          <label class="form-label" for="d-broadcast-claim-expires" id="d-broadcast-claim-expires-lbl">Prazo para aceitar a oferta</label>
+          <input class="form-control" id="d-broadcast-claim-expires" type="datetime-local" disabled />
+          <div id="d-broadcast-claim-expires-hint" style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.4;"></div>
         </div>
       </div>
       <div class="form-group">
@@ -1163,7 +1177,7 @@
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeDispatchModal()">Cancelar</button>
-      <button type="button" class="btn btn-primary btn-sm" id="ops-dispatch-submit"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar OS</button>
+      <button type="button" class="btn btn-primary btn-sm" id="ops-dispatch-submit" data-ops-action="dispatch-send"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar OS</button>
     </div>
   </div>
 </div>
@@ -1514,13 +1528,39 @@ function renderDispatchCandidateChips() {
       );
     })
     .join('');
+  if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') window.syncDispatchBroadcastOfferExpiresUi();
 }
+
+function syncDispatchBroadcastOfferExpiresUi() {
+  const wrap = document.getElementById('d-broadcast-claim-expires-wrap');
+  const input = document.getElementById('d-broadcast-claim-expires');
+  const hint = document.getElementById('d-broadcast-claim-expires-hint');
+  if (!wrap || !input) return;
+  const n =
+    typeof window.normalizeDispatchCandidateEmails === 'function'
+      ? window.normalizeDispatchCandidateEmails().length
+      : 0;
+  const ok = n >= 2;
+  input.disabled = !ok;
+  if (hint) {
+    if (typeof opsT === 'function') {
+      hint.textContent = ok ? opsT('ops_dispatch_broadcast_expires_hint') : opsT('ops_dispatch_broadcast_expires_need_two');
+    } else {
+      hint.textContent = ok
+        ? 'Opcional. Contagem regressiva no app do prestador.'
+        : 'Disponível com dois ou mais técnicos (modo primeiro a aceitar).';
+    }
+  }
+  wrap.style.opacity = ok ? '1' : '0.88';
+}
+window.syncDispatchBroadcastOfferExpiresUi = syncDispatchBroadcastOfferExpiresUi;
 
 window.removeDispatchCandidate = function (idx) {
   const i = Number(idx);
   if (!Array.isArray(window._dispatchCandidateList) || !Number.isFinite(i) || i < 0 || i >= window._dispatchCandidateList.length) return;
   window._dispatchCandidateList.splice(i, 1);
   renderDispatchCandidateChips();
+  syncDispatchBroadcastOfferExpiresUi();
 };
 
 function normalizeDispatchCandidateEmails() {
@@ -1531,7 +1571,17 @@ function normalizeDispatchCandidateEmails() {
     const low = extra.toLowerCase();
     if (!list.some(function (e) { return String(e).trim().toLowerCase() === low; })) list.push(extra);
   }
-  return list.map(function (e) { return String(e).trim(); }).filter(Boolean);
+  const trimmed = list.map(function (e) { return String(e).trim(); }).filter(Boolean);
+  const seen = new Set();
+  const out = [];
+  for (let i = 0; i < trimmed.length; i++) {
+    const em = trimmed[i];
+    const k = em.toLowerCase();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(em);
+  }
+  return out;
 }
 window.normalizeDispatchCandidateEmails = normalizeDispatchCandidateEmails;
 
@@ -1558,6 +1608,7 @@ window.addDispatchCandidateFromInput = function () {
   if (input) input.value = '';
   hideDispatchTechSuggestions();
   renderDispatchCandidateChips();
+  syncDispatchBroadcastOfferExpiresUi();
 };
 
 window.selectDispatchTechEmail = function (email) {
@@ -1568,6 +1619,7 @@ window.selectDispatchTechEmail = function (email) {
   if (!window._dispatchCandidateList.some(function (e) { return String(e).trim().toLowerCase() === low; })) {
     window._dispatchCandidateList.push(em);
     renderDispatchCandidateChips();
+    syncDispatchBroadcastOfferExpiresUi();
   }
   const input = document.getElementById('d-email');
   if (input) input.value = '';
@@ -1637,14 +1689,65 @@ function initDispatchTechAutocomplete() {
   });
 }
 
-/** Clique em «Enviar OS»: addEventListener + Promise evita cliques ignorados com handlers async. */
+/**
+ * Encontra o botão «Enviar OS» (vários alvos: shadow DOM, texto, gap no rodapé).
+ */
+function findDispatchSubmitTarget(e) {
+  const modal = document.getElementById('dispatch-modal');
+  let el = null;
+  const t = e.target;
+  if (t && typeof t.closest === 'function') {
+    el = t.closest('[data-ops-action="dispatch-send"]');
+    if (!el) el = t.closest('#ops-dispatch-submit');
+    if (!el && modal) el = t.closest('#dispatch-modal .modal-footer .btn-primary');
+  }
+  if (!el && typeof e.composedPath === 'function') {
+    const path = e.composedPath();
+    for (let i = 0; i < path.length; i++) {
+      const node = path[i];
+      if (!node || node.nodeType !== 1) continue;
+      if (!modal || !modal.contains(node)) continue;
+      if (node.getAttribute && node.getAttribute('data-ops-action') === 'dispatch-send') {
+        el = node;
+        break;
+      }
+      if (node.id === 'ops-dispatch-submit') {
+        el = node;
+        break;
+      }
+      if (node.matches && node.matches('.modal-footer .btn-primary') && node.closest && node.closest('#dispatch-modal')) {
+        el = node;
+        break;
+      }
+    }
+  }
+  return el;
+}
+
+/**
+ * «Enviar OS»: delegação no overlay + composedPath (ion-icon = Shadow DOM; closest() não atravessa).
+ * Promise para rotas async; capture=true para ganhar ao Leaflet/overlays.
+ */
 function initDispatchSubmitButton() {
-  const btn = document.getElementById('ops-dispatch-submit');
-  if (!btn || btn.dataset.opsDispatchSubmitBound) return;
-  btn.dataset.opsDispatchSubmitBound = '1';
-  btn.addEventListener(
+  const modal = document.getElementById('dispatch-modal');
+  if (!modal || modal.dataset.opsDispatchDelegated) return;
+  modal.dataset.opsDispatchDelegated = '1';
+  modal.addEventListener(
     'click',
     (e) => {
+      let submit = null;
+      try {
+        submit = findDispatchSubmitTarget(e);
+      } catch (err) {
+        console.warn('[ops-dispatch-submit] path', err);
+      }
+      // #region agent log
+      try {
+        const candLen = Array.isArray(window._dispatchCandidateList) ? window._dispatchCandidateList.length : -1;
+        void fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e72ba8' }, body: JSON.stringify({ sessionId: 'e72ba8', hypothesisId: 'H1', location: 'operations.html:dispatchModalClick', message: 'modal click', data: { submitFound: !!submit, targetTag: e.target && e.target.nodeName, candLen: candLen }, timestamp: Date.now() }) }).catch(function () {});
+      } catch (_d) {}
+      // #endregion
+      if (!submit) return;
       e.preventDefault();
       e.stopPropagation();
       const fn = window.confirmDispatch;
@@ -2036,6 +2139,40 @@ window.onOpsScopeFilterChange = function () {
   void window.loadBoard();
 };
 
+function updateOpsBoardHintAfterFilter(filteredCount) {
+  const hint = document.getElementById('ops-board-hint');
+  const hintText = document.getElementById('ops-board-hint-text');
+  const clearBtn = document.getElementById('ops-board-hint-clear');
+  if (!hint || !hintText) return;
+  if (allTasks.length === 0) {
+    hintText.textContent = typeof opsT === 'function' ? opsT('ops_hint_api_zero') : '';
+    hint.style.display = 'block';
+    if (clearBtn) clearBtn.style.display = 'none';
+    return;
+  }
+  if (filteredCount === 0) {
+    hintText.textContent = typeof opsT === 'function' ? opsT('ops_hint_all_filtered') : '';
+    hint.style.display = 'block';
+    if (clearBtn) clearBtn.style.display = 'inline-block';
+    return;
+  }
+  hint.style.display = 'none';
+}
+
+window.clearOpsUiFilters = function () {
+  const s = document.getElementById('filter-search');
+  const e = document.getElementById('filter-email');
+  const v = document.getElementById('filter-voice-sync');
+  if (s) s.value = '';
+  if (e) e.value = '';
+  if (v) v.value = '';
+  try {
+    applyFilters();
+  } catch (err) {
+    console.error('[OPS] clearOpsUiFilters', err);
+  }
+};
+
 window.loadBoard = async function() {
   try {
     const rpDlg = document.getElementById('revision-picker-modal');
@@ -2052,10 +2189,18 @@ window.loadBoard = async function() {
     const data = await CONFIG.get(
       `/operations/tasks?_t=${Date.now()}&scope=${encodeURIComponent(scope)}&limit=${encodeURIComponent(String(limit))}`
     );
-    if (!data) return;
+    if (data == null) {
+      alert(typeof opsT === 'function' ? opsT('ops_load_failed') : 'Não foi possível carregar o quadro.');
+      return;
+    }
     if (!Array.isArray(data)) {
       console.error('[OPS] /operations/tasks não devolveu array:', data);
-      alert(opsT('ops_api_unexpected'));
+      const extra =
+        data && typeof data === 'object' && data.error != null ? String(data.error) : '';
+      alert(
+        (typeof opsT === 'function' ? opsT('ops_api_unexpected') : 'Resposta inválida.') +
+          (extra ? '\n\n' + extra : '')
+      );
       return;
     }
     allTasks = data;
@@ -2073,6 +2218,7 @@ window.loadBoard = async function() {
     applyFilters();
   } catch(e) {
     console.error('[OPS] Falha ao carregar board:', e);
+    alert(typeof opsT === 'function' ? opsT('ops_load_failed') : 'Falha ao carregar o quadro.');
   }
 };
 
@@ -2090,28 +2236,46 @@ function populateEmailFilter(tasks) {
 }
 
 window.applyFilters = function() {
-  const emailFilter  = document.getElementById('filter-email').value.toLowerCase();
-  const searchFilter = document.getElementById('filter-search').value.toLowerCase();
-  const voiceFilter = String(document.getElementById('filter-voice-sync')?.value || '').toLowerCase();
+  try {
+    const emailEl = document.getElementById('filter-email');
+    const searchEl = document.getElementById('filter-search');
+    const emailFilter = (emailEl && emailEl.value ? emailEl.value : '').toLowerCase();
+    const searchFilter = (searchEl && searchEl.value ? searchEl.value : '').toLowerCase();
+    const voiceFilter = String(document.getElementById('filter-voice-sync')?.value || '').toLowerCase();
 
-  const filtered = allTasks.filter(t => {
-    const matchEmail  = !emailFilter  || (t.ownerEmail || '').toLowerCase() === emailFilter;
-    const matchSearch = !searchFilter || 
-      (t.id   || '').toLowerCase().includes(searchFilter) ||
-      (t.title|| '').toLowerCase().includes(searchFilter) ||
-      (t.ownerEmail||'').toLowerCase().includes(searchFilter) ||
-      (t.refId||'').toLowerCase().includes(searchFilter) ||
-      String(t.osNumber || '').toLowerCase().includes(searchFilter) ||
-      String(t.routineTaskNumber || '').toLowerCase().includes(searchFilter) ||
-      String(t.lastSubmittedRevision ?? '').includes(searchFilter);
-    const hasPendingVoice = taskHasPendingVoiceTranscription(t);
-    const matchVoice =
-      !voiceFilter ||
-      (voiceFilter === 'pending_voice' && hasPendingVoice);
-    return matchEmail && matchSearch && matchVoice;
-  });
+    const filtered = allTasks.filter(t => {
+      const matchEmail  = !emailFilter  || (t.ownerEmail || '').toLowerCase() === emailFilter;
+      const matchSearch = !searchFilter ||
+        (t.id   || '').toLowerCase().includes(searchFilter) ||
+        (t.title|| '').toLowerCase().includes(searchFilter) ||
+        (t.ownerEmail||'').toLowerCase().includes(searchFilter) ||
+        (t.refId||'').toLowerCase().includes(searchFilter) ||
+        String(t.osNumber || '').toLowerCase().includes(searchFilter) ||
+        String(t.routineTaskNumber || '').toLowerCase().includes(searchFilter) ||
+        String(t.lastSubmittedRevision ?? '').includes(searchFilter);
+      let hasPendingVoice = false;
+      try {
+        hasPendingVoice = taskHasPendingVoiceTranscription(t);
+      } catch (e) {
+        console.warn('[OPS] taskHasPendingVoiceTranscription', e);
+      }
+      const matchVoice =
+        !voiceFilter ||
+        (voiceFilter === 'pending_voice' && hasPendingVoice);
+      return matchEmail && matchSearch && matchVoice;
+    });
 
-  renderKanban(filtered);
+    renderKanban(filtered);
+    updateOpsBoardHintAfterFilter(filtered.length);
+  } catch (e) {
+    console.error('[OPS] applyFilters:', e);
+    try {
+      renderKanban(allTasks);
+      updateOpsBoardHintAfterFilter(allTasks.length);
+    } catch (e2) {
+      console.error('[OPS] applyFilters fallback', e2);
+    }
+  }
 };
 
 // ── Column Sorting and Filtering (estado: colState acima) ─────
@@ -7723,6 +7887,9 @@ window.openDispatchModal = async function() {
   document.getElementById('d-email').value = '';
   window._dispatchCandidateList = [];
   renderDispatchCandidateChips();
+  const dBroadcastExp = document.getElementById('d-broadcast-claim-expires');
+  if (dBroadcastExp) dBroadcastExp.value = '';
+  if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') window.syncDispatchBroadcastOfferExpiresUi();
   const dClient = document.getElementById('d-client-email');
   if (dClient) dClient.value = '';
   document.getElementById('d-title').value = '';
@@ -8397,11 +8564,14 @@ window.closeDispatchModal = () => {
   window._dispatchCandidateList = [];
   const chips = document.getElementById('d-dispatch-candidate-chips');
   if (chips) chips.innerHTML = '';
+  const dBroadcastExp = document.getElementById('d-broadcast-claim-expires');
+  if (dBroadcastExp) dBroadcastExp.value = '';
   document.getElementById('dispatch-modal').style.display = 'none';
 };
 
 window.confirmDispatch = async function() {
   try {
+  hideDispatchTechSuggestions();
   const tplEl = document.getElementById('d-template');
   const titleEl = document.getElementById('d-title');
   const descEl = document.getElementById('d-desc');
@@ -8411,6 +8581,12 @@ window.confirmDispatch = async function() {
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const candidateEmails = normalizeDispatchCandidateEmails();
+  // #region agent log
+  try {
+    const rawLen = Array.isArray(window._dispatchCandidateList) ? window._dispatchCandidateList.length : -1;
+    void fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e72ba8' }, body: JSON.stringify({ sessionId: 'e72ba8', hypothesisId: 'H2', location: 'operations.html:confirmDispatch', message: 'normalized emails', data: { candidateN: candidateEmails.length, chipListN: rawLen }, timestamp: Date.now() }) }).catch(function () {});
+  } catch (_d) {}
+  // #endregion
   if (candidateEmails.length === 0) {
     alert(typeof opsT === 'function' ? opsT('ops_dispatch_email_required') : 'Informe o e-mail do técnico.');
     return;
@@ -8549,11 +8725,29 @@ window.confirmDispatch = async function() {
     };
     if (candidateEmails.length >= 2) {
       dispatchBody.candidateEmails = candidateEmails;
+      const expEl = document.getElementById('d-broadcast-claim-expires');
+      const expRaw = expEl && String(expEl.value || '').trim();
+      if (expRaw) {
+        const dt = new Date(expRaw);
+        if (!Number.isNaN(dt.getTime())) {
+          dispatchBody.broadcastClaimExpiresAt = dt.toISOString();
+        }
+      }
     } else {
       dispatchBody.ownerEmail = candidateEmails[0];
     }
     if (expectedOverride != null) dispatchBody.expectedFormDurationMinutes = expectedOverride;
+    // #region agent log
+    try {
+      void fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e72ba8' }, body: JSON.stringify({ sessionId: 'e72ba8', hypothesisId: 'H3', location: 'operations.html:confirmDispatch', message: 'before CONFIG.post dispatch', data: { geoMode: window._geoMode || 'none', candN: dispatchBody.candidateEmails ? dispatchBody.candidateEmails.length : 0, hasOwner: !!dispatchBody.ownerEmail, keys: Object.keys(dispatchBody) }, timestamp: Date.now() }) }).catch(function () {});
+    } catch (_d) {}
+    // #endregion
     const res = await CONFIG.post('/checklists/dispatch', dispatchBody);
+    // #region agent log
+    try {
+      void fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e72ba8' }, body: JSON.stringify({ sessionId: 'e72ba8', hypothesisId: 'H5', location: 'operations.html:confirmDispatch', message: 'after CONFIG.post dispatch', data: { resNull: res == null, success: res && res.success, errSnippet: res && res.error ? String(res.error).slice(0, 120) : '' }, timestamp: Date.now() }) }).catch(function () {});
+    } catch (_d) {}
+    // #endregion
     if (res == null) {
       /* 401: CONFIG já redireciona para login */
       return;
@@ -8585,6 +8779,11 @@ window.confirmDispatch = async function() {
       );
     }
   } catch (e) {
+    // #region agent log
+    try {
+      void fetch('http://127.0.0.1:7247/ingest/2900a63a-2d40-4831-9026-3526ab938edc', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'e72ba8' }, body: JSON.stringify({ sessionId: 'e72ba8', hypothesisId: 'H5', location: 'operations.html:confirmDispatch:catch', message: 'confirmDispatch threw', data: { errName: e && e.name, errMsg: e && e.message ? String(e.message).slice(0, 200) : '' }, timestamp: Date.now() }) }).catch(function () {});
+    } catch (_d) {}
+    // #endregion
     console.error('[confirmDispatch]', e);
     alert(
       typeof opsT === 'function'

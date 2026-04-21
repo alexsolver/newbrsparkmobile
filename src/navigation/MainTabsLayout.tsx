@@ -37,6 +37,8 @@ import { pushWorkTimePunchOutbox } from '../services/workTimePunchOutbox';
 import { emitWorkTimeJourneyChanged, WORK_TIME_JOURNEY_CHANGED } from '../lib/workTimeJourneyEvents';
 import { CHAT_UNREAD_CHANGED_EVENT } from '../lib/chatUnreadEvents';
 import { userHasCapability } from '../services/auth';
+import { ProviderBroadcastOfferProvider } from '../context/ProviderBroadcastOfferContext';
+import { ProviderBroadcastOfferSheet } from '../components/ProviderBroadcastOfferSheet';
 
 /** Destaque do ícone de ponto no menu — jornada ativa (vermelho) / em intervalo (amarelo). */
 const WORK_TIME_TAB_RED = '#DC2626';
@@ -567,26 +569,27 @@ export function MainTabsLayout({ tabBarVariant }: { tabBarVariant: TabBarPersona
   }, [tabBarVariant]);
 
   return (
-    <Tabs
-      tabBar={(props) => (
-        <CustomTabBar {...props} chatUnreadTotal={unreadChat} tabBarVariant={tabBarVariant} />
-      )}
-      screenOptions={{
-        headerShown: false,
-        tabBarHideOnKeyboard: true,
-        tabBarStyle: {
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          elevation: 100,
-          zIndex: 100,
-          borderTopWidth: 0,
-          backgroundColor: 'transparent',
-          height: 0,
-        },
-      }}
-    >
+    <ProviderBroadcastOfferProvider>
+      <Tabs
+        tabBar={(props) => (
+          <CustomTabBar {...props} chatUnreadTotal={unreadChat} tabBarVariant={tabBarVariant} />
+        )}
+        screenOptions={{
+          headerShown: false,
+          tabBarHideOnKeyboard: true,
+          tabBarStyle: {
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            elevation: 100,
+            zIndex: 100,
+            borderTopWidth: 0,
+            backgroundColor: 'transparent',
+            height: 0,
+          },
+        }}
+      >
       <Tabs.Screen
         name="index"
         options={{
@@ -643,6 +646,8 @@ export function MainTabsLayout({ tabBarVariant }: { tabBarVariant: TabBarPersona
       <Tabs.Screen name="documents" options={{ href: null }} />
       <Tabs.Screen name="media" options={{ href: null }} />
     </Tabs>
+      <ProviderBroadcastOfferSheet />
+    </ProviderBroadcastOfferProvider>
   );
 }
 

@@ -1459,9 +1459,21 @@ function looksLikeHtmlMarkup(s: string): boolean {
   return /<\/?[a-z][a-z0-9]*\b/i.test(t) || /&#?\w+;/.test(t);
 }
 
+/** Texto «visível» para comparar HTML do modelo com valor plano vindo da API/rascunho (sem tags). */
+function leituraComparablePlain(html: string): string {
+  return String(html || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
  * HTML mostrado no bloco Leitura: valor em `responses` (ex.: regra «Definir valor»)
  * substitui o `contentHtml` estático do schema. Texto sem tags vira um `<p>` com entidades escapadas.
+ *
+ * Se a API gravar o mesmo texto sem marcação que o modelo tem em HTML rico (caso frequente em execuções
+ * sincronizadas), mantém o HTML do schema para cores/itálico/etc. no `react-native-render-html`.
  */
 function effectiveLeituraContentHtml(responseVal: unknown, schemaContentHtml?: string): string | undefined {
   const schemaRaw = schemaContentHtml != null ? String(schemaContentHtml) : '';
@@ -1477,6 +1489,16 @@ function effectiveLeituraContentHtml(responseVal: unknown, schemaContentHtml?: s
   }
 
   if (!/[<>]/.test(trimmed)) {
+    const plainFromSchema = leituraComparablePlain(schemaRaw);
+    const plainResponse = leituraComparablePlain(trimmed);
+    if (
+      schemaTrim &&
+      looksLikeHtmlMarkup(schemaTrim) &&
+      plainFromSchema.length > 0 &&
+      plainFromSchema === plainResponse
+    ) {
+      return schemaRaw;
+    }
     const escaped = trimmed
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -9303,7 +9325,12 @@ export default function ChecklistEngine() {
                   ) : null}
 
                   {field.type === 'leitura' ? (
-                    <LeituraBlock contentHtml={effectiveLeituraContentHtml(vv(field.id), field.contentHtml)} />
+                    <LeituraBlock
+                      contentHtml={effectiveLeituraContentHtml(
+                        vv(field.id),
+                        field.contentHtml ?? field.content_html
+                      )}
+                    />
                   ) : null}
 
                   {field.type === 'form_complete_button' && !isReadOnly ? (

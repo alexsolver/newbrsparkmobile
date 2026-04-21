@@ -428,6 +428,19 @@ function mapChecklistExecutionToSyncTask(ex) {
   const cs = ex.claimStatus != null ? String(ex.claimStatus).toUpperCase() : '';
   const broadcastClaimPending = am === 'BROADCAST' && cs === 'OPEN';
 
+  let broadcastClaimExpiresIso = null;
+  if (broadcastClaimPending && ex.broadcastClaimExpiresAt != null) {
+    const rawExp = ex.broadcastClaimExpiresAt;
+    const expD =
+      rawExp instanceof Date && !Number.isNaN(rawExp.getTime())
+        ? rawExp
+        : new Date(rawExp);
+    if (!Number.isNaN(expD.getTime())) {
+      broadcastClaimExpiresIso = expD.toISOString();
+      metaOut.broadcastClaimExpiresAt = broadcastClaimExpiresIso;
+    }
+  }
+
   return {
     id: ex.id,
     osNumber: ex.osNumber || null,
@@ -468,6 +481,8 @@ function mapChecklistExecutionToSyncTask(ex) {
     assignmentMode: ex.assignmentMode || 'DIRECT',
     claimStatus: ex.claimStatus ?? null,
     broadcastClaimPending,
+    /** Fim da janela para aceitar a oferta (UTC ISO 8601). Só relevante com broadcastClaimPending. */
+    broadcastClaimExpiresAt: broadcastClaimExpiresIso,
   };
 }
 

@@ -88,7 +88,8 @@ class RouteTrackingService {
   /** Projeção do ponto na polilinha: distância (m), arco desde o 1.º vértice (m), índice do segmento. */
   private projectToRoute(lat: number, lng: number): { distM: number; arcM: number; idx: number } {
     const poly = this.route;
-    if (!poly || poly.length < 2) return { distM: Infinity, arcM: 0, idx: 0 };
+    /** Sem polilinha de referência (ex.: OS só com ponto de destino) — não há «corredor»; distância 0 evita ROUTE_DEVIATION falso. */
+    if (!poly || poly.length < 2) return { distM: 0, arcM: 0, idx: 0 };
     let bestDist = Infinity;
     let bestArc = 0;
     let bestIdx = 0;

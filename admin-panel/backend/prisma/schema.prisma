@@ -1170,6 +1170,8 @@ model ChecklistExecution {
   assignmentMode String @default("DIRECT")
   /// Em leilão: OPEN → CLAIMED | CANCELLED | EXPIRED. Em DIRECT costuma ser null.
   claimStatus    String?
+  /// Instantâneo UTC em que a janela de «primeiro a aceitar» expira (app: contagem regressiva). Opcional no despacho / integrações.
+  broadcastClaimExpiresAt DateTime? @map("broadcast_claim_expires_at")
   /// Lista de e-mails (minúsculas) convidados ao leilão; só usada com BROADCAST+OPEN.
   broadcastCandidates Json?
   claimedByUserId String?

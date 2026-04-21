@@ -1309,6 +1309,19 @@ export default function LiveRouteMapCard({
     };
   }, [visible, expanded, myPos?.lat, myPos?.lng, isRouteCompleted, reduceMotionHero, techHeroPulse]);
 
+  /** Polilinha de despacho (rota/trecho/polígono); <2 vértices = modo ponto / sem corredor. */
+  const hasRoute = Array.isArray(route) && route.length >= 2;
+
+  const distanceToDestinationM = useMemo(() => {
+    if (hasRoute) return null;
+    if (!osrmDest) return null;
+    const lat = myPos?.lat ?? update?.currentLat;
+    const lng = myPos?.lng ?? update?.currentLng;
+    if (lat == null || lng == null) return null;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return Math.round(haversineM(lat, lng, osrmDest.lat, osrmDest.lng));
+  }, [hasRoute, osrmDest, myPos?.lat, myPos?.lng, update?.currentLat, update?.currentLng]);
+
   if (!visible) return null;
 
   const dimLandscape = windowDims.width > windowDims.height;
@@ -1323,7 +1336,7 @@ export default function LiveRouteMapCard({
       ? `transit-map-${Math.round(windowDims.width)}x${Math.round(windowDims.height)}`
       : 'transit-map-ios';
 
-  const isDeviation = update?.event === 'ROUTE_DEVIATION';
+  const isDeviation = hasRoute && update?.event === 'ROUTE_DEVIATION';
   const isComplete  = update?.event === 'ROUTE_COMPLETED';
   const pct         = update?.progressPercent ?? 0;
 
@@ -1843,15 +1856,15 @@ export default function LiveRouteMapCard({
     );
   }
 
-  const hasRoute = route && route.length >= 2;
-
   const transitHeaderLong =
     isComplete
       ? 'Deslocamento Concluído'
       : isPaused
         ? 'Navegação Pausada'
         : !hasRoute
-          ? 'Deslocamento em Andamento'
+          ? distanceToDestinationM != null
+            ? `Deslocamento · ~${distanceToDestinationM} m ao destino`
+            : 'Deslocamento em Andamento'
           : isDeviation
             ? `Aviso: ~${update?.distanceFromRoute ?? '—'} m fora do trajeto`
             : `Em Rota · ${pct}%${zoneType === 'route' && update?.patrolCoveragePercent != null ? ` · Patrulha ~${update.patrolCoveragePercent}%` : ''}`;
@@ -1861,7 +1874,9 @@ export default function LiveRouteMapCard({
     : isPaused
       ? 'Pausado'
       : !hasRoute
-        ? 'Em desloc.'
+        ? distanceToDestinationM != null
+          ? `~${distanceToDestinationM} m`
+          : 'Em desloc.'
         : isDeviation
           ? 'Aviso'
           : `${pct}%`;

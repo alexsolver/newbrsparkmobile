@@ -4,7 +4,7 @@ const { sendFieldTaskActivityPushToAssignee } = require('./fieldTaskAssigneePush
 const { resolveTenantAppDisplayName } = require('./mobileTenantBranding');
 
 /**
- * Avisa técnicos que não ganharam o leilão (OS já atribuída a outro).
+ * Avisa prestadores que não ganharam o leilão (OS já atribuída a outro).
  * @param {import('@prisma/client').PrismaClient} prisma
  */
 async function notifyBroadcastLosers(prisma, opts) {
@@ -30,8 +30,8 @@ async function notifyBroadcastLosers(prisma, opts) {
       templateTenantId,
       assigneeTenantId: null,
       executionId,
-      pushTitle: 'OS atribuída a outro técnico',
-      pushBody: `${osLabel}: outro prestador aceitou primeiro.`.slice(0, 180),
+      pushTitle: 'Essa OS não está mais disponível',
+      pushBody: `${osLabel}: a ordem já foi atribuída a outro prestador.`.slice(0, 180),
       pushSubtitle: 'A OS foi removida da sua lista pendente.',
       logLabel: 'BROADCAST_LOST',
       extraData: {

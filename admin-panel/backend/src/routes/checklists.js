@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const router = express.Router();
 const prisma = require('../db');
 const authUser = require('../middleware/authUser');
@@ -119,6 +120,42 @@ function execMetaRevisionVisitActive(m) {
 
 function execMetaInOpenRevisionVisit(m) {
     return execMetaReopenRevisionPending(m) || execMetaRevisionVisitActive(m);
+}
+
+/**
+ * Prazo de aceite da oferta (broadcast). Integrações: ISO 8601; epoch em segundos ou ms também aceites.
+ * @returns {{ ok: true, date: Date } | { ok: false, error: string }}
+ */
+function parseBroadcastClaimExpiresAtInput(raw) {
+    if (raw === undefined || raw === null) {
+        return { ok: true, date: null };
+    }
+    const s = String(raw).trim();
+    if (!s) {
+        return { ok: true, date: null };
+    }
+    let ms;
+    if (/^\d+$/.test(s)) {
+        const n = Number(s);
+        ms = n < 1e12 ? n * 1000 : n;
+    } else {
+        ms = Date.parse(s);
+    }
+    if (!Number.isFinite(ms)) {
+        return {
+            ok: false,
+            error: 'broadcastClaimExpiresAt inválido: use ISO 8601 (ex.: 2026-04-20T15:00:00.000Z) ou instante Unix em segundos ou milissegundos.',
+        };
+    }
+    const d = new Date(ms);
+    const skewMs = 60_000;
+    if (d.getTime() <= Date.now() - skewMs) {
+        return {
+            ok: false,
+            error: 'broadcastClaimExpiresAt deve ser após o momento atual (tolerância 1 min).',
+        };
+    }
+    return { ok: true, date: d };
 }
 
 // Imagens nas instruções rich-text do Form Builder (painel admin autenticado)
@@ -965,7 +1002,10 @@ router.post('/executions/:taskId/claim', authUser, async (req, res) => {
             if (upd.count !== 1) {
                 return {
                     err: 409,
-                    body: { error: 'Outro técnico já aceitou esta OS.', code: 'CLAIM_LOST' },
+                    body: {
+                      error: 'Essa OS não está mais disponível.',
+                      code: 'CLAIM_LOST',
+                    },
                 };
             }
             const after = await tx.checklistExecution.findUnique({ where: { id: taskId }, include: { template: true } });
@@ -1376,7 +1416,7 @@ router.post('/dispatch', async (req, res) => {
         }
 
         const scopedTenantId = loadedTemplate?.tenantId || null;
-        const resolvedList = [];
+        let resolvedList = [];
         if (multi) {
             for (const raw of payload.candidateEmails) {
                 const r = await resolveFieldTaskAssigneeEmail(
@@ -1394,6 +1434,36 @@ router.post('/dispatch', async (req, res) => {
             );
             if (r) resolvedList.push(r);
         }
+        {
+            const seenCanon = new Set();
+            resolvedList = resolvedList.filter((em) => {
+                const k = String(em || '').trim().toLowerCase();
+                if (!k || seenCanon.has(k)) return false;
+                seenCanon.add(k);
+                return true;
+            });
+        }
+        // #region agent log
+        try {
+            const dbgPath = path.join(__dirname, '..', '..', '..', '..', '.cursor', 'debug-e72ba8.log');
+            fsSync.appendFileSync(
+                dbgPath,
+                JSON.stringify({
+                    sessionId: 'e72ba8',
+                    hypothesisId: 'H4',
+                    location: 'checklists.js:POST /dispatch',
+                    message: 'after resolve/dedupe',
+                    data: {
+                        multi,
+                        candIn: multi ? payload.candidateEmails.length : 0,
+                        resolvedLen: resolvedList.length,
+                        willRejectBroadcast: !!(multi && resolvedList.length < 2),
+                    },
+                    timestamp: Date.now(),
+                }) + '\n',
+            );
+        } catch (_a) {}
+        // #endregion
         if (resolvedList.length === 0) {
             const scoped = scopedTenantId ? ' nesta organização' : '';
             return res.status(400).json({
@@ -1402,9 +1472,39 @@ router.post('/dispatch', async (req, res) => {
         }
 
         const isBroadcast = resolvedList.length >= 2;
-        if (multi && resolvedList.length < 2) {
+
+        let broadcastClaimExpiresAt = null;
+        if (isBroadcast && payload.broadcastClaimExpiresAt != null && String(payload.broadcastClaimExpiresAt).trim() !== '') {
+            const parsed = parseBroadcastClaimExpiresAtInput(payload.broadcastClaimExpiresAt);
+            if (!parsed.ok) {
+                return res.status(400).json({ error: parsed.error });
+            }
+            broadcastClaimExpiresAt = parsed.date;
+        } else if (!isBroadcast && payload.broadcastClaimExpiresAt != null && String(payload.broadcastClaimExpiresAt).trim() !== '') {
             return res.status(400).json({
-                error: 'Indique pelo menos dois técnicos válidos para o modo «primeiro a aceitar».',
+                error: 'broadcastClaimExpiresAt só se aplica ao modo «primeiro a aceitar» (dois ou mais técnicos). Omita o campo ou use candidateEmails com 2+ e-mails.',
+            });
+        }
+
+        if (multi && resolvedList.length < 2) {
+            // #region agent log
+            try {
+                const dbgPath = path.join(__dirname, '..', '..', '..', '..', '.cursor', 'debug-e72ba8.log');
+                fsSync.appendFileSync(
+                    dbgPath,
+                    JSON.stringify({
+                        sessionId: 'e72ba8',
+                        hypothesisId: 'H4',
+                        location: 'checklists.js:POST /dispatch',
+                        message: 'reject broadcast: resolved < 2',
+                        data: { resolvedLen: resolvedList.length },
+                        timestamp: Date.now(),
+                    }) + '\n',
+                );
+            } catch (_a) {}
+            // #endregion
+            return res.status(400).json({
+                error: 'Indique pelo menos dois técnicos distintos e elegíveis para o modo «primeiro a aceitar» (verifique duplicados ou e-mails fora da organização).',
             });
         }
 
@@ -1476,6 +1576,7 @@ router.post('/dispatch', async (req, res) => {
                 assignmentMode: isBroadcast ? 'BROADCAST' : 'DIRECT',
                 claimStatus: isBroadcast ? 'OPEN' : null,
                 broadcastCandidates: isBroadcast ? broadcastList : undefined,
+                broadcastClaimExpiresAt: broadcastClaimExpiresAt,
                 status: 'PENDING',
                 responses: null, // deliberately empty until tech fills it
                 scheduledStartAt: scheduledStart,
@@ -1548,6 +1649,22 @@ router.post('/dispatch', async (req, res) => {
             console.error('[DISPATCH] Falha ao enviar push:', pushErr.message);
         }
         
+        // #region agent log
+        try {
+            const dbgPath = path.join(__dirname, '..', '..', '..', '..', '.cursor', 'debug-e72ba8.log');
+            fsSync.appendFileSync(
+                dbgPath,
+                JSON.stringify({
+                    sessionId: 'e72ba8',
+                    hypothesisId: 'H4',
+                    location: 'checklists.js:POST /dispatch',
+                    message: 'dispatch ok',
+                    data: { executionId: execution.id, isBroadcast, resolvedLen: resolvedList.length },
+                    timestamp: Date.now(),
+                }) + '\n',
+            );
+        } catch (_a) {}
+        // #endregion
         res.json({ success: true, task: { id: execution.id, refId: payload.refId, osNumber: execution.osNumber } });
     } catch (err) {
         console.error("POST /api/checklists/dispatch error:", err);
