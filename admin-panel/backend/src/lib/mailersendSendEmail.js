@@ -83,11 +83,25 @@ async function sendEmailViaMailerSend(opts) {
       return { ok: true, skipped: false, status: res.status, data };
     }
 
-    const msg =
+    let msg =
       (data && (data.message || data.errors?.[0]?.message)) ||
       `HTTP ${res.status}: ${String(raw).slice(0, 240)}`;
+    msg = String(msg);
+    const rawScan = `${msg} ${String(raw || '')}`;
 
-    return { ok: false, skipped: false, error: String(msg), status: res.status, data };
+    const mailersendAuthHint =
+      'Token da API MailerSend inválido ou expirado. Gere um novo token em mailersend.com → API tokens e atualize Integrações → MailerSend (ou MAILERSEND_API_TOKEN no .env).';
+
+    if (
+      res.status === 401 ||
+      res.status === 403 ||
+      /bearer\s*token\s*invalid/i.test(rawScan) ||
+      /unauthori[sz]ed|invalid\s*token|unauthenticated/i.test(rawScan)
+    ) {
+      msg = mailersendAuthHint;
+    }
+
+    return { ok: false, skipped: false, error: msg, status: res.status, data };
   } catch (e) {
     return { ok: false, skipped: false, error: e.message || String(e) };
   }

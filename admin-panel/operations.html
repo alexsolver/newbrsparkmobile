@@ -2957,9 +2957,26 @@ function renderModalBody(t) {
   if (_currentTab === 'info') {
       body.innerHTML = buildInfoTab(t);
   } else if (_currentTab === 'report') {
+      /* Snapshot antes de buildReportTab: esse fluxo remove chaves órfãs de SAÍDA/CHEGADA
+       * (delete responses[orphanedMatchKey]) ao fundir com transit_start/transit_end vazios.
+       * O mapa Leaflet precisa do objeto original — senão fica «sem coordenadas» apesar do PDF ok. */
+      let taskForTransitMap = t;
+      if (t && t.responses && typeof t.responses === 'object' && !Array.isArray(t.responses)) {
+        try {
+          taskForTransitMap = Object.assign({}, t, {
+            responses: JSON.parse(JSON.stringify(t.responses)),
+          });
+        } catch (e) {
+          try {
+            if (typeof structuredClone === 'function') {
+              taskForTransitMap = Object.assign({}, t, { responses: structuredClone(t.responses) });
+            }
+          } catch (e2) {}
+        }
+      }
       body.innerHTML = buildReportTab(t);
       tryInitReportTransitMap(
-        t,
+        taskForTransitMap,
         'report-transit-map',
         (map) => {
           window._reportTransitMap = map;
@@ -7694,13 +7711,32 @@ function renderRevisionSnapshotBody() {
   }
 
   if (tab === 'form') {
+    let taskForTransitMap = fakeT;
+    if (
+      fakeT &&
+      fakeT.responses &&
+      typeof fakeT.responses === 'object' &&
+      !Array.isArray(fakeT.responses)
+    ) {
+      try {
+        taskForTransitMap = Object.assign({}, fakeT, {
+          responses: JSON.parse(JSON.stringify(fakeT.responses)),
+        });
+      } catch (e) {
+        try {
+          if (typeof structuredClone === 'function') {
+            taskForTransitMap = Object.assign({}, fakeT, { responses: structuredClone(fakeT.responses) });
+          }
+        } catch (e2) {}
+      }
+    }
     const html = buildReportTab(fakeT).replace(
       /id="report-transit-map"/g,
       'id="revision-snapshot-transit-map"'
     );
     body.innerHTML = html;
     tryInitReportTransitMap(
-      fakeT,
+      taskForTransitMap,
       'revision-snapshot-transit-map',
       (map) => {
         window._revisionSnapshotTransitMap = map;

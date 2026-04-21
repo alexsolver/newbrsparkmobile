@@ -108,10 +108,24 @@ async function sendEmailViaNylas(opts) {
       return { ok: true, skipped: false, status: res.status, data };
     }
 
-    const msg =
+    let msg =
       (data && (data.message || data.error?.message)) ||
       (typeof data === 'object' && data.request_id ? `HTTP ${res.status}` : null) ||
       `HTTP ${res.status}: ${String(raw).slice(0, 240)}`;
+    msg = String(msg);
+    const rawScan = `${msg} ${String(raw || '')}`;
+    const errType = data && data.error && typeof data.error === 'object' ? data.error.type : '';
+
+    const nylasAuthHint =
+      'API Key ou Grant da Nylas inválido ou revogado. Atualize em Integrações → Nylas (API Key + Grant ID) ou NYLAS_API_KEY / NYLAS_GRANT_ID no .env.';
+
+    if (
+      res.status === 401 ||
+      errType === 'token.unauthorized_access' ||
+      /bearer\s*token\s*invalid|invalid\s*credentials|unauthori[sz]ed/i.test(rawScan)
+    ) {
+      msg = nylasAuthHint;
+    }
 
     return { ok: false, skipped: false, error: msg, status: res.status, data };
   } catch (e) {

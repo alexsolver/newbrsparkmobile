@@ -67,7 +67,7 @@ export default function OtpIdentifierScreen() {
         },
       });
     } catch (e: any) {
-      Alert.alert(t('auth.errorConnection'), e?.message || '—');
+      Alert.alert(t('auth.errorOtpSendTitle'), e?.message || t('auth.errorConnection'));
     } finally {
       setLoad(false);
     }

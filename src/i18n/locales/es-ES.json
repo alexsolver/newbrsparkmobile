@@ -408,6 +408,7 @@
     "errorLogin": "Error al iniciar sesión",
     "errorRegister": "Error al crear cuenta",
     "errorConnection": "Verifique su conexión e inténtelo de nuevo.",
+    "errorOtpSendTitle": "No se pudo enviar el código",
     "resetPasswordTitle": "Recuperar contraseña",
     "resetPasswordDescription": "Ingrese su correo para recibir el enlace de restablecimiento de contraseña.",
     "resetPasswordEmailRequired": "Ingrese su correo para continuar.",

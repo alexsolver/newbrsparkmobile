@@ -408,6 +408,7 @@
     "errorLogin": "Sign in error",
     "errorRegister": "Account creation error",
     "errorConnection": "Check your connection and try again.",
+    "errorOtpSendTitle": "Could not send the code",
     "resetPasswordTitle": "Recover password",
     "resetPasswordDescription": "Enter your email to receive a password reset link.",
     "resetPasswordEmailRequired": "Enter your email to continue.",
