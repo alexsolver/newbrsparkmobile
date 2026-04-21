@@ -19,6 +19,7 @@ import { AppProvider } from '../src/context/AppContext';
 import { PersonaProvider, usePersona } from '../src/context/PersonaContext';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
+import { APP_INTRO_SEEN_KEY } from '../src/lib/appIntroPrefs';
 import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryBridge';
 import { pollStaleGpsReminders } from '../src/services/syncService';
 import { NotificationService, preparePushNotificationInfrastructure } from '../src/services/notifications';
@@ -71,10 +72,21 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inTechRegistration =
       segments[0] === 'auth' && (segments as string[])[1] === 'tech-registration';
     const inLogin = segments[0] === 'auth' && (segments as string[])[1] === 'login';
+    const inAppIntro = segments[0] === 'auth' && (segments as string[])[1] === 'app-intro';
     const inProviderCatalog = segments[0] === 'provider-services';
-    const isRoot       = !segments || !segments.length || !segments[0];
+    const seg0 = (segments as string[])[0];
+    /** `/` ou ecrã `index` — deixar `app/index` decidir intro vs login (não forçar login aqui). */
+    const atRootOrIndex =
+      !segments || segments.length === 0 || !seg0 || seg0 === 'index';
 
-    if (!user && !isRoot && !inAuthGroup && !inClient && !inProvider && !inProfile && !inProviderCatalog) {
+    /** Apresentação inicial antes de qualquer outro ecrã em `auth/` (exc. convite técnico e jornadas OTP). */
+    if (!user && inAuthGroup && !inAppIntro && !inOtpJourney && !inTechRegistration && !pendingTechRegInvite) {
+      void AsyncStorage.getItem(APP_INTRO_SEEN_KEY).then((v) => {
+        if (v !== '1') router.replace('/auth/app-intro' as any);
+      });
+    }
+
+    if (!user && !atRootOrIndex && !inAuthGroup && !inClient && !inProvider && !inProfile && !inProviderCatalog) {
       router.replace('/auth/login' as any);
       return;
     }

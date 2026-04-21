@@ -19,6 +19,7 @@ const LGPD_EXPORT_ALLOWLIST_EXACT = new Set([
   '@brspark_active_role',
   '@brspark_onboarding_done',
   '@brspark_onboarding_provider_done',
+  '@brspark_app_intro_seen',
   '@pref_push_enabled',
   '@pref_dark_mode',
   '@user_profile',

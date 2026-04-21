@@ -25,6 +25,7 @@ import { setLanguage, getDeviceRegion } from '../../src/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
 import { LoginOAuthNativeSection, type NativeOAuthPending } from '../../src/components/auth/LoginOAuthNativeSection';
+import { APP_INTRO_SEEN_KEY } from '../../src/lib/appIntroPrefs';
 
 const REGION_KEY = '@brspark_region';
 
@@ -280,11 +281,13 @@ function Field({ label, value, onChangeText, placeholder, icon, secure, toggle, 
 
 export default function LoginScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ techRegToken?: string }>();
+  const params = useLocalSearchParams<{ techRegToken?: string; register?: string }>();
   const techRegToken =
     typeof params.techRegToken === 'string' && params.techRegToken.trim()
       ? params.techRegToken.trim()
       : undefined;
+  /** Só mostra o formulário depois de confirmar que o intro inicial já foi visto (evita flash se a rota abrir em /login). */
+  const [introSplashDone, setIntroSplashDone] = useState(() => Boolean(techRegToken));
   const { login, loginWithOAuth, register, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
   const { t, i18n } = useTranslation();
   const { colors: C, appTagline, loginBackgroundUrl } = useTheme();
@@ -314,6 +317,30 @@ export default function LoginScreen() {
       cancel = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (techRegToken) {
+      setIntroSplashDone(true);
+      return;
+    }
+    let cancel = false;
+    void AsyncStorage.getItem(APP_INTRO_SEEN_KEY).then((v) => {
+      if (cancel) return;
+      if (v !== '1') {
+        router.replace('/auth/app-intro' as any);
+        return;
+      }
+      setIntroSplashDone(true);
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [techRegToken, router]);
+
+  useEffect(() => {
+    const r = params.register;
+    if (r === '1' || r === 'true') setMode('REGISTER');
+  }, [params.register]);
 
   // Compliance doc viewer
   const [docModal, setDocModal] = useState<{ title: string; content: string } | null>(null);
@@ -579,6 +606,14 @@ export default function LoginScreen() {
       setOtpLoading(false);
     }
   };
+
+  if (!introSplashDone) {
+    return (
+      <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]} edges={['top', 'bottom']}>
+        <ActivityIndicator size="large" color={C.accent} />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>

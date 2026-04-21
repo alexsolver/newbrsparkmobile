@@ -28,6 +28,7 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
 import { ThemedSwitch } from '../../src/components/ThemedSwitch';
 import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
+import { OnboardingIntroSlide } from '../../src/components/OnboardingIntroSlide';
 
 interface ConsentState {
   LOCATION_BACKGROUND: boolean;
@@ -36,8 +37,8 @@ interface ConsentState {
   DATA_RETENTION: boolean;
 }
 
-const SLIDES_TECH = ['WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
-const SLIDES_CLIENT = ['WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
+const SLIDES_TECH = ['INTRO', 'WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
+const SLIDES_CLIENT = ['INTRO', 'WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
 type SlideTech = typeof SLIDES_TECH[number];
 type SlideClient = typeof SLIDES_CLIENT[number];
 type Slide = SlideTech;
@@ -287,6 +288,9 @@ export default function OnboardingScreen() {
 
   const renderSlide = () => {
     switch (currentSlide) {
+      case 'INTRO':
+        return <OnboardingIntroSlide onContinue={goNext} showExistingAccountLink={false} />;
+
       case 'WELCOME':
         if (isTechnician) {
           return (
@@ -623,60 +627,68 @@ export default function OnboardingScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: C.background }]}>
-      <View style={s.progressBar}>
-        {slides.map((_, i) => (
-          <View
-            key={i}
-            style={[
-              s.dot,
-              i === slideIndex
-                ? { width: 20, borderRadius: 3, backgroundColor: C.accent }
-                : { backgroundColor: C.border },
-            ]}
-          />
-        ))}
-      </View>
+      {currentSlide !== 'INTRO' && (
+        <View style={s.progressBar}>
+          {slides.slice(1).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                s.dot,
+                i === slideIndex - 1
+                  ? { width: 20, borderRadius: 3, backgroundColor: C.accent }
+                  : { backgroundColor: C.border },
+              ]}
+            />
+          ))}
+        </View>
+      )}
 
       <Animated.View style={[s.slide, { opacity: fadeAnim }]}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
-          {renderSlide()}
-        </ScrollView>
+        {currentSlide === 'INTRO' ? (
+          renderSlide()
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+            {renderSlide()}
+          </ScrollView>
+        )}
       </Animated.View>
 
-      <View style={[s.navRow, { backgroundColor: C.cardWhite, borderTopColor: C.border }]}>
-        {slideIndex > 0 ? (
-          <TouchableOpacity style={[s.btnBack, { backgroundColor: C.surfaceLow }]} onPress={goBack}>
-            <Ionicons name="arrow-back" size={18} color={C.textSecondary} />
-            <Text style={[s.btnBackText, { color: C.textSecondary }]}>Voltar</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ flex: 1 }} />
-        )}
-
-        <TouchableOpacity
-          style={[
-            s.btnNext,
-            { backgroundColor: C.accent },
-            isLastSlide && { backgroundColor: C.connectivity.online },
-            (loading || retentionBlocked) && { opacity: 0.45 },
-          ]}
-          onPress={isLastSlide ? confirm : goNext}
-          disabled={loading || retentionBlocked}
-          accessibilityState={{ disabled: loading || retentionBlocked }}
-        >
-          {loading ? (
-            <ActivityIndicator color={C.cardWhite} />
+      {currentSlide !== 'INTRO' && (
+        <View style={[s.navRow, { backgroundColor: C.cardWhite, borderTopColor: C.border }]}>
+          {slideIndex > 0 ? (
+            <TouchableOpacity style={[s.btnBack, { backgroundColor: C.surfaceLow }]} onPress={goBack}>
+              <Ionicons name="arrow-back" size={18} color={C.textSecondary} />
+              <Text style={[s.btnBackText, { color: C.textSecondary }]}>Voltar</Text>
+            </TouchableOpacity>
           ) : (
-            <>
-              <Text style={[s.btnNextText, { color: C.cardWhite }]}>
-                {isLastSlide ? t('consentFlow.confirmEnter') : t('consentFlow.continue')}
-              </Text>
-              {!isLastSlide && <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />}
-              {isLastSlide && <Ionicons name="checkmark" size={18} color={C.cardWhite} />}
-            </>
+            <View style={{ flex: 1 }} />
           )}
-        </TouchableOpacity>
-      </View>
+
+          <TouchableOpacity
+            style={[
+              s.btnNext,
+              { backgroundColor: C.accent },
+              isLastSlide && { backgroundColor: C.connectivity.online },
+              (loading || retentionBlocked) && { opacity: 0.45 },
+            ]}
+            onPress={isLastSlide ? confirm : goNext}
+            disabled={loading || retentionBlocked}
+            accessibilityState={{ disabled: loading || retentionBlocked }}
+          >
+            {loading ? (
+              <ActivityIndicator color={C.cardWhite} />
+            ) : (
+              <>
+                <Text style={[s.btnNextText, { color: C.cardWhite }]}>
+                  {isLastSlide ? t('consentFlow.confirmEnter') : t('consentFlow.continue')}
+                </Text>
+                {!isLastSlide && <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />}
+                {isLastSlide && <Ionicons name="checkmark" size={18} color={C.cardWhite} />}
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
