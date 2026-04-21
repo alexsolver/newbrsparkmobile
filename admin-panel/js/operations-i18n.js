@@ -105,8 +105,12 @@ const M = {
       '<ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> Agenda (bloco horário)',
     ops_dispatch_section_geo_html:
       '<ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Local de serviço (cerca eletrônica)',
-    ops_dispatch_email_lbl: 'E-mail do técnico *',
+    ops_dispatch_email_lbl: 'Técnico(s) — e-mail *',
     ops_dispatch_email_ph: 'Nome ou e-mail, sugestões ao digitar',
+    ops_dispatch_email_required: 'Indique pelo menos um e-mail de técnico (adicione à lista ou preencha o campo).',
+    ops_dispatch_email_invalid: 'Formato de e-mail inválido. Use «nome@domínio.com».',
+    ops_dispatch_broadcast_hint: '2 ou mais na lista = modo «primeiro a aceitar» (leilão).',
+    ops_dispatch_add_candidate_btn: 'Adicionar candidato',
     ops_dispatch_suggest_aria: 'Técnicos sugeridos',
     ops_dispatch_client_email_lbl: 'E-mail do cliente',
     ops_dispatch_client_email_ph: 'Opcional — contacto do cliente final',
@@ -286,8 +290,12 @@ const M = {
       '<ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> Schedule (time block)',
     ops_dispatch_section_geo_html:
       '<ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Service location (geofence)',
-    ops_dispatch_email_lbl: 'Technician email *',
+    ops_dispatch_email_lbl: 'Technician(s) — email *',
     ops_dispatch_email_ph: 'Name or email, suggestions as you type',
+    ops_dispatch_email_required: 'Enter at least one technician email (add to the list or fill the field).',
+    ops_dispatch_email_invalid: 'Invalid email format. Use name@domain.com.',
+    ops_dispatch_broadcast_hint: 'Two or more in the list = «first to accept» (broadcast) mode.',
+    ops_dispatch_add_candidate_btn: 'Add candidate',
     ops_dispatch_suggest_aria: 'Suggested technicians',
     ops_dispatch_client_email_lbl: 'Client email',
     ops_dispatch_client_email_ph: 'Optional — end customer contact',
@@ -623,6 +631,9 @@ export function applyOperationsModalsStaticI18n() {
   if (dEmail) dEmail.setAttribute('placeholder', opsT('ops_dispatch_email_ph'));
   const sug = document.getElementById('d-email-suggestions');
   if (sug) sug.setAttribute('aria-label', opsT('ops_dispatch_suggest_aria'));
+  setHtml('d-dispatch-broadcast-hint', 'ops_dispatch_broadcast_hint');
+  const addCandLbl = document.getElementById('d-dispatch-add-candidate-lbl');
+  if (addCandLbl) addCandLbl.textContent = opsT('ops_dispatch_add_candidate_btn');
 
   setLabelFor('d-client-email', 'ops_dispatch_client_email_lbl');
   const dClientEmail = document.getElementById('d-client-email');

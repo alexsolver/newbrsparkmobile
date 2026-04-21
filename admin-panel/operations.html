@@ -1163,7 +1163,7 @@
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeDispatchModal()">Cancelar</button>
-      <button type="button" class="btn btn-primary btn-sm" onclick="window.confirmDispatch()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar OS</button>
+      <button type="button" class="btn btn-primary btn-sm" id="ops-dispatch-submit"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar OS</button>
     </div>
   </div>
 </div>
@@ -1533,6 +1533,7 @@ function normalizeDispatchCandidateEmails() {
   }
   return list.map(function (e) { return String(e).trim(); }).filter(Boolean);
 }
+window.normalizeDispatchCandidateEmails = normalizeDispatchCandidateEmails;
 
 window.addDispatchCandidateFromInput = function () {
   const input = document.getElementById('d-email');
@@ -1634,6 +1635,34 @@ function initDispatchTechAutocomplete() {
     const email = li.getAttribute('data-email');
     if (email) window.selectDispatchTechEmail(email);
   });
+}
+
+/** Clique em «Enviar OS»: addEventListener + Promise evita cliques ignorados com handlers async. */
+function initDispatchSubmitButton() {
+  const btn = document.getElementById('ops-dispatch-submit');
+  if (!btn || btn.dataset.opsDispatchSubmitBound) return;
+  btn.dataset.opsDispatchSubmitBound = '1';
+  btn.addEventListener(
+    'click',
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const fn = window.confirmDispatch;
+      if (typeof fn !== 'function') {
+        alert('Erro: o despacho não foi carregado. Recarregue a página (F5).');
+        console.error('[ops-dispatch-submit] window.confirmDispatch is', typeof fn);
+        return;
+      }
+      Promise.resolve(fn()).catch((err) => {
+        console.error('[confirmDispatch]', err);
+        const msg = err && err.message ? err.message : String(err);
+        alert(
+          typeof opsT === 'function' ? opsT('ops_dispatch_fail_network', { detail: msg }) : msg,
+        );
+      });
+    },
+    true,
+  );
 }
 
 window.toggleReopenRevisionTechUi = function () {
@@ -8372,9 +8401,13 @@ window.closeDispatchModal = () => {
 };
 
 window.confirmDispatch = async function() {
-  const refId    = document.getElementById('d-template').value;
-  const title    = document.getElementById('d-title').value.trim();
-  const desc     = document.getElementById('d-desc').value.trim();
+  try {
+  const tplEl = document.getElementById('d-template');
+  const titleEl = document.getElementById('d-title');
+  const descEl = document.getElementById('d-desc');
+  const refId = tplEl && tplEl.value ? String(tplEl.value).trim() : '';
+  const title = titleEl && titleEl.value ? String(titleEl.value).trim() : '';
+  const desc = descEl && descEl.value ? String(descEl.value).trim() : '';
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const candidateEmails = normalizeDispatchCandidateEmails();
@@ -8424,10 +8457,10 @@ window.confirmDispatch = async function() {
 
   if (geoMode === 'radius') {
     // <ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> PONTO
-    const lat = parseFloat(document.getElementById('d-lat').value);
-    const lng = parseFloat(document.getElementById('d-lng').value);
-    const radius = parseInt(document.getElementById('d-radius').value) || 200;
-    const address = document.getElementById('d-address').value.trim();
+    const lat = parseFloat(String(document.getElementById('d-lat')?.value ?? ''));
+    const lng = parseFloat(String(document.getElementById('d-lng')?.value ?? ''));
+    const radius = parseInt(String(document.getElementById('d-radius')?.value ?? ''), 10) || 200;
+    const address = (document.getElementById('d-address')?.value || '').trim();
     if (!isNaN(lat) && !isNaN(lng)) {
       navigationDestination = { kind: 'point', lat: lat, lng: lng, address: address || null };
       locationPayload = {
@@ -8502,7 +8535,6 @@ window.confirmDispatch = async function() {
     }
   }
 
-  try {
     const dispatchBody = {
       refId,
       title: title || 'Nova OS Designada',
@@ -8527,8 +8559,8 @@ window.confirmDispatch = async function() {
       return;
     }
     if (res.success) {
-      closeDispatchModal();
-      loadBoard();
+      window.closeDispatchModal();
+      void window.loadBoard();
       let modeDesc = opsT('ops_dispatch_geo_val_none');
       if (locationPayload.locationZoneType === 'radius') {
         modeDesc = opsT('ops_dispatch_geo_val_point', { radius: String(locationPayload.locationRadius ?? '') });
@@ -8553,11 +8585,13 @@ window.confirmDispatch = async function() {
       );
     }
   } catch (e) {
-    console.error(e);
+    console.error('[confirmDispatch]', e);
     alert(
-      opsT('ops_dispatch_fail_network', {
-        detail: e && e.message ? e.message : opsT('ops_dispatch_fail_retry'),
-      }),
+      typeof opsT === 'function'
+        ? opsT('ops_dispatch_fail_network', {
+            detail: e && e.message ? e.message : opsT('ops_dispatch_fail_retry'),
+          })
+        : String(e && e.message ? e.message : e),
     );
   }
 };
@@ -8596,11 +8630,12 @@ async function maybeOpenExecutionFromQuery() {
 
 // ── Auto-refresh (30s) ─────────────────────────────────────────
 initDispatchTechAutocomplete();
+initDispatchSubmitButton();
 void (async () => {
   await window.loadBoard();
   await maybeOpenExecutionFromQuery();
 })();
-refreshInterval = setInterval(loadBoard, 30000);
+refreshInterval = setInterval(() => void window.loadBoard(), 30000);
 window.addEventListener('beforeunload', () => clearInterval(refreshInterval));
 </script>
 </body>
