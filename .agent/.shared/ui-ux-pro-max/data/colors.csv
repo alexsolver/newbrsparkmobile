@@ -93,5 +93,5 @@ No,Product Type,Keywords,Primary (Hex),Secondary (Hex),CTA (Hex),Background (Hex
 92,Biohacking / Longevity,"bio, health, science",#FF4D4D,#4D94FF,#00E676,#F5F5F7,#1C1C1E,#E5E5EA,Biological red/blue + Clinical white
 93,Autonomous Systems,"drone, robot, fleet",#00FF41,#008F11,#FF3333,#0D1117,#E6EDF3,#30363D,Terminal Green + Tactical Dark
 94,Generative AI Art,"art, gen-ai, creative",#111111,#333333,#FFFFFF,#FAFAFA,#000000,#E5E5E5,Canvas Neutral + High Contrast
-95,Spatial / Vision OS,"spatial, glass, vision",#FFFFFF,#E5E5E5,#007AFF,#888888,#000000,#FFFFFF,Glass opacity 20% + System Blue
+95,Spatial / Vision OS,"spatial, glass, vision",#FFFFFF,#E5E5E5,#007AFF,#888888,#000000,#C7C7CC,Glass opacity 20% + System Blue; Border ≠ Primary (separator visible on white/light glass)
 96,Climate Tech,"climate, green, energy",#2E8B57,#87CEEB,#FFD700,#F0FFF4,#1A3320,#C6E6C6,Nature Green + Solar Yellow + Air Blue

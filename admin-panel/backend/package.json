@@ -6,7 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "postinstall": "prisma generate",
-    "dev": "nodemon src/index.js",
+    "dev": "bash scripts/dev-with-tunnel.sh",
+    "dev:without-auto-tunnel": "node scripts/checkLocalDbReachable.js && nodemon src/index.js",
     "start": "node src/index.js",
     "db:migrate": "bash scripts/db-migrate.sh",
     "db:backup": "bash scripts/backup.sh manual",

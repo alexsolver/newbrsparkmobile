@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Deploy produção: API (admin-panel)",
+      "type": "shell",
+      "command": "export BRSPARK_SSH_KEY=\"${env:HOME}/Downloads/alex.pem\" && ./scripts/deploy-production.sh api",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "group": "none"
+    },
+    {
+      "label": "Deploy produção: Laravel (BrsparkWeb)",
+      "type": "shell",
+      "command": "export BRSPARK_SSH_KEY=\"${env:HOME}/Downloads/alex.pem\" && ./scripts/deploy-production.sh web",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "group": "none"
+    },
+    {
+      "label": "Deploy produção: API + Laravel",
+      "type": "shell",
+      "command": "export BRSPARK_SSH_KEY=\"${env:HOME}/Downloads/alex.pem\" && ./scripts/deploy-production.sh all",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "group": { "kind": "build", "isDefault": false }
+    }
+  ]
+}

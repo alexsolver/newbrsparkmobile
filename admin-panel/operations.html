@@ -4770,7 +4770,7 @@ function buildInfoTab(t) {
     t._viewingRevision != null && Number.isFinite(Number(t._viewingRevision))
       ? `<div style="grid-column:1/-1;padding:10px 12px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;margin-bottom:10px;font-size:12px;line-height:1.45;color:#312e81">
           A visualizar o <strong>snapshot</strong> da <strong>submissão n.º ${Number(t._viewingRevision)}</strong>.
-          Relatório e JSON abaixo reflectem esse envio; dados de execução (técnico, FT, estado) são os actuais no servidor.
+          Relatório e JSON abaixo refletem esse envio; dados de execução (técnico, FT, estado) são os atuais no servidor.
         </div>`
       : '';
 
@@ -5768,7 +5768,7 @@ function openRevisionPickerModal(id, revs, t) {
     const s2 = document.createElement('span');
     s2.style.cssText = 'color:var(--text3);font-size:12px';
     s2.textContent =
-      'Respostas e metadata actuais da execução no servidor (rascunho, em curso ou última sincronização).';
+      'Respostas e metadados atuais da execução no servidor (rascunho, em andamento ou última sincronização).';
     span.append(s1, br, s2);
     lab.append(inp, span);
     wrap.appendChild(lab);
