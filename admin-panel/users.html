@@ -267,7 +267,7 @@
           </select>
         </div>
       </div>
-      <div class="form-group"><label class="form-label" id="ul-new-lbl-pwd">Senha Temporária *</label><input class="form-control" id="new-password" type="password" placeholder="mínimo 6 caracteres" /></div>
+      <div class="form-group"><label class="form-label" id="ul-new-lbl-pwd">Senha Temporária *</label><input class="form-control" id="new-password" type="password" placeholder="Mín. 8 caracteres, maiúscula, minúscula e número" /></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" data-ul-cancel onclick="closeModal('new-user-modal')">Cancelar</button>
@@ -282,7 +282,7 @@
     <div class="modal-header"><span class="modal-title" id="reset-pwd-modal-title">Resetar Senha</span><button class="modal-close" onclick="closeModal('reset-pwd-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
     <div class="modal-body">
       <input type="hidden" id="reset-user-id" />
-      <div class="form-group"><label class="form-label" id="ul-reset-pwd-lbl">Nova Senha *</label><input class="form-control" id="reset-password" type="password" placeholder="mínimo 6 caracteres" /></div>
+      <div class="form-group"><label class="form-label" id="ul-reset-pwd-lbl">Nova Senha *</label><input class="form-control" id="reset-password" type="password" placeholder="Mín. 8 caracteres, maiúscula, minúscula e número" /></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" data-ul-cancel onclick="closeModal('reset-pwd-modal')">Cancelar</button>
@@ -350,6 +350,12 @@
     /* ignore */
   }
   applyUsersListPageI18n();
+  /** Alinhado com `register-onboarding` / `appPasswordPolicy.js`. */
+  function appPasswordPolicyError(pwd) {
+    const s = String(pwd || '');
+    if (s.length < 8 || !/[A-Z]/.test(s) || !/[a-z]/.test(s) || !/[0-9]/.test(s)) return t('ul_pwdMin');
+    return '';
+  }
   const tenantFilterField = document.getElementById('filter-tenant')?.closest('.filter-field');
   if (tenantFilterField) tenantFilterField.hidden = !isPlatformAdmin;
   const newUserBtn = document.querySelector('.data-toolbar-actions .btn.btn-primary');
@@ -1565,7 +1571,8 @@
   document.getElementById('confirm-reset-btn').addEventListener('click', async () => {
     const id  = document.getElementById('reset-user-id').value;
     const pwd = document.getElementById('reset-password').value;
-    if (!pwd || pwd.length < 6) return alert(t('ul_pwdMin'));
+    const pwdErr = appPasswordPolicyError(pwd);
+    if (pwdErr) return alert(pwdErr);
     const res = await CONFIG.patch(`/users/${id}/reset-password`, { newPassword: pwd });
     if (res?.ok !== false) { alert(t('ul_pwdOk')); closeModal('reset-pwd-modal'); }
     else alert(`${t('ul_pwdErr')} ${res?.error || ''}`);
@@ -1578,7 +1585,8 @@
     const tenantId = document.getElementById('reset-email-tenant')?.value || '';
     const pwd = document.getElementById('reset-email-password')?.value || '';
     if (!email) return alert(t('ul_resetEmailNeedEmail'));
-    if (!pwd || pwd.length < 6) return alert(t('ul_pwdMin'));
+    const pwdErrEmail = appPasswordPolicyError(pwd);
+    if (pwdErrEmail) return alert(pwdErrEmail);
     const body = { email, newPassword: pwd };
     if (tenantId) body.tenantId = tenantId;
     const res = await CONFIG.patch('/users/reset-password-by-email', body);
@@ -1601,6 +1609,8 @@
       employeeMatricula: (document.getElementById('new-employee-matricula')?.value || '').trim() || undefined,
     };
     if (!body.name || !body.email || !body.password || !body.tenantId) return alert(t('ul_createFill'));
+    const pwdErrCreate = appPasswordPolicyError(body.password);
+    if (pwdErrCreate) return alert(pwdErrCreate);
     const res = await CONFIG.post('/users', body);
     if (res?.id) {
       closeModal('new-user-modal');

@@ -32,6 +32,7 @@ import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
 import { setLanguage, getDeviceRegion } from '../src/i18n';
 import { clearLocalDatabase } from '../src/database';
+import { passwordChecks } from '../src/lib/appPasswordPolicy';
 import {
   getChecklistOutboxConflicts,
   requeueChecklistOutboxConflicts,
@@ -540,7 +541,18 @@ export default function ProfileScreen() {
 
   const handleChangePassword = async () => {
     if (!oldPwd || !newPwd) return Alert.alert(t('common.attention'), "Preencha todos os campos.");
-    if (newPwd.length < 6) return Alert.alert(t('common.attention'), "A nova senha deve ter pelo menos 6 caracteres.");
+    const pc = passwordChecks(newPwd);
+    if (!pc.len || !pc.upper || !pc.lower || !pc.num) {
+      const parts: string[] = [];
+      if (!pc.len) parts.push(t('auth.registerFlow.reqMin8'));
+      if (!pc.upper) parts.push(t('auth.registerFlow.reqUpper'));
+      if (!pc.lower) parts.push(t('auth.registerFlow.reqLower'));
+      if (!pc.num) parts.push(t('auth.registerFlow.reqNumber'));
+      return Alert.alert(
+        t('common.attention'),
+        `${t('auth.registerFlow.securityRequirements')}:\n${parts.join('\n')}`,
+      );
+    }
 
     setChangingPwd(true);
     try {

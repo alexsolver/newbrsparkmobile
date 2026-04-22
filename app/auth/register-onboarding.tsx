@@ -25,6 +25,7 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
 import { FlagIsoImage } from '../../src/components/FlagIsoImage';
 import { AuthService, API_BASE } from '../../src/services/auth';
+import { passwordChecks } from '../../src/lib/appPasswordPolicy';
 import { setLanguage, getDeviceRegion } from '../../src/i18n';
 import { useAuth } from '../../src/hooks/useAuth';
 import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
@@ -300,15 +301,6 @@ function createRegisterStyles(C: ColorPalette) {
     },
     dialRowActive: { backgroundColor: C.status.info.bg },
   });
-}
-
-function passwordChecks(p: string) {
-  return {
-    len: p.length >= 8,
-    upper: /[A-Z]/.test(p),
-    lower: /[a-z]/.test(p),
-    num: /[0-9]/.test(p),
-  };
 }
 
 export default function RegisterOnboardingScreen() {

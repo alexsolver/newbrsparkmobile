@@ -25,6 +25,8 @@ const {
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
 const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
 const { resolveAppDefaultTenantId } = require('../lib/appDefaultTenant');
+const { validateAppPasswordPolicy } = require('../lib/appPasswordPolicy');
+const { assertEmailFreeAcrossAllTenants } = require('../lib/appRegistrationEmailGuard');
 
 function buildSafeTenantForApp(tenant) {
   if (!tenant) return null;
@@ -209,8 +211,8 @@ router.post('/register', async (req, res) => {
     const { name, email, password, phone, deviceId } = req.body;
     if (!name || !email || !password)
       return res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios.' });
-    if (password.length < 6)
-      return res.status(400).json({ error: 'Senha deve ter ao menos 6 caracteres.' });
+    const pwReg = validateAppPasswordPolicy(password);
+    if (!pwReg.ok) return res.status(400).json({ error: pwReg.error });
 
     const emailNorm = String(email).trim().toLowerCase();
     const hash = await bcrypt.hash(password, 10);
@@ -233,11 +235,9 @@ router.post('/register', async (req, res) => {
       return res.status(403).json({ error: 'Novos registros estão temporariamente indisponíveis.' });
     }
 
-    const existingUser = await prisma.user.findUnique({
-      where: { email_tenantId: { email: emailNorm, tenantId: defaultTenantId } },
-    });
-    if (existingUser) {
-      return res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+    const emailTaken = await assertEmailFreeAcrossAllTenants(prisma, emailNorm);
+    if (emailTaken) {
+      return res.status(409).json({ error: emailTaken, code: 'EMAIL_IN_USE' });
     }
 
     const seat = await assertTechnicianSeatForNewUser(prisma, defaultTenantId, 'USER');
@@ -677,8 +677,9 @@ router.post('/password-reset/confirm', async (req, res) => {
     if (!token) {
       return res.status(400).json({ error: 'Token de redefinição é obrigatório.' });
     }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+    const pwReset = validateAppPasswordPolicy(newPassword);
+    if (!pwReset.ok) {
+      return res.status(400).json({ error: pwReset.error });
     }
 
     const jwtSecret = String(process.env.JWT_SECRET || '').trim();

@@ -9,6 +9,12 @@ const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('./brsparkSyncWebhoo
 const OTP_REG_SETUP_PURPOSE = 'OTP_REG_SETUP_V1';
 const OTP_REG_SETUP_TTL = process.env.OTP_REG_SETUP_TTL || '20m';
 
+const { validateAppPasswordPolicy } = require('./appPasswordPolicy');
+const {
+  assertEmailFreeAcrossAllTenants,
+  assertNoActiveSameEmailOutsideDefaultTenant,
+} = require('./appRegistrationEmailGuard');
+
 const CHALLENGE_TTL_MS = Number(process.env.OTP_TTL_MINUTES || 10) * 60 * 1000;
 const RATE_MAX_START = Math.max(1, Math.min(20, Number(process.env.OTP_RATE_MAX_START || 3)));
 const RATE_WINDOW_MS = Number(process.env.OTP_RATE_WINDOW_MIN || 15) * 60 * 1000;
@@ -281,7 +287,15 @@ async function startChallenge(prisma, { identifier, channelPref, purpose, nameIf
           emailNorm,
           phoneE164: phoneParsed.e164,
         });
-        /** E-mail duplicado activo: não bloqueamos aqui — o OTP comprova posse; em `verifyRegisterOtpPhase1` libertamos a linha. */
+        const emailElsewhere = await assertNoActiveSameEmailOutsideDefaultTenant(prisma, emailNorm, tid);
+        if (emailElsewhere) {
+          return {
+            ok: false,
+            code: 'EMAIL_IN_USE',
+            error: emailElsewhere,
+            status: 409,
+          };
+        }
         const existingPhone = await prisma.user.findFirst({
           where: { tenantId: tid, phone: phoneParsed.e164, isActive: true },
         });
@@ -425,6 +439,10 @@ async function verifyChallenge(
     const seat = await assertTechnicianSeatForNewUser(prisma, defaultTenantId, 'USER');
     if (!seat.ok) {
       return { ok: false, error: seat.error, code: seat.code, status: 403 };
+    }
+    const emailDupOtp = await assertEmailFreeAcrossAllTenants(prisma, displayEmail);
+    if (emailDupOtp) {
+      return { ok: false, code: 'EMAIL_IN_USE', error: emailDupOtp, status: 409 };
     }
     const name =
       (nameFromMeta && String(nameFromMeta).trim()) || (isEmail ? displayEmail.split('@')[0] : 'Prestador');
@@ -570,6 +588,15 @@ async function verifyRegisterOtpPhase1(prisma, { resolveAppDefaultTenantId }, { 
     emailNorm: displayEmail,
   });
 
+  const emailTakenPhase1 = await assertNoActiveSameEmailOutsideDefaultTenant(
+    prisma,
+    displayEmail,
+    defaultTenantId,
+  );
+  if (emailTakenPhase1) {
+    return { ok: false, code: 'EMAIL_IN_USE', error: emailTakenPhase1, status: 409 };
+  }
+
   const existingPhone = await prisma.user.findFirst({
     where: { tenantId: defaultTenantId, phone: phoneE164, isActive: true },
   });
@@ -620,8 +647,9 @@ async function completeRegisterFromSetupToken(
     return { ok: false, error: 'Você deve aceitar os Termos de Uso e a Política de Privacidade.', status: 400 };
   }
   const rawPass = String(password || '');
-  if (rawPass.length < 6) {
-    return { ok: false, error: 'Senha deve ter ao menos 6 caracteres.', status: 400 };
+  const pwReg = validateAppPasswordPolicy(rawPass);
+  if (!pwReg.ok) {
+    return { ok: false, error: pwReg.error, status: 400 };
   }
 
   const jwtSecret = String(process.env.JWT_SECRET || '').trim();
@@ -671,15 +699,13 @@ async function completeRegisterFromSetupToken(
     emailNorm: displayEmail,
   });
 
-  const existingUser = await prisma.user.findFirst({
-    where: {
-      tenantId: defaultTenantId,
-      isActive: true,
-      email: { equals: displayEmail, mode: 'insensitive' },
-    },
-  });
-  if (existingUser) {
-    return { ok: false, error: 'Este e-mail já está cadastrado.', status: 409 };
+  const emailTakenComplete = await assertNoActiveSameEmailOutsideDefaultTenant(
+    prisma,
+    displayEmail,
+    defaultTenantId,
+  );
+  if (emailTakenComplete) {
+    return { ok: false, code: 'EMAIL_IN_USE', error: emailTakenComplete, status: 409 };
   }
 
   const existingByPhone = await prisma.user.findFirst({

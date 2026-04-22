@@ -20,6 +20,7 @@ const {
   resolveScopedTenantId,
 } = require('../lib/authorization');
 const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverage');
+const { validateAppPasswordPolicy } = require('../lib/appPasswordPolicy');
 
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
@@ -285,6 +286,8 @@ router.post('/', async (req, res) => {
     const { name, email, password, tenantId, role: bodyRole = 'USER', employeeMatricula: rawMatricula } = req.body;
     const scopedTenantId = scopedTenantIdFromReq(req, tenantId);
     if (!name || !email || !password || !scopedTenantId) return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
+    const pwCreate = validateAppPasswordPolicy(password);
+    if (!pwCreate.ok) return res.status(400).json({ error: pwCreate.error });
     const role = String(bodyRole).toUpperCase();
     if (!USER_ROLES.has(role)) return res.status(400).json({ error: 'Papel inválido.' });
     if (!isPlatformAdmin(req.authorization) && role === 'SAAS_ADMIN') {
@@ -402,8 +405,9 @@ router.patch('/reset-password-by-email', async (req, res) => {
     if (!email || !newPassword) {
       return res.status(400).json({ error: 'E-mail e nova senha são obrigatórios.' });
     }
-    if (String(newPassword).length < 6) {
-      return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
+    const pwByEmail = validateAppPasswordPolicy(newPassword);
+    if (!pwByEmail.ok) {
+      return res.status(400).json({ error: pwByEmail.error });
     }
     const em = String(email).toLowerCase().trim();
     const tid = scopedTenantIdFromReq(req, tenantId);
@@ -466,6 +470,8 @@ router.patch('/:id/reset-password', async (req, res) => {
   try {
     const { newPassword } = req.body;
     if (!newPassword) return res.status(400).json({ error: 'Nova senha ausente.' });
+    const pwId = validateAppPasswordPolicy(newPassword);
+    if (!pwId.ok) return res.status(400).json({ error: pwId.error });
     const existing = await findScopedUserOrNull(req, req.params.id);
     if (!existing) return res.status(404).json({ error: 'Usuário não encontrado.' });
     const hash = await bcrypt.hash(newPassword, 10);
