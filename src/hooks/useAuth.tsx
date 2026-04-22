@@ -361,6 +361,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const deleteAccount = async () => {
     await AuthService.deleteAccount();
     setUser(null);
+    _setUserRole('CLIENT');
+    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
     resetAppIntroGuestSession();
   };
 

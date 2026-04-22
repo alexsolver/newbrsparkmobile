@@ -7,7 +7,7 @@
  * Uso:
  *   cd admin-panel/backend && node scripts/sendEvaluationSurveyTestEmail.js alex@brspark.com
  *
- * Requer: DATABASE_URL, MAILERSEND_* ou Nylas, ADMIN_PANEL_PUBLIC_BASE_URL (URL absoluta do evaluation-survey.html).
+ * Requer: DATABASE_URL, Microsoft Graph e/ou MAILERSEND_* ou Nylas, ADMIN_PANEL_PUBLIC_BASE_URL (evaluation-survey.html).
  */
 
 require('dotenv').config();

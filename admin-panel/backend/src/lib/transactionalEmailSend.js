@@ -2,15 +2,21 @@
 
 const { sendEmailViaNylas } = require('./nylasSendEmail');
 const { sendEmailViaMailerSend } = require('./mailersendSendEmail');
+const { sendEmailViaMicrosoftGraph } = require('./microsoftGraphSendEmail');
 
 /**
- * E-mail transacional: tenta MailerSend (MAILERSEND_API_TOKEN + MAILERSEND_FROM_EMAIL);
- * se não configurado, tenta Nylas. Se MailerSend estiver configurado e falhar, não faz fallback.
+ * E-mail transacional (redefinição de senha, verificação de conta, convites, avaliações, etc.):
+ * 1. **Microsoft Graph** (integração ou MICROSOFT_GRAPH_*) — se configurado e falhar, não faz fallback.
+ * 2. MailerSend → 3. Nylas (se Graph não estiver configurado).
  *
- * @param {object} opts — mesmo contrato que `sendEmailViaNylas` / `sendEmailViaMailerSend`
- * @returns {Promise<{ send: object, provider: 'mailersend'|'nylas'|'none' }>}
+ * @param {object} opts — mesmo contrato que `sendEmailViaNylas` / `sendEmailViaMailerSend` / Graph
+ * @returns {Promise<{ send: object, provider: 'microsoft_graph'|'mailersend'|'nylas'|'none' }>}
  */
 async function sendTransactionalEmailWithFallback(opts) {
+  const mg = await sendEmailViaMicrosoftGraph(opts);
+  if (mg.ok) return { send: mg, provider: 'microsoft_graph' };
+  if (!mg.skipped) return { send: mg, provider: 'microsoft_graph' };
+
   const ms = await sendEmailViaMailerSend(opts);
   if (ms.ok) return { send: ms, provider: 'mailersend' };
   if (!ms.skipped) return { send: ms, provider: 'mailersend' };
@@ -20,17 +26,21 @@ async function sendTransactionalEmailWithFallback(opts) {
 }
 
 /**
- * Códigos OTP e e-mails equivalentes: por omissão **Nylas primeiro**, depois MailerSend.
- *
- * `OTP_EMAIL_PROVIDER` (opcional):
+ * Códigos OTP e e-mails equivalentes:
+ * 1. Se **Microsoft Graph** (integração ou MICROSOFT_GRAPH_*) estiver completo → envia só por Graph.
+ * 2. Caso contrário, `OTP_EMAIL_PROVIDER`:
  * - `nylas` (omissão) — Nylas → MailerSend
  * - `mailersend` — MailerSend → Nylas
- * - `legacy` — mesmo que o resto da app (`sendTransactionalEmailWithFallback`: MailerSend → Nylas)
+ * - `legacy` — mesmo que o resto da app (`sendTransactionalEmailWithFallback`: Graph → MailerSend → Nylas)
  *
  * @param {object} opts — mesmo contrato que `sendEmailViaNylas` / `sendEmailViaMailerSend`
- * @returns {Promise<{ send: object, provider: 'mailersend'|'nylas'|'none' }>}
+ * @returns {Promise<{ send: object, provider: 'microsoft_graph'|'mailersend'|'nylas'|'none' }>}
  */
 async function sendOtpTransactionalEmail(opts) {
+  const mg = await sendEmailViaMicrosoftGraph(opts);
+  if (mg.ok) return { send: mg, provider: 'microsoft_graph' };
+  if (!mg.skipped) return { send: mg, provider: 'microsoft_graph' };
+
   const mode = String(process.env.OTP_EMAIL_PROVIDER || 'nylas').toLowerCase();
   if (mode === 'legacy') {
     return sendTransactionalEmailWithFallback(opts);

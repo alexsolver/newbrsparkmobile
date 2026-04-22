@@ -23,6 +23,7 @@ const {
   normalizeMoondreamBaseUrl,
 } = require('./visionMoondreamAnalyze');
 const { normalizeMailerSendApiBaseUrl } = require('./mailersendCredentials');
+const { testMicrosoftGraphAccess } = require('./microsoftGraphSendEmail');
 
 /** PNG 1×1 para POST de teste (mesmo contrato multipart do app). */
 const VISION_CHECKLIST_PROBE_PNG = Buffer.from(
@@ -76,6 +77,7 @@ async function testIntegration(integration) {
   if (type === 'EMAIL') {
     if (name === 'Nylas') return testNylas(integration);
     if (name === 'MailerSend') return testMailerSend(integration);
+    if (name === 'Microsoft Graph') return testMicrosoftGraphAccess(integration);
     if (name === 'Gmail' || name === 'Office 365' || name === 'SMTP Genérico') {
       return testSmtp(integration);
     }

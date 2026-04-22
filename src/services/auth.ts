@@ -847,21 +847,33 @@ export class AuthService {
     return AuthService.getUser();
   }
 
-  /** Exclusão de conta (LGPD) */
+  /**
+   * Exclusão de conta (LGPD): `DELETE /api/me` no Node ou Laravel.
+   * Só limpa armazenamento local após resposta de sucesso do servidor.
+   */
   static async deleteAccount(): Promise<void> {
     const existing = await AuthService.getUser();
-    try {
-      await apiFetch('/api/me', { method: 'DELETE' });
-    } finally {
-      if (existing?.id) {
-        try {
-          await deleteAvatarCache(existing.id);
-        } catch {
-          /* ignore */
-        }
+    const res = await apiFetch('/api/me', { method: 'DELETE' });
+    if (!res.ok) {
+      let msg = `Não foi possível excluir a conta (${res.status}).`;
+      try {
+        const data = (await res.json()) as { message?: string; error?: string };
+        if (typeof data.message === 'string' && data.message.trim()) msg = data.message.trim();
+        else if (typeof data.error === 'string' && data.error.trim()) msg = data.error.trim();
+      } catch {
+        /* ignore */
       }
-      await AsyncStorage.clear();
+      throw new Error(msg);
     }
+    if (existing?.id) {
+      try {
+        await deleteAvatarCache(existing.id);
+      } catch {
+        /* ignore */
+      }
+    }
+    /** Igual ao logout: SQLite + caches; preserva chave de isolamento (evita re-purge total no arranque). */
+    await purgeAllBrSparkLocalCaches();
   }
 
   /** Alterar senha — POST /api/auth/change-password */

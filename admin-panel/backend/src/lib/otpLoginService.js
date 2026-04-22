@@ -23,6 +23,61 @@ function randomUuid() {
 /**
  * @returns {{ type: 'email'|'phone', key: string, displayEmail: string, e164?: string, phoneForDb?: string }}
  */
+/**
+ * Liberta `@@unique([email, tenantId])` e colisão de telefone quando só existe conta **inativa**
+ * (ex.: exclusão incompleta que não tombstonou o e-mail — bloqueava novo registo com o mesmo e-mail).
+ * Contas ativas não são alteradas.
+ */
+async function releaseDeadAccountSlotsForRegister(prisma, { tenantId, emailNorm, phoneE164 }) {
+  if (!tenantId || !emailNorm) return;
+
+  const passHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+
+  const byEmail = await prisma.user.findFirst({
+    where: { tenantId, email: emailNorm },
+  });
+  if (byEmail && !byEmail.isActive) {
+    const tombstone = `deleted_${byEmail.id}@brspark.com`;
+    await prisma.$transaction([
+      prisma.pushToken.deleteMany({ where: { userId: byEmail.id } }),
+      prisma.user.update({
+        where: { id: byEmail.id },
+        data: {
+          name: 'Usuário Excluído',
+          email: tombstone,
+          password: passHash,
+          phone: null,
+          avatarUrl: null,
+          addressJson: null,
+          personalDocuments: null,
+          faceEnrollmentPhotos: null,
+          comprefaceRecognitionSync: null,
+          employeeMatricula: null,
+          preferredChatLocale: null,
+          emailVerificationToken: null,
+          emailVerificationExpiresAt: null,
+          emailVerifiedAt: null,
+          currentSessionId: null,
+          currentDeviceId: null,
+          isActive: false,
+        },
+      }),
+    ]);
+  }
+
+  if (phoneE164) {
+    const byPhone = await prisma.user.findFirst({
+      where: { tenantId, phone: phoneE164 },
+    });
+    if (byPhone && !byPhone.isActive) {
+      await prisma.user.update({
+        where: { id: byPhone.id },
+        data: { phone: null },
+      });
+    }
+  }
+}
+
 function parseIdentifier(raw) {
   const s = String(raw || '')
     .trim()
@@ -99,9 +154,9 @@ function otpDevPlaintextAllowed() {
 }
 
 /**
- * OTP por e-mail: por omissão **Nylas primeiro** (`sendOtpTransactionalEmail`), depois MailerSend.
- * Outros e-mails transacionais continuam com MailerSend→Nylas. SMS/WhatsApp desativados.
- * Em desenvolvimento, ALLOW_OTP_PLAINTEXT=1 imprime o código em log para telefone.
+ * OTP por e-mail: `sendOtpTransactionalEmail` — **Microsoft Graph** primeiro (integração ou env); se não configurado,
+ * Nylas/MailerSend conforme `OTP_EMAIL_PROVIDER`. Outros e-mails transacionais: mesma prioridade Graph em `sendTransactionalEmailWithFallback`.
+ * SMS/WhatsApp desativados. Em desenvolvimento, ALLOW_OTP_PLAINTEXT=1 imprime o código em log para telefone.
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {object} opts
  */
@@ -121,7 +176,7 @@ async function sendOtpToChannel(prisma, { channel, target, code, isE164Phone }) 
       (send && send.skipped && send.reason) ||
       (send && send.error) ||
       (provider === 'none'
-        ? 'Nenhum envio de e-mail configurado para OTP (Nylas: API Key + Grant ID, ou MailerSend).'
+        ? 'Nenhum envio de e-mail configurado para OTP (Microsoft Graph, ou Nylas: API Key + Grant ID, ou MailerSend).'
         : 'Falha ao enviar o código por e-mail.');
     return { ok: false, error: String(reason) };
   }
@@ -194,8 +249,13 @@ async function startChallenge(prisma, { identifier, channelPref, purpose, nameIf
       const tid = await resolveAppDefaultTenantId();
       if (tid) {
         const emailNorm = parsed.key;
-        const existingEmail = await prisma.user.findUnique({
-          where: { email_tenantId: { email: emailNorm, tenantId: tid } },
+        await releaseDeadAccountSlotsForRegister(prisma, {
+          tenantId: tid,
+          emailNorm,
+          phoneE164: phoneParsed.e164,
+        });
+        const existingEmail = await prisma.user.findFirst({
+          where: { tenantId: tid, email: emailNorm, isActive: true },
         });
         if (existingEmail) {
           return {
@@ -206,7 +266,7 @@ async function startChallenge(prisma, { identifier, channelPref, purpose, nameIf
           };
         }
         const existingPhone = await prisma.user.findFirst({
-          where: { tenantId: tid, phone: phoneParsed.e164 },
+          where: { tenantId: tid, phone: phoneParsed.e164, isActive: true },
         });
         if (existingPhone) {
           return {
@@ -482,8 +542,14 @@ async function verifyRegisterOtpPhase1(prisma, { resolveAppDefaultTenantId }, { 
     };
   }
 
-  const existing = await prisma.user.findUnique({
-    where: { email_tenantId: { email: displayEmail, tenantId: defaultTenantId } },
+  await releaseDeadAccountSlotsForRegister(prisma, {
+    tenantId: defaultTenantId,
+    emailNorm: displayEmail,
+    phoneE164,
+  });
+
+  const existing = await prisma.user.findFirst({
+    where: { tenantId: defaultTenantId, email: displayEmail, isActive: true },
   });
   if (existing) {
     return {
@@ -494,7 +560,7 @@ async function verifyRegisterOtpPhase1(prisma, { resolveAppDefaultTenantId }, { 
     };
   }
   const existingPhone = await prisma.user.findFirst({
-    where: { tenantId: defaultTenantId, phone: phoneE164 },
+    where: { tenantId: defaultTenantId, phone: phoneE164, isActive: true },
   });
   if (existingPhone) {
     return {
@@ -583,15 +649,21 @@ async function completeRegisterFromSetupToken(
     return { ok: false, error: 'Novos registros estão temporariamente indisponíveis.', status: 403 };
   }
 
-  const existingUser = await prisma.user.findUnique({
-    where: { email_tenantId: { email: displayEmail, tenantId: defaultTenantId } },
+  await releaseDeadAccountSlotsForRegister(prisma, {
+    tenantId: defaultTenantId,
+    emailNorm: displayEmail,
+    phoneE164: phoneVal,
+  });
+
+  const existingUser = await prisma.user.findFirst({
+    where: { tenantId: defaultTenantId, email: displayEmail, isActive: true },
   });
   if (existingUser) {
     return { ok: false, error: 'Este e-mail já está cadastrado.', status: 409 };
   }
 
   const existingByPhone = await prisma.user.findFirst({
-    where: { tenantId: defaultTenantId, phone: phoneVal },
+    where: { tenantId: defaultTenantId, phone: phoneVal, isActive: true },
   });
   if (existingByPhone) {
     return { ok: false, error: 'Este telefone já está cadastrado.', status: 409 };

@@ -11,6 +11,7 @@ const { normalizeMailerSendApiBaseUrl } = require('../lib/mailersendCredentials'
 const { normalizeOsrmBaseUrl } = require('../lib/osrmBaseUrl');
 const { normalizeNylasApiUri } = require('../lib/nylasCredentials');
 const { normalizeMoondreamBaseUrl } = require('../lib/visionMoondreamAnalyze');
+const { normalizeMicrosoftGraphApiBaseUrl } = require('../lib/microsoftGraphCredentials');
 
 function maskIntegrationSecret(v) {
   if (!v || typeof v !== 'string') return null;
@@ -90,6 +91,8 @@ router.post('/', async (req, res) => {
       resolvedBase = normalizeGoogleGenerativeLanguageBaseUrl(baseUrl);
     } else if (name === 'MailerSend') {
       resolvedBase = normalizeMailerSendApiBaseUrl(baseUrl);
+    } else if (name === 'Microsoft Graph') {
+      resolvedBase = normalizeMicrosoftGraphApiBaseUrl(baseUrl);
     } else if (name === 'Stripe') {
       resolvedBase = 'https://api.stripe.com';
     } else if (name === 'Didit' && (baseUrl == null || !String(baseUrl).trim())) {
@@ -155,6 +158,8 @@ router.patch('/:id', async (req, res) => {
       data = { ...data, baseUrl: normalizeGoogleGenerativeLanguageBaseUrl(data.baseUrl) };
     } else if (existing.name === 'MailerSend' && Object.prototype.hasOwnProperty.call(data, 'baseUrl')) {
       data = { ...data, baseUrl: normalizeMailerSendApiBaseUrl(data.baseUrl) };
+    } else if (existing.name === 'Microsoft Graph' && Object.prototype.hasOwnProperty.call(data, 'baseUrl')) {
+      data = { ...data, baseUrl: normalizeMicrosoftGraphApiBaseUrl(data.baseUrl) };
     } else if (existing.name === 'Stripe' && data.baseUrl) {
       data = { ...data, baseUrl: 'https://api.stripe.com' };
     } else if (existing.name === 'Didit' && data.baseUrl) {

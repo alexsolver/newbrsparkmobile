@@ -57,6 +57,7 @@ const ROUTES = [
   })],
   ['get', '/api/me', op('Dados do usuário logado (app)', ['App — Conta'], bearerApp)],
   ['put', '/api/me', op('Atualizar perfil (app)', ['App — Conta'], bearerApp)],
+  ['delete', '/api/me', op('Excluir conta (anonimizar + desativar; LGPD)', ['App — Conta'], bearerApp)],
   ['post', '/api/me/technician', op('Criar/atualizar perfil de técnico', ['App — Conta'], bearerApp)],
 
   // ── Sync core (/api/sync + authUser global no router)

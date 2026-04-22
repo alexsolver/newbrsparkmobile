@@ -210,6 +210,39 @@
           </div>
         </div>
 
+        <!-- Microsoft Graph (app daemon — OAuth client credentials; e-mail transacional) -->
+        <div class="int-card" id="card-microsoft-graph">
+          <div class="int-card-header">
+            <div class="int-logo" style="background:#0078D4;color:#fff;font-weight:800;font-size:13px">365</div>
+            <div><div class="int-name">Microsoft Graph</div><div class="int-cat">E-mail · OAuth (aplicação)</div></div>
+            <span class="int-status inactive" id="status-microsoft-graph" style="margin-left:auto">○ Desconectado</span>
+          </div>
+          <div class="int-desc">
+            Registo de aplicação <strong>daemon</strong> no Microsoft Entra ID com permissão de <strong>aplicação</strong>
+            <code>Mail.Send</code> e consentimento de administrador. O envio usa
+            <code>POST …/users/{caixa}/sendMail</code> (a caixa «Enviar como» deve ser a mesma licenciada no M365).
+            Com esta integração <strong>ativa e completa</strong>, o servidor usa o Graph em <strong>primeiro lugar</strong> para
+            <strong>OTP</strong>, <strong>redefinição de senha</strong>, verificação de e-mail, convites (prestador, avaliações, etc.):
+            só recorre a MailerSend/Nylas se o Graph não estiver configurado.
+            <a href="https://learn.microsoft.com/graph/api/user-sendmail" target="_blank" rel="noopener noreferrer">Documentação Graph</a>.
+            <strong>Segredo:</strong> no Azure, em Certificates &amp; secrets, copie o <strong>Value</strong> mostrado ao criar o segredo (texto longo).
+            Não use o <strong>Secret ID</strong> (GUID só de referência) — isso gera o erro AADSTS7000215.
+          </div>
+          <div class="int-fields" id="fields-microsoft-graph">
+            <input class="form-control" id="tenant-microsoft-graph" placeholder="ID do inquilino (Directory tenant ID)" autocomplete="off" />
+            <input class="form-control" id="clientid-microsoft-graph" placeholder="ID da aplicação (Client ID)" autocomplete="off" />
+            <input class="form-control" id="secret-microsoft-graph" type="password" placeholder="Valor do Client secret (Value ao criar — NÃO o Secret ID)" autocomplete="off" />
+            <input class="form-control" id="sendas-microsoft-graph" placeholder="Enviar como — UPN ou e-mail da caixa (ex.: noreply@empresa.onmicrosoft.com)" autocomplete="off" />
+            <input class="form-control" id="fromname-microsoft-graph" placeholder="Nome a mostrar (opcional, ex.: BrSpark)" autocomplete="off" />
+            <input class="form-control" id="url-microsoft-graph" placeholder="Raiz Graph (padrão: https://graph.microsoft.com/v1.0)" value="https://graph.microsoft.com/v1.0" />
+          </div>
+          <div class="int-actions">
+            <button class="btn btn-primary btn-sm" onclick="void window.saveMicrosoftGraph()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-microsoft-graph" style="display:none" onclick="testInt('microsoft-graph')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-microsoft-graph" style="display:none" onclick="deleteIntByName('Microsoft Graph')">Remover</button>
+          </div>
+        </div>
+
         <!-- Nylas -->
         <div class="int-card" id="card-nylas">
           <div class="int-card-header">
@@ -573,6 +606,7 @@
     'Office 365':          { slug:'office365' },
     'SMTP Genérico':       { slug:'smtp' },
     'MailerSend':          { slug:'mailersend' },
+    'Microsoft Graph':     { slug:'microsoft-graph' },
     'Nylas':               { slug:'nylas' },
     'Dropbox':             { slug:'dropbox' },
     'Cloudflare R2':       { slug:'cloudflare-r2' },
@@ -744,6 +778,24 @@
     const msMeta = msRow?.metadata && typeof msRow.metadata === 'object' ? msRow.metadata : {};
     if (fromMs) fromMs.value = msMeta.mailersendFromEmail != null ? String(msMeta.mailersendFromEmail) : '';
     if (nameMs) nameMs.value = msMeta.mailersendFromName != null ? String(msMeta.mailersendFromName) : '';
+
+    const mgRow = activeInts['Microsoft Graph'];
+    const mgTenant = document.getElementById('tenant-microsoft-graph');
+    const mgClient = document.getElementById('clientid-microsoft-graph');
+    const mgSecret = document.getElementById('secret-microsoft-graph');
+    const mgSend = document.getElementById('sendas-microsoft-graph');
+    const mgFromN = document.getElementById('fromname-microsoft-graph');
+    const mgUrl = document.getElementById('url-microsoft-graph');
+    const mgMeta = mgRow?.metadata && typeof mgRow.metadata === 'object' ? mgRow.metadata : {};
+    if (mgTenant) mgTenant.value = mgMeta.microsoftTenantId != null ? String(mgMeta.microsoftTenantId) : '';
+    if (mgClient) mgClient.value = mgMeta.microsoftClientId != null ? String(mgMeta.microsoftClientId) : '';
+    if (mgSecret) mgSecret.value = '';
+    if (mgSend) mgSend.value = mgMeta.microsoftSendAsUser != null ? String(mgMeta.microsoftSendAsUser) : '';
+    if (mgFromN) mgFromN.value = mgMeta.microsoftFromName != null ? String(mgMeta.microsoftFromName) : '';
+    if (mgUrl) {
+      const bu = mgRow?.baseUrl != null ? String(mgRow.baseUrl).trim() : '';
+      mgUrl.value = bu && /^https?:\/\//i.test(bu) ? bu.replace(/\/+$/, '') : 'https://graph.microsoft.com/v1.0';
+    }
 
     const urlCf = document.getElementById('url-compreface');
     const prefixCf = document.getElementById('prefix-compreface');
@@ -969,6 +1021,61 @@
     if (res?.id || res?.name) {
       loadIntegrations();
       showToast(integT('integ_toast_mailersend_saved'));
+    } else {
+      alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
+    }
+  };
+
+  // Microsoft Graph — client credentials (daemon); OTP por e-mail quando configurado
+  window.saveMicrosoftGraph = async () => {
+    if (!canManageIntegrations) return;
+    const tenant = document.getElementById('tenant-microsoft-graph')?.value.trim() || '';
+    const clientId = document.getElementById('clientid-microsoft-graph')?.value.trim() || '';
+    const secret = document.getElementById('secret-microsoft-graph')?.value.trim() || '';
+    const sendAs = document.getElementById('sendas-microsoft-graph')?.value.trim() || '';
+    const fromN = document.getElementById('fromname-microsoft-graph')?.value.trim() || '';
+    const graphBase = document.getElementById('url-microsoft-graph')?.value.trim() || 'https://graph.microsoft.com/v1.0';
+    if (!tenant || !clientId || !sendAs) {
+      return alert(integT('integ_alert_msgraph_fields'));
+    }
+    const existing = activeInts['Microsoft Graph'];
+    const metadata = {
+      microsoftTenantId: tenant,
+      microsoftClientId: clientId,
+      microsoftSendAsUser: sendAs,
+    };
+    if (fromN) metadata.microsoftFromName = fromN;
+
+    if (existing?.id && !secret) {
+      const res = await CONFIG.patch(`/integrations/${existing.id}`, {
+        baseUrl: graphBase,
+        metadata,
+        description: 'Microsoft Graph — envio transacional (client credentials, Mail.Send).',
+      });
+      if (res?.id || res?.name) {
+        loadIntegrations();
+        showToast(integT('integ_toast_msgraph_updated'));
+      } else {
+        alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
+      }
+      return;
+    }
+    if (!secret) return alert(integT('integ_alert_msgraph_secret'));
+
+    const body = {
+      type: 'EMAIL',
+      name: 'Microsoft Graph',
+      status: 'ACTIVE',
+      baseUrl: graphBase,
+      apiKey: secret,
+      metadata,
+      description: 'Microsoft Graph — envio transacional (client credentials, Mail.Send).',
+    };
+    if (existing?.id) await CONFIG.del(`/integrations/${existing.id}`);
+    const res = await CONFIG.post('/integrations', body);
+    if (res?.id || res?.name) {
+      loadIntegrations();
+      showToast(integT('integ_toast_msgraph_saved'));
     } else {
       alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
     }

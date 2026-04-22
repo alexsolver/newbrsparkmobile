@@ -1308,7 +1308,21 @@ export default function ProfileScreen() {
             onPress={() => {
               Alert.alert(t('profile.deleteAccountTitle'), t('profile.deleteAccountMsg'), [
                 { text: t('common.cancel'), style: 'cancel' },
-                { text: t('profile.deleteForever'), style: 'destructive', onPress: async () => { await deleteAccount(); router.replace('/auth/login' as any); } },
+                {
+                  text: t('profile.deleteForever'),
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await deleteAccount();
+                      router.replace('/auth/login' as any);
+                    } catch (e: unknown) {
+                      Alert.alert(
+                        t('common.error'),
+                        e instanceof Error ? e.message : t('auth.errorConnection'),
+                      );
+                    }
+                  },
+                },
               ]);
             }}
           >

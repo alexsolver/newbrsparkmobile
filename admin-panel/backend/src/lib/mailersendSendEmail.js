@@ -7,6 +7,7 @@ const { resolveMailerSendConfig } = require('./mailersendCredentials');
  * Envia e-mail transacional via MailerSend (`POST /v1/email`).
  *
  * Credenciais: integração «MailerSend» no painel e/ou MAILERSEND_API_TOKEN + MAILERSEND_FROM_EMAIL (domínio verificado).
+ * Usado em fallback quando Microsoft Graph não está configurado (ver `transactionalEmailSend.js`).
  *
  * @param {object} opts
  * @param {string|string[]|{ email: string, name?: string }} opts.to

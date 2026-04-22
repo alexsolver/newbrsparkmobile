@@ -28,8 +28,6 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
 import { ThemedSwitch } from '../../src/components/ThemedSwitch';
 import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
-import { OnboardingIntroSlide } from '../../src/components/OnboardingIntroSlide';
-
 interface ConsentState {
   LOCATION_BACKGROUND: boolean;
   LOCATION_FOREGROUND: boolean;
@@ -37,11 +35,17 @@ interface ConsentState {
   DATA_RETENTION: boolean;
 }
 
-const SLIDES_TECH = ['INTRO', 'WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
-const SLIDES_CLIENT = ['INTRO', 'WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
+/** Sem `INTRO`: o hero de marketing fica só em `/auth/app-intro`; pós-login começa já no consentimento (WELCOME). */
+const SLIDES_TECH = ['WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
+const SLIDES_CLIENT = ['WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
 type SlideTech = typeof SLIDES_TECH[number];
 type SlideClient = typeof SLIDES_CLIENT[number];
 type Slide = SlideTech;
+
+/** iOS pode devolver `provisional` (notificações silenciosas); conta como já configurado para o passo. */
+function isNotificationOnboardingSatisfied(status: string | null): boolean {
+  return status === 'granted' || status === 'provisional';
+}
 
 const REGION_KEY = '@brspark_region';
 const ALLOWED_REGIONS = ['BR', 'US', 'ES', 'AR'] as const;
@@ -189,6 +193,26 @@ export default function OnboardingScreen() {
 
   const currentSlide: Slide = slides[slideIndex] as Slide;
 
+  useEffect(() => {
+    if (currentSlide !== 'NOTIFICATIONS') return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const r = await Notifications.getPermissionsAsync();
+        if (cancelled) return;
+        setNotifStatus(r.status);
+        if (isNotificationOnboardingSatisfied(r.status)) {
+          await NotificationService.registerForPushNotificationsAsync().catch(() => {});
+        }
+      } catch {
+        if (!cancelled) setNotifStatus(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSlide]);
+
   const goNext = useCallback(() => {
     const slide = slides[slideIndex];
     if (slide === 'RETENTION' && !consents.DATA_RETENTION) {
@@ -288,9 +312,6 @@ export default function OnboardingScreen() {
 
   const renderSlide = () => {
     switch (currentSlide) {
-      case 'INTRO':
-        return <OnboardingIntroSlide onContinue={goNext} showExistingAccountLink={false} />;
-
       case 'WELCOME':
         if (isTechnician) {
           return (
@@ -471,7 +492,8 @@ export default function OnboardingScreen() {
           </View>
         );
 
-      case 'NOTIFICATIONS':
+      case 'NOTIFICATIONS': {
+        const notifOk = isNotificationOnboardingSatisfied(notifStatus);
         return (
           <View style={s.slideContent}>
             <View style={s.slideHeader}>
@@ -481,31 +503,59 @@ export default function OnboardingScreen() {
             </View>
             <View style={s.infoCard}>
               <Ionicons name="call-outline" size={18} color="#2563eb" />
-              <Text style={s.infoText}>{t('consentFlow.notifOnboardingHint')}</Text>
+              <Text style={s.infoText}>
+                {notifOk ? t('consentFlow.notifOnboardingHintWhenGranted') : t('consentFlow.notifOnboardingHint')}
+              </Text>
             </View>
-            <TouchableOpacity
-              onPress={async () => {
-                const r = await Notifications.requestPermissionsAsync();
-                setNotifStatus(r.status);
-                if (r.status === 'granted') {
-                  await NotificationService.registerForPushNotificationsAsync().catch(() => {});
-                }
-              }}
-              style={[
-                s.infoCard,
-                { marginTop: 12, backgroundColor: C.surfaceLow, borderWidth: 0, paddingVertical: 16, justifyContent: 'center' },
-              ]}
-            >
-              <Ionicons name="megaphone-outline" size={22} color={C.accent} />
-              <Text style={[s.infoText, { textAlign: 'center', fontWeight: '800' }]}>{t('consentFlow.notifOnboardingCta')}</Text>
-            </TouchableOpacity>
-            {notifStatus && (
-              <Text style={{ marginTop: 8, textAlign: 'center', color: C.textSecondary, fontSize: 12 }}>
-                {t('consentFlow.notifOnboardingResult', { status: notifStatus })}
+            {notifOk ? (
+              <View
+                style={[
+                  s.infoCard,
+                  {
+                    marginTop: 12,
+                    borderColor: '#10b981',
+                    backgroundColor: '#ecfdf5',
+                    paddingVertical: 16,
+                    gap: 10,
+                  },
+                ]}
+              >
+                <Ionicons name="checkmark-circle" size={28} color="#10b981" />
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.infoText, { fontWeight: '800', color: C.primary }]}>
+                    {t('consentFlow.notifOnboardingGrantedTitle')}
+                  </Text>
+                  <Text style={[s.infoText, { marginTop: 6 }]}>{t('consentFlow.notifOnboardingGrantedBody')}</Text>
+                </View>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={async () => {
+                  const r = await Notifications.requestPermissionsAsync();
+                  setNotifStatus(r.status);
+                  if (isNotificationOnboardingSatisfied(r.status)) {
+                    await NotificationService.registerForPushNotificationsAsync().catch(() => {});
+                  }
+                }}
+                style={[
+                  s.infoCard,
+                  { marginTop: 12, backgroundColor: C.surfaceLow, borderWidth: 0, paddingVertical: 16, justifyContent: 'center' },
+                ]}
+              >
+                <Ionicons name="megaphone-outline" size={22} color={C.accent} />
+                <Text style={[s.infoText, { textAlign: 'center', fontWeight: '800' }]}>
+                  {t('consentFlow.notifOnboardingCta')}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {notifStatus === 'denied' && (
+              <Text style={{ marginTop: 8, textAlign: 'center', color: C.textSecondary, fontSize: 12, lineHeight: 18 }}>
+                {t('consentFlow.notifOnboardingDeniedHint')}
               </Text>
             )}
           </View>
         );
+      }
 
       case 'RETENTION':
         if (isTechnician) {
@@ -627,68 +677,60 @@ export default function OnboardingScreen() {
 
   return (
     <View style={[s.container, { backgroundColor: C.background }]}>
-      {currentSlide !== 'INTRO' && (
-        <View style={s.progressBar}>
-          {slides.slice(1).map((_, i) => (
-            <View
-              key={i}
-              style={[
-                s.dot,
-                i === slideIndex - 1
-                  ? { width: 20, borderRadius: 3, backgroundColor: C.accent }
-                  : { backgroundColor: C.border },
-              ]}
-            />
-          ))}
-        </View>
-      )}
+      <View style={s.progressBar}>
+        {slides.map((_, i) => (
+          <View
+            key={i}
+            style={[
+              s.dot,
+              i === slideIndex
+                ? { width: 20, borderRadius: 3, backgroundColor: C.accent }
+                : { backgroundColor: C.border },
+            ]}
+          />
+        ))}
+      </View>
 
       <Animated.View style={[s.slide, { opacity: fadeAnim }]}>
-        {currentSlide === 'INTRO' ? (
-          renderSlide()
-        ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
-            {renderSlide()}
-          </ScrollView>
-        )}
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+          {renderSlide()}
+        </ScrollView>
       </Animated.View>
 
-      {currentSlide !== 'INTRO' && (
-        <View style={[s.navRow, { backgroundColor: C.cardWhite, borderTopColor: C.border }]}>
-          {slideIndex > 0 ? (
-            <TouchableOpacity style={[s.btnBack, { backgroundColor: C.surfaceLow }]} onPress={goBack}>
-              <Ionicons name="arrow-back" size={18} color={C.textSecondary} />
-              <Text style={[s.btnBackText, { color: C.textSecondary }]}>Voltar</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={{ flex: 1 }} />
-          )}
-
-          <TouchableOpacity
-            style={[
-              s.btnNext,
-              { backgroundColor: C.accent },
-              isLastSlide && { backgroundColor: C.connectivity.online },
-              (loading || retentionBlocked) && { opacity: 0.45 },
-            ]}
-            onPress={isLastSlide ? confirm : goNext}
-            disabled={loading || retentionBlocked}
-            accessibilityState={{ disabled: loading || retentionBlocked }}
-          >
-            {loading ? (
-              <ActivityIndicator color={C.cardWhite} />
-            ) : (
-              <>
-                <Text style={[s.btnNextText, { color: C.cardWhite }]}>
-                  {isLastSlide ? t('consentFlow.confirmEnter') : t('consentFlow.continue')}
-                </Text>
-                {!isLastSlide && <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />}
-                {isLastSlide && <Ionicons name="checkmark" size={18} color={C.cardWhite} />}
-              </>
-            )}
+      <View style={[s.navRow, { backgroundColor: C.cardWhite, borderTopColor: C.border }]}>
+        {slideIndex > 0 ? (
+          <TouchableOpacity style={[s.btnBack, { backgroundColor: C.surfaceLow }]} onPress={goBack}>
+            <Ionicons name="arrow-back" size={18} color={C.textSecondary} />
+            <Text style={[s.btnBackText, { color: C.textSecondary }]}>Voltar</Text>
           </TouchableOpacity>
-        </View>
-      )}
+        ) : (
+          <View style={{ flex: 1 }} />
+        )}
+
+        <TouchableOpacity
+          style={[
+            s.btnNext,
+            { backgroundColor: C.accent },
+            isLastSlide && { backgroundColor: C.connectivity.online },
+            (loading || retentionBlocked) && { opacity: 0.45 },
+          ]}
+          onPress={isLastSlide ? confirm : goNext}
+          disabled={loading || retentionBlocked}
+          accessibilityState={{ disabled: loading || retentionBlocked }}
+        >
+          {loading ? (
+            <ActivityIndicator color={C.cardWhite} />
+          ) : (
+            <>
+              <Text style={[s.btnNextText, { color: C.cardWhite }]}>
+                {isLastSlide ? t('consentFlow.confirmEnter') : t('consentFlow.continue')}
+              </Text>
+              {!isLastSlide && <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />}
+              {isLastSlide && <Ionicons name="checkmark" size={18} color={C.cardWhite} />}
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }

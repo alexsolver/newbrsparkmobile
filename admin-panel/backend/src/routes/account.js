@@ -914,6 +914,59 @@ router.get('/me', authUser, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+/**
+ * DELETE /api/me — exclusão de conta (LGPD): anonimiza dados de identificação, invalida sessão,
+ * remove tokens push e desativa o utilizador (paridade com Laravel `AuthController::deleteAccount`).
+ */
+router.delete('/me', authUser, async (req, res) => {
+  const userId = String(req.user.id || '').trim();
+  if (!userId) return res.status(400).json({ error: 'Sessão inválida.' });
+
+  const randomPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+  const tombstoneEmail = `deleted_${userId}@brspark.com`;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.pushToken.deleteMany({ where: { userId } });
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          name: 'Usuário Excluído',
+          email: tombstoneEmail,
+          password: randomPassword,
+          phone: null,
+          avatarUrl: null,
+          addressJson: null,
+          personalDocuments: null,
+          faceEnrollmentPhotos: null,
+          comprefaceRecognitionSync: null,
+          employeeMatricula: null,
+          preferredChatLocale: null,
+          emailVerificationToken: null,
+          emailVerificationExpiresAt: null,
+          emailVerifiedAt: null,
+          currentSessionId: null,
+          currentDeviceId: null,
+          isActive: false,
+        },
+      });
+    });
+
+    res.json({
+      message: 'Conta excluída e dados anonimizados com sucesso.',
+    });
+  } catch (err) {
+    const msg = err && err.message ? String(err.message) : 'Erro ao excluir conta.';
+    if (msg.includes('Unique constraint') || msg.includes('P2002')) {
+      return res.status(409).json({
+        error: 'Não foi possível concluir a exclusão agora. Contacte o suporte.',
+      });
+    }
+    console.error('[account] DELETE /me', err);
+    res.status(500).json({ error: msg });
+  }
+});
+
 // ─── PUT /api/me ─────────────────────────────────────────────────────────────
 // Autenticado — atualiza perfil do usuário logado
 router.put('/me', authUser, async (req, res) => {
