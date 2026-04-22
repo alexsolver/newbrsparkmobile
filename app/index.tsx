@@ -1,12 +1,11 @@
 import { Redirect, useGlobalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
 import { usePersona } from '../src/context/PersonaContext';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { View, ActivityIndicator } from 'react-native';
 import { useTheme } from '../src/theme/ThemeContext';
-import { APP_INTRO_SEEN_KEY } from '../src/lib/appIntroPrefs';
+import { isAppIntroDismissedForGuestSession } from '../src/lib/appIntroPrefs';
 
 type GuestTarget = 'boot' | 'intro' | 'login';
 
@@ -29,14 +28,7 @@ export default function AppEntryIndex() {
       setGuestTarget('login');
       return;
     }
-    let cancel = false;
-    AsyncStorage.getItem(APP_INTRO_SEEN_KEY).then((v) => {
-      if (cancel) return;
-      setGuestTarget(v === '1' ? 'login' : 'intro');
-    });
-    return () => {
-      cancel = true;
-    };
+    setGuestTarget(isAppIntroDismissedForGuestSession() ? 'login' : 'intro');
   }, [loading, user, pendingTechRegInvite]);
 
   if (loading) {

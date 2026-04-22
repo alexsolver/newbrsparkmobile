@@ -14,10 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { BrandingLogoImage } from './BrandingLogoImage';
-import { APP_INTRO_SEEN_KEY } from '../lib/appIntroPrefs';
+import { markAppIntroDismissedForGuestSession } from '../lib/appIntroPrefs';
+import { Button } from './Button';
 
 export type IntroPersonaTab = 'person' | 'provider' | 'company';
 
@@ -25,7 +25,7 @@ const HERO_IMAGES: Record<IntroPersonaTab, string> = {
   person:
     'https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&q=80&w=600',
   provider:
-    'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&q=80&w=600',
+    'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&q=80&w=600',
   company:
     'https://images.unsplash.com/photo-1521737711867-e3b97375f902?auto=format&fit=crop&q=80&w=600',
 };
@@ -36,12 +36,15 @@ type Props = {
   showExistingAccountLink?: boolean;
   /** Se omitido e o link estiver visível, marca intro como vista e abre o login. */
   onExistingAccountPress?: () => void | Promise<void>;
+  /** Catálogo de prestadores (ex.: intro antes do login). Só mostra o botão se definido. */
+  onExploreServicesPress?: () => void | Promise<void>;
 };
 
 export function OnboardingIntroSlide({
   onContinue,
   showExistingAccountLink = true,
   onExistingAccountPress,
+  onExploreServicesPress,
 }: Props) {
   const { t } = useTranslation();
   const { colors: C } = useTheme();
@@ -67,10 +70,12 @@ export function OnboardingIntroSlide({
   const body = t(`consentFlow.introBody_${activeTab}`);
 
   const handleExistingAccount = useCallback(() => {
-    const run = onExistingAccountPress ?? (async () => {
-      await AsyncStorage.setItem(APP_INTRO_SEEN_KEY, '1');
-      router.replace('/auth/login' as any);
-    });
+    const run =
+      onExistingAccountPress ??
+      (() => {
+        markAppIntroDismissedForGuestSession();
+        router.replace('/auth/login' as any);
+      });
     void run();
   }, [onExistingAccountPress]);
 
@@ -165,6 +170,16 @@ export function OnboardingIntroSlide({
           <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />
         </TouchableOpacity>
 
+        {onExploreServicesPress ? (
+          <Button
+            title={t('consentFlow.introExploreServices')}
+            variant="secondary"
+            onPress={() => void onExploreServicesPress()}
+            style={styles.secondaryBtn}
+            testID="onboarding-explore-services"
+          />
+        ) : null}
+
         {showExistingAccountLink && (
           <View style={styles.loginRow}>
             <Text style={[styles.loginMuted, { color: C.textLight }]}>{t('consentFlow.introLoginPrefix')} </Text>
@@ -237,6 +252,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   primaryBtnText: { fontSize: 15, fontWeight: '800' },
+  secondaryBtn: { width: '100%', borderRadius: 16 },
   loginRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

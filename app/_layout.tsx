@@ -19,7 +19,7 @@ import { AppProvider } from '../src/context/AppContext';
 import { PersonaProvider, usePersona } from '../src/context/PersonaContext';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
-import { APP_INTRO_SEEN_KEY } from '../src/lib/appIntroPrefs';
+import { isAppIntroDismissedForGuestSession } from '../src/lib/appIntroPrefs';
 import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryBridge';
 import { pollStaleGpsReminders } from '../src/services/syncService';
 import { NotificationService, preparePushNotificationInfrastructure } from '../src/services/notifications';
@@ -80,10 +80,16 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
       !segments || segments.length === 0 || !seg0 || seg0 === 'index';
 
     /** Apresentação inicial antes de qualquer outro ecrã em `auth/` (exc. convite técnico e jornadas OTP). */
-    if (!user && inAuthGroup && !inAppIntro && !inOtpJourney && !inTechRegistration && !pendingTechRegInvite) {
-      void AsyncStorage.getItem(APP_INTRO_SEEN_KEY).then((v) => {
-        if (v !== '1') router.replace('/auth/app-intro' as any);
-      });
+    if (
+      !user &&
+      inAuthGroup &&
+      !inAppIntro &&
+      !inOtpJourney &&
+      !inTechRegistration &&
+      !pendingTechRegInvite &&
+      !isAppIntroDismissedForGuestSession()
+    ) {
+      router.replace('/auth/app-intro' as any);
     }
 
     if (!user && !atRootOrIndex && !inAuthGroup && !inClient && !inProvider && !inProfile && !inProviderCatalog) {

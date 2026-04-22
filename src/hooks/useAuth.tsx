@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { dataCollectionService } from '../services/dataCollectionService';
 import { warmAvatarCacheForUser } from '../services/avatarLocalCache';
 import { NotificationService } from '../services/notifications';
+import { resetAppIntroGuestSession } from '../lib/appIntroPrefs';
 
 interface AuthContextType {
   user: User | null;
@@ -128,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (!after) {
                 _setUserRole('CLIENT');
                 await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
+                resetAppIntroGuestSession();
               }
             }
           } catch {
@@ -146,6 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = subscribeSessionInvalidated(() => {
       setUser(null);
       _setUserRole('CLIENT');
+      resetAppIntroGuestSession();
     });
     const pushSub = Notifications.addNotificationReceivedListener((notification) => {
       const data = notification.request?.content?.data as Record<string, unknown> | undefined;
@@ -198,6 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } else {
               effective = null;
               setUser(null);
+              resetAppIntroGuestSession();
             }
           } catch {
             /* mantém localUser em effective */
@@ -340,11 +344,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AuthService.logout();
     setUser(null);
     _setUserRole('CLIENT');
+    resetAppIntroGuestSession();
   };
 
   const deleteAccount = async () => {
     await AuthService.deleteAccount();
     setUser(null);
+    resetAppIntroGuestSession();
   };
 
   const setUserRole = async (role: 'CLIENT' | 'TECHNICIAN') => {

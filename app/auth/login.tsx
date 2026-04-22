@@ -25,7 +25,7 @@ import { setLanguage, getDeviceRegion } from '../../src/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
 import { LoginOAuthNativeSection, type NativeOAuthPending } from '../../src/components/auth/LoginOAuthNativeSection';
-import { APP_INTRO_SEEN_KEY } from '../../src/lib/appIntroPrefs';
+import { isAppIntroDismissedForGuestSession } from '../../src/lib/appIntroPrefs';
 
 const REGION_KEY = '@brspark_region';
 
@@ -323,18 +323,11 @@ export default function LoginScreen() {
       setIntroSplashDone(true);
       return;
     }
-    let cancel = false;
-    void AsyncStorage.getItem(APP_INTRO_SEEN_KEY).then((v) => {
-      if (cancel) return;
-      if (v !== '1') {
-        router.replace('/auth/app-intro' as any);
-        return;
-      }
-      setIntroSplashDone(true);
-    });
-    return () => {
-      cancel = true;
-    };
+    if (!isAppIntroDismissedForGuestSession()) {
+      router.replace('/auth/app-intro' as any);
+      return;
+    }
+    setIntroSplashDone(true);
   }, [techRegToken, router]);
 
   useEffect(() => {
