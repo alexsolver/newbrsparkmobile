@@ -5,8 +5,9 @@
  */
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const bcrypt  = require('bcryptjs');
-const prisma  = require('./db');
+const prisma = require('./db');
 const { normalizeOsrmBaseUrl } = require('./lib/osrmBaseUrl');
+const complianceLocalized = require('./seedData/complianceLocalizedBodies');
 
 async function main() {
   console.log('🌱 Seeding BrSpark Admin database...\n');
@@ -607,6 +608,7 @@ async function main() {
     {
       id: 'lgpd-v1',
       type: 'LGPD_DPA',
+      locale: 'pt-BR',
       version: '1.0',
       title: 'DPA — Acordo de Processamento de Dados (LGPD)',
       content: [
@@ -628,16 +630,49 @@ async function main() {
         'Este DPA vigora enquanto durar a relação contratual.',
       ].join('\n'),
     },
+    {
+      id: 'terms-v1-en',
+      type: 'TERMS_OF_USE',
+      locale: 'en-US',
+      version: '1.0',
+      title: 'BrSpark Platform — Terms of Use',
+      content: complianceLocalized.TERMS_EN,
+    },
+    {
+      id: 'privacy-v1-en',
+      type: 'PRIVACY_POLICY',
+      locale: 'en-US',
+      version: '1.0',
+      title: 'BrSpark — Privacy Policy',
+      content: complianceLocalized.PRIVACY_EN,
+    },
+    {
+      id: 'terms-v1-es',
+      type: 'TERMS_OF_USE',
+      locale: 'es-ES',
+      version: '1.0',
+      title: 'Plataforma BrSpark — Términos de uso',
+      content: complianceLocalized.TERMS_ES,
+    },
+    {
+      id: 'privacy-v1-es',
+      type: 'PRIVACY_POLICY',
+      locale: 'es-ES',
+      version: '1.0',
+      title: 'BrSpark — Política de privacidad',
+      content: complianceLocalized.PRIVACY_ES,
+    },
   ];
 
   for (const doc of complianceDocs) {
+    const loc = doc.locale || 'pt-BR';
     await prisma.complianceDoc.upsert({
       where: { id: doc.id },
-      update: { content: doc.content, title: doc.title, isActive: true },
-      create: { ...doc, isActive: true, publishedAt: new Date(), createdBy: adminEmail },
+      update: { content: doc.content, title: doc.title, isActive: true, locale: loc },
+      create: { ...doc, locale: loc, isActive: true, publishedAt: new Date(), createdBy: adminEmail },
     });
   }
-  console.log(`✅ Compliance docs: ${complianceDocs.length} documentos (ToU + Privacidade + DPA)`);
+  console.log(`✅ Compliance docs: ${complianceDocs.length} documentos (ToU + Privacidade + DPA + EN/ES)`);
 
 
   // ── Notification Templates ─────────────────────────────

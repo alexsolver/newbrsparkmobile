@@ -33,6 +33,7 @@ interface AuthContextType {
   deleteAccount: () => Promise<void>;
   completeLoginWithOtp: (challengeToken: string, otp: string) => Promise<void>;
   loginWithOtp: (p: { challengeId: string; code: string; name?: string }) => Promise<void>;
+  completeRegisterAfterOtpSetup: (p: { setupToken: string; password: string; consent: boolean }) => Promise<void>;
   userRole: 'CLIENT' | 'TECHNICIAN';
   setUserRole: (role: 'CLIENT' | 'TECHNICIAN') => Promise<void>;
   patchUser: (partial: Partial<User>) => Promise<void>;
@@ -330,6 +331,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync pós-OTP app falhou:', err));
   };
 
+  const completeRegisterAfterOtpSetup = async (p: { setupToken: string; password: string; consent: boolean }) => {
+    const u = await AuthService.completeRegisterAfterOtpSetup(p);
+    setUser(u);
+    runAvatarWarm(u);
+    _setUserRole('CLIENT');
+    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
+    dataCollectionService.onSessionOpen(u.email, u.tenantId, false);
+    ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync pós-registo OTP falhou:', err));
+  };
+
   const register = async (data: { name: string; email: string; password: string; phone?: string; consent: boolean }) => {
     const u = await AuthService.register(data);
     setUser(u);
@@ -376,6 +387,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         deleteAccount,
         completeLoginWithOtp,
         loginWithOtp,
+        completeRegisterAfterOtpSetup,
         userRole,
         setUserRole,
         patchUser,

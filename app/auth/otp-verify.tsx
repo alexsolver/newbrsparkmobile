@@ -1,5 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -7,13 +18,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
 
+/** Confirmação de OTP para login (conta já existente). */
 export default function OtpVerifyScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const p = useLocalSearchParams<{
     challengeId?: string;
-    name?: string;
-    purpose?: string;
   }>();
   const { colors: C } = useTheme();
   const { loginWithOtp } = useAuth();
@@ -50,15 +60,14 @@ export default function OtpVerifyScreen() {
         mainT: { color: '#fff', fontWeight: '900', fontSize: 16 },
         back: { position: 'absolute' as const, top: 8, left: 8, zIndex: 1 },
       }),
-    [C]
+    [C],
   );
 
   const onVerify = async () => {
     if (code.length < 6 || !challengeId) return;
     setLoad(true);
     try {
-      const name = p.purpose === 'register' && p.name ? String(p.name) : undefined;
-      await loginWithOtp({ challengeId, code, name: name && name.trim() ? name.trim() : undefined });
+      await loginWithOtp({ challengeId, code });
     } catch (e: any) {
       Alert.alert(t('auth.errorLogin'), e?.message || t('auth.errorConnection'));
       setCode('');
@@ -76,11 +85,7 @@ export default function OtpVerifyScreen() {
     <SafeAreaView style={s.root} edges={['top', 'bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ paddingTop: 8 }} keyboardShouldPersistTaps="handled">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={s.back}
-            hitSlop={12}
-          >
+          <TouchableOpacity onPress={() => router.back()} style={s.back} hitSlop={12}>
             <Ionicons name="chevron-back" size={24} color={C.accent} />
           </TouchableOpacity>
           <Text style={s.title}>{t('auth.otpTitle')}</Text>
@@ -100,7 +105,7 @@ export default function OtpVerifyScreen() {
             onPress={onVerify}
             disabled={code.length < 6 || load}
           >
-            {load ? <ActivityIndicator color="#fff" /> : <Text style={s.mainT}>OK</Text>}
+            {load ? <ActivityIndicator color="#fff" /> : <Text style={s.mainT}>{t('common.ok')}</Text>}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

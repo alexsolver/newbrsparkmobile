@@ -201,48 +201,39 @@ app.use('/api/operations', require('./routes/operations')); // painel + POST rej
 // Public: effective collection policy for mobile app (no auth)
 app.get('/api/collection-policy/effective', collectionPolicyRoutes.effectiveHandler);
 
+const {
+  findPublishedComplianceDoc,
+  listActiveComplianceDocsForLocale,
+} = require('./lib/complianceLocale');
+
 // Public compliance docs — no auth, for mobile app
 app.get('/api/compliance/active', async (req, res) => {
   try {
-    const { tenantId } = req.query;
-    const where = { isActive: true };
-    // If tenantId provided, return tenant-specific + global (merged, tenant-first)
-    const docs = await prisma.complianceDoc.findMany({
-      where: tenantId
-        ? { isActive: true, OR: [{ tenantId }, { tenantId: null }] }
-        : { isActive: true, tenantId: null },
-      select: { id: true, type: true, version: true, title: true, publishedAt: true, tenantId: true },
-      orderBy: [{ tenantId: 'asc' }, { type: 'asc' }],
+    const { tenantId, locale } = req.query;
+    const docs = await listActiveComplianceDocsForLocale(prisma, {
+      tenantId: typeof tenantId === 'string' && tenantId.trim() ? tenantId.trim() : null,
+      localeHint: typeof locale === 'string' ? locale : null,
     });
-    // Dedupe: prefer tenant-specific over global per type
-    const deduped = {};
-    for (const d of docs) {
-      if (!deduped[d.type] || d.tenantId) deduped[d.type] = d;
-    }
-    res.json(Object.values(deduped));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    res.json(docs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/compliance/active/:type', async (req, res) => {
   try {
-    const { tenantId } = req.query;
+    const { tenantId, locale } = req.query;
     const type = req.params.type.toUpperCase();
-    // Try tenant-specific first, fallback to global
-    let doc = tenantId
-      ? await prisma.complianceDoc.findFirst({
-          where: { type, isActive: true, tenantId },
-          orderBy: { publishedAt: 'desc' },
-        })
-      : null;
-    if (!doc) {
-      doc = await prisma.complianceDoc.findFirst({
-        where: { type, isActive: true, tenantId: null },
-        orderBy: { publishedAt: 'desc' },
-      });
-    }
+    const doc = await findPublishedComplianceDoc(prisma, {
+      type,
+      tenantId: typeof tenantId === 'string' && tenantId.trim() ? tenantId.trim() : null,
+      localeHint: typeof locale === 'string' ? locale : null,
+    });
     if (!doc) return res.status(404).json({ error: 'Documento não encontrado.' });
     res.json(doc);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/compliance/accept — registra ConsentRecord do técnico

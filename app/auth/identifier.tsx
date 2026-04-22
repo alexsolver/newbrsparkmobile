@@ -1,22 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { AuthService } from '../../src/services/auth';
 
-type FlowMode = 'login' | 'register';
-
+/**
+ * OTP só para quem já tem conta (login).
+ * Novo registo: fluxo em `/auth/register-onboarding`.
+ */
 export default function OtpIdentifierScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const p = useLocalSearchParams<{ mode?: string }>();
   const { colors: C } = useTheme();
-  const [mode, setMode] = useState<FlowMode>(p?.mode === 'register' ? 'register' : 'login');
   const [identifier, setId] = useState('');
-  const [name, setName] = useState('');
   const [load, setLoad] = useState(false);
 
   const s = useMemo(
@@ -26,34 +25,40 @@ export default function OtpIdentifierScreen() {
         back: { marginBottom: 8 },
         title: { fontSize: 24, fontWeight: '900', color: C.slate, marginBottom: 6 },
         hint: { fontSize: 14, color: C.textSecondary, marginBottom: 20 },
-        toggles: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-        chip: { flex: 1, padding: 10, borderRadius: 12, borderWidth: 1, borderColor: C.border, alignItems: 'center' },
-        chipOn: { backgroundColor: C.status.info.bg, borderColor: C.accent },
-        chText: { fontSize: 12, fontWeight: '800', color: C.slate },
-        field: { borderWidth: 1, borderColor: C.border, backgroundColor: C.background, borderRadius: 12, padding: 12, fontSize: 16, color: C.primary, fontWeight: '600', marginBottom: 12 },
-        main: { backgroundColor: C.accent, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 4 },
+        field: {
+          borderWidth: 1,
+          borderColor: C.border,
+          backgroundColor: C.background,
+          borderRadius: 12,
+          padding: 12,
+          fontSize: 16,
+          color: C.primary,
+          fontWeight: '600',
+          marginBottom: 12,
+        },
+        main: {
+          backgroundColor: C.accent,
+          borderRadius: 16,
+          paddingVertical: 16,
+          alignItems: 'center',
+          marginTop: 4,
+        },
         mainD: { opacity: 0.5 },
         mainT: { color: '#fff', fontWeight: '900', fontSize: 16 },
-        row: { flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' },
       }),
-    [C]
+    [C],
   );
 
   const send = async () => {
     if (!identifier.trim()) {
-      Alert.alert('', t('auth.alertFillFields'));
-      return;
-    }
-    if (mode === 'register' && !name.trim()) {
-      Alert.alert('', t('auth.alertFillName'));
+      Alert.alert('', t('auth.identifierPlaceholder'));
       return;
     }
     setLoad(true);
     try {
       const out = await AuthService.startOtpAuth({
         identifier: identifier.trim(),
-        purpose: mode === 'register' ? 'register' : 'login',
-        name: mode === 'register' ? name.trim() : undefined,
+        purpose: 'login',
       });
       if (out.devCode && __DEV__) {
         console.log('[OTP dev]', out.devCode);
@@ -62,8 +67,6 @@ export default function OtpIdentifierScreen() {
         pathname: '/auth/otp-verify' as any,
         params: {
           challengeId: out.challengeId,
-          name: mode === 'register' ? name.trim() : '',
-          purpose: mode,
         },
       });
     } catch (e: any) {
@@ -84,26 +87,6 @@ export default function OtpIdentifierScreen() {
       </TouchableOpacity>
       <Text style={s.title}>{t('auth.identifierTitle')}</Text>
       <Text style={s.hint}>{t('auth.identifierHint')}</Text>
-
-      <View style={s.toggles}>
-        <TouchableOpacity style={[s.chip, mode === 'login' && s.chipOn]} onPress={() => setMode('login')}>
-          <Text style={s.chText}>{t('auth.identifierModeLogin')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[s.chip, mode === 'register' && s.chipOn]} onPress={() => setMode('register')}>
-          <Text style={s.chText}>{t('auth.identifierModeRegister')}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {mode === 'register' && (
-        <TextInput
-          value={name}
-          onChangeText={setName}
-          placeholder={t('auth.identifierName')}
-          style={s.field}
-          placeholderTextColor={C.textLight}
-          autoCapitalize="words"
-        />
-      )}
 
       <TextInput
         value={identifier}

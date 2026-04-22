@@ -106,6 +106,14 @@
       </div>
       <div class="form-group"><label class="form-label" id="cmp-lbl-version">Versão</label><input class="form-control" id="editor-version" placeholder="Ex: 2.0" /></div>
     </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label class="form-label" id="cmp-lbl-locale">Idioma (locale)</label>
+      <select class="form-control" id="editor-locale">
+        <option value="pt-BR">Português (pt-BR)</option>
+        <option value="en-US">English (en-US)</option>
+        <option value="es-ES">Español (es-ES)</option>
+      </select>
+    </div>
     <div class="form-group"><label class="form-label" id="cmp-lbl-doc-title">Título</label><input class="form-control" id="editor-doc-title" placeholder="Título completo do documento" /></div>
     <div class="form-group"><label class="form-label" id="cmp-lbl-content">Conteúdo (Markdown)</label><textarea class="editor" id="editor-content" placeholder="# Título&#10;&#10;Escreva o conteúdo em Markdown..."></textarea></div>
   </div>
@@ -135,6 +143,7 @@
     return sorted.map((d, i) => `
       <div class="history-row">
         <span class="ver">v${d.version}</span>
+        <span style="font-size:10px;font-weight:700;color:var(--text3);min-width:52px">${d.locale || 'pt-BR'}</span>
         <span class="badge ${d.isActive ? 'badge-green ver-active' : 'badge-gray ver-draft'}" style="font-size:9px">
           ${d.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Vigente' : i === 0 && !d.isActive ? 'Rascunho' : 'Expirado'}
         </span>
@@ -154,36 +163,43 @@
     const groups = groupByType(docs);
     if (!groups.length) return '<div style="text-align:center;padding:40px;color:var(--text3)">Nenhum documento cadastrado.</div>';
     return groups.map(({ type, docs: typeDocs }) => {
-      const active = typeDocs.find(d => d.isActive);
+      const actives = typeDocs.filter(d => d.isActive);
       const versionsCount = typeDocs.length;
+      const localeBadges = actives.length
+        ? actives.map((a) => `<span class="badge badge-green" style="font-size:9px;margin-right:4px">${a.locale || 'pt-BR'}</span>`).join('')
+        : '';
       return `
         <div class="type-section">
           <div class="type-section-header">
             <span class="badge ${typeMap[type]}">${complianceTypeLabel(type)}</span>
-            <span class="type-section-title">${active ? active.title : 'Sem versão ativa'}</span>
+            <span class="type-section-title">${actives.length ? actives.map((a) => a.title).join(' · ') : 'Sem versão ativa'}</span>
             <span style="font-size:11px;color:var(--text3);margin-right:4px">${versionsCount} versão${versionsCount > 1 ? 'ões' : ''}</span>
-            ${active ? `<span class="badge badge-green" style="font-size:10px"><ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Vigente: v${active.version}</span>` : '<span class="badge badge-amber" style="font-size:10px"><ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Sem versão ativa</span>'}
+            ${actives.length ? `<span style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${localeBadges}<span class="badge badge-green" style="font-size:10px"><ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Vigente</span></span>` : '<span class="badge badge-amber" style="font-size:10px"><ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Sem versão ativa</span>'}
             <button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="toggleHistory('${type}')"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Histórico</button>
             <button class="btn btn-primary btn-sm" style="font-size:11px" onclick="openEditor('${type}')">+ Nova Versão</button>
           </div>
 
-          ${active ? `
-          <div class="doc-card" style="border-left:3px solid var(--green)">
+          ${actives.map((active) => `
+          <div class="doc-card" style="border-left:3px solid var(--green);margin-bottom:8px">
             <div class="doc-card-header">
               <div style="flex:1">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
                   <span style="font-size:13px;font-weight:800;color:var(--text)">${active.title}</span>
                   <span style="font-size:9px;color:var(--text3)">v${active.version}</span>
+                  <span class="badge" style="font-size:9px">${active.locale || 'pt-BR'}</span>
                 </div>
                 <div style="font-size:10px;color:var(--text3)">
                   Publicado: ${active.publishedAt ? new Date(active.publishedAt).toLocaleDateString(mpIntlLocale()) : '—'}
                   &nbsp;·&nbsp; ${active._count?.acceptances || 0} aceitações registradas
                 </div>
               </div>
-              <button class="btn btn-ghost btn-sm" onclick="editDoc('${active.id}')">Editar Vigente</button>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="btn btn-ghost btn-sm" onclick="editDoc('${active.id}')">Editar Vigente</button>
+                <button type="button" class="btn btn-danger btn-sm" style="font-size:11px" data-doc-id="${active.id}" onclick="deleteActiveDoc(this)">Excluir vigente</button>
+              </div>
             </div>
             <div class="doc-content-preview">${(active.content || '').slice(0, 220)}…</div>
-          </div>` : ''}
+          </div>`).join('')}
 
           <!-- Histórico de versões (colapsável) -->
           <div class="history-panel" id="hist-${type}">
@@ -192,6 +208,7 @@
             </div>
             <div style="display:flex;gap:6px;font-size:10px;font-weight:700;color:var(--text3);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:4px">
               <span style="min-width:56px">Versão</span>
+              <span style="min-width:52px">Locale</span>
               <span style="min-width:64px">Status</span>
               <span style="flex:1">Título</span>
               <span style="min-width:80px;text-align:right">Aceitações</span>
@@ -242,11 +259,42 @@
     }
   };
 
+  // ── Delete active (force) — duplo clique para confirmar ─────────────────────
+  window.deleteActiveDoc = async (btn) => {
+    const id = btn.dataset.docId;
+    if (!id) return;
+    if (!btn.dataset.confirming) {
+      btn.dataset.confirming = '1';
+      btn.textContent = 'Confirmar exclusão';
+      btn.classList.replace('btn-danger', 'btn-warning');
+      setTimeout(() => {
+        if (btn.dataset.confirming) {
+          delete btn.dataset.confirming;
+          btn.textContent = 'Excluir vigente';
+          btn.classList.replace('btn-warning', 'btn-danger');
+        }
+      }, 5000);
+      return;
+    }
+    delete btn.dataset.confirming;
+    btn.disabled = true;
+    btn.textContent = '…';
+    const res = await CONFIG.del(`/compliance/${encodeURIComponent(id)}?force=1`);
+    if (res?.error) {
+      alert(mpT('cmp_alert_err', { detail: res.error }));
+      btn.disabled = false;
+      btn.textContent = 'Excluir vigente';
+      btn.classList.replace('btn-warning', 'btn-danger');
+      return;
+    }
+    loadDocs();
+  };
+
   // ── Delete ───────────────────────────────────────────────────────────────────
   window.deleteDoc = async (id, title, btn) => {
     if (btn.dataset.confirming) {
       btn.disabled = true; btn.textContent = '…';
-      const res = await CONFIG.delete(`/compliance/${id}`);
+      const res = await CONFIG.del(`/compliance/${id}`);
       if (res?.error) { alert(mpT('cmp_alert_err', { detail: res.error })); btn.disabled = false; btn.innerHTML = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon>'; delete btn.dataset.confirming; return; }
       loadDocs();
     } else {
@@ -271,6 +319,7 @@
     document.getElementById('editor-version').value    = doc.version;
     document.getElementById('editor-doc-title').value  = doc.title;
     document.getElementById('editor-content').value    = doc.content;
+    document.getElementById('editor-locale').value     = doc.locale || 'pt-BR';
     document.getElementById('editor-type').disabled    = true;  // tipo não muda em edição
     document.getElementById('editor-overlay').classList.add('open');
   };
@@ -281,6 +330,7 @@
     document.getElementById('cmp-editor-title').textContent = mpT('cmp_editor_new_title');
     document.getElementById('editor-type').value       = presetType || 'TERMS_OF_USE';
     document.getElementById('editor-type').disabled    = !!presetType;
+    document.getElementById('editor-locale').value     = 'pt-BR';
     document.getElementById('editor-version').value    = '';
     document.getElementById('editor-doc-title').value  = '';
     document.getElementById('editor-content').value    = '';
@@ -300,6 +350,7 @@
     const title   = document.getElementById('editor-doc-title').value.trim();
     const content = document.getElementById('editor-content').value.trim();
     const type    = document.getElementById('editor-type').value;
+    const locale  = document.getElementById('editor-locale').value.trim() || 'pt-BR';
     const errEl   = document.getElementById('editor-error');
     const pubBtn  = document.getElementById('cmp-btn-publish');
     const dftBtn  = document.getElementById('cmp-btn-draft');
@@ -316,14 +367,14 @@
     try {
       let res;
       if (id) {
-        res = await CONFIG.patch(`/compliance/${id}`, { version, title, content });
+        res = await CONFIG.patch(`/compliance/${id}`, { version, title, content, locale });
         if (res?.error) throw new Error(res.error);
         if (shouldPublish) {
           const pub = await CONFIG.patch(`/compliance/${id}/publish`, {});
           if (pub?.error) throw new Error(pub.error);
         }
       } else {
-        res = await CONFIG.post('/compliance', { type, version, title, content, publish: shouldPublish });
+        res = await CONFIG.post('/compliance', { type, version, title, content, locale, publish: shouldPublish });
         if (res?.error) throw new Error(res.error);
       }
       closeEditor();

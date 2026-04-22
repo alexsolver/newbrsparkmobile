@@ -16,7 +16,12 @@ const { buildEffectiveTenantBranding } = require('../lib/tenantBranding');
 const { buildAppAuthorization } = require('../lib/authorization');
 const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverage');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
-const { startChallenge, verifyChallenge } = require('../lib/otpLoginService');
+const {
+  startChallenge,
+  verifyChallenge,
+  verifyRegisterOtpPhase1,
+  completeRegisterFromSetupToken,
+} = require('../lib/otpLoginService');
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
 const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
 const { resolveAppDefaultTenantId } = require('../lib/appDefaultTenant');
@@ -1132,6 +1137,8 @@ router.post('/otp-auth/start', express.json(), async (req, res) => {
       channelPref: req.body?.channel,
       purpose: req.body?.purpose,
       nameIfRegister: req.body?.name,
+      registerPhone: req.body?.phone,
+      resolveAppDefaultTenantId,
     });
     if (!out.ok) {
       return res.status(out.status || 400).json({ error: out.error });
@@ -1168,6 +1175,47 @@ router.post('/otp-auth/verify', express.json(), async (req, res) => {
     return res.json({ token: out.token, user: out.user });
   } catch (err) {
     console.error('[POST /otp-auth/verify]', err);
+    return res.status(500).json({ error: err?.message || 'Erro interno' });
+  }
+});
+
+/** Registo em 3 passos: após OTP válido, devolve token para definir senha (sem sessão ainda). */
+router.post('/otp-auth/register-verify-otp', express.json(), async (req, res) => {
+  try {
+    const out = await verifyRegisterOtpPhase1(prisma, { resolveAppDefaultTenantId }, {
+      challengeId: req.body?.challengeId,
+      code: req.body?.code,
+      registerName: req.body?.name,
+    });
+    if (!out.ok) {
+      return res.status(out.status || 400).json({ error: out.error, code: out.code, attemptsLeft: out.attemptsLeft });
+    }
+    return res.json({ setupToken: out.setupToken });
+  } catch (err) {
+    console.error('[POST /otp-auth/register-verify-otp]', err);
+    return res.status(500).json({ error: err?.message || 'Erro interno' });
+  }
+});
+
+/** Finaliza registo com senha + consentimento (após `register-verify-otp`). */
+router.post('/otp-auth/register-complete', express.json(), async (req, res) => {
+  try {
+    const out = await completeRegisterFromSetupToken(
+      prisma,
+      { assertTechnicianSeatForNewUser, resolveAppDefaultTenantId, issueAppJwtAfterLogin },
+      {
+        setupToken: req.body?.setupToken,
+        password: req.body?.password,
+        consent: req.body?.consent,
+        deviceId: req.body?.deviceId,
+      },
+    );
+    if (!out.ok) {
+      return res.status(out.status || 400).json({ error: out.error, code: out.code });
+    }
+    return res.status(201).json({ token: out.token, user: out.user });
+  } catch (err) {
+    console.error('[POST /otp-auth/register-complete]', err);
     return res.status(500).json({ error: err?.message || 'Erro interno' });
   }
 });

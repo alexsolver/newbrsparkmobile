@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+import * as Location from 'expo-location';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   TextInput, ActivityIndicator, RefreshControl, Linking,
-  ScrollView, Image,
+  ScrollView, Image, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -25,6 +27,7 @@ import {
   type DirectoryCategoryChip,
 } from '../../../src/services/directoryCategories';
 import { resolveDirectoryMediaUri } from '../../../src/utils/directoryMediaUrl';
+import { requestForegroundLocationAfterRationale } from '../../../src/lib/jitPermissions';
 
 function providerCategoryLabel(t: TFunction, category: string, chips: DirectoryCategoryChip[]): string {
   const chip = chips.find((c) => c.id === category);
@@ -203,6 +206,8 @@ export default function ServicesScreen() {
   const [fromCache, setFromCache] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [categoryChips, setCategoryChips] = useState<DirectoryCategoryChip[]>(FALLBACK_DIRECTORY_CATEGORY_CHIPS);
+  const [geoCity, setGeoCity] = useState('');
+  const jitLocationPromptedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -215,7 +220,29 @@ export default function ServicesScreen() {
     };
   }, []);
 
-  const doSearch = useCallback(async (q: string, cat: string, pg: number, append = false, isRefresh = false) => {
+  useFocusEffect(
+    useCallback(() => {
+      void (async () => {
+        if (jitLocationPromptedRef.current) return;
+        const fg = await Location.getForegroundPermissionsAsync();
+        if (fg.status === Location.PermissionStatus.UNDETERMINED) {
+          jitLocationPromptedRef.current = true;
+          await requestForegroundLocationAfterRationale(t);
+        }
+      })();
+    }, [t]),
+  );
+
+  const doSearch = useCallback(
+    async (
+      q: string,
+      cat: string,
+      pg: number,
+      append = false,
+      isRefresh = false,
+      cityFilter?: string,
+    ) => {
+    const city = cityFilter !== undefined ? cityFilter : geoCity;
     if (pg === 1 && !append) {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
@@ -226,6 +253,7 @@ export default function ServicesScreen() {
     const result = await ProviderService.search({
       q,
       category: cat,
+      city,
       page: pg,
       limit: 20,
       forceRefresh: isRefresh,
@@ -238,7 +266,9 @@ export default function ServicesScreen() {
     setLoading(false);
     setRefreshing(false);
     setLoadingMore(false);
-  }, []);
+    },
+    [geoCity],
+  );
 
   // Debounced search: triggers 400ms after user stops typing
   useEffect(() => {
@@ -248,7 +278,7 @@ export default function ServicesScreen() {
       doSearch(search, category, 1);
     }, 400);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [search, category]);
+  }, [search, category, geoCity, doSearch]);
 
   // Initial load
   useEffect(() => { doSearch('', '', 1); }, []);
@@ -260,6 +290,34 @@ export default function ServicesScreen() {
     const next = page + 1;
     setPage(next);
     doSearch(search, category, next, true);
+  };
+
+  const findNearbyProviders = async () => {
+    const granted = await requestForegroundLocationAfterRationale(t);
+    if (!granted) return;
+    try {
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const [place] = await Location.reverseGeocodeAsync({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      });
+      const city = (place?.city || place?.subregion || place?.district || '').trim();
+      if (!city) {
+        Alert.alert('', t('services.nearbyNoCity'));
+        return;
+      }
+      setGeoCity(city);
+      setPage(1);
+      doSearch(search, category, 1, false, false, city);
+    } catch {
+      Alert.alert('', t('services.nearbyNoCity'));
+    }
+  };
+
+  const clearNearbyFilter = () => {
+    setGeoCity('');
+    setPage(1);
+    doSearch(search, category, 1, false, false, '');
   };
 
   return (
@@ -281,6 +339,49 @@ export default function ServicesScreen() {
             </View>
           )}
         </View>
+      </View>
+
+      <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
+        <TouchableOpacity
+          onPress={findNearbyProviders}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            backgroundColor: C.cardWhite,
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: C.border,
+          }}
+        >
+          <Ionicons name="location-outline" size={20} color={C.accent} />
+          <Text style={{ flex: 1, fontSize: 14, fontWeight: '800', color: C.primary }}>
+            {t('services.nearbyProviders')}
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color={C.textLight} />
+        </TouchableOpacity>
+        {geoCity ? (
+          <TouchableOpacity onPress={clearNearbyFilter} style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                backgroundColor: `${C.accent}22`,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 12,
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: '800', color: C.accent }}>
+                {t('services.nearbyChip', { city: geoCity })}
+              </Text>
+              <Ionicons name="close-circle" size={16} color={C.accent} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* Ações Fixas (Top Menu Scrollable) */}

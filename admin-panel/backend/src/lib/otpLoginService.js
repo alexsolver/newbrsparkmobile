@@ -2,7 +2,12 @@
 
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('./brsparkSyncWebhook');
+
+/** JWT de curta duração após OTP válido no registo — troca por sessão em `register-complete`. */
+const OTP_REG_SETUP_PURPOSE = 'OTP_REG_SETUP_V1';
+const OTP_REG_SETUP_TTL = process.env.OTP_REG_SETUP_TTL || '20m';
 
 const CHALLENGE_TTL_MS = Number(process.env.OTP_TTL_MINUTES || 10) * 60 * 1000;
 const RATE_MAX_START = Math.max(1, Math.min(20, Number(process.env.OTP_RATE_MAX_START || 3)));
@@ -36,6 +41,22 @@ function parseIdentifier(raw) {
   if (digits.length < 10) {
     return { type: 'invalid', key: '' };
   }
+  /** Número internacional explícito (ex.: enviado pelo app após escolher DDI): +… */
+  const hadLeadingPlus = /^\s*\+/.test(String(raw || '').trim());
+  if (hadLeadingPlus) {
+    if (digits.length > 15) {
+      return { type: 'invalid', key: '' };
+    }
+    const e164 = '+' + digits;
+    return {
+      type: 'phone',
+      key: e164,
+      e164,
+      displayEmail: `u${digits}@p.brspark.app`,
+      phoneForDb: e164,
+    };
+  }
+  /** Legado: só dígitos, heurística Brasil (DDD + número). */
   let d = digits;
   if (d.length === 11 && d[0] === '0') d = d.slice(1);
   if (d.length === 10) {
@@ -78,15 +99,16 @@ function otpDevPlaintextAllowed() {
 }
 
 /**
- * OTP por e-mail (MailerSend/Nylas/SMTP). SMS/WhatsApp desativados.
+ * OTP por e-mail: por omissão **Nylas primeiro** (`sendOtpTransactionalEmail`), depois MailerSend.
+ * Outros e-mails transacionais continuam com MailerSend→Nylas. SMS/WhatsApp desativados.
  * Em desenvolvimento, ALLOW_OTP_PLAINTEXT=1 imprime o código em log para telefone.
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {object} opts
  */
 async function sendOtpToChannel(prisma, { channel, target, code, isE164Phone }) {
   if (channel === 'EMAIL' && String(target).includes('@')) {
-    const { sendTransactionalEmailWithFallback } = require('./transactionalEmailSend');
-    const { send, provider } = await sendTransactionalEmailWithFallback({
+    const { sendOtpTransactionalEmail } = require('./transactionalEmailSend');
+    const { send, provider } = await sendOtpTransactionalEmail({
       to: target,
       subject: 'Seu código de acesso',
       text: i18nBrCodeMsgPlain(code),
@@ -99,7 +121,7 @@ async function sendOtpToChannel(prisma, { channel, target, code, isE164Phone }) 
       (send && send.skipped && send.reason) ||
       (send && send.error) ||
       (provider === 'none'
-        ? 'Nenhum envio de e-mail configurado (MailerSend ou Nylas).'
+        ? 'Nenhum envio de e-mail configurado para OTP (Nylas: API Key + Grant ID, ou MailerSend).'
         : 'Falha ao enviar o código por e-mail.');
     return { ok: false, error: String(reason) };
   }
@@ -141,14 +163,65 @@ function escapeOtpHtml(t) {
 
 /**
  * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {{ identifier: string, channelPref?: string, purpose?: string, nameIfRegister?: string, registerPhone?: string, resolveAppDefaultTenantId?: () => Promise<string|null> }} opts
  */
-async function startChallenge(prisma, { identifier, channelPref, purpose, nameIfRegister }) {
-  const parsed = parseIdentifier(identifier);
-  if (parsed.type === 'invalid') {
+async function startChallenge(prisma, { identifier, channelPref, purpose, nameIfRegister, registerPhone, resolveAppDefaultTenantId }) {
+  const purposeN = String(purpose || 'login');
+  const nameTrim = nameIfRegister != null && String(nameIfRegister).trim() ? String(nameIfRegister).trim() : undefined;
+
+  let metadataJson = { nameIfRegister: nameTrim };
+  let parsed = parseIdentifier(identifier);
+
+  if (purposeN === 'register') {
+    if (parsed.type !== 'email') {
+      return {
+        ok: false,
+        error: 'No registo use um e-mail válido. O código de verificação é enviado apenas por e-mail.',
+        status: 400,
+      };
+    }
+    const phoneParsed = parseIdentifier(String(registerPhone || '').trim());
+    if (phoneParsed.type !== 'phone' || !phoneParsed.e164) {
+      return {
+        ok: false,
+        error: 'Indique um telefone válido com DDD e número (mín. 10 dígitos nacionais ou formato internacional).',
+        status: 400,
+      };
+    }
+    metadataJson.phoneIfRegister = phoneParsed.e164;
+
+    if (typeof resolveAppDefaultTenantId === 'function') {
+      const tid = await resolveAppDefaultTenantId();
+      if (tid) {
+        const emailNorm = parsed.key;
+        const existingEmail = await prisma.user.findUnique({
+          where: { email_tenantId: { email: emailNorm, tenantId: tid } },
+        });
+        if (existingEmail) {
+          return {
+            ok: false,
+            code: 'ACCOUNT_EXISTS',
+            error: 'Já existe uma conta com este e-mail. Use Entrar ou recuperação de senha.',
+            status: 409,
+          };
+        }
+        const existingPhone = await prisma.user.findFirst({
+          where: { tenantId: tid, phone: phoneParsed.e164 },
+        });
+        if (existingPhone) {
+          return {
+            ok: false,
+            code: 'PHONE_IN_USE',
+            error: 'Este telefone já está associado a uma conta.',
+            status: 409,
+          };
+        }
+      }
+    }
+  } else if (parsed.type === 'invalid') {
     return { ok: false, error: 'Informe um e-mail válido ou telefone (DD + número).', status: 400 };
   }
 
-  const purposeN = String(purpose || 'login');
   const key = parsed.type === 'email' ? parsed.key : parsed.key;
   const limit = await rateLimitCheck(prisma, key, purposeN);
   if (!limit.ok) {
@@ -180,7 +253,7 @@ async function startChallenge(prisma, { identifier, channelPref, purpose, nameIf
       purpose: purposeN,
       maxAttempts: 5,
       expiresAt: exp,
-      metadataJson: { nameIfRegister: nameIfRegister != null ? String(nameIfRegister).trim() : undefined },
+      metadataJson,
     },
   });
 
@@ -349,8 +422,235 @@ async function verifyChallenge(
   return { ok: true, status: 200, ...out };
 }
 
+/**
+ * Registo em 2 fases: valida OTP de registo **sem** criar utilizador nem emitir JWT de sessão.
+ * Devolve `setupToken` para `completeRegisterFromSetupToken` (definição de senha).
+ */
+async function verifyRegisterOtpPhase1(prisma, { resolveAppDefaultTenantId }, { challengeId, code, registerName }) {
+  const ch = await prisma.otpLoginChallenge.findUnique({ where: { id: String(challengeId) } });
+  if (!ch || ch.consumedAt) {
+    return { ok: false, error: 'Código inválido ou expirado.', status: 400 };
+  }
+  if (String(ch.purpose || '') !== 'register') {
+    return { ok: false, error: 'Fluxo inválido para este código.', status: 400 };
+  }
+  if (new Date(ch.expiresAt).getTime() < Date.now()) {
+    return { ok: false, error: 'Código expirado. Solicite outro.', status: 400 };
+  }
+  if (ch.attempts >= ch.maxAttempts) {
+    return { ok: false, error: 'Muitas tentativas. Solicite um novo código.', status: 400 };
+  }
+
+  const good = await bcrypt.compare(String(code).trim(), ch.codeHash);
+  if (!good) {
+    await prisma.otpLoginChallenge.update({ where: { id: ch.id }, data: { attempts: { increment: 1 } } });
+    return { ok: false, error: 'Código incorreto.', status: 400, attemptsLeft: ch.maxAttempts - ch.attempts - 1 };
+  }
+
+  const meta = (ch.metadataJson && typeof ch.metadataJson === 'object' ? ch.metadataJson : {}) || {};
+  const nameFromMeta =
+    registerName != null && String(registerName).trim()
+      ? String(registerName).trim()
+      : meta.nameIfRegister != null && String(meta.nameIfRegister).trim()
+        ? String(meta.nameIfRegister).trim()
+        : null;
+  if (!nameFromMeta) {
+    return { ok: false, code: 'NAME_REQUIRED', error: 'Indique o nome completo no passo de registo.', status: 400 };
+  }
+
+  const isEmail = ch.target.includes('@');
+  const displayEmail = isEmail ? ch.target : `u${ch.target.replace(/\D/g, '')}@p.brspark.app`;
+  const phoneE164 =
+    meta.phoneIfRegister != null && String(meta.phoneIfRegister).trim()
+      ? String(meta.phoneIfRegister).trim()
+      : null;
+  if (!phoneE164) {
+    return {
+      ok: false,
+      code: 'PHONE_REQUIRED',
+      error: 'Registo incompleto: falta o telefone associado ao pedido. Solicite um novo código.',
+      status: 400,
+    };
+  }
+
+  const defaultTenantId = await resolveAppDefaultTenantId();
+  if (!defaultTenantId) {
+    return {
+      ok: false,
+      error: 'Configuração do servidor: tenant master BrSpark (slug brspark) não encontrada.',
+      status: 503,
+    };
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { email_tenantId: { email: displayEmail, tenantId: defaultTenantId } },
+  });
+  if (existing) {
+    return {
+      ok: false,
+      code: 'ACCOUNT_EXISTS',
+      error: 'Já existe uma conta com este e-mail ou telefone. Use Entrar ou recuperação de senha.',
+      status: 409,
+    };
+  }
+  const existingPhone = await prisma.user.findFirst({
+    where: { tenantId: defaultTenantId, phone: phoneE164 },
+  });
+  if (existingPhone) {
+    return {
+      ok: false,
+      code: 'PHONE_IN_USE',
+      error: 'Este telefone já está associado a uma conta.',
+      status: 409,
+    };
+  }
+
+  await prisma.otpLoginChallenge.update({
+    where: { id: ch.id },
+    data: { consumedAt: new Date(), userId: null },
+  });
+
+  const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+  if (!jwtSecret) {
+    return { ok: false, error: 'Servidor mal configurado (JWT).', status: 500 };
+  }
+
+  const jti = randomUuid();
+  const setupToken = jwt.sign(
+    {
+      purpose: OTP_REG_SETUP_PURPOSE,
+      jti,
+      email: displayEmail,
+      phone: phoneE164,
+      name: nameFromMeta,
+    },
+    jwtSecret,
+    { expiresIn: OTP_REG_SETUP_TTL },
+  );
+
+  return { ok: true, status: 200, setupToken };
+}
+
+/**
+ * Cria utilizador com senha após `verifyRegisterOtpPhase1`.
+ */
+async function completeRegisterFromSetupToken(
+  prisma,
+  { assertTechnicianSeatForNewUser, resolveAppDefaultTenantId, issueAppJwtAfterLogin },
+  { setupToken, password, consent, deviceId },
+) {
+  if (!consent) {
+    return { ok: false, error: 'Você deve aceitar os Termos de Uso e a Política de Privacidade.', status: 400 };
+  }
+  const rawPass = String(password || '');
+  if (rawPass.length < 6) {
+    return { ok: false, error: 'Senha deve ter ao menos 6 caracteres.', status: 400 };
+  }
+
+  const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+  if (!jwtSecret) {
+    return { ok: false, error: 'Servidor mal configurado (JWT).', status: 500 };
+  }
+
+  let payload;
+  try {
+    payload = jwt.verify(String(setupToken || '').trim(), jwtSecret);
+  } catch {
+    return { ok: false, error: 'Sessão de registo expirada ou inválida. Solicite um novo código.', status: 400 };
+  }
+  if (!payload || payload.purpose !== OTP_REG_SETUP_PURPOSE || !payload.email) {
+    return { ok: false, error: 'Token de registo inválido.', status: 400 };
+  }
+
+  const displayEmail = String(payload.email).trim().toLowerCase();
+  const name = String(payload.name || '').trim() || displayEmail.split('@')[0];
+  const phoneVal = payload.phone != null && String(payload.phone).trim() ? String(payload.phone).trim() : null;
+  if (!phoneVal) {
+    return { ok: false, error: 'Token de registo inválido ou incompleto (telefone). Solicite um novo código.', status: 400 };
+  }
+
+  const defaultTenantId = await resolveAppDefaultTenantId();
+  if (!defaultTenantId) {
+    return {
+      ok: false,
+      error: 'Registo indisponível: não foi encontrada a tenant master BrSpark.',
+      status: 503,
+    };
+  }
+
+  const tenant = await prisma.tenant.findUnique({ where: { id: defaultTenantId } });
+  if (!tenant || tenant.status === 'SUSPENDED' || tenant.status === 'CANCELLED') {
+    return { ok: false, error: 'Novos registros estão temporariamente indisponíveis.', status: 403 };
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: { email_tenantId: { email: displayEmail, tenantId: defaultTenantId } },
+  });
+  if (existingUser) {
+    return { ok: false, error: 'Este e-mail já está cadastrado.', status: 409 };
+  }
+
+  const existingByPhone = await prisma.user.findFirst({
+    where: { tenantId: defaultTenantId, phone: phoneVal },
+  });
+  if (existingByPhone) {
+    return { ok: false, error: 'Este telefone já está cadastrado.', status: 409 };
+  }
+
+  const seat = await assertTechnicianSeatForNewUser(prisma, defaultTenantId, 'USER');
+  if (!seat.ok) {
+    return { ok: false, error: seat.error, code: seat.code, status: 403 };
+  }
+
+  const passHash = await bcrypt.hash(rawPass, 10);
+
+  const user = await prisma.$transaction(async (tx) => {
+    const u = await tx.user.create({
+      data: {
+        name,
+        email: displayEmail,
+        password: passHash,
+        tenantId: defaultTenantId,
+        phone: phoneVal,
+        role: 'USER',
+        phoneVerifiedAt: phoneVal ? new Date() : null,
+      },
+      include: { tenant: { include: { subscription: { include: { plan: true } } } }, technicianProfile: true },
+    });
+    await tx.auditLog.create({
+      data: {
+        tenantId: defaultTenantId,
+        userId: u.id,
+        action: 'USER_REGISTER_OTP_PASSWORD',
+        resource: displayEmail,
+        category: 'AUTH',
+      },
+    });
+    return u;
+  });
+
+  deliverBrsparkLaravelEvent({
+    type: EVENT_TYPES.USER_CREATED,
+    idempotencyKey: `user-${user.id}-register-otp-pwd`,
+    payload: { userId: user.id, tenantId: user.tenantId, email: user.email, phone: user.phone, source: 'otp_password' },
+  }).catch((e) => console.warn('[otp reg complete] sync webhook', e));
+
+  const full = await prisma.user.findUnique({
+    where: { id: user.id },
+    include: { tenant: { include: { subscription: { include: { plan: true } } } }, technicianProfile: true },
+  });
+  if (!full) {
+    return { ok: false, error: 'Falha ao recarregar utilizador.', status: 500 };
+  }
+
+  const out = await issueAppJwtAfterLogin(full, deviceId, displayEmail);
+  return { ok: true, status: 200, ...out };
+}
+
 module.exports = {
   startChallenge,
   verifyChallenge,
+  verifyRegisterOtpPhase1,
+  completeRegisterFromSetupToken,
   parseIdentifier,
 };

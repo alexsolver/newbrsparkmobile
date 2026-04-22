@@ -15,7 +15,7 @@ const {
 } = require('../lib/technicianRegistrationMaterialize');
 const { defaultEmptySchedule, initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
 const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverage');
-const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
+const { sendTransactionalEmailWithFallback, sendOtpTransactionalEmail } = require('../lib/transactionalEmailSend');
 const { syncComprefaceGalleryAfterUserChange } = require('../lib/comprefaceGallerySyncTrigger');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { handleTechnicianProfilePhotoAiValidate } = require('../lib/handleTechnicianProfilePhotoAiValidate');
@@ -160,7 +160,7 @@ async function issueTechRegSubmitOtpChallenge({ app, reqUser }) {
     `<p>Validade: <strong>${Math.ceil(TECH_REG_SUBMIT_OTP_TTL_SECONDS / 60)} minuto(s)</strong>.</p>` +
     '<p>Se você não solicitou este código, ignore este e-mail.</p>';
 
-  await sendTransactionalEmailWithFallback({
+  await sendOtpTransactionalEmail({
     to: email,
     subject: 'BrSpark — código de confirmação do cadastro',
     text,

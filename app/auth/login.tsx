@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Alert, ImageBackground,
-  ActivityIndicator, Linking, Modal, ActionSheetIOS,
+  ActivityIndicator, Linking, Modal,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -21,20 +21,9 @@ import {
   MultipleAccountsError,
   type LoginTenantOption,
 } from '../../src/services/auth';
-import { setLanguage, getDeviceRegion } from '../../src/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
 import { LoginOAuthNativeSection, type NativeOAuthPending } from '../../src/components/auth/LoginOAuthNativeSection';
-const REGION_KEY = '@brspark_region';
-
-const COUNTRIES = [
-  { code: 'BR', label: 'Brasil',    lang: 'pt-BR' as const },
-  { code: 'US', label: 'USA',       lang: 'en-US' as const },
-  { code: 'ES', label: 'España',    lang: 'es-ES' as const },
-  { code: 'AR', label: 'Argentina', lang: 'es-ES' as const },
-];
-
-type Mode = 'LOGIN' | 'REGISTER';
 
 function createLoginStyles(C: ColorPalette) {
   return StyleSheet.create({
@@ -102,23 +91,6 @@ function createLoginStyles(C: ColorPalette) {
       fontWeight: '700',
     },
 
-    consentRow: {
-      flexDirection: 'row', alignItems: 'flex-start', gap: 12,
-      backgroundColor: C.status.info.bg, borderRadius: 12,
-      borderWidth: 1, borderColor: C.status.info.border,
-      padding: 14, marginBottom: 8,
-    },
-    checkbox: {
-      width: 20, height: 20, borderRadius: 6,
-      borderWidth: 2, borderColor: C.accent,
-      justifyContent: 'center', alignItems: 'center',
-      marginTop: 1, flexShrink: 0,
-    },
-    checkboxActive: { backgroundColor: C.accent, borderColor: C.accent },
-    consentText: {
-      flex: 1, fontSize: 13, color: C.textSecondary,
-      fontWeight: '500', lineHeight: 20,
-    },
     link: { color: C.accent, fontWeight: '700', textDecorationLine: 'underline' },
 
     cta: {
@@ -221,15 +193,6 @@ function createLoginStyles(C: ColorPalette) {
       fontSize: 14,
     },
 
-    // Country / language (register) — uma linha compacta + modal
-    countryRow: { marginBottom: 4, marginTop: 2 },
-    countrySelectTitle: {
-      fontSize: 15, color: C.primary, fontWeight: '700',
-      paddingVertical: 2,
-    },
-    countrySelectSub: {
-      fontSize: 12, color: C.textLight, fontWeight: '600', marginTop: 2,
-    },
   });
 }
 
@@ -284,40 +247,27 @@ export default function LoginScreen() {
     typeof params.techRegToken === 'string' && params.techRegToken.trim()
       ? params.techRegToken.trim()
       : undefined;
-  const { login, loginWithOAuth, register, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
+  const { login, loginWithOAuth, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
   const { t, i18n } = useTranslation();
   const { colors: C, appTagline, loginBackgroundUrl } = useTheme();
   const styles = useMemo(() => createLoginStyles(C), [C]);
 
-  const [mode, setMode] = useState<Mode>('LOGIN');
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
-  // Fields
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [consent, setConsent] = useState(false);
-  const [country, setCountry] = useState<string>(() => getDeviceRegion());
-
-  // País: preferir valor guardado no perfil; senão região/idioma do sistema (getDeviceRegion).
-  useEffect(() => {
-    let cancel = false;
-    (async () => {
-      const stored = await AsyncStorage.getItem(REGION_KEY);
-      if (cancel) return;
-      const ok = ['BR', 'US', 'ES', 'AR'];
-      if (stored && ok.includes(stored)) setCountry(stored);
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, []);
 
   useEffect(() => {
     const r = params.register;
-    if (r === '1' || r === 'true') setMode('REGISTER');
-  }, [params.register]);
+    if (r === '1' || r === 'true') {
+      router.replace(
+        techRegToken
+          ? ({ pathname: '/auth/register-onboarding', params: { techRegToken } } as any)
+          : ('/auth/register-onboarding' as any),
+      );
+    }
+  }, [params.register, router, techRegToken]);
 
   // Compliance doc viewer
   const [docModal, setDocModal] = useState<{ title: string; content: string } | null>(null);
@@ -325,17 +275,6 @@ export default function LoginScreen() {
   const [passwordResetVisible, setPasswordResetVisible] = useState(false);
   const [passwordResetEmail, setPasswordResetEmail] = useState('');
   const [passwordResetSending, setPasswordResetSending] = useState(false);
-
-  // Legal basis from policy (LGPD, GDPR, etc.)
-  const [legalBasis, setLegalBasis] = useState('LGPD');
-
-  useEffect(() => {
-    AsyncStorage.getItem('@brspark_collection_policy').then(raw => {
-      if (raw) {
-        try { setLegalBasis(JSON.parse(raw).legalBasis || 'LGPD'); } catch {}
-      }
-    });
-  }, []);
 
   useEffect(() => {
     if (authBoot || !user || !techRegToken) return;
@@ -362,70 +301,13 @@ export default function LoginScreen() {
     } as any);
   };
 
-  const selectedCountry = useMemo(
-    () => COUNTRIES.find((c) => c.code === country) || COUNTRIES[0],
-    [country]
-  );
-
-  const applyCountryAndLanguage = async (c: (typeof COUNTRIES)[number]) => {
-    setCountry(c.code);
-    await AsyncStorage.setItem(REGION_KEY, c.code);
-    await setLanguage(c.lang);
-  };
-
-  /** iOS: action sheet nativo. Android: Alert com lista — evita modal customizado por baixo de outras camadas. */
-  const openCountryLanguagePicker = () => {
-    const titleRaw = t('auth.selectCountryTitle');
-    const title =
-      titleRaw === 'auth.selectCountryTitle' || !titleRaw?.trim() ? 'País e idioma' : titleRaw;
-    const messageRaw = t('auth.countryHint');
-    const message =
-      messageRaw === 'auth.countryHint' || !messageRaw?.trim()
-        ? 'Define o idioma da interface e preferências regionais.'
-        : messageRaw;
-    const cancelLabel = t('common.cancel');
-
-    if (Platform.OS === 'ios') {
-      const options = [
-        ...COUNTRIES.map((c) => String(t(`auth.regions.${c.code}`, { defaultValue: c.label }))),
-        cancelLabel,
-      ];
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options,
-          cancelButtonIndex: COUNTRIES.length,
-          title,
-          message,
-        },
-        (idx) => {
-          if (idx === undefined || idx === COUNTRIES.length) return;
-          void applyCountryAndLanguage(COUNTRIES[idx]);
-        }
-      );
-      return;
-    }
-
-    Alert.alert(title, message, [
-      ...COUNTRIES.map((c) => ({
-        text: String(t(`auth.regions.${c.code}`, { defaultValue: c.label })),
-        onPress: () => void applyCountryAndLanguage(c),
-      })),
-      { text: cancelLabel, style: 'cancel' },
-    ]);
-  };
-
-  const countryFieldLabel = useMemo(() => {
-    const raw = t('auth.countryLabel');
-    if (!raw || raw === 'auth.countryLabel') return 'País e idioma do app';
-    return raw;
-  }, [t, i18n.language]);
-
   const openDoc = async (type: 'TERMS_OF_USE' | 'PRIVACY_POLICY') => {
     setDocLoading(true);
     try {
       // Try tenant-specific document first, then fallback to global
       const storedEmail = await AsyncStorage.getItem('@brspark_email');
-      const res = await fetch(`${API_BASE}/api/compliance/active/${type}`);
+      const loc = encodeURIComponent(i18n.language || 'pt-BR');
+      const res = await fetch(`${API_BASE}/api/compliance/active/${type}?locale=${loc}`);
       if (res.ok) {
         const doc = await res.json();
         setDocModal({ title: doc.title, content: doc.content });
@@ -494,19 +376,10 @@ export default function LoginScreen() {
       return Alert.alert('', t('auth.alertFillFields'));
     }
     oauthPendingRef.current = null;
-    if (mode === 'REGISTER') {
-      if (!name) return Alert.alert('', t('auth.alertFillName'));
-      if (password.length < 6) return Alert.alert('', t('auth.alertWeakPass'));
-      if (!consent) return Alert.alert('', t('auth.alertConsentRequired'));
-    }
 
     setLoading(true);
     try {
-      if (mode === 'LOGIN') {
-        await login(email, password);
-      } else {
-        await register({ name, email, password, consent });
-      }
+      await login(email, password);
       goToTechRegistrationAfterAuth();
       // Sem convite: RouteGuard trata onboarding / tabs
     } catch (e: any) {
@@ -521,7 +394,7 @@ export default function LoginScreen() {
         return;
       }
       Alert.alert(
-        mode === 'LOGIN' ? t('auth.errorLogin') : t('auth.errorRegister'),
+        t('auth.errorLogin'),
         e?.message || t('auth.errorConnection')
       );
     } finally {
@@ -768,36 +641,27 @@ export default function LoginScreen() {
           )}
 
 
-          {/* Mode Tabs */}
+          {/* Abas: Entrar (esta tela) / Criar conta (fluxo OTP + senha) */}
           <View style={styles.tabs}>
-            {(['LOGIN', 'REGISTER'] as Mode[]).map(m => (
-              <TouchableOpacity
-                key={m}
-                style={[styles.tab, mode === m && styles.tabActive]}
-                onPress={() => setMode(m)}
-              >
-                <Text style={[styles.tabT, mode === m && styles.tabTActive]}>
-                  {m === 'LOGIN' ? t('auth.login') : t('auth.createAccount')}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            <View style={[styles.tab, styles.tabActive]}>
+              <Text style={[styles.tabT, styles.tabTActive]}>{t('auth.login')}</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.tab}
+              onPress={() =>
+                router.push(
+                  techRegToken
+                    ? ({ pathname: '/auth/register-onboarding', params: { techRegToken } } as any)
+                    : ('/auth/register-onboarding' as any),
+                )
+              }
+            >
+              <Text style={styles.tabT}>{t('auth.createAccount')}</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
-            {mode === 'REGISTER' && (
-              <>
-                <Field
-                  label={t('auth.fullName').toUpperCase() + ' *'}
-                  value={name}
-                  onChangeText={setName}
-                  placeholder={t('auth.fullNamePlaceholder')}
-                  icon="person-outline"
-                  C={C}
-                  formStyles={styles}
-                />
-              </>
-            )}
             <Field
               label={t('auth.email').toUpperCase() + ' *'}
               value={email}
@@ -821,74 +685,13 @@ export default function LoginScreen() {
               formStyles={styles}
             />
 
-            {mode === 'LOGIN' && (
-              <TouchableOpacity
-                style={styles.forgotLinkRow}
-                onPress={openPasswordResetModal}
-                disabled={loading}
-              >
-                <Text style={styles.forgotLinkText}>{t('auth.forgotPassword')}</Text>
-              </TouchableOpacity>
-            )}
-
-
-
-
-            {/* País / idioma — linha única; lista no modal (padrão de apps) */}
-            {mode === 'REGISTER' && (
-              <View style={styles.countryRow}>
-                <View style={styles.fieldG}>
-                  <Text style={styles.fieldL}>{countryFieldLabel.toUpperCase()}</Text>
-                  <TouchableOpacity
-                    style={styles.fieldRow}
-                    onPress={openCountryLanguagePicker}
-                    activeOpacity={0.75}
-                    accessibilityRole="button"
-                    accessibilityLabel={countryFieldLabel}
-                    accessibilityHint={
-                      t('auth.countryHint') === 'auth.countryHint'
-                        ? 'Define o idioma do app'
-                        : t('auth.countryHint')
-                    }
-                  >
-                    <Ionicons name="globe-outline" size={18} color={C.textLight} style={styles.fieldIcon} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.countrySelectTitle}>
-                        {t(`auth.regions.${selectedCountry.code}`, { defaultValue: selectedCountry.label })}
-                      </Text>
-                      <Text style={styles.countrySelectSub}>
-                        {selectedCountry.lang} · {selectedCountry.code}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-down" size={20} color={C.textLight} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {/* LGPD / GDPR Consent */}
-            {mode === 'REGISTER' && (
-              <TouchableOpacity
-                style={styles.consentRow}
-                onPress={() => setConsent(c => !c)}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.checkbox, consent && styles.checkboxActive]}>
-                  {consent && <Ionicons name="checkmark" size={13} color={C.cardWhite} />}
-                </View>
-                <Text style={styles.consentText}>
-                  {t('auth.consentText')}{' '}
-                  <Text style={styles.link} onPress={() => openDoc('TERMS_OF_USE')}>
-                    {t('auth.termsOfUse')}
-                  </Text>
-                  {' '}{t('auth.and')}{' '}
-                  <Text style={styles.link} onPress={() => openDoc('PRIVACY_POLICY')}>
-                    {t('auth.privacyPolicy')}
-                  </Text>
-                  {' '}({t('auth.consentRequired')})
-                </Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.forgotLinkRow}
+              onPress={openPasswordResetModal}
+              disabled={loading}
+            >
+              <Text style={styles.forgotLinkText}>{t('auth.forgotPassword')}</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.cta, loading && { opacity: 0.7 }]}
@@ -900,33 +703,25 @@ export default function LoginScreen() {
                 <ActivityIndicator color={C.cardWhite} />
               ) : (
                 <>
-                  <Ionicons
-                    name={mode === 'LOGIN' ? 'log-in-outline' : 'person-add-outline'}
-                    size={20}
-                    color={C.cardWhite}
-                  />
-                  <Text style={styles.ctaText}>
-                    {mode === 'LOGIN' ? t('auth.loginPlatform') : t('auth.createMyAccount')}
-                  </Text>
+                  <Ionicons name="log-in-outline" size={20} color={C.cardWhite} />
+                  <Text style={styles.ctaText}>{t('auth.loginPlatform')}</Text>
                 </>
               )}
             </TouchableOpacity>
 
-            {mode === 'LOGIN' ? (
-              <LoginOAuthNativeSection
-                C={C}
-                disabled={loading}
-                labelDivider={t('auth.oauthOrContinue')}
-                labelGoogle={t('auth.oauthGoogle')}
-                labelMeta={t('auth.oauthMeta')}
-                labelApple={t('auth.oauthApple')}
-                unconfiguredOauthMessage={t('auth.oauthNotConfigured')}
-                onOAuth={(pending) => runNativeOAuthLogin(pending)}
-                onNativeError={(msg) =>
-                  Alert.alert(t('auth.errorLogin'), msg || t('auth.errorConnection'))
-                }
-              />
-            ) : null}
+            <LoginOAuthNativeSection
+              C={C}
+              disabled={loading}
+              labelDivider={t('auth.oauthOrContinue')}
+              labelGoogle={t('auth.oauthGoogle')}
+              labelMeta={t('auth.oauthMeta')}
+              labelApple={t('auth.oauthApple')}
+              unconfiguredOauthMessage={t('auth.oauthNotConfigured')}
+              onOAuth={(pending) => runNativeOAuthLogin(pending)}
+              onNativeError={(msg) =>
+                Alert.alert(t('auth.errorLogin'), msg || t('auth.errorConnection'))
+              }
+            />
 
             <TouchableOpacity onPress={async () => { await logout(); router.replace(getPersonaHomeHref('client') as any); }} style={styles.guestLink}>
               <Text style={styles.guestLinkText}>{t('auth.exploreGuest')}</Text>

@@ -551,15 +551,21 @@ export class AuthService {
     identifier: string;
     purpose?: 'login' | 'register';
     name?: string;
+    /** Obrigatório com `purpose: register`: telefone em formato nacional ou internacional (o OTP vai só para o e-mail). */
+    phone?: string;
   }): Promise<{ challengeId: string; channel: string; expiresInSec: number; devCode?: string }> {
+    const body: Record<string, unknown> = {
+      identifier: params.identifier.trim(),
+      purpose: params.purpose || 'login',
+      name: params.name,
+    };
+    if (params.phone != null && String(params.phone).trim()) {
+      body.phone = String(params.phone).trim();
+    }
     const res = await fetch(`${API_BASE}/api/otp-auth/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        identifier: params.identifier.trim(),
-        purpose: params.purpose || 'login',
-        name: params.name,
-      }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -594,6 +600,63 @@ export class AuthService {
       throw new Error(
         (data as { error?: string }).error || (data as { code?: string }).code || 'Código inválido.',
       );
+    }
+    const d = data as { token: string; user: User };
+    await AuthService.wipeLocalDataBeforeNewSession(d.user);
+    await AsyncStorage.setItem(TOKEN_KEY, d.token);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(d.user));
+    await AuthService.tryAutoRestoreOfflineBackup(d.user);
+    return d.user;
+  }
+
+  /** OTP de registo — valida código sem criar sessão; devolve token para o passo da senha. */
+  static async verifyRegisterOtpPhase1(params: {
+    challengeId: string;
+    code: string;
+    name?: string;
+  }): Promise<{ setupToken: string }> {
+    const res = await fetch(`${API_BASE}/api/otp-auth/register-verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challengeId: params.challengeId,
+        code: params.code.trim(),
+        name: params.name,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(
+        (data as { error?: string }).error || (data as { code?: string }).code || 'Código inválido.',
+      );
+    }
+    const setupToken = String((data as { setupToken?: string }).setupToken || '');
+    if (!setupToken) {
+      throw new Error('Resposta inválida do servidor.');
+    }
+    return { setupToken };
+  }
+
+  /** Finaliza registo após OTP (senha + consentimento LGPD/GDPR). */
+  static async completeRegisterAfterOtpSetup(params: {
+    setupToken: string;
+    password: string;
+    consent: boolean;
+  }): Promise<User> {
+    const deviceId = await getDeviceId();
+    const res = await fetch(`${API_BASE}/api/otp-auth/register-complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        setupToken: params.setupToken,
+        password: params.password,
+        consent: params.consent,
+        deviceId,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error((data as { error?: string }).error || (data as { code?: string }).code || 'Erro ao criar conta.');
     }
     const d = data as { token: string; user: User };
     await AuthService.wipeLocalDataBeforeNewSession(d.user);

@@ -16,6 +16,7 @@ import { Badge } from '../../src/components/Badge';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import { ensureCameraPermissionAfterRationale, ensureLibraryPermissionAfterRationale } from '../../src/lib/jitPermissions';
 import * as Location from 'expo-location';
 import { ApiService } from '../../src/services/api';
 import QRCode from 'react-native-qrcode-svg';
@@ -513,11 +514,18 @@ export default function AssetDetailScreen() {
     }
     const launcher = mode === 'camera'
       ? async () => {
-          const perm = await ImagePicker.requestCameraPermissionsAsync();
-          if (!perm.granted) { Alert.alert('Permissão negada', 'Câmera não autorizada.'); return null; }
+          const ok = await ensureCameraPermissionAfterRationale(t);
+          if (!ok) {
+            Alert.alert(t('profile.permDenied'), t('profile.cameraPermDenied'));
+            return null;
+          }
           return ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1,1], quality: 0.7 });
         }
-      : async () => ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1,1], quality: 0.7 });
+      : async () => {
+          const ok = await ensureLibraryPermissionAfterRationale(t);
+          if (!ok) return null;
+          return ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1,1], quality: 0.7 });
+        };
     const result = await launcher();
     if (!result || result.canceled) return;
     const uri = result.assets[0].uri;
@@ -935,24 +943,26 @@ export default function AssetDetailScreen() {
         {
           text: t('profile.takePhoto'),
           onPress: async () => {
-            const perm = await ImagePicker.requestCameraPermissionsAsync();
-            if (perm.granted) {
-              let result = await ImagePicker.launchCameraAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: false, quality: 0.6,
-              });
-              if (!result.canceled) {
-                setEditForm((prev: any) => ({ ...prev, photos: [...prev.photos, { uri: result.assets[0].uri, description: '' }] }));
-              }
-            } else {
+            const ok = await ensureCameraPermissionAfterRationale(t);
+            if (!ok) {
               Alert.alert(t('profile.permDenied'), t('profile.cameraPermDenied'));
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: false, quality: 0.6,
+            });
+            if (!result.canceled) {
+              setEditForm((prev: any) => ({ ...prev, photos: [...prev.photos, { uri: result.assets[0].uri, description: '' }] }));
             }
           }
         },
         {
           text: t('profile.cameraRoll'),
           onPress: async () => {
-            let result = await ImagePicker.launchImageLibraryAsync({
+            const ok = await ensureLibraryPermissionAfterRationale(t);
+            if (!ok) return;
+            const result = await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
               allowsEditing: false, quality: 0.6,
               allowsMultipleSelection: true,

@@ -8,7 +8,7 @@ export default function AppIntroScreen() {
 
   const goRegister = useCallback(() => {
     markAppIntroDismissedForGuestSession();
-    router.replace({ pathname: '/auth/login', params: { register: '1' } } as any);
+    router.replace('/auth/register-onboarding' as any);
   }, [router]);
 
   return (

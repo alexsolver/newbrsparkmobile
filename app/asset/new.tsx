@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { saveAssetsLocal, getLocalAssets, queueOfflineAction, logAssetHistory } from '../../src/database';
 import { Asset } from '../../src/types/asset';
 import * as ImagePicker from 'expo-image-picker';
+import { ensureCameraPermissionAfterRationale, ensureLibraryPermissionAfterRationale } from '../../src/lib/jitPermissions';
 import * as Location from 'expo-location';
 import { ApiService } from '../../src/services/api';
 import { pushSyncQueue } from '../../src/services/syncService';
@@ -363,24 +364,26 @@ export default function NewAssetScreen() {
         {
           text: t('newAsset.cameraCapture'),
           onPress: async () => {
-            const perm = await ImagePicker.requestCameraPermissionsAsync();
-            if (perm.granted) {
-              let result = await ImagePicker.launchCameraAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true, quality: 0.6,
-              });
-              if (!result.canceled) {
-                setPhotos((prev: string[]) => [...prev, result.assets[0].uri]);
-              }
-            } else {
+            const ok = await ensureCameraPermissionAfterRationale(t);
+            if (!ok) {
               Alert.alert(t('common.error'), t('newAsset.cameraPermError'));
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: true, quality: 0.6,
+            });
+            if (!result.canceled) {
+              setPhotos((prev: string[]) => [...prev, result.assets[0].uri]);
             }
           }
         },
         {
           text: t('newAsset.deviceGallery'),
           onPress: async () => {
-            let result = await ImagePicker.launchImageLibraryAsync({
+            const ok = await ensureLibraryPermissionAfterRationale(t);
+            if (!ok) return;
+            const result = await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
               allowsEditing: true, quality: 0.6,
             });

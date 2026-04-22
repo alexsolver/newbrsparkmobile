@@ -799,6 +799,7 @@ model ComplianceDoc {
   id          String   @id @default(cuid())
   type        DocType
   version     String   // e.g. "1.2"
+  locale      String   @default("pt-BR") // BCP-47 pt-BR | en-US | es-ES — ativo por type+tenant+locale
   title       String
   content     String   @db.Text
   isActive    Boolean  @default(false)  // only one active per type
