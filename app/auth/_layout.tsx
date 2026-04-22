@@ -5,7 +5,6 @@ export default function AuthLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="app-intro" />
       <Stack.Screen name="login" />
-      <Stack.Screen name="welcome" />
       <Stack.Screen name="identifier" />
       <Stack.Screen name="otp-verify" />
       <Stack.Screen name="legal-sign" />

@@ -167,6 +167,8 @@ export default function ChatRoomScreen() {
           return next;
         });
         lastTs.current = msgs[msgs.length - 1].timestamp;
+        // Atualiza lastReadAt no servidor para o badge da lista baixar ao ver mensagens novas no fio.
+        ChatService.markAsRead(roomId!).catch(() => {});
       }
     },
     [roomId, user?.id, isOnline, isOpsChat],
@@ -196,7 +198,10 @@ export default function ChatRoomScreen() {
   useFocusEffect(
     useCallback(() => {
       void runFlush();
-    }, [runFlush]),
+      if (roomId && !isOpsChat && isOnline === true) {
+        ChatService.markAsRead(roomId).catch(() => {});
+      }
+    }, [runFlush, roomId, isOpsChat, isOnline]),
   );
 
   useEffect(() => {
@@ -258,9 +263,11 @@ export default function ChatRoomScreen() {
       loadRoomInfo();
       loadMessagingState();
 
+      let initialMessagesSynced = false;
       try {
         const remote = await ChatService.getMessages(roomId, 0);
         if (cancelled) return;
+        initialMessagesSynced = true;
         if (remote.length > 0) {
           setMessages((prev) => {
             const merged = mergeRemoteWithPending(remote, prev.length ? prev : initial);
@@ -269,9 +276,12 @@ export default function ChatRoomScreen() {
             return merged;
           });
         }
-        ChatService.markAsRead(roomId).catch(() => {});
       } catch {
         /* mantém cache e mensagens pendentes locais */
+      } finally {
+        if (!cancelled && !isOpsChat && roomId && isOnline === true && initialMessagesSynced) {
+          ChatService.markAsRead(roomId).catch(() => {});
+        }
       }
     })();
     return () => {
@@ -291,6 +301,7 @@ export default function ChatRoomScreen() {
     color,
     avatarUrl,
     opsViewerLocale,
+    isOnline,
   ]);
 
   useEffect(() => {

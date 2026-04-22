@@ -66,7 +66,7 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inOnboarding = segments[0] === 'auth' && (segments as string[])[1] === 'onboarding';
     const inOtpJourney =
       segments[0] === 'auth' &&
-      ['welcome', 'identifier', 'otp-verify', 'awaiting-approval', 'simulator', 'legal-sign'].includes(
+      ['identifier', 'otp-verify', 'awaiting-approval', 'simulator', 'legal-sign'].includes(
         (segments as string[])[1] || ''
       );
     const inTechRegistration =
@@ -80,10 +80,12 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
       !segments || segments.length === 0 || !seg0 || seg0 === 'index';
 
     /** Apresentação inicial antes de qualquer outro ecrã em `auth/` (exc. convite técnico e jornadas OTP). */
+    /** `login` fica de fora: convidado que toca «Criar conta ou entrar» no perfil deve ver o ecrã de login, não voltar ao intro. */
     if (
       !user &&
       inAuthGroup &&
       !inAppIntro &&
+      !inLogin &&
       !inOtpJourney &&
       !inTechRegistration &&
       !pendingTechRegInvite &&

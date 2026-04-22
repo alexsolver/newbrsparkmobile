@@ -5,8 +5,10 @@ import {
   StyleSheet,
   Pressable,
   Animated,
-  Dimensions,
   TouchableOpacity,
+  ScrollView,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'react-native';
@@ -49,10 +51,11 @@ export function OnboardingIntroSlide({
   const { t } = useTranslation();
   const { colors: C } = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: winH } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState<IntroPersonaTab>('person');
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  const winH = Dimensions.get('window').height;
-  const imageBlockH = Math.min(winH * 0.36, 280);
+  /** Mínimo evita faixa quase invisível quando o meio (ScrollView) pede muito espaço em ecrãs baixos. */
+  const imageBlockH = Math.max(200, Math.min(winH * 0.36, 280));
 
   const switchTab = useCallback(
     (tab: IntroPersonaTab) => {
@@ -87,7 +90,18 @@ export function OnboardingIntroSlide({
 
   return (
     <View style={[styles.root, { backgroundColor: C.background, paddingTop: Math.max(insets.top, 8) }]}>
-      <View style={[styles.imageWrap, { height: imageBlockH, marginHorizontal: 10, marginTop: 4 }]}>
+      <View
+        style={[
+          styles.imageWrap,
+          {
+            height: imageBlockH,
+            minHeight: imageBlockH,
+            marginHorizontal: 10,
+            marginTop: 4,
+            flexShrink: 0,
+          },
+        ]}
+      >
         <Animated.View style={[styles.imageInner, { opacity: fadeAnim }]}>
           <Image
             source={{ uri: HERO_IMAGES[activeTab] }}
@@ -104,21 +118,29 @@ export function OnboardingIntroSlide({
         />
       </View>
 
-      <View style={styles.copyBlock}>
-        <View style={styles.logoRow}>
-          <BrandingLogoImage
-            style={styles.logoImg}
-            resizeMode="contain"
-            accessibilityLabel={t('consentFlow.a11yLogo')}
-          />
-        </View>
+      <View style={[styles.copyBlock, { backgroundColor: C.background }]}>
+        <ScrollView
+          style={[styles.copyScroll, { backgroundColor: C.background }]}
+          contentContainerStyle={styles.copyScrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
+          <View style={styles.logoRow}>
+            <BrandingLogoImage
+              style={styles.logoImg}
+              resizeMode="contain"
+              accessibilityLabel={t('consentFlow.a11yLogo')}
+            />
+          </View>
 
-        <Animated.View style={{ opacity: fadeAnim }}>
-          <Text style={[styles.headline, { color: C.slate }]} accessibilityRole="header">
-            {headline}
-          </Text>
-          <Text style={[styles.body, { color: C.textSecondary }]}>{body}</Text>
-        </Animated.View>
+          <Animated.View style={{ opacity: fadeAnim }}>
+            <Text style={[styles.headline, { color: C.slate }]} accessibilityRole="header">
+              {headline}
+            </Text>
+            <Text style={[styles.body, { color: C.textSecondary }]}>{body}</Text>
+          </Animated.View>
+        </ScrollView>
 
         <View style={[styles.segment, { backgroundColor: C.surfaceLow }]}>
           {tabs.map(({ key, labelKey }) => {
@@ -127,18 +149,24 @@ export function OnboardingIntroSlide({
               <Pressable
                 key={key}
                 onPress={() => switchTab(key)}
-                style={[
+                style={({ pressed }) => [
                   styles.segmentItem,
                   active
                     ? {
                         backgroundColor: C.cardWhite,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.08,
-                        shadowRadius: 3,
-                        elevation: 2,
+                        ...Platform.select({
+                          ios: {
+                            shadowColor: '#000',
+                            shadowOffset: { width: 0, height: 1 },
+                            shadowOpacity: 0.08,
+                            shadowRadius: 3,
+                          },
+                          android: { elevation: 2 },
+                          default: {},
+                        }),
                       }
-                    : { backgroundColor: 'transparent' },
+                    : { backgroundColor: 'transparent', elevation: 0 },
+                  pressed && !active ? { opacity: 0.85 } : null,
                 ]}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: active }}
@@ -204,8 +232,16 @@ const styles = StyleSheet.create({
   heroImage: { width: '100%', height: '100%' },
   copyBlock: {
     flex: 1,
+    minHeight: 0,
     paddingHorizontal: 24,
     paddingTop: 12,
+  },
+  copyScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  copyScrollContent: {
+    paddingBottom: 12,
   },
   logoRow: { alignItems: 'flex-start', marginBottom: 4 },
   logoImg: { width: 200, height: 48 },
@@ -221,18 +257,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderRadius: 16,
     padding: 4,
-    gap: 4,
   },
   segmentItem: {
     flex: 1,
+    marginHorizontal: 2,
     paddingVertical: 10,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 3,
-    elevation: 2,
   },
   segmentLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.3 },
   footer: {

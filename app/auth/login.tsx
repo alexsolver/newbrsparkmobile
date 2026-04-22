@@ -25,8 +25,6 @@ import { setLanguage, getDeviceRegion } from '../../src/i18n';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
 import { LoginOAuthNativeSection, type NativeOAuthPending } from '../../src/components/auth/LoginOAuthNativeSection';
-import { isAppIntroDismissedForGuestSession } from '../../src/lib/appIntroPrefs';
-
 const REGION_KEY = '@brspark_region';
 
 const COUNTRIES = [
@@ -286,8 +284,6 @@ export default function LoginScreen() {
     typeof params.techRegToken === 'string' && params.techRegToken.trim()
       ? params.techRegToken.trim()
       : undefined;
-  /** Só mostra o formulário depois de confirmar que o intro inicial já foi visto (evita flash se a rota abrir em /login). */
-  const [introSplashDone, setIntroSplashDone] = useState(() => Boolean(techRegToken));
   const { login, loginWithOAuth, register, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
   const { t, i18n } = useTranslation();
   const { colors: C, appTagline, loginBackgroundUrl } = useTheme();
@@ -317,18 +313,6 @@ export default function LoginScreen() {
       cancel = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (techRegToken) {
-      setIntroSplashDone(true);
-      return;
-    }
-    if (!isAppIntroDismissedForGuestSession()) {
-      router.replace('/auth/app-intro' as any);
-      return;
-    }
-    setIntroSplashDone(true);
-  }, [techRegToken, router]);
 
   useEffect(() => {
     const r = params.register;
@@ -600,14 +584,6 @@ export default function LoginScreen() {
     }
   };
 
-  if (!introSplashDone) {
-    return (
-      <SafeAreaView style={[styles.safe, { justifyContent: 'center', alignItems: 'center' }]} edges={['top', 'bottom']}>
-        <ActivityIndicator size="large" color={C.accent} />
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
 
@@ -806,13 +782,6 @@ export default function LoginScreen() {
               </TouchableOpacity>
             ))}
           </View>
-
-          <TouchableOpacity
-            onPress={() => router.push('/auth/welcome' as any)}
-            style={{ marginBottom: 16, alignItems: 'center' }}
-          >
-            <Text style={styles.forgotLinkText}>{t('auth.otpEntryCta')}</Text>
-          </TouchableOpacity>
 
           {/* Form */}
           <View style={styles.form}>

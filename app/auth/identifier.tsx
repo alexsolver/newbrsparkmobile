@@ -76,7 +76,7 @@ export default function OtpIdentifierScreen() {
   return (
     <SafeAreaView style={s.root} edges={['top', 'bottom']}>
       <TouchableOpacity
-        onPress={() => (router.canGoBack() ? router.back() : router.replace('/auth/welcome' as any))}
+        onPress={() => (router.canGoBack() ? router.back() : router.replace('/auth/login' as any))}
         style={s.back}
         hitSlop={12}
       >
