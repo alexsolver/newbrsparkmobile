@@ -20,6 +20,24 @@ function normEmail(v) {
   return String(v || '').trim().toLowerCase();
 }
 
+/**
+ * Resolve `ChatRoomMember` por sala + utilizador, tolerando `userId` na BD com casing
+ * diferente do JWT (legado; ex.: `contact.requesterId` sem `normEmail` ao criar a sala).
+ * `findUnique({ roomId_userId })` exige igualdade exacta e fazia o PUT /read falhar em silêncio.
+ */
+async function resolveRoomMemberForViewer(roomId, viewerEmailNorm) {
+  const rid = String(roomId || '').trim();
+  const e = String(viewerEmailNorm || '').trim();
+  if (!rid || !e) return null;
+  return prisma.chatRoomMember.findFirst({
+    where: {
+      roomId: rid,
+      userId: { equals: e, mode: 'insensitive' },
+    },
+    select: { id: true, userId: true, role: true, lastReadAt: true },
+  });
+}
+
 function normRole(v) {
   return String(v || '').trim().toUpperCase();
 }
@@ -307,15 +325,16 @@ router.put('/contacts/:id/status', async (req, res) => {
 
     // Se aceitou, cria uma sala 1-1 se não existir
     if (status === 'ACCEPTED') {
+      const requesterNorm = normEmail(contact.requesterId);
       // Procura sala 1-1 existente entre os dois
       let room = await prisma.chatRoom.findFirst({
         where: {
           isGroup: false,
           AND: [
-             { members: { some: { userId: email } } },
-             { members: { some: { userId: contact.requesterId } } }
-          ]
-        }
+            { members: { some: { userId: { equals: email, mode: 'insensitive' } } } },
+            { members: { some: { userId: { equals: requesterNorm, mode: 'insensitive' } } } },
+          ],
+        },
       });
 
       if (!room) {
@@ -325,10 +344,10 @@ router.put('/contacts/:id/status', async (req, res) => {
             members: {
               create: [
                 { userId: email, role: 'ADMIN' },
-                { userId: contact.requesterId, role: 'ADMIN' }
-              ]
-            }
-          }
+                { userId: requesterNorm, role: 'ADMIN' },
+              ],
+            },
+          },
         });
       }
     }
@@ -479,7 +498,7 @@ router.get('/rooms', async (req, res) => {
     /** Mesmo critério que ao gravar membros (`normEmail`); `toLowerCase()` só falha com espaços e desincroniza lastRead. */
     const email = normEmail(rawEmail);
     const rooms = await prisma.chatRoom.findMany({
-      where: { members: { some: { userId: email } } },
+      where: { members: { some: { userId: { equals: email, mode: 'insensitive' } } } },
       include: {
         members: { select: { userId: true, role: true, lastReadAt: true } },
         messages: { orderBy: { createdAt: 'desc' }, take: 1 }
@@ -563,9 +582,7 @@ router.get('/rooms/:roomId/messaging-state', async (req, res) => {
     const email = normEmail(rawEmail);
     const { roomId } = req.params;
 
-    const member = await prisma.chatRoomMember.findUnique({
-      where: { roomId_userId: { roomId, userId: email } },
-    });
+    const member = await resolveRoomMemberForViewer(roomId, email);
     if (!member) return res.status(403).json({ error: 'Acesso negado à sala' });
 
     const state = await getRoomMessagingState(roomId);
@@ -584,9 +601,7 @@ router.post('/rooms/:roomId/messages', async (req, res) => {
     const { type, content, mediaUrl } = req.body;
 
     // Verifica se é membro
-    const member = await prisma.chatRoomMember.findUnique({
-      where: { roomId_userId: { roomId, userId: email } }
-    });
+    const member = await resolveRoomMemberForViewer(roomId, email);
 
     if (!member) return res.status(403).json({ error: 'Acesso negado à sala' });
 
@@ -659,9 +674,7 @@ router.get('/rooms/:roomId/messages', async (req, res) => {
     const { roomId } = req.params;
     const { since = 0, viewerLocale: rawViewerLocale } = req.query;
 
-    const member = await prisma.chatRoomMember.findUnique({
-      where: { roomId_userId: { roomId, userId: email } },
-    });
+    const member = await resolveRoomMemberForViewer(roomId, email);
 
     if (!member) return res.status(403).json({ error: 'Acesso negado à sala' });
 
@@ -737,15 +750,13 @@ router.put('/rooms/:roomId/read', async (req, res) => {
     const email = normEmail(rawEmail);
     const { roomId } = req.params;
 
-    const member = await prisma.chatRoomMember.findUnique({
-      where: { roomId_userId: { roomId, userId: email } }
-    });
+    const member = await resolveRoomMemberForViewer(roomId, email);
 
     if (!member) return res.status(404).json({ error: 'Membro não encontrado na sala' });
 
     await prisma.chatRoomMember.update({
-      where: { roomId_userId: { roomId, userId: email } },
-      data: { lastReadAt: new Date() }
+      where: { id: member.id },
+      data: { lastReadAt: new Date() },
     });
 
     res.json({ success: true });

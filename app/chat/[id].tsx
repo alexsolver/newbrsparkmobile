@@ -285,7 +285,9 @@ export default function ChatRoomScreen() {
       } catch {
         /* mantém cache e mensagens pendentes locais */
       } finally {
-        if (!cancelled && !isOpsChat && roomId && isOnline === true && initialMessagesSynced) {
+        /** Se `getMessages` correu até ao fim, há ligação ao servidor — marcar lido mesmo quando
+         * `useConnectivity` ainda está `null` (evita `lastReadAt` preso e tudo «não lido» após login). */
+        if (!cancelled && !isOpsChat && roomId && initialMessagesSynced) {
           ChatService.markAsRead(roomId).catch(() => {});
         }
       }
