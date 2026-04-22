@@ -23,46 +23,73 @@ function randomUuid() {
 /**
  * @returns {{ type: 'email'|'phone', key: string, displayEmail: string, e164?: string, phoneForDb?: string }}
  */
+/** Mesmo payload que `DELETE /api/me` — anonimiza e invalida sessão. */
+async function tombstoneUserRowFully(prisma, userId) {
+  const id = String(userId || '').trim();
+  if (!id) return;
+  const passHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+  const tombstone = `deleted_${id}@brspark.com`;
+  await prisma.$transaction([
+    prisma.pushToken.deleteMany({ where: { userId: id } }),
+    prisma.user.update({
+      where: { id },
+      data: {
+        name: 'Usuário Excluído',
+        email: tombstone,
+        password: passHash,
+        phone: null,
+        avatarUrl: null,
+        addressJson: null,
+        personalDocuments: null,
+        faceEnrollmentPhotos: null,
+        comprefaceRecognitionSync: null,
+        employeeMatricula: null,
+        preferredChatLocale: null,
+        emailVerificationToken: null,
+        emailVerificationExpiresAt: null,
+        emailVerifiedAt: null,
+        currentSessionId: null,
+        currentDeviceId: null,
+        isActive: false,
+      },
+    }),
+  ]);
+}
+
 /**
- * Liberta `@@unique([email, tenantId])` e colisão de telefone quando só existe conta **inativa**
- * (ex.: exclusão incompleta que não tombstonou o e-mail — bloqueava novo registo com o mesmo e-mail).
- * Contas ativas não são alteradas.
+ * Após OTP de registo válido no e-mail: libertar o par (email, tenant) para novo utilizador.
+ * O código no inbox comprova posse do endereço — equivalente a «apagar conta» antes de novo registo.
+ */
+async function reclaimEmailForRegisterAfterOtpVerified(prisma, { tenantId, emailNorm }) {
+  if (!tenantId || !emailNorm) return;
+  const rows = await prisma.user.findMany({
+    where: {
+      tenantId,
+      email: { equals: emailNorm, mode: 'insensitive' },
+    },
+    select: { id: true },
+  });
+  for (const r of rows) {
+    await tombstoneUserRowFully(prisma, r.id);
+  }
+}
+
+/**
+ * Liberta `@@unique([email, tenantId])` (só inativos) e telefone inativo **antes** de enviar OTP —
+ * evita bloqueio quando a exclusão não tombstonou o e-mail. Contas ativas com o mesmo e-mail
+ * só são libertadas em `reclaimEmailForRegisterAfterOtpVerified` (após código correcto).
  */
 async function releaseDeadAccountSlotsForRegister(prisma, { tenantId, emailNorm, phoneE164 }) {
   if (!tenantId || !emailNorm) return;
 
-  const passHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
-
   const byEmail = await prisma.user.findFirst({
-    where: { tenantId, email: emailNorm },
+    where: {
+      tenantId,
+      email: { equals: emailNorm, mode: 'insensitive' },
+    },
   });
   if (byEmail && !byEmail.isActive) {
-    const tombstone = `deleted_${byEmail.id}@brspark.com`;
-    await prisma.$transaction([
-      prisma.pushToken.deleteMany({ where: { userId: byEmail.id } }),
-      prisma.user.update({
-        where: { id: byEmail.id },
-        data: {
-          name: 'Usuário Excluído',
-          email: tombstone,
-          password: passHash,
-          phone: null,
-          avatarUrl: null,
-          addressJson: null,
-          personalDocuments: null,
-          faceEnrollmentPhotos: null,
-          comprefaceRecognitionSync: null,
-          employeeMatricula: null,
-          preferredChatLocale: null,
-          emailVerificationToken: null,
-          emailVerificationExpiresAt: null,
-          emailVerifiedAt: null,
-          currentSessionId: null,
-          currentDeviceId: null,
-          isActive: false,
-        },
-      }),
-    ]);
+    await tombstoneUserRowFully(prisma, byEmail.id);
   }
 
   if (phoneE164) {
@@ -254,17 +281,7 @@ async function startChallenge(prisma, { identifier, channelPref, purpose, nameIf
           emailNorm,
           phoneE164: phoneParsed.e164,
         });
-        const existingEmail = await prisma.user.findFirst({
-          where: { tenantId: tid, email: emailNorm, isActive: true },
-        });
-        if (existingEmail) {
-          return {
-            ok: false,
-            code: 'ACCOUNT_EXISTS',
-            error: 'Já existe uma conta com este e-mail. Use Entrar ou recuperação de senha.',
-            status: 409,
-          };
-        }
+        /** E-mail duplicado activo: não bloqueamos aqui — o OTP comprova posse; em `verifyRegisterOtpPhase1` libertamos a linha. */
         const existingPhone = await prisma.user.findFirst({
           where: { tenantId: tid, phone: phoneParsed.e164, isActive: true },
         });
@@ -548,17 +565,11 @@ async function verifyRegisterOtpPhase1(prisma, { resolveAppDefaultTenantId }, { 
     phoneE164,
   });
 
-  const existing = await prisma.user.findFirst({
-    where: { tenantId: defaultTenantId, email: displayEmail, isActive: true },
+  await reclaimEmailForRegisterAfterOtpVerified(prisma, {
+    tenantId: defaultTenantId,
+    emailNorm: displayEmail,
   });
-  if (existing) {
-    return {
-      ok: false,
-      code: 'ACCOUNT_EXISTS',
-      error: 'Já existe uma conta com este e-mail ou telefone. Use Entrar ou recuperação de senha.',
-      status: 409,
-    };
-  }
+
   const existingPhone = await prisma.user.findFirst({
     where: { tenantId: defaultTenantId, phone: phoneE164, isActive: true },
   });
@@ -655,8 +666,17 @@ async function completeRegisterFromSetupToken(
     phoneE164: phoneVal,
   });
 
+  await reclaimEmailForRegisterAfterOtpVerified(prisma, {
+    tenantId: defaultTenantId,
+    emailNorm: displayEmail,
+  });
+
   const existingUser = await prisma.user.findFirst({
-    where: { tenantId: defaultTenantId, email: displayEmail, isActive: true },
+    where: {
+      tenantId: defaultTenantId,
+      isActive: true,
+      email: { equals: displayEmail, mode: 'insensitive' },
+    },
   });
   if (existingUser) {
     return { ok: false, error: 'Este e-mail já está cadastrado.', status: 409 };

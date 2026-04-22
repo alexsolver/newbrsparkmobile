@@ -1196,6 +1196,10 @@ router.post('/otp-auth/start', express.json(), async (req, res) => {
     if (!out.ok) {
       return res.status(out.status || 400).json({ error: out.error });
     }
+    /** Diagnóstico: clientes antigos devolviam 409 «e-mail já existe» aqui; v2 já não bloqueia e-mail activo no envio do OTP. */
+    if (String(req.body?.purpose || '').toLowerCase() === 'register') {
+      res.setHeader('X-Brspark-Register-Start-Policy', 'v2-no-email-block-at-send');
+    }
     return res.json({
       challengeId: out.challengeId,
       channel: out.channel,
