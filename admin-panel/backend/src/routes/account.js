@@ -25,7 +25,10 @@ const {
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
 const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
 const { resolveAppDefaultTenantId } = require('../lib/appDefaultTenant');
-const { validateAppPasswordPolicy } = require('../lib/appPasswordPolicy');
+const {
+  validateAppPasswordPolicy,
+  APP_PASSWORD_RULES_USER_FACING_PT,
+} = require('../lib/appPasswordPolicy');
 const { assertEmailFreeAcrossAllTenants } = require('../lib/appRegistrationEmailGuard');
 
 function buildSafeTenantForApp(tenant) {
@@ -599,6 +602,7 @@ router.post('/password-reset/request', async (req, res) => {
           `Olá, ${user.name || 'usuário'}!\n\n` +
           `Recebemos uma solicitação para redefinir a senha da sua conta BrSpark${tenantName ? ` em ${tenantName}` : ''}.\n\n` +
           `Use este link para criar uma nova senha:\n${resetLink}\n\n` +
+          `${APP_PASSWORD_RULES_USER_FACING_PT}\n\n` +
           `Este link expira em ${process.env.PASSWORD_RESET_EXPIRES_IN || '30 minutos'}.\n` +
           `Se você não pediu a redefinição, pode ignorar este e-mail.\n`;
 
@@ -607,6 +611,7 @@ router.post('/password-reset/request', async (req, res) => {
           `<h2 style="margin:0 0 12px">Redefinição de senha</h2>` +
           `<p>Olá, <strong>${escapeHtml(user.name || 'usuário')}</strong>.</p>` +
           `<p>Recebemos uma solicitação para redefinir a senha da sua conta BrSpark${tenantName ? ` em <strong>${escapeHtml(tenantName)}</strong>` : ''}.</p>` +
+          `<p style="margin:0 0 16px;font-size:14px;color:#334155">${escapeHtml(APP_PASSWORD_RULES_USER_FACING_PT)}</p>` +
           `<p style="margin:24px 0">` +
           `<a href="${escapeHtml(resetLink)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Criar nova senha</a>` +
           `</p>` +

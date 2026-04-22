@@ -445,7 +445,7 @@
     "errorConnection": "Verifique su conexión e inténtelo de nuevo.",
     "errorOtpSendTitle": "No se pudo enviar el código",
     "resetPasswordTitle": "Recuperar contraseña",
-    "resetPasswordDescription": "Ingrese su correo para recibir el enlace de restablecimiento de contraseña.",
+    "resetPasswordDescription": "Ingrese su correo para recibir el enlace. La nueva contraseña debe tener al menos 8 caracteres, con mayúscula, minúscula y un número.",
     "resetPasswordEmailRequired": "Ingrese su correo para continuar.",
     "sendResetLink": "Enviar enlace",
     "resetPasswordRequestSent": "Si existe una cuenta con este correo, recibirá un enlace para restablecer la contraseña en breve.",

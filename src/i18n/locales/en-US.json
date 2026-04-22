@@ -445,7 +445,7 @@
     "errorConnection": "Check your connection and try again.",
     "errorOtpSendTitle": "Could not send the code",
     "resetPasswordTitle": "Recover password",
-    "resetPasswordDescription": "Enter your email to receive a password reset link.",
+    "resetPasswordDescription": "Enter your email to receive a reset link. Your new password must be at least 8 characters and include uppercase, lowercase, and a digit.",
     "resetPasswordEmailRequired": "Enter your email to continue.",
     "sendResetLink": "Send link",
     "resetPasswordRequestSent": "If an account exists for this email, you will receive a password reset link shortly.",

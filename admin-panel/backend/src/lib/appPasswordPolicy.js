@@ -4,6 +4,13 @@
 const MIN_APP_PASSWORD_LEN = 8;
 
 /**
+ * Texto único para UI, e-mails e primeiro erro de validação (comprimento).
+ * Ao alterar, alinhar `admin-panel/reset-password.html` (validateAppPasswordPolicy + copy visível).
+ */
+const APP_PASSWORD_RULES_USER_FACING_PT =
+  'A senha deve ter pelo menos 8 caracteres, incluindo uma letra maiúscula, uma minúscula e um número.';
+
+/**
  * @param {string} raw
  * @returns {{ ok: true } | { ok: false, error: string }}
  */
@@ -12,8 +19,7 @@ function validateAppPasswordPolicy(raw) {
   if (p.length < MIN_APP_PASSWORD_LEN) {
     return {
       ok: false,
-      error:
-        'A senha deve ter pelo menos 8 caracteres, incluindo uma letra maiúscula, uma minúscula e um número.',
+      error: APP_PASSWORD_RULES_USER_FACING_PT,
     };
   }
   if (!/[A-Z]/.test(p)) {
@@ -28,4 +34,8 @@ function validateAppPasswordPolicy(raw) {
   return { ok: true };
 }
 
-module.exports = { MIN_APP_PASSWORD_LEN, validateAppPasswordPolicy };
+module.exports = {
+  MIN_APP_PASSWORD_LEN,
+  validateAppPasswordPolicy,
+  APP_PASSWORD_RULES_USER_FACING_PT,
+};

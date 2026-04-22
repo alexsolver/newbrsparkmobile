@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
+import { BrandingLogoImage } from './BrandingLogoImage';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -143,7 +144,43 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const pathname = usePathname() || '';
   const { t } = useTranslation();
   const params = useLocalSearchParams();
-  const { colors: C } = useTheme();
+  const { colors: C, resolvedLogoUrl, appDisplayName } = useTheme();
+  /** Sem ficheiro de marca no servidor: mostrar nome da org em vez do PNG «BrSpark» embutido. */
+  const useHeaderTextMark = useMemo(() => {
+    const n = String(appDisplayName || '').trim();
+    if (!n || resolvedLogoUrl) return false;
+    return n.toLowerCase() !== 'brspark';
+  }, [appDisplayName, resolvedLogoUrl]);
+
+  const renderHeaderBrand = (compact: boolean) => {
+    const w = compact ? 70 : 100;
+    const h = compact ? 22 : 32;
+    if (useHeaderTextMark) {
+      return (
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          accessibilityLabel={appDisplayName}
+          style={{
+            maxWidth: compact ? 88 : 118,
+            fontSize: compact ? 12 : 14,
+            fontWeight: '800',
+            letterSpacing: compact ? -0.2 : -0.3,
+            color: C.accent,
+          }}
+        >
+          {appDisplayName}
+        </Text>
+      );
+    }
+    return (
+      <BrandingLogoImage
+        style={{ width: w, height: h }}
+        resizeMode="contain"
+        accessibilityLabel={appDisplayName}
+      />
+    );
+  };
   const { width: windowWidth } = useWindowDimensions();
   const { guardRef } = useAppContext();
   const { user } = useAuth();
@@ -422,12 +459,17 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
               <Ionicons name={(leftIcon as any) || 'arrow-back'} size={22} color={C.slate} />
             </TouchableOpacity>
 
-            <View style={{ width: 70, height: 22, marginLeft: 2, marginRight: 4, flexShrink: 0 }}>
-              <Image
-                source={require('../../assets/logo.png')}
-                style={{ width: 70, height: 22 }}
-                resizeMode="contain"
-              />
+            <View
+              style={{
+                minWidth: 70,
+                height: 22,
+                marginLeft: 2,
+                marginRight: 4,
+                flexShrink: 0,
+                justifyContent: 'center',
+              }}
+            >
+              {renderHeaderBrand(true)}
             </View>
 
             {title ? (
@@ -509,13 +551,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
       <View style={[styles.container, { borderBottomColor: C.border, height: 64 }]}>
         {/* Esquerda: logo fixo — não participa do “centro” absoluto para não ser tapado pelo seletor */}
         <View style={{ flexShrink: 0, marginRight: 8 }}>
-          <View style={{ width: 100, height: 32 }}>
-            <Image
-              source={require('../../assets/logo.png')}
-              style={{ width: 100, height: 32 }}
-              resizeMode="contain"
-            />
-          </View>
+          <View style={{ minWidth: 100, height: 32, justifyContent: 'center' }}>{renderHeaderBrand(false)}</View>
         </View>
 
         {/* Centro: rótulo de concha (só na persona prestador) entre logo e avatar */}

@@ -161,7 +161,10 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem('@pref_dark_mode', JSON.stringify(val));
   };
 
+  /** Cores / logótipo / fundo: só com white-label ligado no plano + tenant. */
   const liveBranding = user?.tenant?.branding?.enabled ? user.tenant.branding : null;
+  /** Nome e slogan: o backend preenche `effective` mesmo com `enabled: false` (ex.: nome da org). */
+  const serverTenantBranding = user?.tenant?.branding;
   const branding =
     liveBranding && Number(liveBranding.brandingVersion || 0) >= Number(brandingCache?.brandingVersion || 0)
       ? liveBranding
@@ -256,10 +259,12 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     () => resolveTenantPalette(dark ? darkColors : lightColors, branding || null),
     [dark, branding],
   );
-  const appDisplayName =
-    (branding?.enabled && String(branding.appDisplayName || '').trim()) || 'BrSpark';
-  const appTagline =
-    (branding?.enabled && String(branding.tagline || '').trim()) || 'Precisou, resolveu.';
+  const appDisplayName = user
+    ? String(serverTenantBranding?.appDisplayName || user.tenant?.name || '').trim() || 'BrSpark'
+    : (branding?.enabled && String(branding.appDisplayName || '').trim()) || 'BrSpark';
+  const appTagline = user
+    ? String(serverTenantBranding?.tagline || '').trim() || 'Precisou, resolveu.'
+    : (branding?.enabled && String(branding.tagline || '').trim()) || 'Precisou, resolveu.';
   const resolvedLogoUrl =
     branding?.enabled
       ? dark
