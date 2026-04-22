@@ -47,6 +47,7 @@ import { haversineMeters, polylineLengthMeters } from '../../src/utils/polylineM
 import { LinearGradient } from 'expo-linear-gradient';
 import GeofenceStatusBar from './GeofenceStatusBar';
 import GeofenceMapScreen from './GeofenceMapScreen';
+import GeofenceCheckFieldMap from './GeofenceCheckFieldMap';
 import GlobalGeofenceConsultMap from './GlobalGeofenceConsultMap';
 import { resolveGlobalFenceDestinationCoords, taskHasGeometryForGlobalGate } from './globalGeofenceCombined';
 import SegmentDestinationPickerModal from './SegmentDestinationPickerModal';
@@ -11350,45 +11351,54 @@ export default function ChecklistEngine() {
                 const geoBusyHere = gpsBusyFieldId === field.id;
                 const geoBusyAny = gpsBusyFieldId != null;
                 return (
-                <TouchableOpacity
-                  style={[
-                    styles.actionBtn,
-                    {
-                      backgroundColor: '#e2e8f0',
-                      borderColor: '#cbd5e1',
-                      borderWidth: 1,
-                      flexDirection: 'row',
-                      gap: 8,
-                      opacity: geoBusyAny && !geoBusyHere ? 0.55 : 1,
-                    },
-                  ]}
-                  disabled={isReadOnly || geoBusyAny}
-                  onPress={() => ensureOnlineValidation(field, async () => {
-                   await handleTransit(field.id, 'VALIDACAO_CERCA', undefined, scope);
-                   // GPS chega na cerca eletrônica — modo IN_SERVICE
-                   const resultStr = vv(field.id);
-                   let insideZone = false;
-                   try { insideZone = JSON.parse(resultStr || '{}').geofence?.insideZone; } catch {}
-                   if (insideZone) {
-                     const email = await AsyncStorage.getItem('@brspark_email');
-                     const taskDest = getDestFromTaskLike(currentTask);
-                     dataCollectionService.setState('IN_SERVICE', {
-                       executionId: String(taskId || ''),
-                       ownerEmail: email || 'unknown',
-                       lat: taskDest?.lat,
-                       lng: taskDest?.lng,
-                     }).catch(() => {});
-                   }
-                })}>
-                   {geoBusyHere ? (
-                     <ActivityIndicator color={C.primary} size="small" />
-                   ) : (
-                     <Ionicons name="location" size={20} color={C.primary} />
-                   )}
-                   <Text style={{color: C.primary, fontWeight: '700', fontSize:14}}>
-                     {geoBusyHere ? 'A obter localização…' : 'VALIDAR LOCALIZAÇÃO (GPS)'}
-                   </Text>
-                </TouchableOpacity>
+                <View style={{ gap: 12 }}>
+                  <GeofenceCheckFieldMap
+                    geoField={field}
+                    task={currentTask}
+                    savedValueJson={vv(field.id)}
+                    liveGps={!isReadOnly}
+                    primaryColor={C.primary}
+                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.actionBtn,
+                      {
+                        backgroundColor: '#e2e8f0',
+                        borderColor: '#cbd5e1',
+                        borderWidth: 1,
+                        flexDirection: 'row',
+                        gap: 8,
+                        opacity: geoBusyAny && !geoBusyHere ? 0.55 : 1,
+                      },
+                    ]}
+                    disabled={isReadOnly || geoBusyAny}
+                    onPress={() => ensureOnlineValidation(field, async () => {
+                     await handleTransit(field.id, 'VALIDACAO_CERCA', undefined, scope);
+                     // GPS chega na cerca eletrônica — modo IN_SERVICE
+                     const resultStr = vv(field.id);
+                     let insideZone = false;
+                     try { insideZone = JSON.parse(resultStr || '{}').geofence?.insideZone; } catch {}
+                     if (insideZone) {
+                       const email = await AsyncStorage.getItem('@brspark_email');
+                       const taskDest = getDestFromTaskLike(currentTask);
+                       dataCollectionService.setState('IN_SERVICE', {
+                         executionId: String(taskId || ''),
+                         ownerEmail: email || 'unknown',
+                         lat: taskDest?.lat,
+                         lng: taskDest?.lng,
+                       }).catch(() => {});
+                     }
+                  })}>
+                     {geoBusyHere ? (
+                       <ActivityIndicator color={C.primary} size="small" />
+                     ) : (
+                       <Ionicons name="location" size={20} color={C.primary} />
+                     )}
+                     <Text style={{color: C.primary, fontWeight: '700', fontSize:14}}>
+                       {geoBusyHere ? 'A obter localização…' : 'VALIDAR LOCALIZAÇÃO (GPS)'}
+                     </Text>
+                  </TouchableOpacity>
+                </View>
                 );
               })()}
               {field.type === 'signature' && (
