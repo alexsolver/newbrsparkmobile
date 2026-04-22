@@ -4989,6 +4989,142 @@ function buildReportTab(t) {
   const localMediaUnavailableOpsHtml = () =>
     '<div style="padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:12px;color:#9a3412;line-height:1.45;font-weight:600">A imagem ficou só no dispositivo (URI local). Sincronize de novo com internet para enviar a mídia ao servidor — depois o relatório mostra a foto.</div>';
 
+  /** Igual ao PDF (`parseCapturedAtFromPhotoUriPdf`): data/hora na query `capturedAt`. */
+  function parseCapturedAtFromPhotoUriReport(uri) {
+    try {
+      const s = String(uri);
+      const q = s.indexOf('?');
+      if (q === -1) return null;
+      const cap = new URLSearchParams(s.slice(q)).get('capturedAt');
+      if (!cap) return null;
+      const d = new Date(decodeURIComponent(cap));
+      if (Number.isNaN(d.getTime())) return null;
+      return d.toLocaleString('pt-BR');
+    } catch (e) {
+      return null;
+    }
+  }
+  function formatFieldTimeIsoReport(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('pt-BR');
+  }
+  /** `__time_<id>` ou `__time_<sec>_r<n>_<id>` (repetível). */
+  function lookupApproxFieldTimeIsoReport(fieldId, rowScope) {
+    if (!fieldId) return null;
+    const direct = responses[`__time_${fieldId}`];
+    if (direct) return direct;
+    if (!rowScope || typeof rowScope !== 'object') return null;
+    const suffix = '_' + fieldId;
+    for (const k of Object.keys(responses)) {
+      if (k.startsWith('__time_') && k.endsWith(suffix)) return responses[k];
+    }
+    return null;
+  }
+  /** Rodapé «carimbada» com GPS/morada (alinhado ao bloco PDF em `onePhotoCard`). */
+  function buildGpsComplementFromStampedUriReport(singleVal) {
+    let locationStr = '';
+    let photoLat;
+    let photoLng;
+    let photoAddr;
+    try {
+      const urlParts = singleVal.split('?');
+      if (urlParts.length > 1) {
+        const params = new URLSearchParams(urlParts[1]);
+        if (params.has('lat') && params.has('lng')) {
+          photoLat = parseFloat(params.get('lat'));
+          photoLng = parseFloat(params.get('lng'));
+        }
+        if (params.has('addr')) photoAddr = params.get('addr');
+      }
+    } catch (e) {}
+    if (photoLat && photoLng) {
+      const decAddr = photoAddr
+        ? escHtml(decodeURIComponent(String(photoAddr).replace(/\+/g, ' ')))
+        : 'Desconhecido';
+      locationStr =
+        '<br/><span style="margin-top:3px;display:inline-block">📍 ' +
+        decAddr +
+        '</span><br/><span style="color:#FFF8F0">🧭 Lat: ' +
+        photoLat.toFixed(5) +
+        ', Lng: ' +
+        photoLng.toFixed(5) +
+        '</span>';
+    } else if (endGPS && endGPS.lat) {
+      locationStr =
+        '<br/><span style="margin-top:3px;display:inline-block">📍 ' +
+        escHtml(endGPS.addr || 'Local coletado') +
+        '</span><br/><span style="color:#FFF8F0">🧭 Lat: ' +
+        parseFloat(endGPS.lat).toFixed(5) +
+        ', Lng: ' +
+        parseFloat(endGPS.lng).toFixed(5) +
+        '</span>';
+    } else if (startGPS && startGPS.lat) {
+      locationStr =
+        '<br/><span style="margin-top:3px;display:inline-block">📍 ' +
+        escHtml(startGPS.addr || 'Local coletado') +
+        '</span><br/><span style="color:#FFF8F0">🧭 Lat: ' +
+        parseFloat(startGPS.lat).toFixed(5) +
+        ', Lng: ' +
+        parseFloat(startGPS.lng).toFixed(5) +
+        '</span>';
+    } else if (t.locationLat) {
+      locationStr =
+        '<br/><span style="margin-top:3px;display:inline-block">📍 ' +
+        escHtml(t.locationAddress || 'Destino O.S.') +
+        '</span><br/><span style="color:#FFF8F0">🧭 Lat: ' +
+        parseFloat(t.locationLat).toFixed(5) +
+        ', Lng: ' +
+        parseFloat(t.locationLng).toFixed(5) +
+        '</span>';
+    }
+    return locationStr;
+  }
+  /**
+   * Cartão de foto carimbada no relatório HTML do painel — paridade com `renderPhotoPdfBlock` / PDF.
+   */
+  function buildStampedPhotoCardHtmlReport(singleVal, fieldId, rowScope, capHtml, fotoIdx0, totalPhotos) {
+    const fallbackTaskTs = t.completedAt ? new Date(t.completedAt).toLocaleString('pt-BR') : '—';
+    const stampTs =
+      parseCapturedAtFromPhotoUriReport(singleVal) ||
+      formatFieldTimeIsoReport(lookupApproxFieldTimeIsoReport(fieldId, rowScope)) ||
+      fallbackTaskTs;
+    const idxLine = totalPhotos > 1 ? ' · Foto ' + (fotoIdx0 + 1) : '';
+    if (singleVal.startsWith('file://')) {
+      const showFooter = true;
+      const body = `<div style="min-height:160px;background:#fff7ed;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box">
+          <div style="text-align:center;color:#9a3412;font-size:11px;font-weight:700;line-height:1.45">Mídia ainda em arquivo local — após sincronizar, a imagem aparece aqui.</div>
+        </div>`;
+      return (
+        `<div style="margin-top:8px;max-width:350px;background:#EA580C;border-radius:10px;border:1px solid #c2410c;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,0.06)">` +
+        body +
+        (showFooter
+          ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:9px;font-weight:700;line-height:1.45;box-sizing:border-box;font-family:ui-monospace,monospace">🕒 ${escHtml(
+              stampTs + idxLine,
+            )}</div>`
+          : '') +
+        `</div>${capHtml}`
+      );
+    }
+    const gpsComplement = buildGpsComplementFromStampedUriReport(singleVal);
+    const showFooter = true;
+    const srcEsc = escapeHtmlAttr(singleVal);
+    const hrefAttr = escapeHtmlAttr(singleVal);
+    const imgInner = `<img src="${srcEsc}" alt="" style="border-radius:0;width:100%;height:auto;min-height:180px;max-height:320px;object-fit:cover;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x300?text=Foto'"/>`;
+    return (
+      `<div style="margin-top:8px;max-width:350px;margin-left:0;margin-right:auto;background:#EA580C;border-radius:10px;border:1px solid #c2410c;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,0.06)">` +
+      imgInner +
+      (showFooter
+        ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:9px;font-weight:700;line-height:1.45;box-sizing:border-box;font-family:ui-monospace,monospace">🕒 ${escHtml(
+            stampTs + idxLine,
+          )}${gpsComplement}</div>`
+        : '') +
+      `</div>` +
+      `<div style="font-size:11px;margin-top:6px"><a href="${hrefAttr}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Abrir foto</a></div>${capHtml}`
+    );
+  }
+
   // Render a single field value, handling special types
   // `fieldTypeOrField`: string (tipo), objeto campo do template, ou null (órfãos).
   const renderFieldValue = (val, fieldTypeOrField, responses, fieldId, rowScope) => {
@@ -5021,6 +5157,7 @@ function buildReportTab(t) {
       return val.map((item, i) => {
         const s = String(item);
         const isUrl = s.startsWith('http') || s.startsWith('file://');
+        const isStampedMedia = isUrl || s.startsWith('data:image');
         const capHtml = mediaCapLine(responses, fieldId, i, rowScope);
         if (fieldType === 'file_upload' && isUrl) {
           const hrefEsc = s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
@@ -5034,7 +5171,10 @@ function buildReportTab(t) {
             : '';
           return `${imgPart}<div style="margin-bottom:6px"><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700"><ion-icon name="document-attach-outline" style="vertical-align:-2px"></ion-icon> Download ${val.length > 1 ? 'anexo ' + (i + 1) + ' — ' : ''}${fnameEsc}</a>${capHtml}</div>`;
         }
-        if ((fieldType === 'photo' || fieldType === 'photo_stamped' || fieldType === 'facial_recognition') && isUrl) {
+        if (fieldType === 'photo_stamped' && isStampedMedia) {
+          return buildStampedPhotoCardHtmlReport(s, fieldId, rowScope, capHtml, i, val.length);
+        }
+        if ((fieldType === 'photo' || fieldType === 'facial_recognition') && isUrl) {
           if (s.startsWith('file://')) {
             return `<div style="margin-top:8px">${localMediaUnavailableOpsHtml()}${capHtml}</div>`;
           }
@@ -5272,7 +5412,14 @@ function buildReportTab(t) {
     }
     /** Foto / reconhecimento facial guardados como string URI (não só array). */
     if (
-      (fieldType === 'photo' || fieldType === 'photo_stamped' || fieldType === 'facial_recognition') &&
+      fieldType === 'photo_stamped' &&
+      (str.startsWith('http') || str.startsWith('file://') || str.startsWith('data:image'))
+    ) {
+      const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);
+      return buildStampedPhotoCardHtmlReport(str, fieldId, rowScope, capHtml, 0, 1);
+    }
+    if (
+      (fieldType === 'photo' || fieldType === 'facial_recognition') &&
       (str.startsWith('http') || str.startsWith('file://'))
     ) {
       const capHtml = mediaCapLine(responses, fieldId, 0, rowScope);
