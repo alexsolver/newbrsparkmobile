@@ -33,14 +33,17 @@ const { assertEmailFreeAcrossAllTenants } = require('../lib/appRegistrationEmail
 
 function buildSafeTenantForApp(tenant) {
   if (!tenant) return null;
+  /** Nome legal vs nome de exibição (painel): o app deve refletir o rebrand visível ao cliente. */
+  const displayTenantName = String(tenant.ownerName || '').trim() || tenant.name;
   const branding = buildEffectiveTenantBranding({
-    tenantName: tenant.name,
+    tenantName: displayTenantName,
     planFeatures: tenant.subscription?.plan?.features,
     tenantFeatures: tenant.features,
   });
   return {
     id: tenant.id,
     name: tenant.name,
+    ownerName: tenant.ownerName,
     status: tenant.status,
     branding: branding.effective,
     /**

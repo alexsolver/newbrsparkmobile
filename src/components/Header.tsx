@@ -145,12 +145,17 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const { t } = useTranslation();
   const params = useLocalSearchParams();
   const { colors: C, resolvedLogoUrl, appDisplayName } = useTheme();
+  const { user } = useAuth();
+  /** Mesma prioridade que o tema + payload cru (evita desincronizar se `ownerName` ainda não estiver no cache de tema). */
+  const headerTenantMark = String(
+    user?.tenant?.branding?.appDisplayName || user?.tenant?.ownerName || user?.tenant?.name || appDisplayName || '',
+  ).trim();
   /** Sem ficheiro de marca no servidor: mostrar nome da org em vez do PNG «BrSpark» embutido. */
   const useHeaderTextMark = useMemo(() => {
-    const n = String(appDisplayName || '').trim();
+    const n = headerTenantMark || String(appDisplayName || '').trim();
     if (!n || resolvedLogoUrl) return false;
     return n.toLowerCase() !== 'brspark';
-  }, [appDisplayName, resolvedLogoUrl]);
+  }, [appDisplayName, headerTenantMark, resolvedLogoUrl]);
 
   const renderHeaderBrand = (compact: boolean) => {
     const w = compact ? 70 : 100;
@@ -169,7 +174,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
             color: C.accent,
           }}
         >
-          {appDisplayName}
+          {headerTenantMark || appDisplayName}
         </Text>
       );
     }
@@ -183,7 +188,6 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   };
   const { width: windowWidth } = useWindowDimensions();
   const { guardRef } = useAppContext();
-  const { user } = useAuth();
   const { activePersona } = usePersona();
   /** Troca cliente ↔ prestador: Configurações; o cabeçalho só mostra o seletor (Serviços/Ativos) na persona cliente. */
   const avatarUri = useResolvedAvatarUri(user);

@@ -260,7 +260,12 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     [dark, branding],
   );
   const appDisplayName = user
-    ? String(serverTenantBranding?.appDisplayName || user.tenant?.name || '').trim() || 'BrSpark'
+    ? String(
+        serverTenantBranding?.appDisplayName ||
+          user.tenant?.ownerName ||
+          user.tenant?.name ||
+          '',
+      ).trim() || 'BrSpark'
     : (branding?.enabled && String(branding.appDisplayName || '').trim()) || 'BrSpark';
   const appTagline = user
     ? String(serverTenantBranding?.tagline || '').trim() || 'Precisou, resolveu.'

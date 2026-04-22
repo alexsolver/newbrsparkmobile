@@ -190,6 +190,8 @@ export interface User {
   tenant?: {
     id: string;
     name: string;
+    /** Nome de exibição da organização (painel); pode diferir de `name` (razão social / interno). */
+    ownerName?: string | null;
     status: string;
     /** Preferência para campos «Visão de IA — detecção»: API Moondream vs proxy YOLO (painel / tenant.features). */
     visionDetectionEngine?: 'yolo' | 'moondream';
