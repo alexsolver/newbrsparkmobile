@@ -48,6 +48,7 @@ const stockCriticalRoutes   = require('./routes/stockCritical');
 const i18nRoutes          = require('./routes/i18n');
 const storageRoutes       = require('./routes/storage');
 const syncModulesRoutes   = require('./routes/sync-modules'); // módulos mobile (custos, seguros, vault…)
+const cmsBrandingMirrorInternal = require('./routes/cmsBrandingMirrorInternal');
 const {
   router: assetOccupancyCalendarRouter,
   publicAssetOccupancyIcs,
@@ -137,6 +138,8 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 /** Bridge servidor-a-servidor: Laravel → tokens JWT para o módulo de avaliações no BrsparkWeb */
 app.use('/api/internal', evaluationsWebBridgeRoutes);
+/** Laravel CMS → espelho de branding no PostgreSQL (`features.cmsBrandingMirror`) */
+app.use('/api/internal', cmsBrandingMirrorInternal);
 
 // ── Health ─────────────────────────────────────────────────
 app.get('/health', (_req, res) => {

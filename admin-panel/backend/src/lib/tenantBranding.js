@@ -43,7 +43,7 @@ function asTrimmedString(v, maxLen = 400) {
 function asOptionalUrl(v) {
   const s = asTrimmedString(v, 1200);
   if (!s) return '';
-  if (/^(https?:)?\/\//i.test(s) || s.startsWith('/uploads/')) return s;
+  if (/^(https?:)?\/\//i.test(s) || s.startsWith('/uploads/') || s.startsWith('/storage/')) return s;
   return '';
 }
 
@@ -96,6 +96,15 @@ function readBrandingPermissionsFromPlanFeatures(planFeatures) {
   return sanitizeBrandingPermissions({ ...BRANDING_PERMISSION_DEFAULTS, ...raw });
 }
 
+function stripEmptyStringKeys(obj) {
+  if (!isPlainObject(obj)) return {};
+  const o = { ...obj };
+  for (const k of Object.keys(o)) {
+    if (o[k] === '') delete o[k];
+  }
+  return o;
+}
+
 function sanitizeTenantBranding(raw, permissions) {
   const src = isPlainObject(raw) ? raw : {};
   const ent = sanitizeBrandingPermissions(permissions);
@@ -124,9 +133,11 @@ function sanitizeTenantBranding(raw, permissions) {
 
 function buildEffectiveTenantBranding({ tenantName, planFeatures, tenantFeatures }) {
   const permissions = readBrandingPermissionsFromPlanFeatures(planFeatures);
+  const mirror = isPlainObject(tenantFeatures?.cmsBrandingMirror) ? tenantFeatures.cmsBrandingMirror : {};
   const tenantBrandingRaw =
     isPlainObject(tenantFeatures) && isPlainObject(tenantFeatures.branding) ? tenantFeatures.branding : {};
-  const saved = sanitizeTenantBranding(tenantBrandingRaw, permissions);
+  const mergedRaw = { ...mirror, ...stripEmptyStringKeys(tenantBrandingRaw) };
+  const saved = sanitizeTenantBranding(mergedRaw, permissions);
   const effective = {
     ...BRANDING_DEFAULTS,
     ...saved,
