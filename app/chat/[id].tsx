@@ -201,6 +201,12 @@ export default function ChatRoomScreen() {
       if (roomId && !isOpsChat && isOnline === true) {
         ChatService.markAsRead(roomId).catch(() => {});
       }
+      return () => {
+        /** Ao sair do fio, reenviar leitura evita contador a voltar a subir até ao próximo poll. */
+        if (roomId && !isOpsChat) {
+          ChatService.markAsRead(roomId).catch(() => {});
+        }
+      };
     }, [runFlush, roomId, isOpsChat, isOnline]),
   );
 

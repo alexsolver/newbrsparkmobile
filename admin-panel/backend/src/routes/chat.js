@@ -287,7 +287,7 @@ router.put('/contacts/:id/status', async (req, res) => {
     if (rawUserIds && !Array.isArray(rawUserIds)) { // Added check for userIds if present
       return res.status(400).json({ error: 'Lista de participantes inválida' });
     }
-    const userIds = rawUserIds ? rawUserIds.map(u => u.toLowerCase()) : []; // Lowercase if present
+    const userIds = rawUserIds ? rawUserIds.map((u) => normEmail(u)) : [];
 
     const contact = await prisma.chatContact.findUnique({ where: { id } });
     if (!contact || contact.addresseeId !== email) {
@@ -476,7 +476,8 @@ router.put('/rooms/:roomId/members', async (req, res) => {
 router.get('/rooms', async (req, res) => {
   try {
     const { email: rawEmail } = req.user;
-    const email = rawEmail.toLowerCase();
+    /** Mesmo critério que ao gravar membros (`normEmail`); `toLowerCase()` só falha com espaços e desincroniza lastRead. */
+    const email = normEmail(rawEmail);
     const rooms = await prisma.chatRoom.findMany({
       where: { members: { some: { userId: email } } },
       include: {
@@ -501,23 +502,25 @@ router.get('/rooms', async (req, res) => {
     const mapped = await Promise.all(rooms.map(async (r) => {
       let displayName = r.name;
       let displayAvatar = null;
-      let myLastReadAt = r.members.find(m => m.userId === email)?.lastReadAt || new Date(0);
+      const myMember = r.members.find((m) => normEmail(m.userId) === email);
+      let myLastReadAt = myMember?.lastReadAt || new Date(0);
 
       if (!r.isGroup) {
         // Encontra o outro membro
-        const other = r.members.find(m => m.userId !== email)?.userId;
+        const other = r.members.find((m) => normEmail(m.userId) !== email)?.userId;
         if (other && userDict[other]) {
           displayName = userDict[other].name;
           displayAvatar = userDict[other].avatarUrl;
         }
       }
 
+      /** Excluir mensagens próprias com comparação case-insensitive (legado pode ter casing diferente em senderId). */
       const unreadCount = await prisma.chatMessage.count({
         where: {
           roomId: r.id,
           createdAt: { gt: myLastReadAt },
-          senderId: { not: email }
-        }
+          NOT: { senderId: { equals: email, mode: 'insensitive' } },
+        },
       });
 
       const lastMsg = r.messages[0];
@@ -531,7 +534,7 @@ router.get('/rooms', async (req, res) => {
         avatarUrl: displayAvatar,
         unreadCount,
         lastMessage: lastMsg?.content || (lastMsg?.mediaUrl ? 'Mídia enviada' : null),
-        lastSender: lastMsg?.senderId === email ? 'Você' : (userDict[lastMsg?.senderId]?.name || null),
+        lastSender: lastMsg && normEmail(lastMsg.senderId) === email ? 'Você' : (userDict[lastMsg?.senderId]?.name || null),
         lastMessageAt: lastMsg ? lastMsg.createdAt.getTime() : r.createdAt.getTime(),
         memberCount: r.members.length,
         members: r.members.map(m => ({
@@ -557,7 +560,7 @@ router.get('/rooms', async (req, res) => {
 router.get('/rooms/:roomId/messaging-state', async (req, res) => {
   try {
     const { email: rawEmail } = req.user;
-    const email = rawEmail.toLowerCase();
+    const email = normEmail(rawEmail);
     const { roomId } = req.params;
 
     const member = await prisma.chatRoomMember.findUnique({
@@ -576,7 +579,7 @@ router.get('/rooms/:roomId/messaging-state', async (req, res) => {
 router.post('/rooms/:roomId/messages', async (req, res) => {
   try {
     const { email: rawEmail, name } = req.user;
-    const email = rawEmail.toLowerCase();
+    const email = normEmail(rawEmail);
     const { roomId } = req.params;
     const { type, content, mediaUrl } = req.body;
 
@@ -652,7 +655,7 @@ router.post('/rooms/:roomId/messages', async (req, res) => {
 router.get('/rooms/:roomId/messages', async (req, res) => {
   try {
     const { email: rawEmail } = req.user;
-    const email = rawEmail.toLowerCase();
+    const email = normEmail(rawEmail);
     const { roomId } = req.params;
     const { since = 0, viewerLocale: rawViewerLocale } = req.query;
 
@@ -731,7 +734,7 @@ router.get('/rooms/:roomId/messages', async (req, res) => {
 router.put('/rooms/:roomId/read', async (req, res) => {
   try {
     const { email: rawEmail } = req.user;
-    const email = rawEmail.toLowerCase();
+    const email = normEmail(rawEmail);
     const { roomId } = req.params;
 
     const member = await prisma.chatRoomMember.findUnique({
