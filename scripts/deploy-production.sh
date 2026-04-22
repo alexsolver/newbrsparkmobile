@@ -8,6 +8,7 @@
 #   ./scripts/deploy-production.sh all          # api + web
 #   SKIP_LARAVEL_MIGRATE=1 ... web   # não corre php artisan migrate --force
 #   SKIP_PRISMA_MIGRATE=1 ... api    # emergência: não corre Prisma migrate
+#   SKIP_FRONTEND_BUILD=1 ... web   # não corre npm run build (só PHP/backend public)
 #
 set -euo pipefail
 
@@ -15,6 +16,8 @@ set -euo pipefail
 SKIP_PRISMA_MIGRATE="${SKIP_PRISMA_MIGRATE:-0}"
 # Laravel: por omissão aplica migrações em produção
 RUN_LARAVEL_MIGRATE="${RUN_LARAVEL_MIGRATE:-1}"
+# BrsparkWeb: por omissão faz vite build e copia dist → backend/public (index.html + assets)
+SKIP_FRONTEND_BUILD="${SKIP_FRONTEND_BUILD:-0}"
 
 TARGET="${1:-all}"
 SSH_KEY="${BRSPARK_SSH_KEY:-$HOME/Downloads/alex.pem}"
@@ -80,8 +83,34 @@ REMOTE
   echo "[deploy] API concluído."
 }
 
+# Garante public/index.html e assets do React (BrsparkWeb/frontend) antes do rsync — sem isto o Laravel serve resources/views/welcome.
+build_brspark_web_frontend() {
+  local FRONTEND_LOCAL
+  FRONTEND_LOCAL="$(cd "$WEB_LOCAL/../frontend" 2>/dev/null && pwd)" || FRONTEND_LOCAL=""
+  if [[ "${SKIP_FRONTEND_BUILD}" == "1" ]]; then
+    echo "[deploy] SKIP_FRONTEND_BUILD=1 — build do frontend ignorado"
+    return 0
+  fi
+  if [[ ! -d "$FRONTEND_LOCAL" || ! -f "$FRONTEND_LOCAL/package.json" ]]; then
+    echo "[deploy] Aviso: pasta BrsparkWeb/frontend em falta — public/index.html não será gerado aqui." >&2
+    return 0
+  fi
+  echo "[deploy] npm ci + npm run build (BrsparkWeb frontend)…"
+  (cd "$FRONTEND_LOCAL" && npm ci && npm run build)
+  echo "[deploy] Copiar frontend/dist → ${WEB_LOCAL}/public/ (SPA)…"
+  mkdir -p "$WEB_LOCAL/public/assets"
+  rsync -a --delete "$FRONTEND_LOCAL/dist/assets/" "$WEB_LOCAL/public/assets/"
+  if [[ -d "$FRONTEND_LOCAL/dist/locales" ]]; then
+    mkdir -p "$WEB_LOCAL/public/locales"
+    rsync -a --delete "$FRONTEND_LOCAL/dist/locales/" "$WEB_LOCAL/public/locales/"
+  fi
+  rsync -a "$FRONTEND_LOCAL/dist/" "$WEB_LOCAL/public/" \
+    --exclude assets --exclude locales --exclude '.DS_Store'
+}
+
 deploy_web() {
   [[ -n "$WEB_LOCAL" && -d "$WEB_LOCAL" ]] || { echo "[deploy] Falta BrsparkWeb/backend (defina BRSPARK_WEB_LOCAL)." >&2; exit 1; }
+  build_brspark_web_frontend
   echo "[deploy] Rsync Laravel → ${SSH_USER}@${SSH_HOST}:${REMOTE_WEB}/"
   rsync "${RSYNC_LARAVEL[@]}" -e "$RSYNC_RSH" \
     "$WEB_LOCAL/" "${SSH_USER}@${SSH_HOST}:${REMOTE_WEB}/"

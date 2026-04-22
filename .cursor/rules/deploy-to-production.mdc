@@ -14,7 +14,7 @@ Quando o pedido for para **colocar código em produção**, **commit para produ�
    ./scripts/deploy-production.sh all
    ```
 
-2. O script já faz: rsync do **admin-panel** e **Laravel (BrsparkWeb/backend)**, `npm ci` no Node, **Prisma migrate** com recuperação automática de falhas típicas (P3009), `php artisan migrate --force` no Laravel, caches e **PM2 restart**.
+2. O script já faz: rsync do **admin-panel** e **Laravel (BrsparkWeb/backend)**; no alvo `web`/`all` corre **`npm ci` + `npm run build`** em **BrsparkWeb/frontend** e copia **`dist/`** para **`backend/public/`** (SPA em `www.brspark.com`). No Node: `npm ci`, **Prisma migrate** (P3009), `php artisan migrate --force`, caches e **PM2 restart**. Emergência só PHP: `SKIP_FRONTEND_BUILD=1`.
 
 3. Se o comando falhar, analisar a saída (SSH, Prisma, Artisan) e propor correção; não deixar o utilizador com passos manuais salvo migração SQL impossível de reaplicar sem intervenção na BD.
 
