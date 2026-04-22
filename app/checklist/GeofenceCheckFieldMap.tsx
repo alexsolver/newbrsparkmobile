@@ -198,7 +198,7 @@ export default function GeofenceCheckFieldMap({
   liveGps = true,
   primaryColor,
 }: Props) {
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<React.ElementRef<typeof MapView> | null>(null);
   const [canvasW, setCanvasW] = useState(() => Math.max(260, Dimensions.get('window').width - 88));
   const [mapReady, setMapReady] = useState(false);
   const [livePos, setLivePos] = useState<{ lat: number; lng: number } | null>(null);
