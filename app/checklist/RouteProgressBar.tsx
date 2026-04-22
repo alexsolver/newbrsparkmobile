@@ -6,8 +6,10 @@ import React, { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { routeTracker, RouteUpdate } from '../../src/services/routeTrackingService';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../../src/theme/ThemeContext';
 
 export default function RouteProgressBar() {
+  const { colors: C } = useTheme();
   const [update, setUpdate] = useState<RouteUpdate | null>(null);
 
   useEffect(() => {
@@ -20,7 +22,7 @@ export default function RouteProgressBar() {
 
   const isDeviation = update.event === 'ROUTE_DEVIATION';
   const isComplete  = update.event === 'ROUTE_COMPLETED';
-  const color = isComplete ? '#16a34a' : isDeviation ? '#d97706' : '#f97316';
+  const color = isComplete ? '#16a34a' : isDeviation ? '#d97706' : C.accent;
 
   return (
     <View style={[styles.container, { borderColor: color + '40', backgroundColor: color + '12' }]}>

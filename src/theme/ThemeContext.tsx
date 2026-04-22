@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { lightColors, darkColors, ColorPalette } from './colors';
 import { useAuth } from '../hooks/useAuth';
-import { API_BASE } from '../services/auth';
+import { API_BASE, GUEST_LOGIN_BRANDING_KEY } from '../services/auth';
 
 const BRANDING_CACHE_KEY = '@brspark:tenant_branding_cache';
 const BRANDING_LOGO_CACHE_KEY = '@brspark:tenant_branding_logo_cache';
@@ -16,6 +16,11 @@ type TenantBranding = {
   accentColor?: string;
   secondaryColor?: string;
   surfaceColor?: string;
+  menuChipActiveBg?: string;
+  menuChipActiveFg?: string;
+  menuChipInactiveBg?: string;
+  menuChipInactiveFg?: string;
+  menuChipInactiveBorder?: string;
   logoLightUrl?: string;
   logoDarkUrl?: string;
   loginBackgroundUrl?: string;
@@ -91,6 +96,10 @@ function resolveTenantPalette(base: ColorPalette, branding: TenantBranding | nul
   const next = { ...base };
   if (branding.primaryColor) next.primary = branding.primaryColor;
   if (branding.accentColor) next.accent = branding.accentColor;
+  /** Só `primaryColor` no painel: evitar `accent` por defeito (laranja BrSpark) em chips e ícones. */
+  if (branding.primaryColor && !String(branding.accentColor || '').trim()) {
+    next.accent = branding.primaryColor;
+  }
   if (branding.primaryColor) next.branding = branding.primaryColor;
   if (branding.secondaryColor) next.textSecondary = branding.secondaryColor;
   if (branding.surfaceColor) {
@@ -104,6 +113,19 @@ function resolveTenantPalette(base: ColorPalette, branding: TenantBranding | nul
     next.filledButtonBg = branding.accentColor;
     next.filledButtonFg = getContrastText(branding.accentColor);
   }
+
+  const chipActiveBg =
+    String(branding.menuChipActiveBg || '').trim() ||
+    String(branding.accentColor || '').trim() ||
+    String(branding.primaryColor || '').trim() ||
+    next.accent;
+  next.menuChipActiveBg = chipActiveBg;
+  const chipFgExplicit = String(branding.menuChipActiveFg || '').trim();
+  next.menuChipActiveFg = chipFgExplicit ? chipFgExplicit : getContrastText(chipActiveBg);
+  next.menuChipInactiveBg = String(branding.menuChipInactiveBg || '').trim() || next.cardWhite;
+  next.menuChipInactiveFg = String(branding.menuChipInactiveFg || '').trim() || next.textSecondary;
+  next.menuChipInactiveBorder = String(branding.menuChipInactiveBorder || '').trim() || next.border;
+
   return next;
 }
 
@@ -119,7 +141,7 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
   const [dark, setDark] = useState(false);
   const [brandingCache, setBrandingCache] = useState<TenantBranding | null>(null);
   const [logoCache, setLogoCache] = useState<BrandingLogoCache | null>(null);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
     AsyncStorage.getItem('@pref_dark_mode')
@@ -130,17 +152,59 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    AsyncStorage.getItem(BRANDING_CACHE_KEY)
-      .then((raw) => {
-        if (!raw) return;
-        try {
-          setBrandingCache(JSON.parse(raw));
-        } catch {
-          /* ignore */
-        }
-      })
-      .catch(() => {});
+    let cancelled = false;
+    (async () => {
+      try {
+        let raw = await AsyncStorage.getItem(BRANDING_CACHE_KEY);
+        if (!raw) raw = await AsyncStorage.getItem(GUEST_LOGIN_BRANDING_KEY);
+        if (!raw || cancelled) return;
+        const parsed = JSON.parse(raw) as TenantBranding;
+        if (parsed?.enabled) setBrandingCache(parsed);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  /** Após logout (ou sessão expirada), alinhar estado ao que ficou em disco — purge apaga `BRANDING_CACHE_KEY` e grava só o guest. */
+  useEffect(() => {
+    if (authLoading) return;
+    if (user != null) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(BRANDING_CACHE_KEY);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw) as TenantBranding;
+            if (!cancelled) setBrandingCache(parsed?.enabled ? parsed : null);
+          } catch {
+            if (!cancelled) setBrandingCache(null);
+          }
+          return;
+        }
+        const rawG = await AsyncStorage.getItem(GUEST_LOGIN_BRANDING_KEY);
+        if (!rawG) {
+          if (!cancelled) setBrandingCache(null);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(rawG) as TenantBranding;
+          if (!cancelled) setBrandingCache(parsed?.enabled ? parsed : null);
+        } catch {
+          if (!cancelled) setBrandingCache(null);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, authLoading]);
 
   useEffect(() => {
     AsyncStorage.getItem(BRANDING_LOGO_CACHE_KEY)
@@ -178,7 +242,7 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
      *  Nunca apagar só porque `branding` veio ausente na resposta (rede parcial / /me sem aninhar tenant). */
     if (tb && tb.enabled === false) {
       setBrandingCache(null);
-      AsyncStorage.removeItem(BRANDING_CACHE_KEY).catch(() => {});
+      AsyncStorage.multiRemove([BRANDING_CACHE_KEY, GUEST_LOGIN_BRANDING_KEY]).catch(() => {});
       return;
     }
     if (!liveBranding?.enabled) return;
@@ -192,9 +256,9 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      if (!liveBranding?.enabled) return;
-      const lightRemote = resolveBrandingUrl(liveBranding.logoLightUrl || liveBranding.logoDarkUrl || null);
-      const darkRemote = resolveBrandingUrl(liveBranding.logoDarkUrl || liveBranding.logoLightUrl || null);
+      if (!branding?.enabled) return;
+      const lightRemote = resolveBrandingUrl(branding.logoLightUrl || branding.logoDarkUrl || null);
+      const darkRemote = resolveBrandingUrl(branding.logoDarkUrl || branding.logoLightUrl || null);
       if (!lightRemote && !darkRemote) return;
 
       const current = logoCache || {
@@ -253,7 +317,7 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [liveBranding, logoCache]);
+  }, [branding, logoCache]);
 
   const palette = useMemo(
     () => resolveTenantPalette(dark ? darkColors : lightColors, branding || null),

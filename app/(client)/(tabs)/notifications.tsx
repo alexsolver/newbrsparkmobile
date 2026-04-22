@@ -240,7 +240,7 @@ export default function NotificationsScreen() {
           const cfg = cat !== 'all' ? categoryConfig[cat] : null;
           return (
             <TouchableOpacity key={cat} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => setFilter(cat)}>
-              {cfg && <Ionicons name={cfg.icon} size={11} color={active ? C.cardWhite : cfg.color} style={{ marginRight: 4 }} />}
+              {cfg && <Ionicons name={cfg.icon} size={11} color={active ? C.menuChipActiveFg : cfg.color} style={{ marginRight: 4 }} />}
               <Text style={[styles.filterText, active && styles.filterTextActive]}>{cat === 'all' ? 'Todos' : cfg!.label}</Text>
             </TouchableOpacity>
           );
@@ -306,10 +306,10 @@ function createNotificationsStyles(C: ColorPalette) {
       backgroundColor: C.cardWhite,
       height: 32,
     },
-    filterChipActive: { backgroundColor: C.accent, borderColor: C.accent },
+    filterChipActive: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
 
     filterText: { fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-    filterTextActive: { color: C.cardWhite },
+    filterTextActive: { color: C.menuChipActiveFg },
 
     list: { paddingHorizontal: 16, paddingBottom: 32 },
 

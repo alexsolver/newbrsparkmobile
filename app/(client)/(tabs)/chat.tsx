@@ -897,9 +897,9 @@ function createChatStyles(C: ColorPalette) {
 
     filterRow: { backgroundColor: C.cardWhite, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.border },
     filterChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: C.background, borderWidth: 1, borderColor: C.border },
-    filterChipActive: { backgroundColor: C.accent, borderColor: C.accent },
+    filterChipActive: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
     filterChipText: { fontSize: 13, fontWeight: '700', color: C.textSecondary },
-    filterChipTextActive: { color: '#fff' },
+    filterChipTextActive: { color: C.menuChipActiveFg },
     filterBadge: { marginLeft: 5, backgroundColor: C.accent, borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1, minWidth: 16, alignItems: 'center' },
     filterBadgeText: { fontSize: 10, fontWeight: '900', color: '#fff' },
     searchWrap: {

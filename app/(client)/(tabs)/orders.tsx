@@ -262,9 +262,9 @@ function createOrdersStyles(C: ColorPalette) {
       borderWidth: 1,
       borderColor: C.border,
     },
-    filterChipActive: { backgroundColor: C.accent, borderColor: C.accent },
+    filterChipActive: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
     filterText: { fontSize: 13, fontWeight: '700', color: C.textSecondary },
-    filterTextActive: { color: C.cardWhite, fontWeight: '800' },
+    filterTextActive: { color: C.menuChipActiveFg, fontWeight: '800' },
 
     orderCard: {
       flexDirection: 'row',

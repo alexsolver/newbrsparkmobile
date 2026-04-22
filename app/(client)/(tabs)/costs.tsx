@@ -545,9 +545,9 @@ function createCostsStyles(C: ColorPalette) {
   locBar: { marginTop: 15 },
   filterScroll: { paddingHorizontal: 20, paddingBottom: 15 },
   filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: C.cardWhite, borderWidth: 1, borderColor: C.border, marginRight: 8 },
-  filterChipA: { backgroundColor: C.accent, borderColor: C.accent },
+  filterChipA: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
   filterChipT: { fontSize: 11, fontWeight: '800', color: C.textSecondary, textTransform: 'uppercase' },
-  filterChipTA: { color: C.cardWhite },
+  filterChipTA: { color: C.menuChipActiveFg },
 
   content: { padding: 20 },
   secTitle: { fontSize: 9, fontWeight: '900', color: C.textLight, letterSpacing: 1.2, marginBottom: 15, textTransform: 'uppercase' },
@@ -575,9 +575,9 @@ function createCostsStyles(C: ColorPalette) {
   inputL: { fontSize: 9, fontWeight: '900', color: C.textLight, marginBottom: 8, textTransform: 'uppercase' },
   input: { backgroundColor: C.surfaceLow, padding: 14, borderRadius: 12, fontSize: 13, fontWeight: '700', borderWidth: 1, borderColor: C.border },
   pChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: C.divider, marginRight: 8, borderWidth: 1, borderColor: C.border },
-  pChipA: { backgroundColor: C.accent, borderColor: C.accent },
+  pChipA: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
   pChipT: { fontSize: 10, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase' },
-  pChipTA: { color: C.cardWhite },
+  pChipTA: { color: C.menuChipActiveFg },
   confirmBtn: { backgroundColor: C.accent, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 10 },
   confirmText: { color: C.cardWhite, fontWeight: '900', fontSize: 13, letterSpacing: 0.5, textTransform: 'uppercase' },
 

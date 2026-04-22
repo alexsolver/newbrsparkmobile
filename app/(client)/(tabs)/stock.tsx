@@ -593,9 +593,9 @@ function createStockStyles(C: ColorPalette) {
   locBar: { backgroundColor: C.cardWhite, paddingBottom: 12 },
   filterScroll: { paddingHorizontal: 16, paddingBottom: 12 },
   filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: C.background, borderWidth: 1, borderColor: C.border, marginRight: 8 },
-  filterChipActive: { backgroundColor: C.accent, borderColor: C.accent },
+  filterChipActive: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
   filterChipText: { fontSize: 11, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  filterChipTextActive: { color: '#fff' },
+  filterChipTextActive: { color: C.menuChipActiveFg },
 
   searchArea: { paddingHorizontal: 16, marginBottom: 10 },
   searchRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
@@ -655,10 +655,10 @@ function createStockStyles(C: ColorPalette) {
   inputG: { marginBottom: 15 },
   inputL: { fontSize: 9, fontWeight: '900', color: C.textLight, marginBottom: 6, letterSpacing: 0.6, textTransform: 'uppercase' },
   pChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: C.surfaceLow, marginRight: 8, borderWidth: 1, borderColor: C.border },
-  pChipA: { backgroundColor: C.accent, borderColor: C.accent },
+  pChipA: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
 
   pChipT: { fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase' },
-  pChipTA: { color: '#fff' },
+  pChipTA: { color: C.menuChipActiveFg },
   confirmBtn: { backgroundColor: C.accent, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 10 },
 
   confirmText: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 1, textTransform: 'uppercase' },

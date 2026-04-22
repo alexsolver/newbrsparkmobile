@@ -6,6 +6,7 @@ import React from 'react';
 import { Circle, Marker, Polygon, Polyline } from 'react-native-maps';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { View } from 'react-native';
+import { useTheme } from '../../src/theme/ThemeContext';
 import type { GlobalGeofenceMeta } from './globalGeofenceCombined';
 import { parsePolygonRaw } from './globalGeofenceCombined';
 
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export default function GlobalGeofenceMapLayers({ gf, destMarkerTitle = 'Destino da OS' }: Props) {
+  const { colors: C } = useTheme();
   const { destination, destinationRadiusM, geometry } = gf;
   const poly = geometry ? parsePolygonRaw(geometry.locationPolygon) : [];
   const zt = String(geometry?.zoneType || '').toLowerCase();
@@ -57,7 +59,7 @@ export default function GlobalGeofenceMapLayers({ gf, destMarkerTitle = 'Destino
         <>
           <Polyline
             coordinates={poly.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-            strokeColor="#f97316"
+            strokeColor={C.accent}
             strokeWidth={3}
             lineDashPattern={[8, 4]}
           />
@@ -67,7 +69,7 @@ export default function GlobalGeofenceMapLayers({ gf, destMarkerTitle = 'Destino
               style={{
                 width: 30,
                 height: 30,
-                backgroundColor: '#ea580c',
+                backgroundColor: C.accent,
                 borderRadius: 15,
                 alignItems: 'center',
                 justifyContent: 'center',

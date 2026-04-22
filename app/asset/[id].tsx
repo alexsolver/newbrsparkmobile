@@ -189,9 +189,9 @@ function createAssetDetailStyles(C: ColorPalette) {
   inputL: { fontSize: 9, fontWeight: '900', color: C.textLight, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.6 },
   input: { backgroundColor: '#F8FAFC', padding: 14, borderRadius: 12, fontSize: 13, fontWeight: '700', borderWidth: 1, borderColor: C.border },
   pChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: '#F1F5F9', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  pChipA: { backgroundColor: C.accent, borderColor: C.accent },
+  pChipA: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
   pChipT: { fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase' },
-  pChipTA: { color: '#fff' },
+  pChipTA: { color: C.menuChipActiveFg },
   confirmBtn: { backgroundColor: C.accent, padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 10 },
   confirmText: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 1, textTransform: 'uppercase' },
   });
@@ -2844,11 +2844,34 @@ export default function AssetDetailScreen() {
                     {['MANUTENÇÃO', 'OUTROS', 'LIMPEZA'].map(c=>(
                       <TouchableOpacity 
                         key={c} 
-                        style={[{paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: '#F1F5F9', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center'}, newExp.category === c && { backgroundColor: C.accent, borderColor: C.accent },
-]} 
+                        style={[
+                          {
+                            paddingHorizontal: 12,
+                            paddingVertical: 6,
+                            borderRadius: 10,
+                            backgroundColor: C.menuChipInactiveBg,
+                            marginRight: 8,
+                            borderWidth: 1,
+                            borderColor: C.menuChipInactiveBorder,
+                            justifyContent: 'center',
+                          },
+                          newExp.category === c && { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
+                        ]}
                         onPress={()=>setNewExp({...newExp, category:c})}
                       >
-                        <Text style={[{fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase'}, newExp.category === c && {color: '#fff'}]}>{c}</Text>
+                        <Text
+                          style={[
+                            {
+                              fontSize: 9,
+                              fontWeight: '900',
+                              color: C.menuChipInactiveFg,
+                              textTransform: 'uppercase',
+                            },
+                            newExp.category === c && { color: C.menuChipActiveFg },
+                          ]}
+                        >
+                          {c}
+                        </Text>
                       </TouchableOpacity>
                     ))}
                    </ScrollView>

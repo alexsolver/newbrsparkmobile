@@ -456,16 +456,16 @@ export default function ServicesScreen() {
           <TouchableOpacity
             style={[
               styles.catChip,
-              category === cat.id && { backgroundColor: C.accent, borderColor: C.accent },
+              category === cat.id && { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
             ]}
             onPress={() => setCategory(category === cat.id ? '' : cat.id)}
           >
             <Ionicons
               name={cat.icon as any}
               size={13}
-              color={category === cat.id ? C.cardWhite : C.textSecondary}
+              color={category === cat.id ? C.menuChipActiveFg : C.textSecondary}
             />
-            <Text style={[styles.catChipTxt, category === cat.id && { color: C.cardWhite }]}>
+            <Text style={[styles.catChipTxt, category === cat.id && { color: C.menuChipActiveFg }]}>
               {cat.i18nKey ? t(cat.i18nKey) : (cat.label || cat.id)}
             </Text>
           </TouchableOpacity>
@@ -550,11 +550,11 @@ function createServicesStyles(C: ColorPalette) {
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 20,
-      backgroundColor: C.divider,
+      backgroundColor: C.menuChipInactiveBg,
       borderWidth: 1,
-      borderColor: C.border,
+      borderColor: C.menuChipInactiveBorder,
     },
-    catChipTxt: { fontSize: 12, fontWeight: '700', color: C.textSecondary },
+    catChipTxt: { fontSize: 12, fontWeight: '700', color: C.menuChipInactiveFg },
 
     cardOuter: {
       marginBottom: 10,

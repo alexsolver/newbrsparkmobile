@@ -183,36 +183,106 @@
           </div>
         </div>
       </div>
+      <div style="font-size:11px;font-weight:800;color:var(--text);margin-top:4px;">Chips de menu / filtros (opcional)</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.45;">
+        Vazio = o app deriva do destaque/primária. Preencha para controlar o chip ativo (ex.: MOBILIDADE) e os inativos (GERAL, …).
+      </div>
+      <div class="grid-2 tenant-branding-modal__grid">
+        <div class="form-group tenant-branding-modal__field">
+          <label class="form-label">Chip ativo — fundo</label>
+          <div class="tenant-branding-modal__color-row">
+            <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-menu-chip-active-bg" placeholder="#14B8A6" />
+            <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-menu-chip-active-bg-picker" value="#14B8A6" aria-label="Fundo chip ativo" />
+          </div>
+        </div>
+        <div class="form-group tenant-branding-modal__field">
+          <label class="form-label">Chip ativo — texto</label>
+          <div class="tenant-branding-modal__color-row">
+            <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-menu-chip-active-fg" placeholder="#FFFFFF" />
+            <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-menu-chip-active-fg-picker" value="#FFFFFF" aria-label="Texto chip ativo" />
+          </div>
+        </div>
+      </div>
+      <div class="grid-2 tenant-branding-modal__grid">
+        <div class="form-group tenant-branding-modal__field">
+          <label class="form-label">Chip inativo — fundo</label>
+          <div class="tenant-branding-modal__color-row">
+            <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-menu-chip-inactive-bg" placeholder="#FFFFFF" />
+            <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-menu-chip-inactive-bg-picker" value="#FFFFFF" aria-label="Fundo chip inativo" />
+          </div>
+        </div>
+        <div class="form-group tenant-branding-modal__field">
+          <label class="form-label">Chip inativo — texto</label>
+          <div class="tenant-branding-modal__color-row">
+            <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-menu-chip-inactive-fg" placeholder="#475569" />
+            <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-menu-chip-inactive-fg-picker" value="#475569" aria-label="Texto chip inativo" />
+          </div>
+        </div>
+      </div>
+      <div class="form-group tenant-branding-modal__field">
+        <label class="form-label">Chip inativo — borda</label>
+        <div class="tenant-branding-modal__color-row">
+          <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-menu-chip-inactive-border" placeholder="#E2E8F0" />
+          <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-menu-chip-inactive-border-picker" value="#E2E8F0" aria-label="Borda chip inativo" />
+        </div>
+      </div>
       <div class="tenant-branding-modal__preview-shell">
         <div class="tenant-branding-modal__preview-head">
-          <div style="font-size:12px;font-weight:800;color:var(--text);">Prévia do app</div>
-          <div style="font-size:10px;color:var(--text3);font-weight:700;">Login + header + CTA</div>
+          <div>
+            <div style="font-size:12px;font-weight:800;color:var(--text);">Prévia do app</div>
+            <div style="font-size:10px;color:var(--text3);font-weight:700;line-height:1.35;">Login · campos de formulário · botões · menus em chip · cabeçalho</div>
+          </div>
         </div>
         <div id="tenant-branding-validation" style="display:none;font-size:11px;font-weight:700;color:#b91c1c;background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px;margin-bottom:10px;"></div>
-        <div id="tenant-branding-preview" style="border:1px solid var(--border);border-radius:16px;overflow:hidden;background:#fff;">
-          <div id="tenant-branding-preview-login" style="padding:18px;background:#F8FAFC;min-height:120px;display:flex;flex-direction:column;justify-content:flex-end;">
-            <div id="tenant-branding-preview-logo-pill" style="display:inline-flex;align-items:center;gap:8px;width:max-content;max-width:100%;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.82);border:1px solid rgba(15,23,42,.08);">
-              <div id="tenant-branding-preview-logo-dot" style="width:12px;height:12px;border-radius:999px;background:#EA580C;flex-shrink:0;"></div>
-              <div style="min-width:0;">
-                <div style="font-size:16px;font-weight:900;color:#0F172A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="tenant-branding-preview-name">BrSpark</div>
-                <div style="font-size:11px;color:#64748B;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" id="tenant-branding-preview-tagline">Precisou, resolveu.</div>
+        <div id="tenant-branding-preview" class="tenant-branding-preview-root">
+          <div class="tenant-branding-preview-login-stage">
+            <div class="tenant-branding-preview-caption">Tela de login</div>
+            <div class="tenant-branding-preview-phone">
+              <div class="tenant-branding-preview-phone-bar">9:41</div>
+              <div id="tenant-branding-preview-login" class="tenant-branding-preview-login">
+                <img id="tenant-branding-preview-login-logo" alt="" class="tenant-branding-preview-login-logo-img" />
+                <div id="tenant-branding-preview-login-logo-ph" class="tenant-branding-preview-login-logo-ph" aria-hidden="true">Logo</div>
+                <div id="tenant-branding-preview-name" class="tenant-branding-preview-login-name">BrSpark</div>
+                <div id="tenant-branding-preview-tagline" class="tenant-branding-preview-login-tag">Precisou, resolveu.</div>
+                <div class="tenant-branding-preview-fake-input" data-fake="email"></div>
+                <div class="tenant-branding-preview-fake-input" data-fake="pass" style="margin-top:8px;"></div>
+                <button type="button" id="tenant-branding-preview-login-btn" class="tenant-branding-preview-login-btn">Entrar</button>
               </div>
             </div>
           </div>
-          <div style="padding:16px;">
-            <div id="tenant-branding-preview-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-              <div>
-                <div style="font-size:10px;font-weight:900;color:#EA580C;text-transform:uppercase;letter-spacing:.5px;" id="tenant-branding-preview-eyebrow">BrSpark</div>
-                <div style="font-size:14px;font-weight:900;color:#0F172A;margin-top:2px;">Dashboard</div>
+          <div class="tenant-branding-preview-split">
+            <div>
+              <div class="tenant-branding-preview-caption">Formulário</div>
+              <div id="tenant-branding-preview-form-card" class="tenant-branding-preview-form-card">
+                <div class="tenant-branding-preview-form-label">Nome do cliente</div>
+                <div class="tenant-branding-preview-fake-input tenant-branding-preview-fake-input--wide"></div>
+                <div class="tenant-branding-preview-form-label tenant-branding-preview-form-label--spaced">Observações</div>
+                <div class="tenant-branding-preview-fake-textarea"></div>
+                <div class="tenant-branding-preview-form-actions">
+                  <button type="button" id="tenant-branding-preview-btn-outline" class="tenant-branding-preview-btn-outline">Cancelar</button>
+                  <button type="button" id="tenant-branding-preview-button" class="tenant-branding-preview-btn-primary">Guardar</button>
+                </div>
               </div>
-              <div style="width:32px;height:32px;border-radius:999px;background:#F1F5F9;border:1px solid #E2E8F0;"></div>
             </div>
-            <div id="tenant-branding-preview-card" style="padding:14px;border-radius:14px;background:#FFF7ED;border:1px solid #FDBA74;">
-              <div style="font-size:13px;font-weight:800;color:#EA580C;">Botão / destaque</div>
-              <div style="font-size:11px;color:#475569;margin-top:6px;">As cores abaixo simulam login, header e CTAs do app.</div>
-              <button type="button" id="tenant-branding-preview-button" style="margin-top:12px;border:none;border-radius:12px;padding:10px 12px;background:#EA580C;color:#fff;font-size:12px;font-weight:900;cursor:default;">
-                Ação principal
-              </button>
+            <div>
+              <div class="tenant-branding-preview-caption">Menus / filtros (chip ativo)</div>
+              <div id="tenant-branding-preview-chip-row" class="tenant-branding-preview-chip-row">
+                <span class="tenant-branding-preview-chip" data-active="0">GERAL</span>
+                <span class="tenant-branding-preview-chip" data-active="0">IMOBILIÁRIO</span>
+                <span class="tenant-branding-preview-chip" data-active="1">MOBILIDADE</span>
+                <span class="tenant-branding-preview-chip" data-active="0">MAQUINÁRIO</span>
+              </div>
+              <div class="tenant-branding-preview-caption" style="margin-top:14px;">Cabeçalho in-app</div>
+              <div id="tenant-branding-preview-header" class="tenant-branding-preview-mini-header">
+                <div class="tenant-branding-preview-mini-header-left">
+                  <div id="tenant-branding-preview-logo-dot" class="tenant-branding-preview-mini-dot"></div>
+                  <div>
+                    <div id="tenant-branding-preview-eyebrow" class="tenant-branding-preview-mini-eyebrow">BrSpark</div>
+                    <div id="tenant-branding-preview-header-title" class="tenant-branding-preview-mini-title">Início</div>
+                  </div>
+                </div>
+                <div class="tenant-branding-preview-mini-avatar"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -475,21 +545,156 @@
     loadTenants();
   };
 
+  function brandingPreviewParseHex6(hex) {
+    const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || '').trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+
+  function brandingPreviewContrastOn(bgHex) {
+    const rgb = brandingPreviewParseHex6(bgHex);
+    if (!rgb) return '#FFFFFF';
+    const L = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+    return L > 0.55 ? '#0F172A' : '#FFFFFF';
+  }
+
+  function brandingPreviewEscCssUrl(u) {
+    return String(u || '')
+      .trim()
+      .replace(/\\/g, '/')
+      .replace(/"/g, '%22')
+      .replace(/\(/g, '%28')
+      .replace(/\)/g, '%29');
+  }
+
   function setBrandingPreview() {
     const name = document.getElementById('tenant-branding-app-name').value.trim() || 'BrSpark';
     const tagline = document.getElementById('tenant-branding-tagline').value.trim() || 'Precisou, resolveu.';
     const primary = document.getElementById('tenant-branding-primary').value.trim() || '#F97316';
     const accent = document.getElementById('tenant-branding-accent').value.trim() || '#EA580C';
-    const surface = document.getElementById('tenant-branding-surface').value.trim() || '#FFF7ED';
-    document.getElementById('tenant-branding-preview-name').textContent = name;
-    document.getElementById('tenant-branding-preview-tagline').textContent = tagline;
+    const secondary = document.getElementById('tenant-branding-secondary').value.trim() || '#475569';
+    const surface = document.getElementById('tenant-branding-surface').value.trim() || '#F8FAFC';
+    const logoLight = document.getElementById('tenant-branding-logo-light').value.trim();
+    const loginBg = document.getElementById('tenant-branding-login-bg').value.trim();
+
+    const loginRoot = document.getElementById('tenant-branding-preview-login');
+    const nameEl = document.getElementById('tenant-branding-preview-name');
+    const tagEl = document.getElementById('tenant-branding-preview-tagline');
+    nameEl.textContent = name;
+    tagEl.textContent = tagline;
+
+    if (loginBg) {
+      const u = brandingPreviewEscCssUrl(loginBg);
+      loginRoot.style.backgroundColor = 'transparent';
+      loginRoot.style.backgroundImage = `linear-gradient(180deg, rgba(15,23,42,0.38) 0%, rgba(15,23,42,0.78) 100%), url("${u}")`;
+      loginRoot.style.backgroundSize = 'cover, cover';
+      loginRoot.style.backgroundPosition = 'center, center';
+      loginRoot.dataset.onPhoto = '1';
+      nameEl.style.color = '#fff';
+      tagEl.style.color = 'rgba(255,255,255,0.9)';
+    } else {
+      loginRoot.style.backgroundImage = 'none';
+      loginRoot.style.backgroundColor = surface;
+      delete loginRoot.dataset.onPhoto;
+      nameEl.style.color = secondary;
+      tagEl.style.color = secondary;
+    }
+
+    const logoImg = document.getElementById('tenant-branding-preview-login-logo');
+    const logoPh = document.getElementById('tenant-branding-preview-login-logo-ph');
+    const syncLogoVis = () => {
+      if (logoLight) {
+        logoImg.style.display = 'block';
+        logoPh.style.display = 'none';
+      } else {
+        logoImg.removeAttribute('src');
+        logoImg.style.display = 'none';
+        logoPh.style.display = 'flex';
+      }
+    };
+    if (logoLight) {
+      logoImg.onload = () => {
+        logoImg.style.display = 'block';
+        logoPh.style.display = 'none';
+      };
+      logoImg.onerror = () => {
+        logoImg.style.display = 'none';
+        logoPh.style.display = 'flex';
+      };
+      logoImg.src = logoLight;
+    } else {
+      syncLogoVis();
+    }
+    logoPh.style.borderColor = primary;
+    logoPh.style.color = primary;
+
+    const loginBtn = document.getElementById('tenant-branding-preview-login-btn');
+    loginBtn.style.background = primary;
+    loginBtn.style.color = brandingPreviewContrastOn(primary);
+
+    const onPhoto = loginRoot.dataset.onPhoto === '1';
+    document.querySelectorAll('.tenant-branding-preview-login .tenant-branding-preview-fake-input').forEach((el) => {
+      el.style.background = onPhoto ? 'rgba(255,255,255,0.92)' : '#fff';
+      el.style.borderColor = onPhoto ? 'rgba(255,255,255,0.4)' : `${primary}40`;
+    });
+
+    const formCard = document.getElementById('tenant-branding-preview-form-card');
+    formCard.style.background = surface;
+    formCard.style.borderColor = `${primary}22`;
+    formCard.querySelectorAll('.tenant-branding-preview-form-label').forEach((lab) => {
+      lab.style.color = secondary;
+    });
+    const ta = formCard.querySelector('.tenant-branding-preview-fake-textarea');
+    if (ta) {
+      ta.style.background = '#fff';
+      ta.style.borderColor = `${primary}33`;
+    }
+    const wideInp = formCard.querySelector('.tenant-branding-preview-fake-input--wide');
+    if (wideInp) {
+      wideInp.style.background = '#fff';
+      wideInp.style.borderColor = `${primary}33`;
+    }
+
+    const outlineBtn = document.getElementById('tenant-branding-preview-btn-outline');
+    outlineBtn.style.border = `2px solid ${primary}`;
+    outlineBtn.style.color = primary;
+    outlineBtn.style.background = '#fff';
+
+    const mainBtn = document.getElementById('tenant-branding-preview-button');
+    mainBtn.style.background = primary;
+    mainBtn.style.color = brandingPreviewContrastOn(primary);
+
+    const chipActBg =
+      document.getElementById('tenant-branding-menu-chip-active-bg').value.trim() || accent || primary;
+    const chipActFgRaw = document.getElementById('tenant-branding-menu-chip-active-fg').value.trim();
+    const chipActFg = chipActFgRaw || brandingPreviewContrastOn(chipActBg);
+    const chipInBg =
+      document.getElementById('tenant-branding-menu-chip-inactive-bg').value.trim() || surface;
+    const chipInFg =
+      document.getElementById('tenant-branding-menu-chip-inactive-fg').value.trim() || secondary;
+    const chipInBd =
+      document.getElementById('tenant-branding-menu-chip-inactive-border').value.trim() || '#E2E8F0';
+
+    document.querySelectorAll('.tenant-branding-preview-chip').forEach((chip) => {
+      const active = chip.getAttribute('data-active') === '1';
+      if (active) {
+        chip.style.background = chipActBg;
+        chip.style.color = chipActFg;
+        chip.style.border = `1px solid ${chipActBg}`;
+      } else {
+        chip.style.background = chipInBg;
+        chip.style.color = chipInFg;
+        chip.style.border = `1px solid ${chipInBd}`;
+      }
+    });
+
     document.getElementById('tenant-branding-preview-eyebrow').textContent = name;
-    document.getElementById('tenant-branding-preview-login').style.background = surface;
-    document.getElementById('tenant-branding-preview-card').style.background = `${accent}14`;
-    document.getElementById('tenant-branding-preview-card').style.borderColor = `${accent}66`;
-    document.getElementById('tenant-branding-preview-card').style.color = primary;
-    document.getElementById('tenant-branding-preview-button').style.background = primary;
+    document.getElementById('tenant-branding-preview-eyebrow').style.color = accent;
+    document.getElementById('tenant-branding-preview-header-title').style.color = secondary;
     document.getElementById('tenant-branding-preview-logo-dot').style.background = accent;
+    document.getElementById('tenant-branding-preview-header').style.background = surface;
+    document.getElementById('tenant-branding-preview-header').style.borderColor = `${primary}18`;
   }
 
   function isHexColor(value) {
@@ -516,6 +721,11 @@
     syncBrandingColorPicker('tenant-branding-accent', 'tenant-branding-accent-picker', '#14B8A6');
     syncBrandingColorPicker('tenant-branding-secondary', 'tenant-branding-secondary-picker', '#334155');
     syncBrandingColorPicker('tenant-branding-surface', 'tenant-branding-surface-picker', '#F8FAFC');
+    syncBrandingColorPicker('tenant-branding-menu-chip-active-bg', 'tenant-branding-menu-chip-active-bg-picker', '#14B8A6');
+    syncBrandingColorPicker('tenant-branding-menu-chip-active-fg', 'tenant-branding-menu-chip-active-fg-picker', '#FFFFFF');
+    syncBrandingColorPicker('tenant-branding-menu-chip-inactive-bg', 'tenant-branding-menu-chip-inactive-bg-picker', '#FFFFFF');
+    syncBrandingColorPicker('tenant-branding-menu-chip-inactive-fg', 'tenant-branding-menu-chip-inactive-fg-picker', '#475569');
+    syncBrandingColorPicker('tenant-branding-menu-chip-inactive-border', 'tenant-branding-menu-chip-inactive-border-picker', '#E2E8F0');
   }
 
   function validateBrandingForm() {
@@ -529,6 +739,17 @@
     if (!logoLight && !logoDark) issues.push('Informe ao menos um logo para branding ativo.');
     if (primary && !isHexColor(primary)) issues.push('Cor primária inválida. Use formato #RRGGBB.');
     if (accent && !isHexColor(accent)) issues.push('Cor de destaque inválida. Use formato #RRGGBB.');
+    const chipHexIds = [
+      'tenant-branding-menu-chip-active-bg',
+      'tenant-branding-menu-chip-active-fg',
+      'tenant-branding-menu-chip-inactive-bg',
+      'tenant-branding-menu-chip-inactive-fg',
+      'tenant-branding-menu-chip-inactive-border',
+    ];
+    chipHexIds.forEach((id) => {
+      const v = document.getElementById(id).value.trim();
+      if (v && !isHexColor(v)) issues.push(`Cor inválida em «${id}». Use #RRGGBB ou deixe vazio.`);
+    });
     return issues;
   }
 
@@ -561,24 +782,42 @@
     });
   }
 
-  ['tenant-branding-app-name','tenant-branding-tagline','tenant-branding-primary','tenant-branding-accent','tenant-branding-surface']
-    .forEach((id) => document.getElementById(id).addEventListener('input', setBrandingPreview));
   [
     'tenant-branding-app-name',
     'tenant-branding-tagline',
-    'tenant-branding-logo-light',
-    'tenant-branding-logo-dark',
-    'tenant-branding-login-bg',
     'tenant-branding-primary',
     'tenant-branding-accent',
     'tenant-branding-secondary',
     'tenant-branding-surface',
-  ].forEach((id) => document.getElementById(id).addEventListener('input', renderBrandingValidation));
-  document.getElementById('tenant-branding-enabled').addEventListener('change', renderBrandingValidation);
+    'tenant-branding-logo-light',
+    'tenant-branding-logo-dark',
+    'tenant-branding-login-bg',
+    'tenant-branding-menu-chip-active-bg',
+    'tenant-branding-menu-chip-active-fg',
+    'tenant-branding-menu-chip-inactive-bg',
+    'tenant-branding-menu-chip-inactive-fg',
+    'tenant-branding-menu-chip-inactive-border',
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      setBrandingPreview();
+      renderBrandingValidation();
+    });
+  });
+  document.getElementById('tenant-branding-enabled').addEventListener('change', () => {
+    setBrandingPreview();
+    renderBrandingValidation();
+  });
   bindBrandingColorPair('tenant-branding-primary', 'tenant-branding-primary-picker', '#0F766E');
   bindBrandingColorPair('tenant-branding-accent', 'tenant-branding-accent-picker', '#14B8A6');
   bindBrandingColorPair('tenant-branding-secondary', 'tenant-branding-secondary-picker', '#334155');
   bindBrandingColorPair('tenant-branding-surface', 'tenant-branding-surface-picker', '#F8FAFC');
+  bindBrandingColorPair('tenant-branding-menu-chip-active-bg', 'tenant-branding-menu-chip-active-bg-picker', '#14B8A6');
+  bindBrandingColorPair('tenant-branding-menu-chip-active-fg', 'tenant-branding-menu-chip-active-fg-picker', '#FFFFFF');
+  bindBrandingColorPair('tenant-branding-menu-chip-inactive-bg', 'tenant-branding-menu-chip-inactive-bg-picker', '#FFFFFF');
+  bindBrandingColorPair('tenant-branding-menu-chip-inactive-fg', 'tenant-branding-menu-chip-inactive-fg-picker', '#475569');
+  bindBrandingColorPair('tenant-branding-menu-chip-inactive-border', 'tenant-branding-menu-chip-inactive-border-picker', '#E2E8F0');
   syncAllBrandingColorPickers();
 
   async function fileToBase64(file) {
@@ -652,6 +891,11 @@
       document.getElementById('tenant-branding-accent').value = branding.accentColor || '';
       document.getElementById('tenant-branding-secondary').value = branding.secondaryColor || '';
       document.getElementById('tenant-branding-surface').value = branding.surfaceColor || '';
+      document.getElementById('tenant-branding-menu-chip-active-bg').value = branding.menuChipActiveBg || '';
+      document.getElementById('tenant-branding-menu-chip-active-fg').value = branding.menuChipActiveFg || '';
+      document.getElementById('tenant-branding-menu-chip-inactive-bg').value = branding.menuChipInactiveBg || '';
+      document.getElementById('tenant-branding-menu-chip-inactive-fg').value = branding.menuChipInactiveFg || '';
+      document.getElementById('tenant-branding-menu-chip-inactive-border').value = branding.menuChipInactiveBorder || '';
       syncAllBrandingColorPickers();
       setBrandingPreview();
       renderBrandingValidation();
@@ -688,6 +932,11 @@
         accentColor: document.getElementById('tenant-branding-accent').value.trim(),
         secondaryColor: document.getElementById('tenant-branding-secondary').value.trim(),
         surfaceColor: document.getElementById('tenant-branding-surface').value.trim(),
+        menuChipActiveBg: document.getElementById('tenant-branding-menu-chip-active-bg').value.trim(),
+        menuChipActiveFg: document.getElementById('tenant-branding-menu-chip-active-fg').value.trim(),
+        menuChipInactiveBg: document.getElementById('tenant-branding-menu-chip-inactive-bg').value.trim(),
+        menuChipInactiveFg: document.getElementById('tenant-branding-menu-chip-inactive-fg').value.trim(),
+        menuChipInactiveBorder: document.getElementById('tenant-branding-menu-chip-inactive-border').value.trim(),
       },
     };
     const res = await CONFIG.put(`/tenants/${id}/branding`, body);

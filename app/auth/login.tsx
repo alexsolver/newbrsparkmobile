@@ -94,12 +94,19 @@ function createLoginStyles(C: ColorPalette) {
     link: { color: C.accent, fontWeight: '700', textDecorationLine: 'underline' },
 
     cta: {
-      backgroundColor: C.accent, flexDirection: 'row',
-      alignItems: 'center', justifyContent: 'center',
-      paddingVertical: 18, borderRadius: 18, gap: 10,
+      backgroundColor: C.accent,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 18,
+      borderRadius: 18,
+      gap: 10,
       marginTop: 12,
-      shadowColor: C.accent, shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
+      shadowColor: C.accent,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.35,
+      shadowRadius: 12,
+      elevation: 8,
     },
     ctaText: { color: C.cardWhite, fontWeight: '900', fontSize: 16 },
 
@@ -600,7 +607,10 @@ export default function LoginScreen() {
             />
 
             <TouchableOpacity
-              style={[{ backgroundColor: C.accent, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginBottom: 14 }, (otp.length < 6 || otpLoading) && { opacity: 0.5 }]}
+              style={[
+                { backgroundColor: C.accent, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginBottom: 14 },
+                (otp.length < 6 || otpLoading) && { opacity: 0.5 },
+              ]}
               onPress={handleVerifyOtp}
               disabled={otp.length < 6 || otpLoading}
             >

@@ -141,7 +141,6 @@ const PAUSE_PICKER_CAT_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 const PAUSE_PICKER_CAT_COLOR: Record<string, string> = {
   personal: '#7C3AED',
-  operational: '#EA580C',
   logistics: '#0369A1',
   client_site: '#059669',
   equipment: '#475569',
@@ -8369,7 +8368,7 @@ export default function ChecklistEngine() {
         />
       ) : null}
       <LinearGradient 
-        colors={['#EA580C', '#F97316']}
+        colors={[C.primary, C.branding]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={[styles.header, { paddingBottom: 16 }]}
@@ -10260,7 +10259,7 @@ export default function ChecklistEngine() {
                                     paddingVertical: 12,
                                     paddingHorizontal: 14,
                                     borderRadius: 12,
-                                    backgroundColor: busy ? '#cbd5e1' : '#ea580c',
+                                    backgroundColor: busy ? '#cbd5e1' : C.accent,
                                     alignItems: 'center',
                                   }}
                                 >
@@ -10528,7 +10527,7 @@ export default function ChecklistEngine() {
                                       paddingVertical: 12,
                                       paddingHorizontal: 14,
                                       borderRadius: 12,
-                                      backgroundColor: busy ? '#cbd5e1' : '#ea580c',
+                                      backgroundColor: busy ? '#cbd5e1' : C.accent,
                                       alignItems: 'center',
                                     }}
                                   >
@@ -12267,7 +12266,7 @@ export default function ChecklistEngine() {
       <Modal visible={pauseReasonModalVisible} animationType="slide" onRequestClose={() => setPauseReasonModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: '#EEF2F6' }}>
           <LinearGradient
-            colors={['#EA580C', '#F97316']}
+            colors={[C.primary, C.branding]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{
@@ -12353,7 +12352,7 @@ export default function ChecklistEngine() {
           >
             {pausePickerStep === 'category'
               ? PAUSE_CATEGORIES.map((cat) => {
-                  const c = PAUSE_PICKER_CAT_COLOR[cat.id] || C.primary;
+                  const c = cat.id === 'operational' ? C.accent : PAUSE_PICKER_CAT_COLOR[cat.id] || C.primary;
                   const ic = PAUSE_PICKER_CAT_ICON[cat.id] || 'folder-outline';
                   return (
                     <TouchableOpacity
@@ -12420,7 +12419,10 @@ export default function ChecklistEngine() {
                 })
               : pauseSelectedCategory
                 ? (() => {
-                    const subAccent = PAUSE_PICKER_CAT_COLOR[pauseSelectedCategory.id] || C.primary;
+                    const subAccent =
+                      pauseSelectedCategory.id === 'operational'
+                        ? C.accent
+                        : PAUSE_PICKER_CAT_COLOR[pauseSelectedCategory.id] || C.primary;
                     return pauseSelectedCategory.subs.map((sub) => {
                       const selected = pauseHighlightSubId === sub.id;
                       return (
@@ -12540,7 +12542,7 @@ export default function ChecklistEngine() {
                   }}
                 >
                   <LinearGradient
-                    colors={['#EA580C', '#DC2626']}
+                    colors={[C.accent, '#DC2626']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={{ paddingVertical: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' }}
@@ -12588,7 +12590,7 @@ export default function ChecklistEngine() {
             >
               <View style={{ alignItems: 'center', marginBottom: 18 }}>
                 <LinearGradient
-                  colors={['#fb923c', '#ea580c', '#dc2626']}
+                  colors={[C.primary, C.accent, '#dc2626']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{
@@ -12597,7 +12599,7 @@ export default function ChecklistEngine() {
                     borderRadius: 38,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    shadowColor: '#ea580c',
+                    shadowColor: C.accent,
                     shadowOffset: { width: 0, height: 10 },
                     shadowOpacity: 0.4,
                     shadowRadius: 18,
@@ -12639,7 +12641,7 @@ export default function ChecklistEngine() {
                     borderRadius: 16,
                     padding: 14,
                     borderLeftWidth: 3,
-                    borderLeftColor: '#f97316',
+                    borderLeftColor: C.accent,
                   }}
                 >
                   <Text style={{ color: '#78716c', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 }}>
@@ -12696,7 +12698,7 @@ export default function ChecklistEngine() {
 
               <TouchableOpacity activeOpacity={0.92} onPress={resumeFromPauseOverlay} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
                 <LinearGradient
-                  colors={['#f97316', '#ea580c', '#dc2626']}
+                  colors={[C.primary, C.accent, '#dc2626']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={{
@@ -12749,7 +12751,7 @@ export default function ChecklistEngine() {
             {t('pause.blockedHint')}
           </Text>
           <TouchableOpacity
-            style={{ backgroundColor: '#f97316', paddingVertical: 18, borderRadius: 16 }}
+            style={{ backgroundColor: C.accent, paddingVertical: 18, borderRadius: 16 }}
             onPress={() => void unpauseExecutionFromServer()}
           >
             <Text style={{ color: '#fff', fontWeight: '900', fontSize: 17, textAlign: 'center' }}>{t('pause.unpauseBtn')}</Text>

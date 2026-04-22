@@ -31,17 +31,24 @@ export function Chip({
 }: Props) {
   const { colors: C } = useTheme();
   const accent = accentColor ?? C.primary;
+  const useMenu = !accentColor;
+  const activeBg = useMenu ? C.menuChipActiveBg : accent;
+  const inactiveBg = useMenu ? C.menuChipInactiveBg : C.cardWhite;
+  const inactiveBorder = useMenu ? C.menuChipInactiveBorder : C.border;
+  const activeFg = useMenu ? C.menuChipActiveFg : C.filledButtonFg;
 
   const padV = variant === 'segment' ? 10 : 8;
   const padH = variant === 'segment' ? 12 : 10;
   const r = variant === 'segment' ? radius.md : radius.sm;
 
-  const bg = selected ? accent : C.cardWhite;
-  const border = selected ? accent : C.border;
+  const bg = selected ? activeBg : inactiveBg;
+  const border = selected ? activeBg : inactiveBorder;
   const labelColor = selected
-    ? C.filledButtonFg
+    ? activeFg
     : variant === 'filter'
-      ? C.slate
+      ? useMenu
+        ? C.menuChipInactiveFg
+        : C.slate
       : accent;
 
   const content = (
@@ -77,7 +84,7 @@ export function Chip({
           paddingVertical: padV,
           paddingHorizontal: padH,
           borderRadius: r,
-          backgroundColor: selected ? accent : pressed ? C.surfaceLow : C.cardWhite,
+          backgroundColor: selected ? activeBg : pressed ? C.surfaceLow : inactiveBg,
           borderColor: border,
           borderWidth: StyleSheet.hairlineWidth * 2,
           opacity: disabled ? 0.5 : 1,

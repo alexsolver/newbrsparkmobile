@@ -916,8 +916,8 @@ function createStockModuleStyles(C: ColorPalette) {
   catalogItem: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#F8FAFC', borderRadius: 12, marginBottom: 8, gap: 12 },
   catalogT: { fontSize: 12, fontWeight: '800', color: C.primary, flex: 1 },
   pChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: C.background, marginRight: 8 },
-  pChipA: { backgroundColor: C.accent },
+  pChipA: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
   pChipT: { fontSize: 9, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase' },
-  pChipTA: { color: '#fff' }
+  pChipTA: { color: C.menuChipActiveFg },
   });
 }

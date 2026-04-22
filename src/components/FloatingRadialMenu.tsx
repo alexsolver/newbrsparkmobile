@@ -345,7 +345,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
         <Modal visible={isOpen} animationType="slide" onRequestClose={closeMenu}>
           <View style={listStyles.modalRoot}>
             <LinearGradient
-              colors={['#EA580C', '#F97316']}
+              colors={[C.primary, C.branding]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={[listStyles.headerGradient, { paddingTop: insets.top + 10, paddingBottom: 18 }]}
@@ -398,7 +398,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
 
               {rtLoading ? (
                 <View style={{ paddingVertical: 16, alignItems: 'center' }}>
-                  <ActivityIndicator color="#EA580C" />
+                  <ActivityIndicator color={C.branding} />
                   <Text style={{ marginTop: 8, fontSize: 12, color: '#64748B', fontWeight: '600' }}>
                     {t('radialMenu.routineTasksLoading')}
                   </Text>
@@ -421,7 +421,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
                   {rtAssignments.map((a) => {
                     const rtCacheCount = countRoutineTasksInLocalRtCacheForTemplate(rtCloudRows, a.templateId);
                     const rtIconName = String(a.icon || '').trim();
-                    const rtAccent = String(a.iconColor || '').trim() || '#EA580C';
+                    const rtAccent = String(a.iconColor || '').trim() || C.branding;
                     const rtGlyph = rtIconName ? (
                       <TaskMetadataGlyph icon={a.icon} iconLibrary={a.iconLibrary} size={26} color={rtAccent} />
                     ) : (
@@ -464,7 +464,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
                           style={{
                             fontSize: 17,
                             fontWeight: '900',
-                            color: '#EA580C',
+                            color: C.branding,
                             minWidth: 28,
                             textAlign: 'right',
                             paddingTop: 2,

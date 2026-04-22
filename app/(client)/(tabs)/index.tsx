@@ -26,7 +26,6 @@ import {
 import {
   SERVICE_CATEGORY_COLORS,
   MEDIA_TAG_COLORS,
-  MODE_SEGMENT_COLORS,
   type ColorPalette,
 } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -3420,8 +3419,8 @@ export default function DashboardScreen() {
 
     const TYPE_COLORS: Record<string, string> = {
       REAL_ESTATE: MEDIA_TAG_COLORS.BEFORE,
-      MOBILITY: MODE_SEGMENT_COLORS.PROVIDER,
-      TERRESTRIAL: MODE_SEGMENT_COLORS.PROVIDER,
+      MOBILITY: C.accent,
+      TERRESTRIAL: C.accent,
       MACHINERY: SERVICE_CATEGORY_COLORS.Reformas,
       AQUATIC: SERVICE_CATEGORY_COLORS['Climatização'],
       IT: MEDIA_TAG_COLORS.WARRANTY,
@@ -3914,7 +3913,7 @@ export default function DashboardScreen() {
               size={PROVIDER_OS_SORT_CHIP_ICON_SIZE}
               color={
                 providerListModeInLongPressAnchorFamily(providerSortMode, 'NEWEST')
-                  ? MODE_SEGMENT_COLORS.PROVIDER
+                  ? C.accent
                   : C.textLight
               }
               style={{ marginRight: PROVIDER_OS_SORT_CHIP_ICON_MARGIN }}
@@ -3925,7 +3924,7 @@ export default function DashboardScreen() {
                 lineHeight: PROVIDER_OS_SORT_CHIP_LINE_HEIGHT,
                 fontWeight: providerListModeInLongPressAnchorFamily(providerSortMode, 'NEWEST') ? '900' : '700',
                 color: providerListModeInLongPressAnchorFamily(providerSortMode, 'NEWEST')
-                  ? MODE_SEGMENT_COLORS.PROVIDER
+                  ? C.accent
                   : C.textLight,
                 textTransform: 'uppercase',
                 flexShrink: 1,
@@ -3982,7 +3981,7 @@ export default function DashboardScreen() {
               size={PROVIDER_OS_SORT_CHIP_ICON_SIZE}
               color={
                 providerListModeInLongPressAnchorFamily(providerSortMode, 'OLDEST')
-                  ? MODE_SEGMENT_COLORS.PROVIDER
+                  ? C.accent
                   : C.textLight
               }
               style={{ marginRight: PROVIDER_OS_SORT_CHIP_ICON_MARGIN }}
@@ -3993,7 +3992,7 @@ export default function DashboardScreen() {
                 lineHeight: PROVIDER_OS_SORT_CHIP_LINE_HEIGHT,
                 fontWeight: providerListModeInLongPressAnchorFamily(providerSortMode, 'OLDEST') ? '900' : '700',
                 color: providerListModeInLongPressAnchorFamily(providerSortMode, 'OLDEST')
-                  ? MODE_SEGMENT_COLORS.PROVIDER
+                  ? C.accent
                   : C.textLight,
                 textTransform: 'uppercase',
                 flexShrink: 1,
@@ -4048,13 +4047,13 @@ export default function DashboardScreen() {
                         alignItems: 'center',
                       }}
                     >
-                      <ActivityIndicator size="small" color={MODE_SEGMENT_COLORS.PROVIDER} />
+                      <ActivityIndicator size="small" color={C.accent} />
                     </View>
                   ) : (
                     <Ionicons
                       name={iconName as any}
                       size={PROVIDER_OS_SORT_CHIP_ICON_SIZE}
-                      color={routeOn ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight}
+                      color={routeOn ? C.accent : C.textLight}
                       style={{ marginRight: PROVIDER_OS_SORT_CHIP_ICON_MARGIN }}
                     />
                   )}
@@ -4063,7 +4062,7 @@ export default function DashboardScreen() {
                       fontSize: PROVIDER_OS_SORT_CHIP_FONT_SIZE,
                       lineHeight: PROVIDER_OS_SORT_CHIP_LINE_HEIGHT,
                       fontWeight: routeOn ? '900' : '700',
-                      color: routeOn ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight,
+                      color: routeOn ? C.accent : C.textLight,
                       textTransform: 'uppercase',
                       flexShrink: 1,
                     }}
@@ -4109,7 +4108,7 @@ export default function DashboardScreen() {
             style={({ pressed }) => ({
               paddingVertical: 14,
               borderRadius: 12,
-              backgroundColor: MODE_SEGMENT_COLORS.PROVIDER,
+              backgroundColor: C.accent,
               alignItems: 'center',
               opacity: pressed ? 0.9 : 1,
             })}
@@ -4472,7 +4471,7 @@ export default function DashboardScreen() {
                 { id: 'OTHER',       label: t('home.assetTypes.other') },
                 { id: 'GLOBAL',      label: 'Todos' },
              ].map(f => (
-               <TouchableOpacity key={f.id} style={[styles.filterChip, { backgroundColor: C.divider, borderColor: C.border }, activeFilter === f.id && styles.filterChipActive]} onPress={() => setActiveFilter(f.id)}><Text style={[styles.filterChipText, { color: C.textSecondary }, activeFilter === f.id && styles.filterChipTextActive]}>{f.label}</Text></TouchableOpacity>
+               <TouchableOpacity key={f.id} style={[styles.filterChip, { backgroundColor: C.menuChipInactiveBg, borderColor: C.menuChipInactiveBorder }, activeFilter === f.id && styles.filterChipActive]} onPress={() => setActiveFilter(f.id)}><Text style={[styles.filterChipText, { color: C.menuChipInactiveFg }, activeFilter === f.id && styles.filterChipTextActive]}>{f.label}</Text></TouchableOpacity>
              ))}
           </ScrollView>
           {portfolioViewMode === 'MAP' ? renderMapContent() : renderAssetContent()}
@@ -4509,7 +4508,7 @@ export default function DashboardScreen() {
                   {
                     id: 'PENDING' as const,
                     labelKey: 'home.providerTabPending',
-                    color: MODE_SEGMENT_COLORS.PROVIDER,
+                    color: C.accent,
                     icon: 'hourglass-outline' as const,
                   },
                   {
@@ -4660,7 +4659,7 @@ export default function DashboardScreen() {
                   {providerOsListSorted.length === 0 ? (
                   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32, paddingTop: 40 }}>
                     <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: C.status.warning.bg, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
-                      <Ionicons name="construct" size={40} color={MODE_SEGMENT_COLORS.PROVIDER} />
+                      <Ionicons name="construct" size={40} color={C.accent} />
                     </View>
                     <Text style={{ fontSize: 24, fontWeight: '900', color: C.slate, textAlign: 'center', marginBottom: 12, letterSpacing: -0.5 }}>
                       {providerTab === 'PENDING'
@@ -5285,7 +5284,7 @@ export default function DashboardScreen() {
                 {(providerSortMode === 'OSRM_ROUTE' || providerSortMode === 'OSRM_SLA_ROUTE') && (
                     <View style={{ width: 44, marginLeft: 8, alignItems: 'center' }}>
                        {/* Upper Line segment */}
-                       <View style={{ flex: 1, width: 2, backgroundColor: index === 0 ? 'transparent' : (providerSortMode === 'OSRM_SLA_ROUTE' ? C.destructive : MODE_SEGMENT_COLORS.PROVIDER), opacity: 0.3 }} />
+                       <View style={{ flex: 1, width: 2, backgroundColor: index === 0 ? 'transparent' : (providerSortMode === 'OSRM_SLA_ROUTE' ? C.destructive : C.accent), opacity: 0.3 }} />
                        
                        {/* Node */}
                        <TouchableOpacity 
@@ -5300,12 +5299,12 @@ export default function DashboardScreen() {
                             else setRouteMapCenterObj(null);
                             setShowRouteMap(true);
                          }}
-                         style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? C.status.danger.bg : C.status.warning.bg, justifyContent: 'center', alignItems: 'center', marginVertical: -16, zIndex: 10, borderWidth: 2, borderColor: providerSortMode === 'OSRM_SLA_ROUTE' ? C.destructive : MODE_SEGMENT_COLORS.PROVIDER }}>
-                          <Text style={{ color: providerSortMode === 'OSRM_SLA_ROUTE' ? C.destructive : MODE_SEGMENT_COLORS.PROVIDER, fontWeight: '900', fontSize: 13 }}>{index + 1}</Text>
+                         style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: providerSortMode === 'OSRM_SLA_ROUTE' ? C.status.danger.bg : C.status.warning.bg, justifyContent: 'center', alignItems: 'center', marginVertical: -16, zIndex: 10, borderWidth: 2, borderColor: providerSortMode === 'OSRM_SLA_ROUTE' ? C.destructive : C.accent }}>
+                          <Text style={{ color: providerSortMode === 'OSRM_SLA_ROUTE' ? C.destructive : C.accent, fontWeight: '900', fontSize: 13 }}>{index + 1}</Text>
                        </TouchableOpacity>
                        
                        {/* Lower Line segment */}
-                       <View style={{ flex: 1, width: 2, backgroundColor: index === providerOsFlatData.length - 1 ? 'transparent' : (providerSortMode === 'OSRM_SLA_ROUTE' ? C.destructive : MODE_SEGMENT_COLORS.PROVIDER), opacity: 0.3 }} />
+                       <View style={{ flex: 1, width: 2, backgroundColor: index === providerOsFlatData.length - 1 ? 'transparent' : (providerSortMode === 'OSRM_SLA_ROUTE' ? C.destructive : C.accent), opacity: 0.3 }} />
                     </View>
                 )}
                 </Animated.View>
@@ -5386,7 +5385,7 @@ export default function DashboardScreen() {
             
             <View style={styles.sortGrid}>
               {[
-                { id: 'DEFAULT',  label: 'Filtro Padrão', icon: 'swap-vertical', color: MODE_SEGMENT_COLORS.PROVIDER },
+                { id: 'DEFAULT',  label: 'Filtro Padrão', icon: 'swap-vertical', color: C.accent },
                 { id: 'RATING',   label: 'Avaliação',     icon: 'star',          color: MEDIA_TAG_COLORS.DURING },
                 { id: 'AGENDA',   label: 'Próxima Agenda',  icon: 'calendar',      color: C.accent },
                 { id: 'VERIFIED', label: 'Verificados',   icon: 'checkmark-circle',color: MEDIA_TAG_COLORS.BEFORE },
@@ -5450,13 +5449,13 @@ export default function DashboardScreen() {
                     <Ionicons
                       name={row.icon as any}
                       size={22}
-                      color={selected ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight}
+                      color={selected ? C.accent : C.textLight}
                     />
                     <Text style={{ flex: 1, marginLeft: 12, fontSize: 15, fontWeight: '800', color: C.slate }}>
                       {t(`home.providerSort.${labelI18nKey}`)}
                     </Text>
                     {selected ? (
-                      <Ionicons name="checkmark-circle" size={24} color={MODE_SEGMENT_COLORS.PROVIDER} />
+                      <Ionicons name="checkmark-circle" size={24} color={C.accent} />
                     ) : null}
                   </TouchableOpacity>
                 );
@@ -5509,7 +5508,7 @@ export default function DashboardScreen() {
                   flex: 1,
                   paddingVertical: 14,
                   borderRadius: 12,
-                  backgroundColor: MODE_SEGMENT_COLORS.PROVIDER,
+                  backgroundColor: C.accent,
                   alignItems: 'center',
                 }}
               >
@@ -5586,12 +5585,12 @@ export default function DashboardScreen() {
                   }}
                 >
                   {rowLoading ? (
-                    <ActivityIndicator size="small" color={MODE_SEGMENT_COLORS.PROVIDER} style={{ width: 22 }} />
+                    <ActivityIndicator size="small" color={C.accent} style={{ width: 22 }} />
                   ) : (
                     <Ionicons
                       name={row.icon as any}
                       size={22}
-                      color={selected ? MODE_SEGMENT_COLORS.PROVIDER : C.textLight}
+                      color={selected ? C.accent : C.textLight}
                     />
                   )}
                   <View style={{ flex: 1, marginLeft: 12 }}>
@@ -5603,7 +5602,7 @@ export default function DashboardScreen() {
                     ) : null}
                   </View>
                   {selected && !rowLoading ? (
-                    <Ionicons name="checkmark-circle" size={24} color={MODE_SEGMENT_COLORS.PROVIDER} />
+                    <Ionicons name="checkmark-circle" size={24} color={C.accent} />
                   ) : null}
                 </TouchableOpacity>
               );
@@ -6593,14 +6592,22 @@ function createDashboardStyles(C: ColorPalette) {
 
   searchWrapPremium: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: -16, backgroundColor: C.cardWhite, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, shadowColor: C.slate, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
 
-  filterChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: C.surfaceLow, marginRight: 8 },
-  filterChipActive: { backgroundColor: C.accent, borderColor: C.accent },
-  filterChipText: { fontSize: 11, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  filterChipTextActive: { color: C.cardWhite, fontWeight: '900' },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: C.menuChipInactiveBg,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: C.menuChipInactiveBorder,
+    marginRight: 8,
+  },
+  filterChipActive: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
+  filterChipText: { fontSize: 11, fontWeight: '900', color: C.menuChipInactiveFg, textTransform: 'uppercase', letterSpacing: 0.5 },
+  filterChipTextActive: { color: C.menuChipActiveFg, fontWeight: '900' },
 
   // iFood Chips
   ifoodChip: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.cardWhite, borderWidth: 1, borderColor: C.border, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 8 },
-  ifoodChipActive: { backgroundColor: C.accent + '10', borderColor: C.accent },
+  ifoodChipActive: { backgroundColor: `${C.menuChipActiveBg}18`, borderColor: C.menuChipActiveBg },
   ifoodChipText: { fontSize: 13, color: C.textSecondary, fontWeight: '500', marginHorizontal: 4 },
 
   // Sort Bottom Sheet

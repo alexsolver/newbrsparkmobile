@@ -203,6 +203,11 @@ export interface User {
       accentColor?: string;
       secondaryColor?: string;
       surfaceColor?: string;
+      menuChipActiveBg?: string;
+      menuChipActiveFg?: string;
+      menuChipInactiveBg?: string;
+      menuChipInactiveFg?: string;
+      menuChipInactiveBorder?: string;
       logoLightUrl?: string;
       logoDarkUrl?: string;
       loginBackgroundUrl?: string;
@@ -297,6 +302,8 @@ export class MultipleAccountsError extends Error {
 
 const TOKEN_KEY = 'brspark_jwt';
 const USER_KEY  = 'brspark_user';
+/** Branding efectivo da última sessão — ecrã de login sem JWT ainda mostra logo/cores até novo login. */
+export const GUEST_LOGIN_BRANDING_KEY = '@brspark:guest_login_branding_v1';
 /** Não apagar no purge — evita re-disparar migração nuclear em `_layout` a cada login. */
 const ISOLATION_VERSION_KEY = '@brspark:isolation_v';
 /** Marcador temporário quando a sessão expira/sessão invalidada para reter dados offline até novo login da mesma conta. */
@@ -805,6 +812,16 @@ export class AuthService {
       }
     }
     await purgeAllBrSparkLocalCaches();
+    try {
+      const b = existing?.tenant?.branding;
+      if (b && b.enabled) {
+        await AsyncStorage.setItem(GUEST_LOGIN_BRANDING_KEY, JSON.stringify(b));
+      } else {
+        await AsyncStorage.removeItem(GUEST_LOGIN_BRANDING_KEY);
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   /** Recupera usuário salvo localmente */

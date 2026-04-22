@@ -35,6 +35,7 @@ import { fetchDrivingLegEtaMinutes, fetchDrivingGeometryLatLng } from '../../src
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useTheme } from '../../src/theme/ThemeContext';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 import { useTransitMapExpanded } from '../../src/context/TransitMapExpandedContext';
 import { BroadcastOfferSheetEmbedded } from '../../src/components/ProviderBroadcastOfferSheet';
@@ -373,6 +374,7 @@ function EtaBadge({
   transitElapsedLabel?: string | null;
   isLandscape: boolean;
 }) {
+  const { colors: C } = useTheme();
   const insets = useSafeAreaInsets();
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -403,6 +405,7 @@ function EtaBadge({
     <View
       style={[
         etaStyles.wrapperCore,
+        { shadowColor: C.accent },
         isLandscape ? etaStyles.wrapperLandscapePos : etaStyles.wrapperPortraitPos,
         noDestination && (isLandscape ? etaStyles.wrapperWideLandscape : etaStyles.wrapperWide),
         isLandscape
@@ -412,7 +415,7 @@ function EtaBadge({
       pointerEvents="none"
     >
       <LinearGradient
-        colors={['#f97316', '#ea580c']}
+        colors={[C.primary, C.branding]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[
@@ -460,7 +463,6 @@ const etaStyles = StyleSheet.create({
   wrapperCore: {
     zIndex: 20,
     borderRadius: 14,
-    shadowColor: '#f97316',
     shadowOpacity: 0.32,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -612,6 +614,7 @@ export default function LiveRouteMapCard({
 
   const { t: tr } = useTranslation();
   const { user, patchUser } = useAuth();
+  const { colors: C } = useTheme();
   const avatarUri = useResolvedAvatarUri(user);
   const mapRef = useRef<MapView>(null);
   const [update, setUpdate]           = useState<RouteUpdate | null>(null);
@@ -1352,7 +1355,7 @@ export default function LiveRouteMapCard({
   const isComplete  = update?.event === 'ROUTE_COMPLETED';
   const pct         = update?.progressPercent ?? 0;
 
-  let statusColor = '#f97316';
+  let statusColor = C.accent;
   if (isComplete) statusColor = '#16a34a';
   else if (isPaused) statusColor = '#94a3b8';
   else if (isDeviation) statusColor = '#d97706';
@@ -1614,7 +1617,7 @@ export default function LiveRouteMapCard({
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityLabel={tr('chat.localeTitle')}
             >
-              <Ionicons name="language-outline" size={24} color="#ea580c" />
+              <Ionicons name="language-outline" size={24} color={C.accent} />
             </TouchableOpacity>
           </View>
           {trackingChatError ? (
@@ -1677,7 +1680,7 @@ export default function LiveRouteMapCard({
                   </Text>
                   <View
                     style={{
-                      backgroundColor: mine ? '#ea580c' : '#f1f5f9',
+                      backgroundColor: mine ? C.accent : '#f1f5f9',
                       paddingHorizontal: 14,
                       paddingVertical: 10,
                       borderRadius: 16,
@@ -1727,7 +1730,7 @@ export default function LiveRouteMapCard({
                 onPress={() => void sendTrackingChat()}
                 disabled={trackingChatSending}
                 style={{
-                  backgroundColor: '#ea580c',
+                  backgroundColor: C.accent,
                   borderRadius: 12,
                   paddingHorizontal: 16,
                   paddingVertical: 12,
@@ -1792,7 +1795,7 @@ export default function LiveRouteMapCard({
                   }}
                   onPress={() => void applyTrackingChatLocale(null)}
                 >
-                  <Ionicons name="globe-outline" size={20} color="#ea580c" />
+                  <Ionicons name="globe-outline" size={20} color={C.accent} />
                   <Text style={{ flex: 1, marginLeft: 10, fontWeight: '600', color: '#0f172a' }}>
                     {tr('chat.localeAuto')}
                   </Text>
@@ -1845,12 +1848,12 @@ export default function LiveRouteMapCard({
             activeOpacity={0.75}
             accessibilityLabel="Abrir mapa de navegação"
           >
-            <Ionicons name="map" size={24} color="#f97316" />
+            <Ionicons name="map" size={24} color={C.accent} />
             <View style={{ flex: 1 }}>
               <Text style={styles.minimizedTitle}>Mapa da Rota Oculto</Text>
               <Text style={{ fontSize: 12, color: '#64748b' }}>Toque para voltar à navegação.</Text>
             </View>
-            <Ionicons name="expand" size={20} color="#f97316" />
+            <Ionicons name="expand" size={20} color={C.accent} />
           </TouchableOpacity>
           {taskId ? (
             <TouchableOpacity
@@ -1859,7 +1862,7 @@ export default function LiveRouteMapCard({
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityLabel="Abrir chat com o cliente"
             >
-              <Ionicons name="chatbubbles-outline" size={22} color="#ea580c" />
+              <Ionicons name="chatbubbles-outline" size={22} color={C.accent} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -2051,7 +2054,7 @@ export default function LiveRouteMapCard({
                 {templateRouteSplit.remaining.length >= 2 && (
                   <Polyline
                     coordinates={templateRouteSplit.remaining.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-                    strokeColor="#ea580c"
+                    strokeColor={C.accent}
                     strokeWidth={3}
                     lineDashPattern={Platform.OS === 'android' ? undefined : [12, 8]}
                     zIndex={805}
@@ -2062,7 +2065,7 @@ export default function LiveRouteMapCard({
             ) : (
               <Polyline
                 coordinates={route.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-                strokeColor="#ea580c"
+                strokeColor={C.accent}
                 strokeWidth={2}
                 lineDashPattern={Platform.OS === 'android' ? undefined : [12, 8]}
                 zIndex={800}
@@ -2249,7 +2252,7 @@ export default function LiveRouteMapCard({
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            style={[styles.recenterBtn, showGpsTrail && styles.followActiveBtn]}
+            style={[styles.recenterBtn, showGpsTrail && [styles.followActiveBtn, { backgroundColor: C.accent }]]}
             onPress={() => setShowGpsTrail((v) => !v)}
             accessibilityRole="button"
             accessibilityState={{ selected: showGpsTrail }}
@@ -2276,7 +2279,7 @@ export default function LiveRouteMapCard({
           ) : null}
           {embedNativeMap && (
             <TouchableOpacity
-              style={[styles.recenterBtn, followUser && styles.followActiveBtn]}
+              style={[styles.recenterBtn, followUser && [styles.followActiveBtn, { backgroundColor: C.accent }]]}
               onPress={() => setFollowUser((v) => !v)}
               accessibilityLabel={
                 followUser ? 'Modo mapa livre (norte em cima, arrastar mapa)' : 'Modo navegação (seguir GPS e rumo)'
@@ -2336,7 +2339,11 @@ export default function LiveRouteMapCard({
 
           {onEndTransit ? (
             <TouchableOpacity
-              style={[styles.endTransitBtn, endTransitLoading && { opacity: 0.85 }]}
+              style={[
+                styles.endTransitBtn,
+                { backgroundColor: C.accent, shadowColor: C.accent },
+                endTransitLoading && { opacity: 0.85 },
+              ]}
               disabled={endTransitLoading}
               onPress={() => {
                 if (endTransitLoading) return;
@@ -2518,13 +2525,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexDirection: 'row',
-    backgroundColor: '#ea580c',
     paddingVertical: 11,
     paddingHorizontal: 12,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#ea580c',
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
@@ -2588,7 +2593,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#f1f5f9',
   },
-  followActiveBtn: { backgroundColor: '#ea580c', borderWidth: 0 },
+  followActiveBtn: { borderWidth: 0 },
 
   hintPanel: {
     position: 'absolute',

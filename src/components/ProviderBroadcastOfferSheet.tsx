@@ -455,12 +455,12 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
                     width: 36,
                     height: 36,
                     borderRadius: 10,
-                    backgroundColor: '#FFF4E8',
+                    backgroundColor: `${C.accent}22`,
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  <Ionicons name="flash" size={20} color="#EA580C" />
+                  <Ionicons name="flash" size={20} color={C.accent} />
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={{ fontSize: 11, fontWeight: '700', color: C.textLight }} numberOfLines={1}>
@@ -571,7 +571,7 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
                     <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, marginBottom: 10 }}>
                       {(
                         [
-                          { k: 'dur', label: 'DURAÇÃO', value: durLabel, color: C.accent ?? '#EA580C' },
+                          { k: 'dur', label: 'DURAÇÃO', value: durLabel, color: C.accent },
                           { k: 'dist', label: 'DISTÂNCIA', value: distText, color: C.slate },
                           { k: 'eta', label: 'ETA', value: etaText, color: C.success?.text ?? '#16A34A' },
                         ] as const
@@ -608,7 +608,7 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        backgroundColor: '#FFF4E8',
+                        backgroundColor: `${C.accent}22`,
                         borderRadius: 12,
                         paddingHorizontal: 12,
                         paddingVertical: 10,
@@ -616,12 +616,12 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
                       }}
                     >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-                        <Ionicons name="flash" size={18} color="#EA580C" />
+                        <Ionicons name="flash" size={18} color={C.accent} />
                         <Text
                           style={{
                             fontSize: 11,
                             fontWeight: '900',
-                            color: '#EA580C',
+                            color: C.accent,
                             letterSpacing: 0.3,
                           }}
                           numberOfLines={1}
@@ -703,7 +703,7 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
                           paddingVertical: 13,
                           borderRadius: 12,
                           alignItems: 'center',
-                          backgroundColor: C.accent ?? '#EA580C',
+                          backgroundColor: C.accent,
                         }}
                       >
                         {busy === 'accept' ? (

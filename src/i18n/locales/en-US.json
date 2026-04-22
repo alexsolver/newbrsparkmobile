@@ -549,7 +549,7 @@
     "introLoginPrefix": "Already have an account —",
     "introLoginAction": "Sign in",
     "introImageA11y": "Illustration about technical services",
-    "welcomeTitle": "Welcome to BrSpark",
+    "welcomeTitle": "Welcome",
     "welcomeTechBody": "To ensure service quality and your safety, we need to align data use and permissions on your device.",
     "welcomeClientBody": "Manage your assets, find services, and keep everything in one place. Next, we explain clearly what we may collect, always under your control.",
     "techCollectGpsTitle": "GPS location",

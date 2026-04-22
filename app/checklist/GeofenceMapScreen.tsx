@@ -12,6 +12,7 @@ import MapView, { Circle, Marker, Polygon, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useTheme } from '../../src/theme/ThemeContext';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 import { evaluateCombinedGlobalFence, parsePolygonRaw } from './globalGeofenceCombined';
 import GlobalGeofenceMapLayers from './GlobalGeofenceMapLayers';
@@ -69,6 +70,7 @@ function nearestRoutePoint(lat: number, lng: number, route: number[][]): number 
 }
 
 export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, onCancel }: Props) {
+  const { colors: C } = useTheme();
   const { user } = useAuth();
   const avatarUri = useResolvedAvatarUri(user);
   const mapRef = useRef<MapView>(null);
@@ -407,7 +409,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
           <>
             <Polyline
               coordinates={polygon.map(c => ({ latitude: c[0], longitude: c[1] }))}
-              strokeColor="#f97316"
+              strokeColor={C.accent}
               strokeWidth={2}
               lineDashPattern={[8, 4]}
             />
@@ -483,7 +485,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
               backgroundColor:
                 status === 'outside' && failMode === 'block' && zoneType !== 'route'
                   ? '#9ca3af'
-                  : '#f97316',
+                  : C.accent,
             },
           ]}
           onPress={handleProceed}

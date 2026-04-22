@@ -296,9 +296,9 @@ function createCalendarStyles(C: ColorPalette) {
       borderWidth: 1,
       borderColor: C.border,
     },
-    filterChipActive: { backgroundColor: C.accent, borderColor: C.accent },
+    filterChipActive: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
     filterChipText: { fontSize: 11, fontWeight: '900', color: C.textSecondary, letterSpacing: 0.6, textTransform: 'uppercase' },
-    filterChipTextActive: { color: C.cardWhite },
+    filterChipTextActive: { color: C.menuChipActiveFg },
     calendarCard: {
       backgroundColor: C.cardWhite,
       marginHorizontal: 16,

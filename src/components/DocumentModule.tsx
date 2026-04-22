@@ -428,9 +428,9 @@ function createDocumentModuleStyles(C: ColorPalette) {
   searchInput: { flex: 1, marginLeft: 10, fontSize: 11, fontWeight: '700' },
   filterScroll: { paddingVertical: 10, gap: 8 },
   filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: C.border },
-  filterChipActive: { backgroundColor: C.accent, borderColor: C.accent },
+  filterChipActive: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
   filterChipText: { fontSize: 8, fontWeight: '900', color: C.textSecondary, letterSpacing: 0.8, textTransform: 'uppercase' },
-  filterChipActiveText: { color: '#fff' },
+  filterChipActiveText: { color: C.menuChipActiveFg },
 
   categorySection: { paddingHorizontal: 16, marginBottom: 20 },
   categoryTitle: { fontSize: 7, fontWeight: '900', color: C.textSecondary, marginBottom: 10, letterSpacing: 1.5, textTransform: 'uppercase' },
@@ -470,9 +470,9 @@ function createDocumentModuleStyles(C: ColorPalette) {
   subLabel: { fontSize: 7, fontWeight: '900', color: C.textSecondary, marginTop: 15, textTransform: 'uppercase', letterSpacing: 0.8 },
 
   alertChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: C.background, marginRight: 8, borderWidth: 1, borderColor: C.border },
-  alertChipActive: { backgroundColor: C.accent, borderColor: C.accent },
+  alertChipActive: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
   alertChipText: { fontSize: 7, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase' },
-  alertChipActiveText: { color: '#fff' },
+  alertChipActiveText: { color: C.menuChipActiveFg },
   customBox: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 15, padding: 10, backgroundColor: C.background, borderRadius: 12 },
   customLabel: { fontSize: 7, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
   customInput: { borderBottomWidth: 2, borderBottomColor: C.accent, width: 40, textAlign: 'center', fontSize: 12, fontWeight: '900', color: C.accent },

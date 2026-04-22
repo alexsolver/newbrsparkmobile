@@ -419,10 +419,10 @@ function createAIConsultantStyles(C: ColorPalette) {
   // Tabs
   tabRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
   tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 14, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
-  tabBtnActive: { backgroundColor: C.accent, borderColor: C.accent },
+  tabBtnActive: { backgroundColor: C.menuChipActiveBg, borderColor: C.menuChipActiveBg },
   tabBtnActivePremium: { backgroundColor: '#A855F7', borderColor: '#A855F7' },
   tabBtnT: { fontSize: 11, fontWeight: '900', color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  tabBtnTA: { color: '#fff' },
+  tabBtnTA: { color: C.menuChipActiveFg },
 
   // Score
   scoreCard: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 20, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },

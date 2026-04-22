@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
 import { useAuth } from '../../src/hooks/useAuth';
 import { canUseProviderMode } from '../../src/services/auth';
+import { useTheme } from '../../src/theme/ThemeContext';
 
 interface ConsentRecord {
   id: string;
@@ -63,6 +64,7 @@ function consentLabelForRole(
 }
 
 export default function PrivacySettings() {
+  const { colors: C } = useTheme();
   const { user, userRole } = useAuth();
   const isTechnician = userRole === 'TECHNICIAN' && canUseProviderMode(user) && isTechnicianProfileActive(user);
   const visibleConsentTypes = useMemo(
@@ -198,7 +200,7 @@ export default function PrivacySettings() {
         </View>
 
         {loading ? (
-          <ActivityIndicator style={{ marginTop: 60 }} color="#EA580C" />
+          <ActivityIndicator style={{ marginTop: 60 }} color={C.accent} />
         ) : (
           <>
             {/* Consent toggles */}
@@ -212,7 +214,7 @@ export default function PrivacySettings() {
                 return (
                   <View style={s.toggleRow} key={consentType}>
                     <View style={s.toggleIcon}>
-                      <Ionicons name={info.icon as any} size={20} color="#EA580C" />
+                      <Ionicons name={info.icon as any} size={20} color={C.accent} />
                     </View>
                     <View style={s.toggleContent}>
                       <Text style={s.toggleTitle}>{info.title}</Text>
@@ -224,13 +226,13 @@ export default function PrivacySettings() {
                       )}
                     </View>
                     {isSaving ? (
-                      <ActivityIndicator size="small" color="#EA580C" />
+                      <ActivityIndicator size="small" color={C.accent} />
                     ) : (
                       <Switch
                         value={value}
                         onValueChange={val => toggleConsent(record, consentType, val)}
                         trackColor={{ false: '#e2e8f0', true: '#fdba74' }}
-                        thumbColor={value ? '#EA580C' : '#94a3b8'}
+                        thumbColor={value ? C.accent : '#94a3b8'}
                         ios_backgroundColor="#e2e8f0"
                       />
                     )}

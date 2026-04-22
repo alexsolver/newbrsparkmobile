@@ -343,7 +343,7 @@ export default function OnboardingScreen() {
                       : t(`consentFlow.${descKey}`);
                   return (
                     <View style={s.collectItem} key={String(titleKey)}>
-                      <Ionicons name={icon as any} size={20} color="#EA580C" />
+                      <Ionicons name={icon as any} size={20} color={C.accent} />
                       <View style={{ flex: 1 }}>
                         <Text style={s.collectTitle}>{t(`consentFlow.${titleKey}`)}</Text>
                         <Text style={s.collectDesc}>{desc}</Text>
@@ -376,7 +376,7 @@ export default function OnboardingScreen() {
                 ['hardware-chip-outline', 'clientCollectDeviceTitle', 'clientCollectDeviceDesc'],
               ].map(([icon, titleKey, descKey]) => (
                 <View style={s.collectItem} key={String(titleKey)}>
-                  <Ionicons name={icon as any} size={20} color="#EA580C" />
+                  <Ionicons name={icon as any} size={20} color={C.accent} />
                   <View style={{ flex: 1 }}>
                     <Text style={s.collectTitle}>{t(`consentFlow.${titleKey}`)}</Text>
                     <Text style={s.collectDesc}>{t(`consentFlow.${descKey}`)}</Text>
@@ -392,7 +392,7 @@ export default function OnboardingScreen() {
           return (
             <View style={s.slideContent}>
               <View style={s.slideHeader}>
-                <Ionicons name="location" size={36} color="#EA580C" />
+                <Ionicons name="location" size={36} color={C.accent} />
                 <Text style={s.slideTitle}>{t('consentFlow.locTitleTech')}</Text>
                 <Text style={s.slideDesc}>{t('consentFlow.locDescTech')}</Text>
               </View>
@@ -411,7 +411,7 @@ export default function OnboardingScreen() {
                 description={t('consentFlow.locFgDescTech')}
               />
               <View style={s.warnBox}>
-                <Ionicons name="warning-outline" size={16} color="#d97706" />
+                <Ionicons name="warning-outline" size={16} color={C.accent} />
                 <Text style={s.warnText}>{t('consentFlow.locWarnTech')}</Text>
               </View>
             </View>
@@ -420,7 +420,7 @@ export default function OnboardingScreen() {
         return (
           <View style={s.slideContent}>
             <View style={s.slideHeader}>
-              <Ionicons name="location" size={36} color="#EA580C" />
+              <Ionicons name="location" size={36} color={C.accent} />
               <Text style={s.slideTitle}>{t('consentFlow.locTitleClient')}</Text>
               <Text style={s.slideDesc}>
                 {t('consentFlow.locClientBefore')}
@@ -435,7 +435,7 @@ export default function OnboardingScreen() {
               description={t('consentFlow.locFgDescClient')}
             />
             <View style={s.warnBox}>
-              <Ionicons name="information-circle-outline" size={16} color="#d97706" />
+              <Ionicons name="information-circle-outline" size={16} color={C.accent} />
               <Text style={s.warnText}>{t('consentFlow.locInfoClient')}</Text>
             </View>
           </View>
@@ -446,7 +446,7 @@ export default function OnboardingScreen() {
           return (
             <View style={s.slideContent}>
               <View style={s.slideHeader}>
-                <Ionicons name="phone-portrait" size={36} color="#EA580C" />
+                <Ionicons name="phone-portrait" size={36} color={C.accent} />
                 <Text style={s.slideTitle}>{t('consentFlow.deviceTitleTech')}</Text>
                 <Text style={s.slideDesc}>{t('consentFlow.deviceDescTech')}</Text>
               </View>
@@ -470,7 +470,7 @@ export default function OnboardingScreen() {
         return (
           <View style={s.slideContent}>
             <View style={s.slideHeader}>
-              <Ionicons name="phone-portrait" size={36} color="#EA580C" />
+              <Ionicons name="phone-portrait" size={36} color={C.accent} />
               <Text style={s.slideTitle}>{t('consentFlow.deviceTitleClient')}</Text>
               <Text style={s.slideDesc}>{t('consentFlow.deviceDescClient')}</Text>
             </View>
@@ -497,7 +497,7 @@ export default function OnboardingScreen() {
         return (
           <View style={s.slideContent}>
             <View style={s.slideHeader}>
-              <Ionicons name="notifications" size={36} color="#EA580C" />
+              <Ionicons name="notifications" size={36} color={C.accent} />
               <Text style={s.slideTitle}>{t('consentFlow.notifOnboardingTitle')}</Text>
               <Text style={s.slideDesc}>{t('consentFlow.notifOnboardingDesc')}</Text>
             </View>
@@ -562,29 +562,32 @@ export default function OnboardingScreen() {
           return (
             <View style={s.slideContent}>
               <View style={s.slideHeader}>
-                <Ionicons name="time" size={36} color="#EA580C" />
+                <Ionicons name="time" size={36} color={C.accent} />
                 <Text style={s.slideTitle}>{t('consentFlow.retentionTitleTech')}</Text>
                 <Text style={s.slideDesc}>
                   {t('consentFlow.retentionSubtitleTech', { legal: legalLabel })}
                 </Text>
               </View>
               {[
-                ['retRowGpsLive', t('consentFlow.periodDays', { count: policy?.retentionGpsRawDays || 15 }), 'retRowGpsLiveDesc', '#f59e0b'],
+                ['retRowGpsLive', t('consentFlow.periodDays', { count: policy?.retentionGpsRawDays || 15 }), 'retRowGpsLiveDesc', '__BRAND__'],
                 ['retRowOps', t('consentFlow.periodDays', { count: policy?.retentionAuditDays || 180 }), 'retRowOpsDesc', '#3b82f6'],
                 ['retRowForms', t('consentFlow.periodYears', { count: policy?.retentionEventsYears || 5 }), 'retRowFormsDesc', '#10b981'],
                 ['retRowMetrics', t('consentFlow.retRowMetricsPeriod'), 'retRowMetricsDesc', '#8b5cf6'],
-              ].map(([labelKey, period, descKey, color]) => (
+              ].map(([labelKey, period, descKey, color]) => {
+                const c = color === '__BRAND__' ? C.accent : String(color);
+                return (
                 <View style={s.retentionRow} key={String(labelKey)}>
-                  <View style={[s.retentionDot, { backgroundColor: color + '20' }]}>
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+                  <View style={[s.retentionDot, { backgroundColor: c + '20' }]}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c }} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={s.retentionLabel}>{t(`consentFlow.${labelKey}`)}</Text>
                     <Text style={s.retentionDesc}>{t(`consentFlow.${descKey}`)}</Text>
                   </View>
-                  <Text style={[s.retentionPeriod, { color }]}>{period}</Text>
+                  <Text style={[s.retentionPeriod, { color: c }]}>{period}</Text>
                 </View>
-              ))}
+                );
+              })}
               <ConsentToggleRow consents={consents} setConsents={setConsents}
                 consentKey="DATA_RETENTION"
                 icon="checkmark-circle-outline"
@@ -597,7 +600,7 @@ export default function OnboardingScreen() {
         return (
           <View style={s.slideContent}>
             <View style={s.slideHeader}>
-              <Ionicons name="time" size={36} color="#EA580C" />
+              <Ionicons name="time" size={36} color={C.accent} />
               <Text style={s.slideTitle}>{t('consentFlow.retentionTitleClient')}</Text>
               <Text style={s.slideDesc}>
                 {t('consentFlow.retentionSubtitleClient', { legal: legalLabel })}
@@ -606,19 +609,22 @@ export default function OnboardingScreen() {
             {[
               ['retClientUsage', t('consentFlow.periodDays', { count: policy?.retentionAuditDays || 180 }), 'retClientUsageDesc', '#3b82f6'],
               ['retClientAccount', t('consentFlow.periodYears', { count: policy?.retentionEventsYears || 5 }), 'retClientAccountDesc', '#10b981'],
-              ['retClientLoc', t('consentFlow.periodDays', { count: policy?.retentionGpsRawDays || 15 }), 'retClientLocDesc', '#f59e0b'],
-            ].map(([labelKey, period, descKey, color]) => (
+              ['retClientLoc', t('consentFlow.periodDays', { count: policy?.retentionGpsRawDays || 15 }), 'retClientLocDesc', '__BRAND__'],
+            ].map(([labelKey, period, descKey, color]) => {
+              const c = color === '__BRAND__' ? C.accent : String(color);
+              return (
               <View style={s.retentionRow} key={String(labelKey)}>
-                <View style={[s.retentionDot, { backgroundColor: color + '20' }]}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+                <View style={[s.retentionDot, { backgroundColor: c + '20' }]}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c }} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.retentionLabel}>{t(`consentFlow.${labelKey}`)}</Text>
                   <Text style={s.retentionDesc}>{t(`consentFlow.${descKey}`)}</Text>
                 </View>
-                <Text style={[s.retentionPeriod, { color }]}>{period}</Text>
+                <Text style={[s.retentionPeriod, { color: c }]}>{period}</Text>
               </View>
-            ))}
+              );
+            })}
             <ConsentToggleRow consents={consents} setConsents={setConsents}
               consentKey="DATA_RETENTION"
               icon="checkmark-circle-outline"
@@ -631,7 +637,7 @@ export default function OnboardingScreen() {
       case 'CONFIRM':
         return (
           <View style={s.slideContent}>
-            <View style={s.heroIcon}>
+            <View style={[s.heroIconBase, { backgroundColor: C.surfaceLow, shadowColor: C.accent }]}>
               <Ionicons name="checkmark-circle" size={56} color="#10b981" />
             </View>
             <Text style={s.heroTitle}>{t('consentFlow.confirmTitle')}</Text>
@@ -670,7 +676,7 @@ export default function OnboardingScreen() {
   if (authLoading) {
     return (
       <View style={[s.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: C.background }]}>
-        <ActivityIndicator size="large" color={C.accent} />
+        <ActivityIndicator size="large" color={C.filledButtonBg} />
       </View>
     );
   }
@@ -684,7 +690,7 @@ export default function OnboardingScreen() {
             style={[
               s.dot,
               i === slideIndex
-                ? { width: 20, borderRadius: 3, backgroundColor: C.accent }
+                ? { width: 20, borderRadius: 3, backgroundColor: C.filledButtonBg }
                 : { backgroundColor: C.border },
             ]}
           />
@@ -710,7 +716,7 @@ export default function OnboardingScreen() {
         <TouchableOpacity
           style={[
             s.btnNext,
-            { backgroundColor: C.accent },
+            { backgroundColor: C.filledButtonBg },
             isLastSlide && { backgroundColor: C.connectivity.online },
             (loading || retentionBlocked) && { opacity: 0.45 },
           ]}
@@ -719,13 +725,13 @@ export default function OnboardingScreen() {
           accessibilityState={{ disabled: loading || retentionBlocked }}
         >
           {loading ? (
-            <ActivityIndicator color={C.cardWhite} />
+            <ActivityIndicator color={isLastSlide ? C.cardWhite : C.filledButtonFg} />
           ) : (
             <>
-              <Text style={[s.btnNextText, { color: C.cardWhite }]}>
+              <Text style={[s.btnNextText, { color: isLastSlide ? C.cardWhite : C.filledButtonFg }]}>
                 {isLastSlide ? t('consentFlow.confirmEnter') : t('consentFlow.continue')}
               </Text>
-              {!isLastSlide && <Ionicons name="arrow-forward" size={18} color={C.cardWhite} />}
+              {!isLastSlide && <Ionicons name="arrow-forward" size={18} color={C.filledButtonFg} />}
               {isLastSlide && <Ionicons name="checkmark" size={18} color={C.cardWhite} />}
             </>
           )}
@@ -739,7 +745,6 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   progressBar: { flexDirection: 'row', gap: 6, justifyContent: 'center', paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 12 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#e2e8f0' },
-  dotActive: { width: 20, backgroundColor: '#EA580C' },
   slide: { flex: 1 },
   slideContent: { padding: 24 },
   slideHeader: { alignItems: 'center', marginBottom: 28, gap: 10 },
@@ -757,8 +762,21 @@ const s = StyleSheet.create({
   heroLogoImg: { width: 220, height: 72 },
   heroBrandName: { fontSize: 16, fontWeight: '900', textAlign: 'center', marginTop: -8, marginBottom: 4 },
   heroBrandTagline: { fontSize: 12, fontWeight: '600', textAlign: 'center', marginBottom: 10 },
-  /** Ícone circular (ex.: confirmação final). */
-  heroIcon: { width: 96, height: 96, borderRadius: 28, backgroundColor: '#fff7ed', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 20, marginTop: 16, shadowColor: '#EA580C', shadowOpacity: 0.15, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 6 },
+  /** Ícone circular (ex.: confirmação final) — fundo e sombra vêm do tema em runtime. */
+  heroIconBase: {
+    width: 96,
+    height: 96,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 20,
+    marginTop: 16,
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
   heroTitle: { fontSize: 24, fontWeight: '900', color: '#1e293b', textAlign: 'center', marginBottom: 10 },
   heroSubtitle: { fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 22, marginBottom: 20 },
 
@@ -791,7 +809,6 @@ const s = StyleSheet.create({
   navRow: { flexDirection: 'row', gap: 10, padding: 20, paddingBottom: Platform.OS === 'ios' ? 36 : 20, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f1f5f9' },
   btnBack: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#f1f5f9', borderRadius: 14, paddingVertical: 14 },
   btnBackText: { fontSize: 14, fontWeight: '700', color: '#64748b' },
-  btnNext: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#EA580C', borderRadius: 14, paddingVertical: 14 },
-  btnConfirm: { backgroundColor: '#10b981' },
+  btnNext: { flex: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 14 },
   btnNextText: { fontSize: 14, fontWeight: '800', color: '#fff' },
 });

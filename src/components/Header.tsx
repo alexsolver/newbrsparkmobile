@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -25,7 +25,6 @@ import { useConnectivity } from '../hooks/useConnectivity';
 import { useGpsAuraIssue } from '../hooks/useGpsAuraIssue';
 import { NotificationService } from '../services/notifications';
 import { useTranslation } from 'react-i18next';
-import { MODE_SEGMENT_COLORS } from '../theme/colors';
 import { fontSize, fontWeight, radius } from '../theme/layout';
 
 function AvatarConnectivityStack({
@@ -144,40 +143,12 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const pathname = usePathname() || '';
   const { t } = useTranslation();
   const params = useLocalSearchParams();
-  const { colors: C, resolvedLogoUrl, appDisplayName } = useTheme();
+  const { colors: C, appDisplayName } = useTheme();
   const { user } = useAuth();
-  /** Mesma prioridade que o tema + payload cru (evita desincronizar se `ownerName` ainda não estiver no cache de tema). */
-  const headerTenantMark = String(
-    user?.tenant?.branding?.appDisplayName || user?.tenant?.ownerName || user?.tenant?.name || appDisplayName || '',
-  ).trim();
-  /** Sem ficheiro de marca no servidor: mostrar nome da org em vez do PNG «BrSpark» embutido. */
-  const useHeaderTextMark = useMemo(() => {
-    const n = headerTenantMark || String(appDisplayName || '').trim();
-    if (!n || resolvedLogoUrl) return false;
-    return n.toLowerCase() !== 'brspark';
-  }, [appDisplayName, headerTenantMark, resolvedLogoUrl]);
 
   const renderHeaderBrand = (compact: boolean) => {
     const w = compact ? 70 : 100;
     const h = compact ? 22 : 32;
-    if (useHeaderTextMark) {
-      return (
-        <Text
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          accessibilityLabel={appDisplayName}
-          style={{
-            maxWidth: compact ? 88 : 118,
-            fontSize: compact ? 12 : 14,
-            fontWeight: '800',
-            letterSpacing: compact ? -0.2 : -0.3,
-            color: C.accent,
-          }}
-        >
-          {headerTenantMark || appDisplayName}
-        </Text>
-      );
-    }
     return (
       <BrandingLogoImage
         style={{ width: w, height: h }}
@@ -571,7 +542,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
           {showModeSegmentBadge && activePersona === 'provider'
             ? renderPersonaModePill(
                 t('tabs.personaProviderBadge'),
-                MODE_SEGMENT_COLORS.PROVIDER,
+                C.accent,
                 t('tabs.personaProviderA11y'),
               )
             : null}
