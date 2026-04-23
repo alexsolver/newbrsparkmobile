@@ -39,7 +39,6 @@ export type BroadcastOfferSheetModel = {
   visible: boolean;
   /** Primeira vez / nova OS: expandido; tocar fora: minimiza até aceitar/rejeitar. */
   sheetExpanded: boolean;
-  modalKey: string;
   onDismiss: () => void;
   renderLayer: (
     embeddedInTransitModal: boolean,
@@ -77,7 +76,6 @@ const PERMISSION_MS = 12000;
 const GPS_POSITION_MS = 20000;
 /** Velocidade média urbana (m/s) só para ETA aproximado quando o OSRM não responde. */
 const FALLBACK_URBAN_SPEED_MS = 28 / 3.6;
-
 function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const R = 6371000;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -391,31 +389,34 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
   const [busy, setBusy] = useState<'accept' | 'reject' | null>(null);
   /** Expandido = folha completa; minimizado = só faixa inferior (oferta continua na fila). */
   const [sheetExpanded, setSheetExpanded] = useState(true);
+  /** Último id de oferta visto — não limpar quando `task` fica null entre syncs (evita reabrir o modal e «saltar»). */
   const lastOfferTaskIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const tid = task?.id != null ? String(task.id) : null;
-    if (tid === null) {
-      lastOfferTaskIdRef.current = null;
+    if (tid == null) {
       return;
     }
+    setBusy(null);
     if (lastOfferTaskIdRef.current !== tid) {
       lastOfferTaskIdRef.current = tid;
       setSheetExpanded(true);
     }
   }, [task?.id]);
 
-  /** Toque fora (backdrop): minimiza; não remove a oferta. */
+  useEffect(() => {
+    if (!visible) setBusy(null);
+  }, [visible]);
+
+  /** Toque fora (backdrop): minimiza; não remove a oferta. Sempre libera `busy` (recuperação de estado preso). */
   const onDismiss = useCallback(() => {
-    if (busy) return;
+    setBusy(null);
     setSheetExpanded(false);
-  }, [busy]);
+  }, []);
 
   const onExpandFromMinimized = useCallback(() => {
     setSheetExpanded(true);
   }, []);
-
-  const modalKey = visible && task ? `broadcast-offer-${String(task.id)}` : 'broadcast-offer-hidden';
 
   const renderLayer = useCallback(
     (embeddedInTransitModal: boolean, mode: BroadcastOfferSheetMode) => {
@@ -748,7 +749,7 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
     ]
   );
 
-  return { visible, sheetExpanded, modalKey, onDismiss, renderLayer };
+  return { visible, sheetExpanded, onDismiss, renderLayer };
 }
 
 /**
@@ -758,7 +759,7 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
  */
 export function ProviderBroadcastOfferSheet() {
   const { transitMapExpanded } = useTransitMapExpanded();
-  const { visible, sheetExpanded, modalKey, onDismiss, renderLayer } = useBroadcastOfferSheetModel();
+  const { visible, sheetExpanded, onDismiss, renderLayer } = useBroadcastOfferSheetModel();
   if (transitMapExpanded) return null;
   if (!visible) return null;
 
@@ -773,10 +774,9 @@ export function ProviderBroadcastOfferSheet() {
 
   return (
     <Modal
-      key={modalKey}
       visible
       transparent
-      animationType="slide"
+      animationType={Platform.OS === 'android' ? 'none' : 'slide'}
       onRequestClose={onDismiss}
       statusBarTranslucent={Platform.OS === 'android'}
       {...(Platform.OS === 'ios' ? { presentationStyle: 'overFullScreen' as const } : {})}

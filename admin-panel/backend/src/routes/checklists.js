@@ -1470,6 +1470,22 @@ router.post('/dispatch', async (req, res) => {
             });
         }
 
+        const urgenteRequested =
+            payload.urgente === true ||
+            payload.urgente === 1 ||
+            String(payload.urgente ?? '')
+                .trim()
+                .toLowerCase() === 'true';
+
+        if (urgenteRequested && !isBroadcast) {
+            return res.status(400).json({
+                error:
+                    'Urgente só se aplica ao despacho em oferta (dois ou mais técnicos — primeiro a aceitar). Omita urgente ou adicione candidatos.',
+            });
+        }
+
+        const urgenteFlag = isBroadcast && urgenteRequested;
+
         const scheduledStart = parseScheduledStartAt(payload.scheduledStartAt);
         if (!scheduledStart) {
             return res.status(400).json({
@@ -1543,6 +1559,7 @@ router.post('/dispatch', async (req, res) => {
                 responses: null, // deliberately empty until tech fills it
                 scheduledStartAt: scheduledStart,
                 expectedFormDurationMinutes: snapExpectedMin,
+                urgente: urgenteFlag,
                 // Geofencing Location
                 locationLat: parsedLocationLat,
                 locationLng: parsedLocationLng,
@@ -1581,7 +1598,10 @@ router.post('/dispatch', async (req, res) => {
                 return !t || t === 'nova os designada' || t === 'nova atividade';
             };
 
-            const pushTitle = isBroadcast ? 'Nova OS — primeiro a aceitar' : 'Nova OS atribuída';
+            let pushTitle = isBroadcast ? 'Nova OS — primeiro a aceitar' : 'Nova OS atribuída';
+            if (urgenteFlag) {
+                pushTitle = isBroadcast ? 'OS urgente — primeiro a aceitar' : 'OS urgente atribuída';
+            }
             const parts = [];
             if (osNum) parts.push(osNum);
             if (tplTitle) parts.push(tplTitle);
@@ -1592,6 +1612,9 @@ router.post('/dispatch', async (req, res) => {
                     : 'Abra o app para ver detalhes e aceitar.';
             if (isBroadcast) {
                 pushBody = `${pushBody.slice(0, 120)} · Toque para aceitar (concorrência).`.slice(0, 180);
+            }
+            if (urgenteFlag) {
+                pushBody = `URGENTE · ${pushBody}`.slice(0, 180);
             }
             if (pushBody.length > 180) pushBody = `${pushBody.slice(0, 177)}…`;
 

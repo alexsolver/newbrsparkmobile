@@ -3,7 +3,7 @@
  * quando o dashboard não está montado (ex.: checklist / mapa de deslocamento) e mantém
  * os handlers de aceitar/recusar ativos — o registo no `index` desmontava com `(client)`.
  */
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { Alert, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -45,9 +45,54 @@ async function enqueueExecutionInProgressFromDashboard(taskId: string): Promise<
   }
 }
 
+const BROADCAST_OFFERS_REFRESH_DEBOUNCE_MS = 160;
+
+/** Ordem estável: o dashboard ordena por «recentes»; o cache FT+RT não — alternar o 1.º item fazia o sheet reabrir e «saltar». */
+function broadcastClaimExpiresAtMs(t: any): number {
+  const m = t?.metadata;
+  const meta =
+    m && typeof m === 'object' && !Array.isArray(m) ? (m as Record<string, unknown>) : {};
+  const raw =
+    meta.broadcastClaimExpiresAt ??
+    meta.broadcastOfferExpiresAt ??
+    t?.broadcastClaimExpiresAt ??
+    null;
+  if (raw == null || String(raw).trim() === '') return Number.POSITIVE_INFINITY;
+  const ms = Date.parse(String(raw));
+  return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+}
+
+function sortBroadcastOfferQueueStable(tasks: any[]): any[] {
+  return [...tasks].sort((a, b) => {
+    const ea = broadcastClaimExpiresAtMs(a);
+    const eb = broadcastClaimExpiresAtMs(b);
+    if (ea !== eb) return ea - eb;
+    return String(a?.id || '').localeCompare(String(b?.id || ''));
+  });
+}
+
+async function loadRejectedTaskIdsForBroadcast(): Promise<Set<string>> {
+  try {
+    const rStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
+    const rejArr = JSON.parse(rStr);
+    if (!Array.isArray(rejArr)) return new Set();
+    return new Set(rejArr.map((id: unknown) => String(id || '').trim()).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
 async function applyBroadcastOffersFromCache(setBroadcastOfferTasks: (v: any[]) => void) {
-  const all = await loadAllCloudTasksForExecutionLookup();
-  setBroadcastOfferTasks(all.filter((t: any) => Boolean(t?.broadcastClaimPending)));
+  const [all, rejectedIds] = await Promise.all([
+    loadAllCloudTasksForExecutionLookup(),
+    loadRejectedTaskIdsForBroadcast(),
+  ]);
+  const pending = all.filter((t: any) => {
+    if (!Boolean(t?.broadcastClaimPending)) return false;
+    const id = String(t?.id || '').trim();
+    return id && !rejectedIds.has(id);
+  });
+  setBroadcastOfferTasks(sortBroadcastOfferQueueStable(pending));
 }
 
 export function BroadcastOfferRootBridge() {
@@ -56,14 +101,41 @@ export function BroadcastOfferRootBridge() {
   const { isOnline } = useConnectivity();
   const router = useRouter();
   const { setBroadcastOfferTasks, registerBroadcastOfferHandlers } = useProviderBroadcastOffer();
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshOffersIfEligible = useCallback(() => {
     if (String(userRole || '').toUpperCase() !== 'TECHNICIAN' || mode !== 'PROVIDER') {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
       setBroadcastOfferTasks([]);
       return;
     }
-    void applyBroadcastOffersFromCache(setBroadcastOfferTasks);
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      void applyBroadcastOffersFromCache(setBroadcastOfferTasks);
+    }, BROADCAST_OFFERS_REFRESH_DEBOUNCE_MS);
   }, [userRole, mode, setBroadcastOfferTasks]);
+
+  /** Após recusar: aplica já (sem esperar o debounce) para não «voltar» a OS ao ecrã. */
+  const applyBroadcastOffersImmediate = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    void applyBroadcastOffersFromCache(setBroadcastOfferTasks);
+  }, [setBroadcastOfferTasks]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(BRSPARK_CLOUD_TASKS_UPDATED, refreshOffersIfEligible);
@@ -157,13 +229,56 @@ export function BroadcastOfferRootBridge() {
         ]);
       },
       onReject: async (selectedTask: any) => {
+        const idStr = String(selectedTask?.id || '').trim();
+        if (!idStr) {
+          Alert.alert('Erro', 'OS inválida.');
+          return;
+        }
+        const reason = 'Recusada pelo prestador na tela de oferta (broadcast).';
         try {
-          await apiFetch(`/api/operations/tasks/${selectedTask.id}/reject`, {
+          const res = await apiFetch(`/api/operations/tasks/${encodeURIComponent(idStr)}/reject`, {
             method: 'POST',
-            body: JSON.stringify({
-              reason: 'Recusada pelo prestador na tela de oferta (broadcast).',
-            }),
+            body: JSON.stringify({ reason }),
           });
+          const rawBody = await res.text();
+          let errStr = '';
+          try {
+            const data = rawBody.trim() ? JSON.parse(rawBody) : {};
+            errStr =
+              typeof data.error === 'string'
+                ? data.error.trim()
+                : typeof data.message === 'string'
+                  ? String(data.message).trim()
+                  : '';
+          } catch {
+            errStr = rawBody.trim().slice(0, 400);
+          }
+          if (!res.ok) {
+            Alert.alert(
+              'Não foi possível recusar',
+              errStr || `O servidor recusou o pedido (HTTP ${res.status}).`,
+            );
+            return;
+          }
+
+          setBroadcastOfferTasks((prev) => prev.filter((x) => String(x.id) !== idStr));
+          try {
+            await patchCloudTaskById(idStr, (row) => ({
+              ...row,
+              status: 'REJECTED',
+              broadcastClaimPending: false,
+              metadata: {
+                ...(row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+                  ? row.metadata
+                  : {}),
+                rejectionReason: reason,
+                rejectedAt: new Date().toISOString(),
+              },
+            }));
+          } catch {
+            /* ignore */
+          }
+
           const rStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
           let rejArr: string[] = [];
           try {
@@ -172,20 +287,28 @@ export function BroadcastOfferRootBridge() {
             rejArr = [];
           }
           if (!Array.isArray(rejArr)) rejArr = [];
-          if (!rejArr.includes(String(selectedTask.id))) {
-            rejArr.push(String(selectedTask.id));
+          if (!rejArr.includes(idStr)) {
+            rejArr.push(idStr);
             await AsyncStorage.setItem('@brspark_rejected_tasks', JSON.stringify(rejArr));
           }
           if (user?.email) await pullTasks(user.email);
-          refreshOffersIfEligible();
-          Alert.alert('Recusada', 'A atividade foi rejeitada e retirada da sua fila.');
+          applyBroadcastOffersImmediate();
+          Alert.alert('Recusada', 'A atividade foi recusada e retirada da sua fila.');
         } catch (e: any) {
-          Alert.alert('Erro', 'Falha ao rejeitar a atividade: ' + (e?.message || String(e)));
+          Alert.alert('Erro', 'Falha ao recusar a atividade: ' + (e?.message || String(e)));
         }
       },
     });
     return () => registerBroadcastOfferHandlers(null);
-  }, [registerBroadcastOfferHandlers, isOnline, router, user?.email, refreshOffersIfEligible]);
+  }, [
+    registerBroadcastOfferHandlers,
+    isOnline,
+    router,
+    user?.email,
+    refreshOffersIfEligible,
+    applyBroadcastOffersImmediate,
+    setBroadcastOfferTasks,
+  ]);
 
   return null;
 }

@@ -57,7 +57,6 @@ import { tabBarOuterHeight } from '../../../src/components/FloatingRadialMenu';
 import { TaskMetadataGlyph } from '../../../src/components/TaskMetadataGlyph';
 import { ProviderOsListCardStudio } from '../../../src/components/ProviderOsListCardStudio';
 import { useAppContext } from '../../../src/context/AppContext';
-import { useProviderBroadcastOffer } from '../../../src/context/ProviderBroadcastOfferContext';
 import { API_BASE, apiFetch, userHasCapability, isB2CConsumerUser } from '../../../src/services/auth';
 import { getOsrmBaseUrl } from '../../../src/services/osrmConfig';
 import { fetchTravelDurationsFromOrigin, fetchStitchedDrivingRouteLatLng } from '../../../src/services/osrmClient';
@@ -2206,7 +2205,6 @@ export default function DashboardScreen() {
   /** Limite de linhas na aba Concluídas (lista completa continua em memória após sync). */
   const [providerCompletedListCap, setProviderCompletedListCap] = useState(PROVIDER_OS_COMPLETED_INITIAL);
   const [providerTasks, setProviderTasks] = useState<any[]>([]);
-  const { setBroadcastOfferTasks } = useProviderBroadcastOffer();
   /** Lista prestador (abas, rota, contagens): OS só em modo «oferta» de claim não entram em Pendentes — aparecem no sheet global. */
   const providerTasksForTabs = useMemo(
     () => providerTasks.filter((t: any) => !t?.broadcastClaimPending),
@@ -2328,13 +2326,7 @@ export default function DashboardScreen() {
     };
   }, [mode]);
 
-  useEffect(() => {
-    if (String(userRole || '').toUpperCase() !== 'TECHNICIAN' || mode !== 'PROVIDER') {
-      setBroadcastOfferTasks([]);
-      return;
-    }
-    setBroadcastOfferTasks(providerTasks.filter((t: any) => Boolean(t?.broadcastClaimPending)));
-  }, [userRole, mode, providerTasks, setBroadcastOfferTasks]);
+  /** Ofertas broadcast: só `BroadcastOfferRootBridge` + evento `BRSPARK_CLOUD_TASKS_UPDATED` (evita fila dupla com o dashboard e troca do 1.º item). */
 
   /** Pendentes com coordenadas, na mesma ordem da lista quando “Rota” está ativa (mapa alinhado à timeline). */
   const routeMapTasksOrdered = useMemo(() => {

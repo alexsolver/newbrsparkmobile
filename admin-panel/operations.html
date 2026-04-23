@@ -929,6 +929,15 @@
             <span id="d-dispatch-broadcast-hint" style="font-size:10px;color:var(--text3);line-height:1.35;">2+ na lista = «primeiro a aceitar».</span>
           </div>
           <div id="d-dispatch-candidate-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:6px;"></div>
+          <div id="d-urgente-offer-wrap" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border,#e2e8f0);">
+            <label for="d-urgente" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:700;color:var(--text2);margin:0;">
+              <input type="checkbox" id="d-urgente" disabled style="margin-top:3px;flex-shrink:0;" />
+              <span style="flex:1;min-width:0;">
+                <span id="d-urgente-lbl">Urgente</span>
+                <div id="d-hint-urgente" style="font-size:10px;color:var(--text3);font-weight:500;margin-top:4px;line-height:1.45;"></div>
+              </span>
+            </label>
+          </div>
         </div>
         <div id="d-broadcast-claim-expires-wrap" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border,#e2e8f0);">
           <label class="form-label" for="d-broadcast-claim-expires" id="d-broadcast-claim-expires-lbl">Prazo para aceitar a oferta</label>
@@ -1512,6 +1521,7 @@ function renderDispatchCandidateChips() {
   const list = Array.isArray(window._dispatchCandidateList) ? window._dispatchCandidateList : [];
   if (!list.length) {
     el.innerHTML = '';
+    if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') window.syncDispatchBroadcastOfferExpiresUi();
     return;
   }
   el.innerHTML = list
@@ -1531,11 +1541,47 @@ function renderDispatchCandidateChips() {
   if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') window.syncDispatchBroadcastOfferExpiresUi();
 }
 
+/** «Urgente» só em despacho com oferta (2+ técnicos / primeiro a aceitar). */
+function syncDispatchUrgenteOfferUi() {
+  const wrap = document.getElementById('d-urgente-offer-wrap');
+  const cb = document.getElementById('d-urgente');
+  const hint = document.getElementById('d-hint-urgente');
+  if (!wrap || !cb) return;
+  const n =
+    typeof window.normalizeDispatchCandidateEmails === 'function'
+      ? window.normalizeDispatchCandidateEmails().length
+      : 0;
+  const ok = n >= 2;
+  if (!ok) {
+    cb.checked = false;
+    cb.disabled = true;
+    if (hint) {
+      hint.textContent =
+        typeof opsT === 'function'
+          ? opsT('ops_dispatch_urgent_need_two')
+          : 'Disponível com dois ou mais técnicos (modo oferta / primeiro a aceitar).';
+    }
+    wrap.style.opacity = '0.88';
+    wrap.style.pointerEvents = 'none';
+  } else {
+    cb.disabled = false;
+    wrap.style.opacity = '1';
+    wrap.style.pointerEvents = '';
+    if (hint) {
+      hint.textContent = typeof opsT === 'function' ? opsT('ops_dispatch_urgent_hint') : '';
+    }
+  }
+}
+window.syncDispatchUrgenteOfferUi = syncDispatchUrgenteOfferUi;
+
 function syncDispatchBroadcastOfferExpiresUi() {
   const wrap = document.getElementById('d-broadcast-claim-expires-wrap');
   const input = document.getElementById('d-broadcast-claim-expires');
   const hint = document.getElementById('d-broadcast-claim-expires-hint');
-  if (!wrap || !input) return;
+  if (!wrap || !input) {
+    syncDispatchUrgenteOfferUi();
+    return;
+  }
   const n =
     typeof window.normalizeDispatchCandidateEmails === 'function'
       ? window.normalizeDispatchCandidateEmails().length
@@ -1552,6 +1598,7 @@ function syncDispatchBroadcastOfferExpiresUi() {
     }
   }
   wrap.style.opacity = ok ? '1' : '0.88';
+  syncDispatchUrgenteOfferUi();
 }
 window.syncDispatchBroadcastOfferExpiresUi = syncDispatchBroadcastOfferExpiresUi;
 
@@ -1744,6 +1791,7 @@ function initDispatchSubmitButton() {
       if (!submit) return;
       e.preventDefault();
       e.stopPropagation();
+      if (window._dispatchSubmitInFlight) return;
       const fn = window.confirmDispatch;
       if (typeof fn !== 'function') {
         alert('Erro: o despacho não foi carregado. Recarregue a página (F5).');
@@ -8071,6 +8119,8 @@ window.openDispatchModal = async function() {
   if (dClient) dClient.value = '';
   document.getElementById('d-title').value = '';
   document.getElementById('d-desc').value  = '';
+  const dUrg = document.getElementById('d-urgente');
+  if (dUrg) dUrg.checked = false;
   const dSched = document.getElementById('d-scheduled-start');
   const dDurOv = document.getElementById('d-expected-duration-override');
   if (dDurOv) dDurOv.value = '';
@@ -8747,6 +8797,15 @@ window.closeDispatchModal = () => {
 };
 
 window.confirmDispatch = async function() {
+  if (window._dispatchSubmitInFlight) return;
+  window._dispatchSubmitInFlight = true;
+  const submitBtn = document.getElementById('ops-dispatch-submit');
+  let savedSubmitHtml = null;
+  if (submitBtn) {
+    savedSubmitHtml = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.textContent = typeof opsT === 'function' ? opsT('ops_dispatch_sending') : 'Enviando…';
+  }
   try {
   hideDispatchTechSuggestions();
   const tplEl = document.getElementById('d-template');
@@ -8882,10 +8941,14 @@ window.confirmDispatch = async function() {
     }
   }
 
+    const urgenteEl = document.getElementById('d-urgente');
+    const urgente = candidateEmails.length >= 2 && !!(urgenteEl && urgenteEl.checked);
+
     const dispatchBody = {
       refId,
       title: title || 'Nova OS Designada',
       description: desc,
+      ...(candidateEmails.length >= 2 ? { urgente } : {}),
       metadata: {
         icon: 'build-outline',
         ...(clientEmail ? { clientEmail } : {}),
@@ -8948,6 +9011,12 @@ window.confirmDispatch = async function() {
           })
         : String(e && e.message ? e.message : e),
     );
+  } finally {
+    window._dispatchSubmitInFlight = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      if (savedSubmitHtml != null) submitBtn.innerHTML = savedSubmitHtml;
+    }
   }
 };
 

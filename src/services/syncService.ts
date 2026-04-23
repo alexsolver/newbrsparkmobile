@@ -2378,10 +2378,15 @@ function mergeDurationEtaPreserve(remote: any, prev: any, base: Record<string, u
   const agendaEndAt = mergeOptionalTaskIso(remote?.agendaEndAt, prev?.agendaEndAt);
   const agendaStartAt = mergeOptionalTaskIso(remote?.agendaStartAt, prev?.agendaStartAt);
   const scheduledStartAt = mergeOptionalTaskIso(remote?.scheduledStartAt, prev?.scheduledStartAt);
+  const urgRemote = remote?.urgente;
+  const hasUrgRemote = urgRemote === true || urgRemote === false;
   return {
     ...base,
     ...(expRemote == null && expPrev != null ? { expectedFormDurationMinutes: expPrev } : {}),
     ...(!hasEtaRemote && hasEtaPrev ? { etaMinutes: Math.floor(Number(etaP)) } : {}),
+    ...(!hasUrgRemote && prev != null && Object.prototype.hasOwnProperty.call(prev, 'urgente')
+      ? { urgente: !!prev.urgente }
+      : {}),
     startedAt,
     completedAt,
     plannedFormEndAt,

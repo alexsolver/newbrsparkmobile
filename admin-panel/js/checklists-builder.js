@@ -1571,20 +1571,6 @@ window.closeFieldPropertiesModal = function () {
     }
 };
 
-if (!window.__fieldPropertiesModalEscapeHook) {
-    window.__fieldPropertiesModalEscapeHook = true;
-    document.addEventListener('keydown', function (ev) {
-        if (ev.key !== 'Escape' || !window.fieldPropertiesModalOpen) return;
-        if (document.getElementById('vision-ai-prompt-examples-modal')) return;
-        const logicM = document.getElementById('logic-modal');
-        if (logicM && logicM.style.display === 'flex') return;
-        const secM = document.getElementById('section-step-edit-modal');
-        if (secM && secM.style.display === 'flex') return;
-        ev.preventDefault();
-        window.closeFieldPropertiesModal();
-    });
-}
-
 // Mapeamento de emojis por tipo para embelezamento
 // Mapeamento de ion-icons por tipo para embelezamento
 const iconMap = {

@@ -144,6 +144,11 @@ const M = {
     ops_dispatch_dur_ph: 'Usar valor do formulário (ou 60 min se vazio)',
     ops_dispatch_dur_hint:
       'Só preenchimento do checklist, sem deslocamento. Múltiplos de 5 min; mínimo 5. Se vazio, usa o definido no builder ou 60 min.',
+    ops_dispatch_urgent_lbl: 'Urgente',
+    ops_dispatch_urgent_need_two:
+      'Só disponível com dois ou mais técnicos (oferta — primeiro a aceitar). Adicione candidatos acima.',
+    ops_dispatch_urgent_hint:
+      'Só em oferta: grava prioridade na OS e destaca «URGENTE» na notificação push para os convidados.',
     ops_dispatch_planned_end_preview:
       'Fim previsto (formulário): {when}, {mins} min de preenchimento (sem deslocamento).',
     ops_dispatch_section_geo: 'Local de serviço (cerca eletrônica)',
@@ -153,6 +158,7 @@ const M = {
     ops_dispatch_geo_polygon: 'Polígono',
     ops_dispatch_geo_free: 'Livre',
     ops_dispatch_send: 'Enviar OS',
+    ops_dispatch_sending: 'Enviando…',
     ops_dispatch_success_alert: '✅ OS enviada com sucesso!\n{numLine}{geoLine}',
     ops_dispatch_success_num: 'Nº: {label}',
     ops_dispatch_success_geo: '\n📍 Validação: {mode}',
@@ -341,6 +347,11 @@ const M = {
     ops_dispatch_dur_ph: 'Use form default (or 60 min if empty)',
     ops_dispatch_dur_hint:
       'Checklist filling only, no travel time. Multiples of 5 minutes; minimum 5. If empty, uses the builder default or 60 min.',
+    ops_dispatch_urgent_lbl: 'Urgent',
+    ops_dispatch_urgent_need_two:
+      'Only available with two or more technicians (broadcast — first to accept). Add candidates above.',
+    ops_dispatch_urgent_hint:
+      'Broadcast only: saves priority on the work order and highlights «URGENT» in the push to invited technicians.',
     ops_dispatch_planned_end_preview:
       'Expected end (form): {when}, {mins} min of filling (no travel).',
     ops_dispatch_section_geo: 'Service location (geofence)',
@@ -350,6 +361,7 @@ const M = {
     ops_dispatch_geo_polygon: 'Polygon',
     ops_dispatch_geo_free: 'None',
     ops_dispatch_send: 'Send work order',
+    ops_dispatch_sending: 'Sending…',
     ops_dispatch_success_alert: '✅ Work order sent successfully!\n{numLine}{geoLine}',
     ops_dispatch_success_num: 'No.: {label}',
     ops_dispatch_success_geo: '\n📍 Validation: {mode}',
@@ -401,7 +413,15 @@ const M = {
     ops_geo_polygon_preview: 'Show polygon on map',
   },
 };
-M['es-ES'] = { ...M['en-US'] };
+M['es-ES'] = {
+  ...M['en-US'],
+  ops_dispatch_sending: 'Enviando…',
+  ops_dispatch_urgent_lbl: 'Urgente',
+  ops_dispatch_urgent_need_two:
+    'Solo con dos o más técnicos (oferta — el primero en aceptar). Añada candidatos arriba.',
+  ops_dispatch_urgent_hint:
+    'Solo en oferta: guarda la prioridad en la OS y resalta «URGENTE» en el push a los invitados.',
+};
 
 function interpolate(str, vars) {
   let out = String(str ?? '');
@@ -675,6 +695,7 @@ export function applyOperationsModalsStaticI18n() {
   setLabelFor('d-desc', 'ops_dispatch_desc_lbl');
   const dDesc = document.getElementById('d-desc');
   if (dDesc) dDesc.setAttribute('placeholder', opsT('ops_dispatch_desc_ph'));
+  set('d-urgente-lbl', 'ops_dispatch_urgent_lbl');
 
   setLabelFor('d-scheduled-start', 'ops_dispatch_sched_lbl');
   setHtml('d-hint-scheduled', 'ops_dispatch_sched_hint');
