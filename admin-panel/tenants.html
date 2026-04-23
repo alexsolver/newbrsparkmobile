@@ -589,6 +589,24 @@
     return { resolvedPrimary, resolvedAccent };
   }
 
+  /** Mesmo que `next.accent` em `ThemeContext.resolveTenantPalette` (botão Entrar no login). */
+  function brandingPreviewLoginCtaBg(primaryRaw, accentRaw) {
+    const p = String(primaryRaw || '').trim();
+    const a = String(accentRaw || '').trim();
+    if (p && !a) return p;
+    if (a) return a;
+    return '#EA580C';
+  }
+
+  /** Mesmo que `filledButtonBg` em `ThemeContext.resolveTenantPalette` (ex.: Guardar em formulários). */
+  function brandingPreviewFilledButtonBg(primaryRaw, accentRaw) {
+    const p = String(primaryRaw || '').trim();
+    const a = String(accentRaw || '').trim();
+    if (p) return p;
+    if (a) return a;
+    return '#0F172A';
+  }
+
   function brandingPreviewEscCssUrl(u) {
     return String(u || '')
       .trim()
@@ -604,11 +622,13 @@
     const primaryRaw = document.getElementById('tenant-branding-primary').value.trim();
     const accentRaw = document.getElementById('tenant-branding-accent').value.trim();
     const { resolvedPrimary, resolvedAccent } = brandingPreviewResolvePrimaryAccent(primaryRaw, accentRaw);
-    /** Botão preenchido no login: primária, senão destaque (como `filledButtonBg` no app). */
-    const filledBtnBg = primaryRaw || accentRaw || '#F97316';
+    const loginCtaBg = brandingPreviewLoginCtaBg(primaryRaw, accentRaw);
+    const formFilledBtnBg = brandingPreviewFilledButtonBg(primaryRaw, accentRaw);
     const secondary = document.getElementById('tenant-branding-secondary').value.trim() || '#475569';
     const surface = document.getElementById('tenant-branding-surface').value.trim() || '#F8FAFC';
     const logoLight = document.getElementById('tenant-branding-logo-light').value.trim();
+    const logoDark = document.getElementById('tenant-branding-logo-dark').value.trim();
+    const logoForPreview = logoLight || logoDark;
     const loginBg = document.getElementById('tenant-branding-login-bg').value.trim();
 
     const loginRoot = document.getElementById('tenant-branding-preview-login');
@@ -624,20 +644,20 @@
       loginRoot.style.backgroundSize = 'cover, cover';
       loginRoot.style.backgroundPosition = 'center, center';
       loginRoot.dataset.onPhoto = '1';
-      nameEl.style.color = '#fff';
       tagEl.style.color = 'rgba(255,255,255,0.9)';
     } else {
       loginRoot.style.backgroundImage = 'none';
       loginRoot.style.backgroundColor = surface;
       delete loginRoot.dataset.onPhoto;
-      nameEl.style.color = secondary;
       tagEl.style.color = secondary;
     }
+    /* O ecrã de login no app não mostra o nome por texto — só logo (e slogan). O nome aparece noutros sítios (ex.: cabeçalho da prévia). */
+    nameEl.style.display = 'none';
 
     const logoImg = document.getElementById('tenant-branding-preview-login-logo');
     const logoPh = document.getElementById('tenant-branding-preview-login-logo-ph');
     const syncLogoVis = () => {
-      if (logoLight) {
+      if (logoForPreview) {
         logoImg.style.display = 'block';
         logoPh.style.display = 'none';
       } else {
@@ -646,7 +666,7 @@
         logoPh.style.display = 'flex';
       }
     };
-    if (logoLight) {
+    if (logoForPreview) {
       logoImg.onload = () => {
         logoImg.style.display = 'block';
         logoPh.style.display = 'none';
@@ -655,7 +675,7 @@
         logoImg.style.display = 'none';
         logoPh.style.display = 'flex';
       };
-      logoImg.src = logoLight;
+      logoImg.src = logoForPreview;
     } else {
       syncLogoVis();
     }
@@ -663,8 +683,8 @@
     logoPh.style.color = resolvedPrimary;
 
     const loginBtn = document.getElementById('tenant-branding-preview-login-btn');
-    loginBtn.style.background = filledBtnBg;
-    loginBtn.style.color = brandingPreviewContrastOn(filledBtnBg);
+    loginBtn.style.background = loginCtaBg;
+    loginBtn.style.color = brandingPreviewContrastOn(loginCtaBg);
 
     const onPhoto = loginRoot.dataset.onPhoto === '1';
     document.querySelectorAll('.tenant-branding-preview-login .tenant-branding-preview-fake-input').forEach((el) => {
@@ -695,8 +715,8 @@
     outlineBtn.style.background = '#fff';
 
     const mainBtn = document.getElementById('tenant-branding-preview-button');
-    mainBtn.style.background = filledBtnBg;
-    mainBtn.style.color = brandingPreviewContrastOn(filledBtnBg);
+    mainBtn.style.background = formFilledBtnBg;
+    mainBtn.style.color = brandingPreviewContrastOn(formFilledBtnBg);
 
     const chipActBg =
       document.getElementById('tenant-branding-menu-chip-active-bg').value.trim() ||

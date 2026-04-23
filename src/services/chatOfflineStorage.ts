@@ -33,6 +33,15 @@ export async function saveRoomListCache(userId: string, rooms: ChatRoom[]): Prom
   }
 }
 
+/** Evita badges de «não lidos» desactualizados ao voltar a entrar (cache vs servidor). */
+export async function clearRoomListCache(userId: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(roomsKey(userId));
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function loadMessagesCache(userId: string, roomId: string): Promise<ChatMessage[]> {
   try {
     const raw = await AsyncStorage.getItem(messagesKey(userId, roomId));

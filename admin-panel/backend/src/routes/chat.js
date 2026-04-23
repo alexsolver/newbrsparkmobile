@@ -521,8 +521,19 @@ router.get('/rooms', async (req, res) => {
     const mapped = await Promise.all(rooms.map(async (r) => {
       let displayName = r.name;
       let displayAvatar = null;
-      const myMember = r.members.find((m) => normEmail(m.userId) === email);
-      let myLastReadAt = myMember?.lastReadAt || new Date(0);
+      /** Várias linhas `ChatRoomMember` com o mesmo e-mail e casing distinto (legado) —
+       * `markAsRead` só actualizava uma; aqui usamos o `lastReadAt` mais recente para o badge. */
+      const myMembers = r.members.filter((m) => normEmail(m.userId) === email);
+      const myLastReadMs = myMembers.length
+        ? Math.max(
+            ...myMembers.map((m) => {
+              const d = m.lastReadAt;
+              if (!d) return 0;
+              return d instanceof Date ? d.getTime() : new Date(d).getTime() || 0;
+            }),
+          )
+        : 0;
+      const myLastReadAt = new Date(myLastReadMs);
 
       if (!r.isGroup) {
         // Encontra o outro membro
@@ -750,14 +761,17 @@ router.put('/rooms/:roomId/read', async (req, res) => {
     const email = normEmail(rawEmail);
     const { roomId } = req.params;
 
-    const member = await resolveRoomMemberForViewer(roomId, email);
-
-    if (!member) return res.status(404).json({ error: 'Membro não encontrado na sala' });
-
-    await prisma.chatRoomMember.update({
-      where: { id: member.id },
+    const updated = await prisma.chatRoomMember.updateMany({
+      where: {
+        roomId,
+        userId: { equals: email, mode: 'insensitive' },
+      },
       data: { lastReadAt: new Date() },
     });
+
+    if (updated.count === 0) {
+      return res.status(404).json({ error: 'Membro não encontrado na sala' });
+    }
 
     res.json({ success: true });
   } catch (err) {

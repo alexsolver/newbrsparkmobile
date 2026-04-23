@@ -1174,10 +1174,8 @@ export default function LiveRouteMapCard({
   const suppressTemplatePolyline =
     !!(route && route.length === 2 && dynamicRoute && dynamicRoute.length >= 2);
 
-  const dynamicRouteSplit = useMemo(() => {
-    if (!dynamicRoute || dynamicRoute.length < 2 || routePaintArcM <= 0) return null;
-    return splitPolylineByArcM(dynamicRoute, routePaintArcM);
-  }, [dynamicRoute, routePaintArcM]);
+  /** Sem verde ao longo da OSRM: só a polilinha azul tracejada inteira (KML/trecho mantêm split verde). */
+  const dynamicRouteSplit = null;
 
   const templateRouteSplit = useMemo(() => {
     if (zoneType === 'segment' || zoneType === 'polygon') return null;
@@ -1981,9 +1979,8 @@ export default function LiveRouteMapCard({
                 <Text style={styles.hintStrong}>Rota KML / patrulha:</Text> linha{' '}
                 <Text style={styles.hintStrong}>verde</Text> = trecho já percorrido na referência; linha{' '}
                 <Text style={styles.hintStrong}>laranja</Text> = trajeto planejado que ainda falta; linha{' '}
-                <Text style={styles.hintStrong}>azul</Text> = percurso GPS registrado; na linha de navegação (OSRM),
-                o trecho já percorrido fica <Text style={styles.hintStrong}>verde sólido</Text> e o que falta em
-                azul tracejado, útil ao pausar para ver onde parou. A cobertura de patrulha estima quanto do
+                <Text style={styles.hintStrong}>azul</Text> = percurso GPS registrado; a linha de navegação (OSRM)
+                aparece em azul tracejado. A cobertura de patrulha estima quanto do
                 trajeto planejado foi percorrido dentro do corredor (tolerância definida no despacho).
                 {'\n\n'}
                 <Text style={styles.hintStrong}>Waze / outra app:</Text> aceite localização "sempre" ou "em segundo plano"

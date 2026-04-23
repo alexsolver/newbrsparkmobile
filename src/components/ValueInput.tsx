@@ -166,7 +166,7 @@ export function ValueInput({
   // da janela e pode cobrir o cartão do checklist e bloquear toques no TextInput.
   // Teclado decimal: fechar tocando fora (ScrollView) ou mudando de campo.
   return (
-    <View style={wrapperStyle}>
+    <View style={wrapperStyle} pointerEvents={editable ? 'auto' : 'none'}>
       <TextInput
         value={displayValue}
         onChangeText={(t) => {
@@ -182,6 +182,8 @@ export function ValueInput({
         placeholder={placeholder}
         placeholderTextColor="#94a3b8"
         editable={editable}
+        focusable={editable}
+        showSoftInputOnFocus={editable}
         selectTextOnFocus
       />
     </View>

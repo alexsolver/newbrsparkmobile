@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Image, type ImageResizeMode, type ImageStyle, type StyleProp } from 'react-native';
-import { agentDebugLog, safeUrlHint } from '../debug/agentDebugLog';
 import { useTheme } from '../theme/ThemeContext';
 
 const FALLBACK_LOGO = require('../../assets/logo.png');
@@ -37,17 +36,7 @@ export function BrandingLogoImage({
       source={useUri ? { uri: resolvedLogoUrl as string } : FALLBACK_LOGO}
       defaultSource={FALLBACK_LOGO}
       onError={() => {
-        if (resolvedLogoUrl) {
-          // #region agent log
-          agentDebugLog(
-            'BrandingLogoImage.tsx:onError',
-            'logo_image_load_error',
-            { uriHint: safeUrlHint(resolvedLogoUrl) },
-            'H5',
-          );
-          // #endregion
-          setUriFailed(true);
-        }
+        if (resolvedLogoUrl) setUriFailed(true);
       }}
     />
   );

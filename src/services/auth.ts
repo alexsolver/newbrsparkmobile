@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearRoomListCache } from './chatOfflineStorage';
 import { clearLocalDatabase } from '../database';
 import { deleteAvatarCache, mergeServerUserWithLocalAvatar } from './avatarLocalCache';
 import {
@@ -446,6 +447,8 @@ export class AuthService {
       if (sameUser) {
         console.log('[AUTH] Sessão restaurada para a mesma conta: preservando dados offline locais.');
         await AuthService.clearPreservedLocalOwner();
+        const uid = String(nextUser.id || '').trim();
+        if (uid) await clearRoomListCache(uid);
         return;
       }
     }

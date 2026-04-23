@@ -105,6 +105,57 @@ function stripEmptyStringKeys(obj) {
   return o;
 }
 
+/** iOS ATS bloqueia `http://` na App Store; o mesmo asset em `https://` responde 200 em produção. */
+function forceHttpsOnPublicAssetUrl(url) {
+  const s = String(url || '').trim();
+  if (!s) return '';
+  if (!/^http:\/\//i.test(s)) return s;
+  let host = '';
+  try {
+    host = new URL(s).hostname.toLowerCase();
+  } catch {
+    return s;
+  }
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return s;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) || /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return s;
+  const m = /^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host);
+  if (m) {
+    const sec = Number(m[1]);
+    if (sec >= 16 && sec <= 31) return s;
+  }
+  return `https://${s.slice('http://'.length)}`;
+}
+
+/**
+ * O app móvel (App Store) junta URLs relativas a `API_BASE` (API Node, ex. api.*).
+ * Ficheiros em `/storage/*` vivem no CMS Laravel (outro host). Sem origem absoluta o iOS pede
+ * `https://api…/storage/…` e recebe 404 — o logo cai no fallback BrSpark.
+ *
+ * Defina no .env da API Node (produção): `BRSPARK_CMS_PUBLIC_URL` ou `LARAVEL_APP_URL` = origem
+ * pública do Laravel (ex. https://app.cliente.com), sem barra no fim.
+ */
+function absolutizePublicMediaUrlForMobile(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return forceHttpsOnPublicAssetUrl(s);
+  if (s.startsWith('//')) return forceHttpsOnPublicAssetUrl(`https:${s}`);
+  if (s.startsWith('/storage/')) {
+    const origin = String(
+      process.env.BRSPARK_CMS_PUBLIC_URL ||
+        process.env.LARAVEL_APP_URL ||
+        process.env.BRSPARK_LARAVEL_BASE_URL ||
+        process.env.CMS_DIRECTORY_BASE_URL ||
+        process.env.CMS_PUBLIC_URL ||
+        process.env.APP_URL ||
+        '',
+    )
+      .trim()
+      .replace(/\/+$/, '');
+    if (origin) return forceHttpsOnPublicAssetUrl(`${origin}${s}`);
+  }
+  return forceHttpsOnPublicAssetUrl(s);
+}
+
 function sanitizeTenantBranding(raw, permissions) {
   const src = isPlainObject(raw) ? raw : {};
   const ent = sanitizeBrandingPermissions(permissions);
@@ -144,8 +195,11 @@ function buildEffectiveTenantBranding({ tenantName, planFeatures, tenantFeatures
     enabled: permissions.enabled && saved.enabled,
     appDisplayName: saved.appDisplayName || asTrimmedString(tenantName, 80),
     tagline: saved.tagline || '',
-    logoLightUrl: saved.logoLightUrl || '',
-    logoDarkUrl: saved.logoDarkUrl || saved.logoLightUrl || '',
+    logoLightUrl: absolutizePublicMediaUrlForMobile(saved.logoLightUrl || ''),
+    logoDarkUrl: absolutizePublicMediaUrlForMobile(
+      saved.logoDarkUrl || saved.logoLightUrl || '',
+    ),
+    loginBackgroundUrl: absolutizePublicMediaUrlForMobile(saved.loginBackgroundUrl || ''),
   };
   return {
     permissions,

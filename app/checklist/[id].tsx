@@ -8796,7 +8796,7 @@ export default function ChecklistEngine() {
                 <Text style={{flex: 1, color: '#1E3A8A', fontWeight: '600', fontSize: 13}}>Esta OS já foi concluída e os campos estão bloqueados para alteração.</Text>
             </View>
         )}
-        <View pointerEvents={isReadOnly ? 'box-none' : 'auto'} style={{ gap: 16 }}>
+        <View style={{ gap: 16 }}>
         {useSectionHub && hubPicking && hubStageMenuHasSteps ? (
           <View style={{ gap: 14 }}>
             <View style={{ gap: 6 }}>
@@ -9398,7 +9398,10 @@ export default function ChecklistEngine() {
                                   field.type === 'email' ? 'email-address' : field.type === 'phone' ? 'phone-pad' : 'default'
                                 }
                                 value={String(rowVal ?? '')}
-                                editable={validatingFieldId !== field.id}
+                                editable={!isReadOnly && validatingFieldId !== field.id}
+                                focusable={!isReadOnly && validatingFieldId !== field.id}
+                                showSoftInputOnFocus={!isReadOnly && validatingFieldId !== field.id}
+                                pointerEvents={!isReadOnly && validatingFieldId !== field.id ? 'auto' : 'none'}
                                 onChangeText={(val) => {
                                   const masked = applyChecklistTextMask(
                                     uiValueForChecklistMask(val, field.textMask ?? field.text_mask, effectiveSchemaFieldType(fieldArg)),
@@ -9442,7 +9445,10 @@ export default function ChecklistEngine() {
                     placeholder={field.type === 'date' ? 'DD/MM/YYYY' : 'Sua resposta...'}
                     keyboardType={field.type === 'email' ? 'email-address' : field.type === 'phone' ? 'phone-pad' : 'default'}
                     value={vv(field.id) || ''}
-                    editable={validatingFieldId !== field.id}
+                    editable={!isReadOnly && validatingFieldId !== field.id}
+                    focusable={!isReadOnly && validatingFieldId !== field.id}
+                    showSoftInputOnFocus={!isReadOnly && validatingFieldId !== field.id}
+                    pointerEvents={!isReadOnly && validatingFieldId !== field.id ? 'auto' : 'none'}
                     onChangeText={(val) => hi(field.id, applyChecklistTextMask(
                                     uiValueForChecklistMask(val, field.textMask ?? field.text_mask, effectiveSchemaFieldType(fieldArg)),
                                     field.textMask ?? field.text_mask,
@@ -9468,7 +9474,7 @@ export default function ChecklistEngine() {
                                   style={[styles.input, { flex: 1 }]}
                                   placeholder="0,00"
                                   value={String(rowVal ?? '')}
-                                  editable={validatingFieldId !== field.id}
+                                  editable={!isReadOnly && validatingFieldId !== field.id}
                                   currency
                                   currencySymbol={checklistCurrencySymbol(field)}
                                   onChangeText={(v) => {
@@ -9488,7 +9494,10 @@ export default function ChecklistEngine() {
                                 autoCapitalize="none"
                                 autoCorrect={false}
                                 value={String(rowVal ?? '')}
-                                editable={validatingFieldId !== field.id}
+                                editable={!isReadOnly && validatingFieldId !== field.id}
+                                focusable={!isReadOnly && validatingFieldId !== field.id}
+                                showSoftInputOnFocus={!isReadOnly && validatingFieldId !== field.id}
+                                pointerEvents={!isReadOnly && validatingFieldId !== field.id ? 'auto' : 'none'}
                                 onChangeText={(val) => {
                                   const masked = applyChecklistTextMask(
                                     uiValueForChecklistMask(val, field.textMask ?? field.text_mask, effectiveSchemaFieldType(fieldArg)),
@@ -9532,7 +9541,7 @@ export default function ChecklistEngine() {
                     style={styles.input}
                     placeholder="0,00"
                     value={vv(field.id) || ''}
-                    editable={validatingFieldId !== field.id}
+                    editable={!isReadOnly && validatingFieldId !== field.id}
                     currency
                     currencySymbol={checklistCurrencySymbol(field)}
                     onChangeText={(v) => hi(field.id, v)}
@@ -9548,7 +9557,10 @@ export default function ChecklistEngine() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     value={vv(field.id) || ''}
-                    editable={validatingFieldId !== field.id}
+                    editable={!isReadOnly && validatingFieldId !== field.id}
+                    focusable={!isReadOnly && validatingFieldId !== field.id}
+                    showSoftInputOnFocus={!isReadOnly && validatingFieldId !== field.id}
+                    pointerEvents={!isReadOnly && validatingFieldId !== field.id ? 'auto' : 'none'}
                     onChangeText={(val) => hi(field.id, applyChecklistTextMask(
                                     uiValueForChecklistMask(val, field.textMask ?? field.text_mask, effectiveSchemaFieldType(fieldArg)),
                                     field.textMask ?? field.text_mask,

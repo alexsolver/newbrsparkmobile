@@ -4,7 +4,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { lightColors, darkColors, ColorPalette } from './colors';
 import { useAuth } from '../hooks/useAuth';
 import { API_BASE, GUEST_LOGIN_BRANDING_KEY } from '../services/auth';
-import { agentDebugLog, safeUrlHint } from '../debug/agentDebugLog';
 
 const BRANDING_CACHE_KEY = '@brspark:tenant_branding_cache';
 const BRANDING_LOGO_CACHE_KEY = '@brspark:tenant_branding_logo_cache';
@@ -135,6 +134,39 @@ function resolveTenantPalette(base: ColorPalette, branding: TenantBranding | nul
  * funcionam no simulador (loopback = Mac) mas falham no telemóvel (loopback = aparelho).
  * Reescreve só loopback → mesma origem que `API_BASE` (ex.: produção).
  */
+/** Origem pública do CMS Laravel (EAS: `EXPO_PUBLIC_BRSPARK_CMS_PUBLIC_URL`) — `/storage/*` não vive na API Node. */
+function cmsPublicOrigin(): string {
+  try {
+    const v =
+      typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BRSPARK_CMS_PUBLIC_URL
+        ? String(process.env.EXPO_PUBLIC_BRSPARK_CMS_PUBLIC_URL).trim()
+        : '';
+    return v.replace(/\/+$/, '');
+  } catch {
+    return '';
+  }
+}
+
+/** App Store: ATS bloqueia `http://` para assets remotos; manter http em loopback/LAN para dev. */
+function forceHttpsOnPublicAssetUrl(u: string | null): string | null {
+  const s = String(u || '').trim();
+  if (!s) return u;
+  if (!/^http:\/\//i.test(s)) return s;
+  try {
+    const host = new URL(s).hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return s;
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) || /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return s;
+    const m = /^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host);
+    if (m) {
+      const sec = Number(m[1]);
+      if (sec >= 16 && sec <= 31) return s;
+    }
+    return `https://${s.slice('http://'.length)}`;
+  } catch {
+    return s;
+  }
+}
+
 function rewriteLoopbackBrandingAssetUrl(absoluteUrl: string): string {
   const s = String(absoluteUrl || '').trim();
   if (!s) return s;
@@ -153,22 +185,16 @@ function rewriteLoopbackBrandingAssetUrl(absoluteUrl: string): string {
 function resolveBrandingUrl(url: string | null | undefined): string | null {
   const raw = String(url || '').trim();
   if (!raw) return null;
+  let out: string | null = null;
   if (/^https?:\/\//i.test(raw)) {
-    const out = rewriteLoopbackBrandingAssetUrl(raw);
-    if (out !== raw) {
-      // #region agent log
-      agentDebugLog(
-        'ThemeContext.tsx:resolveBrandingUrl',
-        'loopback_rewritten_to_api_base',
-        { inHint: safeUrlHint(raw), outHint: safeUrlHint(out), apiHint: safeUrlHint(API_BASE) },
-        'H3',
-      );
-      // #endregion
-    }
-    return out;
+    out = rewriteLoopbackBrandingAssetUrl(raw);
+  } else if (raw.startsWith('/storage/')) {
+    const cms = cmsPublicOrigin();
+    out = cms ? `${cms}${raw}` : `${API_BASE.replace(/\/+$/, '')}${raw}`;
+  } else if (raw.startsWith('/')) {
+    out = `${API_BASE.replace(/\/+$/, '')}${raw}`;
   }
-  if (raw.startsWith('/')) return `${API_BASE.replace(/\/+$/, '')}${raw}`;
-  return null;
+  return forceHttpsOnPublicAssetUrl(out);
 }
 
 function ThemeProviderInner({ children }: { children: React.ReactNode }) {
@@ -293,21 +319,6 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
       if (!branding?.enabled) return;
       const lightRemote = resolveBrandingUrl(branding.logoLightUrl || branding.logoDarkUrl || null);
       const darkRemote = resolveBrandingUrl(branding.logoDarkUrl || branding.logoLightUrl || null);
-      // #region agent log
-      agentDebugLog(
-        'ThemeContext.tsx:logoRun',
-        'branding_logo_pipeline_start',
-        {
-          hasUser: !!user,
-          bv: branding?.brandingVersion ?? null,
-          lightRaw: safeUrlHint(branding.logoLightUrl),
-          darkRaw: safeUrlHint(branding.logoDarkUrl),
-          lightResolved: safeUrlHint(lightRemote),
-          darkResolved: safeUrlHint(darkRemote),
-        },
-        'H2',
-      );
-      // #endregion
       if (!lightRemote && !darkRemote) return;
 
       const current = logoCache || {
@@ -340,16 +351,7 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
           const file = `${baseDir}logo_${variant}_${hashString(remoteUrl)}.png`;
           await FileSystem.downloadAsync(remoteUrl, file);
           return file;
-        } catch (e: unknown) {
-          // #region agent log
-          const msg = e instanceof Error ? e.message : String(e);
-          agentDebugLog(
-            'ThemeContext.tsx:ensureLogoCached',
-            'download_failed',
-            { variant, remoteHint: safeUrlHint(remoteUrl), err: msg.slice(0, 160) },
-            'H1',
-          );
-          // #endregion
+        } catch {
           return currLocal || null;
         }
       };
@@ -366,21 +368,6 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
         darkLocalUri: darkLocal || null,
         updatedAt: Date.now(),
       };
-
-      // #region agent log
-      agentDebugLog(
-        'ThemeContext.tsx:logoRun',
-        'branding_logo_pipeline_done',
-        {
-          cancelled,
-          lightOk: !!lightLocal,
-          darkOk: !!darkLocal,
-          lightTail: lightLocal ? String(lightLocal).slice(-36) : '',
-          darkTail: darkLocal ? String(darkLocal).slice(-36) : '',
-        },
-        'H1',
-      );
-      // #endregion
 
       if (cancelled) return;
       setLogoCache(next);
@@ -435,36 +422,6 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
       : null;
   const loginBackgroundUrl =
     branding?.enabled && branding.loginBackgroundUrl ? resolveBrandingUrl(branding.loginBackgroundUrl) : null;
-
-  useEffect(() => {
-    if (!branding?.enabled) return;
-    // #region agent log
-    agentDebugLog(
-      'ThemeContext.tsx:resolvedLogoUrl',
-      'resolved_logo_state',
-      {
-        hasResolved: !!resolvedLogoUrl,
-        uriTail: resolvedLogoUrl ? String(resolvedLogoUrl).slice(-40) : '',
-        sourceRemote: !!(
-          resolvedLogoUrl &&
-          (resolvedLogoUrl === brandingLogoRemoteLight || resolvedLogoUrl === brandingLogoRemoteDark)
-        ),
-        dark,
-        cacheLight: !!logoCache?.lightLocalUri,
-        cacheDark: !!logoCache?.darkLocalUri,
-      },
-      resolvedLogoUrl ? 'H1-resolved' : 'H1-missing-local',
-    );
-    // #endregion
-  }, [
-    branding?.enabled,
-    resolvedLogoUrl,
-    dark,
-    logoCache?.lightLocalUri,
-    logoCache?.darkLocalUri,
-    brandingLogoRemoteLight,
-    brandingLogoRemoteDark,
-  ]);
 
   return (
     <ThemeContext.Provider

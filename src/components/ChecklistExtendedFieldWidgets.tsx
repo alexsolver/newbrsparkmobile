@@ -356,6 +356,9 @@ export function ChecklistRepeatableMatrixField({ field, value, onChange, readOnl
                     <View key={c.id} style={{ width: 120, padding: 6 }}>
                       <TextInput
                         editable={!readOnly}
+                        focusable={!readOnly}
+                        showSoftInputOnFocus={!readOnly}
+                        pointerEvents={readOnly ? 'none' : 'auto'}
                         keyboardType="decimal-pad"
                         value={rawCell != null ? String(rawCell) : ''}
                         onChangeText={(t) => setCell(ri, c.id, t)}
@@ -376,6 +379,9 @@ export function ChecklistRepeatableMatrixField({ field, value, onChange, readOnl
                   <View key={c.id} style={{ width: 120, padding: 6 }}>
                     <TextInput
                       editable={!readOnly}
+                      focusable={!readOnly}
+                      showSoftInputOnFocus={!readOnly}
+                      pointerEvents={readOnly ? 'none' : 'auto'}
                       value={rawCell != null ? String(rawCell) : ''}
                       onChangeText={(t) => setCell(ri, c.id, t)}
                       placeholder="…"

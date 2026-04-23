@@ -272,6 +272,9 @@ export function ChecklistMaterialsReceiptField({ value, onChange, readOnly, user
                         multiline
                         maxLength={2000}
                         editable={!readOnly}
+                        focusable={!readOnly}
+                        showSoftInputOnFocus={!readOnly}
+                        pointerEvents={readOnly ? 'none' : 'auto'}
                         value={l.rejectReason || ''}
                         onChangeText={(t) => setRejectReason(l.inputId, t)}
                         textAlignVertical="top"

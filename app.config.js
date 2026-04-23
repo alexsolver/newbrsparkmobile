@@ -8,7 +8,9 @@
  * Apple: plugin expo-apple-authentication; em APPLE_CLIENT_IDS no Laravel inclua o Services ID / bundle id usado pelo app.
  *
  * Dev Client (iOS/Android): o URL do packager é o Metro (ex.: exp://IP-LAN:8081 ou túnel do `expo start`),
- * NÃO o domínio HTTPS da API (ex. api.brspark.com). Se vir "Could not connect to development server"
+ * NÃO o domínio HTTPS da API (ex. api.brspark.com). Em release, se logos do CMS forem `/storage/…`,
+ * defina também `EXPO_PUBLIC_BRSPARK_CMS_PUBLIC_URL` = origem pública do Laravel (sem `/` final).
+ * Se vir "Could not connect to development server"
  * com host tipo expo.*:8081, abra o menu de desenvolvimento → altere o URL do bundler para o IP do PC onde corre
  * `npx expo start --dev-client`, ou use `expo start --tunnel`. Só use hostname remoto em :8081 se aí estiver mesmo
  * a correr o Metro com porta acessível (e no iOS pode ser preciso exceção ATS para HTTP em Info.plist).
