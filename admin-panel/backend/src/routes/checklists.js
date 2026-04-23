@@ -33,6 +33,7 @@ const {
     normalizeEmail,
     broadcastCandidateArray,
 } = require('../lib/fieldTaskExecutionAccess');
+const { preserveDispatchClientContactMetadata } = require('../lib/technicianClientChatGate');
 const { notifyBroadcastLosers } = require('../lib/fieldTaskBroadcastNotify');
 const {
     TRANSIT_ETA_DISPLAY_SNAPSHOT_AT,
@@ -786,6 +787,7 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
             include: { template: true },
         });
         if (!existing) return res.status(404).json({ error: "OS não encontrada" });
+        const metadataSnapshotBeforePatch = existing.metadata;
         if (!canAppUserAccessFieldTaskExecution(existing, req.user.email)) {
             return res.status(403).json({ error: 'Acesso negado a esta OS.' });
         }
@@ -945,6 +947,7 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
             delete mergedMeta.trackingPausedAt;
         }
 
+        mergedMeta = preserveDispatchClientContactMetadata(metadataSnapshotBeforePatch, mergedMeta);
         updateData.metadata = mergedMeta;
 
         if (
@@ -1255,7 +1258,7 @@ router.post('/executions', authUser, async (req, res) => {
                     const nm = { ...existingMeta, ...metaIn };
                     delete nm.revisionVisitActive;
                     delete nm.reopenForRevisionPending;
-                    return nm;
+                    return preserveDispatchClientContactMetadata(existing.metadata, nm);
                 })();
                 const finalStartedAt = startedAt ? new Date(startedAt) : existing.startedAt;
                 const businessSnap = computeExecutionBusinessMetrics({

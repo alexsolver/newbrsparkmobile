@@ -11,6 +11,11 @@ const META_CLIENT_EMAIL_KEYS = [
   'contactEmail',
   'portalUserEmail',
   'solicitanteEmail',
+  /** Variantes usadas por integrações / UI em PT */
+  'userEmail',
+  'usuarioEmail',
+  'emailCliente',
+  'emailDoCliente',
 ];
 
 const ACTIVITY_CHAT_STATUSES = ['IN_PROGRESS', 'PAUSED', 'COMPLETED'];
@@ -32,15 +37,38 @@ function normalizeExecutionMetadata(raw) {
   return {};
 }
 
+function looksLikeUsableClientEmailValue(v) {
+  if (v == null) return false;
+  const s = String(v).trim().toLowerCase();
+  return s.length > 3 && s.includes('@');
+}
+
 function extractClientEmailFromMetadata(meta) {
   const m = normalizeExecutionMetadata(meta);
   for (const k of META_CLIENT_EMAIL_KEYS) {
     const v = m[k];
-    if (v == null) continue;
-    const s = String(v).trim().toLowerCase();
-    if (s.includes('@')) return s;
+    if (!looksLikeUsableClientEmailValue(v)) continue;
+    return String(v).trim().toLowerCase();
   }
   return null;
+}
+
+/**
+ * Impede que sync do app substitua e-mail de contacto do despacho por vazio/null ou valor sem @.
+ * @param {object|string|null|undefined} serverMeta — metadata já na base antes do merge
+ * @param {object} merged — tipicamente `{ ...existente, ...incoming }`
+ */
+function preserveDispatchClientContactMetadata(serverMeta, merged) {
+  const base = normalizeExecutionMetadata(serverMeta);
+  const out = merged && typeof merged === 'object' && !Array.isArray(merged) ? { ...merged } : {};
+  for (const k of META_CLIENT_EMAIL_KEYS) {
+    const prev = base[k];
+    if (!looksLikeUsableClientEmailValue(prev)) continue;
+    if (!looksLikeUsableClientEmailValue(out[k])) {
+      out[k] = prev;
+    }
+  }
+  return out;
 }
 
 /**
@@ -256,6 +284,7 @@ module.exports = {
   evaluationBlocksTechClientChat,
   getRoomMessagingState,
   extractClientEmailFromMetadata,
+  preserveDispatchClientContactMetadata,
   hasDisplacementStarted,
   ACTIVITY_CHAT_STATUSES,
 };
