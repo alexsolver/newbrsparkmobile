@@ -3,6 +3,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import {
   AuthService,
+  API_BASE,
   TwoFactorRequired,
   User,
   subscribeSessionInvalidated,
@@ -15,6 +16,7 @@ import { ApiService } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { dataCollectionService } from '../services/dataCollectionService';
 import { warmAvatarCacheForUser } from '../services/avatarLocalCache';
+import { normalizeUserAvatarUrl } from '../utils/normalizeUserAvatarUrl';
 import { NotificationService } from '../services/notifications';
 import { resetAppIntroGuestSession } from '../lib/appIntroPrefs';
 
@@ -50,7 +52,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const runAvatarWarm = useCallback((u: User | null) => {
     if (!u) return;
-    warmAvatarCacheForUser(u, async partial => {
+    const absolute = normalizeUserAvatarUrl(u.avatarUrl, API_BASE);
+    const forWarm = absolute ? { ...u, avatarUrl: absolute } : u;
+    warmAvatarCacheForUser(forWarm, async partial => {
       const next = await AuthService.patchUserInStorage(partial);
       if (next) setUser(next);
     }).catch(() => {});
