@@ -14,6 +14,9 @@
  * com host tipo expo.*:8081, abra o menu de desenvolvimento → altere o URL do bundler para o IP do PC onde corre
  * `npx expo start --dev-client`, ou use `expo start --tunnel`. Só use hostname remoto em :8081 se aí estiver mesmo
  * a correr o Metro com porta acessível (e no iOS pode ser preciso exceção ATS para HTTP em Info.plist).
+ *
+ * EAS Update (OTA): `runtimeVersion` alinhado a `expo.version` em app.json — ao subir `version`, é preciso
+ * novo binário na loja; entre builds com a mesma version, `eas update --channel …` distribui JS.
  */
 const path = require('path');
 try {
@@ -53,6 +56,14 @@ for (const p of extraPlugins) {
 module.exports = {
   expo: {
     ...appJson.expo,
+    /** Mesmo `expo.version` (app.json) em todas as plataformas — updates OTA só chegam a binários com esta runtime. */
+    runtimeVersion: {
+      policy: 'appVersion',
+    },
+    updates: {
+      url: `https://u.expo.dev/${easProjectId}`,
+      checkAutomatically: 'ON_LOAD',
+    },
     plugins: mergedPlugins,
     extra: {
       ...(appJson.expo.extra || {}),

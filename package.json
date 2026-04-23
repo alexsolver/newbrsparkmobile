@@ -24,7 +24,9 @@
     "i18n:sync-es": "node scripts/i18n-sync-es.mjs",
     "eas:build:android": "eas build --profile production --platform android",
     "eas:build:ios": "eas build --profile production --platform ios",
-    "eas:build:all": "eas build --profile production --platform all"
+    "eas:build:all": "eas build --profile production --platform all",
+    "eas:update:production": "eas update --channel production",
+    "eas:update:preview": "eas update --channel preview"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
