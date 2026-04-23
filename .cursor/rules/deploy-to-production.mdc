@@ -19,5 +19,3 @@ Quando o pedido for para **colocar código em produção**, **commit para produ�
 3. Se o comando falhar, analisar a saída (SSH, Prisma, Artisan) e propor correção; não deixar o utilizador com passos manuais salvo migração SQL impossível de reaplicar sem intervenção na BD.
 
 4. Não expor segredos de `.env` na resposta. Chaves `.pem` não são commitadas (gitignore).
-
-5. **Deploy automático no servidor (opcional):** em `/usr/local/sbin/brspark-auto-deploy.sh` (cópia de `scripts/brspark-auto-deploy.sh`); timer systemd `brspark-auto-deploy.timer` (≈1 min após cada corrida). Clones: `/var/www/deploy/newbrsparkmobile` (HTTPS, branch `sparkmobile`), `/var/www/deploy/BRSpark` (SSH `git@github.com-brspark:alexsolver/BRSpark.git` — exige **Deploy key** no repositório `BRSpark`; chave em `~/.ssh/id_ed25519_github_brspark` no servidor). Logs: `/var/www/deploy/logs/brspark-auto-deploy.log`. `BRSPARK_FORCE_DEPLOY=1` no `systemd` só em emergência.
