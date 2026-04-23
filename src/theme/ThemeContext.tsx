@@ -129,11 +129,31 @@ function resolveTenantPalette(base: ColorPalette, branding: TenantBranding | nul
   return next;
 }
 
+/**
+ * URLs de branding gravadas com o Node local (`http://127.0.0.1:3001/uploads/...`)
+ * funcionam no simulador (loopback = Mac) mas falham no telemóvel (loopback = aparelho).
+ * Reescreve só loopback → mesma origem que `API_BASE` (ex.: produção).
+ */
+function rewriteLoopbackBrandingAssetUrl(absoluteUrl: string): string {
+  const s = String(absoluteUrl || '').trim();
+  if (!s) return s;
+  try {
+    const u = new URL(/^\/\//i.test(s) ? `https:${s}` : s);
+    const h = u.hostname.toLowerCase();
+    if (h !== '127.0.0.1' && h !== 'localhost' && h !== '::1') return s;
+    const path = `${u.pathname || ''}${u.search || ''}`;
+    const api = API_BASE.replace(/\/+$/, '');
+    return `${api}${path.startsWith('/') ? path : `/${path}`}`;
+  } catch {
+    return s;
+  }
+}
+
 function resolveBrandingUrl(url: string | null | undefined): string | null {
   const raw = String(url || '').trim();
   if (!raw) return null;
-  if (/^https?:\/\//i.test(raw)) return raw;
-  if (raw.startsWith('/')) return `${API_BASE}${raw}`;
+  if (/^https?:\/\//i.test(raw)) return rewriteLoopbackBrandingAssetUrl(raw);
+  if (raw.startsWith('/')) return `${API_BASE.replace(/\/+$/, '')}${raw}`;
   return null;
 }
 
