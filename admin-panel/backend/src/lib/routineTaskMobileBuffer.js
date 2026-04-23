@@ -3,7 +3,6 @@
 const { allocateNextRtNumber } = require('./rtSerialNumber');
 const { routineTaskMetadataFromTemplate } = require('./routineTaskMetadata');
 const { consumeQuota } = require('./planQuotaService');
-const { sendFieldTaskActivityPushToAssignee } = require('./fieldTaskAssigneePush');
 
 const MIN_SLOTS = 1;
 const MAX_SLOTS = 20;
@@ -61,8 +60,6 @@ async function ensureRoutineTaskMobileBuffer(prisma, assignment) {
 
   let created = 0;
   let guard = 0;
-  /** @type {{ id: string, routineTaskNumber: string | null }[]} */
-  const createdRows = [];
   while ((await countActiveRtForTemplate(prisma, email, assignment.templateId)) < slots && guard < MAX_SLOTS * 3) {
     guard += 1;
     const q = await consumeQuota(prisma, assignment.tenantId, 'ROUTINE_TASK', 1);
@@ -74,7 +71,7 @@ async function ensureRoutineTaskMobileBuffer(prisma, assignment) {
       ...routineTaskMetadataFromTemplate(tpl, assignment.templateId, { menuLabel: assignment.menuLabel }),
       rtMobileBuffer: true,
     };
-    const row = await prisma.checklistExecution.create({
+    await prisma.checklistExecution.create({
       data: {
         routineTaskNumber: rt,
         templateId: assignment.templateId,
@@ -85,33 +82,10 @@ async function ensureRoutineTaskMobileBuffer(prisma, assignment) {
       },
       select: { id: true, routineTaskNumber: true },
     });
-    createdRows.push(row);
     created += 1;
   }
 
-  if (createdRows.length > 0) {
-    const tplTitle = String(tpl.title || 'Tarefa de rotina').trim() || 'Tarefa de rotina';
-    const first = createdRows[0];
-    const n = createdRows.length;
-    const pushTitle =
-      n === 1
-        ? `Nova FT: ${String(first.routineTaskNumber || 'RT').slice(0, 40)}`
-        : `${n} novas FT na fila`;
-    const pushBody =
-      n === 1
-        ? `${tplTitle.slice(0, 160)} — toque para ver ou aceitar.`
-        : `${tplTitle.slice(0, 120)} — há ${n} novas execuções na fila.`;
-
-    sendFieldTaskActivityPushToAssignee(prisma, {
-      ownerEmail: email,
-      templateTenantId: tpl.tenantId,
-      assigneeTenantId: assignment.tenantId,
-      executionId: first.id,
-      pushTitle,
-      pushBody,
-      logLabel: 'RT_BUFFER',
-    }).catch((e) => console.warn('[RT_BUFFER] push:', e?.message || e));
-  }
+  /** RT não envia push (os_dispatched): o prestador vê a fila no menu radial — evita alertas no telemóvel. */
 
   return { created, slots };
 }
