@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { lightColors, darkColors, ColorPalette } from './colors';
 import { useAuth } from '../hooks/useAuth';
 import { API_BASE, GUEST_LOGIN_BRANDING_KEY } from '../services/auth';
+import { agentDebugLog, safeUrlHint } from '../debug/agentDebugLog';
 
 const BRANDING_CACHE_KEY = '@brspark:tenant_branding_cache';
 const BRANDING_LOGO_CACHE_KEY = '@brspark:tenant_branding_logo_cache';
@@ -152,7 +153,20 @@ function rewriteLoopbackBrandingAssetUrl(absoluteUrl: string): string {
 function resolveBrandingUrl(url: string | null | undefined): string | null {
   const raw = String(url || '').trim();
   if (!raw) return null;
-  if (/^https?:\/\//i.test(raw)) return rewriteLoopbackBrandingAssetUrl(raw);
+  if (/^https?:\/\//i.test(raw)) {
+    const out = rewriteLoopbackBrandingAssetUrl(raw);
+    if (out !== raw) {
+      // #region agent log
+      agentDebugLog(
+        'ThemeContext.tsx:resolveBrandingUrl',
+        'loopback_rewritten_to_api_base',
+        { inHint: safeUrlHint(raw), outHint: safeUrlHint(out), apiHint: safeUrlHint(API_BASE) },
+        'H3',
+      );
+      // #endregion
+    }
+    return out;
+  }
   if (raw.startsWith('/')) return `${API_BASE.replace(/\/+$/, '')}${raw}`;
   return null;
 }
@@ -279,6 +293,21 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
       if (!branding?.enabled) return;
       const lightRemote = resolveBrandingUrl(branding.logoLightUrl || branding.logoDarkUrl || null);
       const darkRemote = resolveBrandingUrl(branding.logoDarkUrl || branding.logoLightUrl || null);
+      // #region agent log
+      agentDebugLog(
+        'ThemeContext.tsx:logoRun',
+        'branding_logo_pipeline_start',
+        {
+          hasUser: !!user,
+          bv: branding?.brandingVersion ?? null,
+          lightRaw: safeUrlHint(branding.logoLightUrl),
+          darkRaw: safeUrlHint(branding.logoDarkUrl),
+          lightResolved: safeUrlHint(lightRemote),
+          darkResolved: safeUrlHint(darkRemote),
+        },
+        'H2',
+      );
+      // #endregion
       if (!lightRemote && !darkRemote) return;
 
       const current = logoCache || {
@@ -311,7 +340,16 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
           const file = `${baseDir}logo_${variant}_${hashString(remoteUrl)}.png`;
           await FileSystem.downloadAsync(remoteUrl, file);
           return file;
-        } catch {
+        } catch (e: unknown) {
+          // #region agent log
+          const msg = e instanceof Error ? e.message : String(e);
+          agentDebugLog(
+            'ThemeContext.tsx:ensureLogoCached',
+            'download_failed',
+            { variant, remoteHint: safeUrlHint(remoteUrl), err: msg.slice(0, 160) },
+            'H1',
+          );
+          // #endregion
           return currLocal || null;
         }
       };
@@ -328,6 +366,21 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
         darkLocalUri: darkLocal || null,
         updatedAt: Date.now(),
       };
+
+      // #region agent log
+      agentDebugLog(
+        'ThemeContext.tsx:logoRun',
+        'branding_logo_pipeline_done',
+        {
+          cancelled,
+          lightOk: !!lightLocal,
+          darkOk: !!darkLocal,
+          lightTail: lightLocal ? String(lightLocal).slice(-36) : '',
+          darkTail: darkLocal ? String(darkLocal).slice(-36) : '',
+        },
+        'H1',
+      );
+      // #endregion
 
       if (cancelled) return;
       setLogoCache(next);
@@ -354,14 +407,64 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
   const appTagline = user
     ? String(serverTenantBranding?.tagline || '').trim() || 'Precisou, resolveu.'
     : (branding?.enabled && String(branding.tagline || '').trim()) || 'Precisou, resolveu.';
+
+  /** Remoto resolvido (mesma lógica que o efeito de cache) — fallback quando `downloadAsync` falha no aparelho. */
+  const brandingLogoRemoteLight = useMemo(() => {
+    if (!branding?.enabled) return null;
+    return resolveBrandingUrl(branding.logoLightUrl || branding.logoDarkUrl || null);
+  }, [branding?.enabled, branding?.logoLightUrl, branding?.logoDarkUrl]);
+
+  const brandingLogoRemoteDark = useMemo(() => {
+    if (!branding?.enabled) return null;
+    return resolveBrandingUrl(branding.logoDarkUrl || branding.logoLightUrl || null);
+  }, [branding?.enabled, branding?.logoLightUrl, branding?.logoDarkUrl]);
+
   const resolvedLogoUrl =
     branding?.enabled
       ? dark
-        ? logoCache?.darkLocalUri || logoCache?.lightLocalUri || null
-        : logoCache?.lightLocalUri || logoCache?.darkLocalUri || null
+        ? logoCache?.darkLocalUri ||
+          logoCache?.lightLocalUri ||
+          brandingLogoRemoteDark ||
+          brandingLogoRemoteLight ||
+          null
+        : logoCache?.lightLocalUri ||
+          logoCache?.darkLocalUri ||
+          brandingLogoRemoteLight ||
+          brandingLogoRemoteDark ||
+          null
       : null;
   const loginBackgroundUrl =
     branding?.enabled && branding.loginBackgroundUrl ? resolveBrandingUrl(branding.loginBackgroundUrl) : null;
+
+  useEffect(() => {
+    if (!branding?.enabled) return;
+    // #region agent log
+    agentDebugLog(
+      'ThemeContext.tsx:resolvedLogoUrl',
+      'resolved_logo_state',
+      {
+        hasResolved: !!resolvedLogoUrl,
+        uriTail: resolvedLogoUrl ? String(resolvedLogoUrl).slice(-40) : '',
+        sourceRemote: !!(
+          resolvedLogoUrl &&
+          (resolvedLogoUrl === brandingLogoRemoteLight || resolvedLogoUrl === brandingLogoRemoteDark)
+        ),
+        dark,
+        cacheLight: !!logoCache?.lightLocalUri,
+        cacheDark: !!logoCache?.darkLocalUri,
+      },
+      resolvedLogoUrl ? 'H1-resolved' : 'H1-missing-local',
+    );
+    // #endregion
+  }, [
+    branding?.enabled,
+    resolvedLogoUrl,
+    dark,
+    logoCache?.lightLocalUri,
+    logoCache?.darkLocalUri,
+    brandingLogoRemoteLight,
+    brandingLogoRemoteDark,
+  ]);
 
   return (
     <ThemeContext.Provider

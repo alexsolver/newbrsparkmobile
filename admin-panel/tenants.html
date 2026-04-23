@@ -552,11 +552,41 @@
     return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
   }
 
-  function brandingPreviewContrastOn(bgHex) {
+  function brandingPreviewChannelToLinear(v) {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  }
+
+  /** Mesma lógica que `getContrastText` no app (`ThemeContext` / chips). */
+  function brandingPreviewContrastOn(bgHex, dark, light) {
+    dark = dark || '#0F172A';
+    light = light || '#FFFFFF';
     const rgb = brandingPreviewParseHex6(bgHex);
-    if (!rgb) return '#FFFFFF';
-    const L = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
-    return L > 0.55 ? '#0F172A' : '#FFFFFF';
+    if (!rgb) return light;
+    const lum =
+      0.2126 * brandingPreviewChannelToLinear(rgb.r) +
+      0.7152 * brandingPreviewChannelToLinear(rgb.g) +
+      0.0722 * brandingPreviewChannelToLinear(rgb.b);
+    return lum > 0.55 ? dark : light;
+  }
+
+  /**
+   * Replica `resolveTenantPalette` (C.primary / C.accent) para o preview alinhar ao app.
+   */
+  function brandingPreviewResolvePrimaryAccent(primaryRaw, accentRaw) {
+    const BASE_PRIMARY = '#F97316';
+    const BASE_ACCENT = '#EA580C';
+    const p = String(primaryRaw || '').trim();
+    const a = String(accentRaw || '').trim();
+    let resolvedPrimary = p || BASE_PRIMARY;
+    let resolvedAccent = a;
+    if (p && !a) resolvedAccent = p;
+    if (!resolvedAccent) resolvedAccent = BASE_ACCENT;
+    if (!p && a) {
+      resolvedPrimary = BASE_PRIMARY;
+      resolvedAccent = a;
+    }
+    return { resolvedPrimary, resolvedAccent };
   }
 
   function brandingPreviewEscCssUrl(u) {
@@ -571,8 +601,11 @@
   function setBrandingPreview() {
     const name = document.getElementById('tenant-branding-app-name').value.trim() || 'BrSpark';
     const tagline = document.getElementById('tenant-branding-tagline').value.trim() || 'Precisou, resolveu.';
-    const primary = document.getElementById('tenant-branding-primary').value.trim() || '#F97316';
-    const accent = document.getElementById('tenant-branding-accent').value.trim() || '#EA580C';
+    const primaryRaw = document.getElementById('tenant-branding-primary').value.trim();
+    const accentRaw = document.getElementById('tenant-branding-accent').value.trim();
+    const { resolvedPrimary, resolvedAccent } = brandingPreviewResolvePrimaryAccent(primaryRaw, accentRaw);
+    /** Botão preenchido no login: primária, senão destaque (como `filledButtonBg` no app). */
+    const filledBtnBg = primaryRaw || accentRaw || '#F97316';
     const secondary = document.getElementById('tenant-branding-secondary').value.trim() || '#475569';
     const surface = document.getElementById('tenant-branding-surface').value.trim() || '#F8FAFC';
     const logoLight = document.getElementById('tenant-branding-logo-light').value.trim();
@@ -626,51 +659,54 @@
     } else {
       syncLogoVis();
     }
-    logoPh.style.borderColor = primary;
-    logoPh.style.color = primary;
+    logoPh.style.borderColor = resolvedPrimary;
+    logoPh.style.color = resolvedPrimary;
 
     const loginBtn = document.getElementById('tenant-branding-preview-login-btn');
-    loginBtn.style.background = primary;
-    loginBtn.style.color = brandingPreviewContrastOn(primary);
+    loginBtn.style.background = filledBtnBg;
+    loginBtn.style.color = brandingPreviewContrastOn(filledBtnBg);
 
     const onPhoto = loginRoot.dataset.onPhoto === '1';
     document.querySelectorAll('.tenant-branding-preview-login .tenant-branding-preview-fake-input').forEach((el) => {
       el.style.background = onPhoto ? 'rgba(255,255,255,0.92)' : '#fff';
-      el.style.borderColor = onPhoto ? 'rgba(255,255,255,0.4)' : `${primary}40`;
+      el.style.borderColor = onPhoto ? 'rgba(255,255,255,0.4)' : `${resolvedPrimary}40`;
     });
 
     const formCard = document.getElementById('tenant-branding-preview-form-card');
     formCard.style.background = surface;
-    formCard.style.borderColor = `${primary}22`;
+    formCard.style.borderColor = `${resolvedPrimary}22`;
     formCard.querySelectorAll('.tenant-branding-preview-form-label').forEach((lab) => {
       lab.style.color = secondary;
     });
     const ta = formCard.querySelector('.tenant-branding-preview-fake-textarea');
     if (ta) {
       ta.style.background = '#fff';
-      ta.style.borderColor = `${primary}33`;
+      ta.style.borderColor = `${resolvedPrimary}33`;
     }
     const wideInp = formCard.querySelector('.tenant-branding-preview-fake-input--wide');
     if (wideInp) {
       wideInp.style.background = '#fff';
-      wideInp.style.borderColor = `${primary}33`;
+      wideInp.style.borderColor = `${resolvedPrimary}33`;
     }
 
     const outlineBtn = document.getElementById('tenant-branding-preview-btn-outline');
-    outlineBtn.style.border = `2px solid ${primary}`;
-    outlineBtn.style.color = primary;
+    outlineBtn.style.border = `2px solid ${resolvedPrimary}`;
+    outlineBtn.style.color = resolvedPrimary;
     outlineBtn.style.background = '#fff';
 
     const mainBtn = document.getElementById('tenant-branding-preview-button');
-    mainBtn.style.background = primary;
-    mainBtn.style.color = brandingPreviewContrastOn(primary);
+    mainBtn.style.background = filledBtnBg;
+    mainBtn.style.color = brandingPreviewContrastOn(filledBtnBg);
 
     const chipActBg =
-      document.getElementById('tenant-branding-menu-chip-active-bg').value.trim() || accent || primary;
+      document.getElementById('tenant-branding-menu-chip-active-bg').value.trim() ||
+      accentRaw ||
+      primaryRaw ||
+      resolvedAccent;
     const chipActFgRaw = document.getElementById('tenant-branding-menu-chip-active-fg').value.trim();
     const chipActFg = chipActFgRaw || brandingPreviewContrastOn(chipActBg);
     const chipInBg =
-      document.getElementById('tenant-branding-menu-chip-inactive-bg').value.trim() || surface;
+      document.getElementById('tenant-branding-menu-chip-inactive-bg').value.trim() || '#FFFFFF';
     const chipInFg =
       document.getElementById('tenant-branding-menu-chip-inactive-fg').value.trim() || secondary;
     const chipInBd =
@@ -690,11 +726,11 @@
     });
 
     document.getElementById('tenant-branding-preview-eyebrow').textContent = name;
-    document.getElementById('tenant-branding-preview-eyebrow').style.color = accent;
-    document.getElementById('tenant-branding-preview-header-title').style.color = secondary;
-    document.getElementById('tenant-branding-preview-logo-dot').style.background = accent;
-    document.getElementById('tenant-branding-preview-header').style.background = surface;
-    document.getElementById('tenant-branding-preview-header').style.borderColor = `${primary}18`;
+    document.getElementById('tenant-branding-preview-eyebrow').style.color = resolvedAccent;
+    document.getElementById('tenant-branding-preview-header-title').style.color = resolvedPrimary;
+    document.getElementById('tenant-branding-preview-logo-dot').style.background = resolvedAccent;
+    document.getElementById('tenant-branding-preview-header').style.background = '#FFFFFF';
+    document.getElementById('tenant-branding-preview-header').style.borderColor = chipInBd;
   }
 
   function isHexColor(value) {
