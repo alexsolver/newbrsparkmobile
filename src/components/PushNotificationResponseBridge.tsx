@@ -197,10 +197,16 @@ async function handleNotificationResponse(
   if (action === TECH_PUSH_ACTION_REJECT) {
     await stopTechTaskLiveActivityForTask(taskId);
     try {
-      const res = await apiFetch(`/api/operations/tasks/${encodeURIComponent(taskId)}/reject`, {
-        method: 'POST',
-        body: JSON.stringify({ reason: REJECT_REASON_FROM_PUSH }),
-      });
+      const broadcastOffer = String(data.broadcastOffer || '') === '1';
+      const res = broadcastOffer
+        ? await apiFetch('/api/checklists/reject-broadcast-invite', {
+            method: 'POST',
+            body: JSON.stringify({ taskId, reason: REJECT_REASON_FROM_PUSH }),
+          })
+        : await apiFetch(`/api/operations/tasks/${encodeURIComponent(taskId)}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({ reason: REJECT_REASON_FROM_PUSH }),
+          });
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
         Alert.alert('Erro', (txt || `Falha HTTP ${res.status}`).slice(0, 240));

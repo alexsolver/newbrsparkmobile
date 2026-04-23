@@ -3,7 +3,7 @@
  * quando o dashboard não está montado (ex.: checklist / mapa de deslocamento) e mantém
  * os handlers de aceitar/recusar ativos — o registo no `index` desmontava com `(client)`.
  */
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 import { Alert, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -20,7 +20,6 @@ import {
   BROADCAST_OS_UNAVAILABLE_SUBTITLE,
   BROADCAST_OS_UNAVAILABLE_TITLE,
 } from '../constants/broadcastOsMessages';
-import { agentDebugPost } from '../debug/agentDebugIngest';
 
 async function enqueueExecutionInProgressFromDashboard(taskId: string): Promise<void> {
   const id = String(taskId || '').trim();
@@ -94,7 +93,9 @@ async function loadRejectedTaskIdsForBroadcast(): Promise<Set<string>> {
   }
 }
 
-async function applyBroadcastOffersFromCache(setBroadcastOfferTasks: (v: any[]) => void) {
+async function applyBroadcastOffersFromCache(
+  setBroadcastOfferTasks: Dispatch<SetStateAction<any[]>>
+) {
   const [all, rejectedIds] = await Promise.all([
     loadAllCloudTasksForExecutionLookup(),
     loadRejectedTaskIdsForBroadcast(),
@@ -108,44 +109,12 @@ async function applyBroadcastOffersFromCache(setBroadcastOfferTasks: (v: any[]) 
     byId.set(id, t);
   }
   const pending = sortBroadcastOfferQueueStable([...byId.values()]);
-  const nextSig = broadcastOfferQueueSig(next);
-  // #region agent log
-  agentDebugPost({
-    sessionId: '98653d',
-    runId: 'pre',
-    hypothesisId: 'B_E',
-    location: 'BroadcastOfferRootBridge.tsx:applyBroadcastOffersFromCache',
-    message: 'cache_apply',
-    data: {
-      allLen: Array.isArray(all) ? all.length : -1,
-      pendingLen: pending.length,
-      nextLen: next.length,
-      nextIds: next.map((t: any) => String(t?.id ?? '')).slice(0, 5),
-      nextSigTail: nextSig.slice(-80),
-    },
-    timestamp: Date.now(),
-  });
-  // #endregion
+  const nextSig = broadcastOfferQueueSig(pending);
   setBroadcastOfferTasks((prev) => {
     const prevSig = broadcastOfferQueueSig(prev);
     const unchanged = prevSig === nextSig;
-    // #region agent log
-    agentDebugPost({
-      sessionId: '98653d',
-      runId: 'pre',
-      hypothesisId: 'C',
-      location: 'BroadcastOfferRootBridge.tsx:setBroadcastOfferTasks',
-      message: 'queue_update',
-      data: {
-        prevLen: prev.length,
-        nextLen: next.length,
-        unchanged,
-      },
-      timestamp: Date.now(),
-    });
-    // #endregion
     if (unchanged) return prev;
-    return next;
+    return pending;
   });
 }
 
@@ -159,20 +128,6 @@ export function BroadcastOfferRootBridge() {
 
   const refreshOffersIfEligible = useCallback(() => {
     if (String(userRole || '').toUpperCase() !== 'TECHNICIAN' || mode !== 'PROVIDER') {
-      // #region agent log
-      agentDebugPost({
-        sessionId: '98653d',
-        runId: 'pre',
-        hypothesisId: 'A',
-        location: 'BroadcastOfferRootBridge.tsx:refreshOffersIfEligible',
-        message: 'clear_queue_ineligible',
-        data: {
-          userRole: String(userRole || ''),
-          mode: String(mode || ''),
-        },
-        timestamp: Date.now(),
-      });
-      // #endregion
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
@@ -304,9 +259,10 @@ export function BroadcastOfferRootBridge() {
         }
         const reason = 'Recusada pelo prestador na tela de oferta (broadcast).';
         try {
-          const res = await apiFetch(`/api/operations/tasks/${encodeURIComponent(idStr)}/reject`, {
+          /** Path curto + taskId no body — evita 404 «Route not found» em alguns deploys Express. */
+          const res = await apiFetch('/api/checklists/reject-broadcast-invite', {
             method: 'POST',
-            body: JSON.stringify({ reason }),
+            body: JSON.stringify({ taskId: idStr, reason }),
           });
           const rawBody = await res.text();
           let errStr = '';

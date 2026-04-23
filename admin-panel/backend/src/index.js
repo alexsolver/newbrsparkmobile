@@ -56,6 +56,8 @@ const {
 const sharesRoutes        = require('./routes/shares');
 const chatRoutes          = require('./routes/chat');
 const checklistsRoutes    = require('./routes/checklists');
+const authUser = require('./middleware/authUser');
+const { rejectBroadcastInviteFromApp } = require('./lib/rejectBroadcastInviteHandler');
 const evaluationsRoutes       = require('./routes/evaluations');
 const evaluationsPublicRoutes = require('./routes/evaluationsPublic');
 const evaluationsAdminRoutes  = require('./routes/evaluationsAdmin');
@@ -186,6 +188,9 @@ app.use('/api/storage', storageRoutes);       // app: POST /api/storage/upload |
 app.use('/api/shares',  sharesRoutes);        // app: gerenciamento de compartilhamento
 app.use('/api/chat',    chatRoutes);          // app: social & chat
 app.use('/api/barcode', require('./routes/barcode')); // app: proxy integration com barcode (UPCItemDB/Cosmos)
+/** Recusa broadcast: montado no app principal **antes** do router de checklists (evita 404 «Route not found»). */
+app.post('/api/checklists/reject-broadcast-invite', authUser, rejectBroadcastInviteFromApp);
+app.post('/api/checklists/executions/:taskId/reject-broadcast-invite', authUser, rejectBroadcastInviteFromApp);
 app.use('/api/checklists', checklistsRoutes); // app/admin: forms and executions fsm
 app.use('/api/docs', docsAssistantRoutes); // painel: assistente técnico da API Docs
 app.use('/api/routine-tasks', require('./routes/routineTasks')); // app: tarefas de rotina (RT)

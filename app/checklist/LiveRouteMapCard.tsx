@@ -39,7 +39,6 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 import { useTransitMapExpanded } from '../../src/context/TransitMapExpandedContext';
 import { BroadcastOfferSheetEmbedded } from '../../src/components/ProviderBroadcastOfferSheet';
-import { agentDebugPost } from '../../src/debug/agentDebugIngest';
 
 const TRANSIT_MAP_HINTS_KEY = '@brspark_transit_map_hints_v1';
 
@@ -630,17 +629,6 @@ export default function LiveRouteMapCard({
    * assíncrono correr (ou vários frames), o que coincide com «passados uns segundos / ao fechar o mapa».
    */
   useLayoutEffect(() => {
-    // #region agent log
-    agentDebugPost({
-      sessionId: '98653d',
-      runId: 'post-fix',
-      hypothesisId: 'F',
-      location: 'LiveRouteMapCard.tsx:transit_sync',
-      message: 'transit_layout_effect',
-      data: { visible, expanded, willSetGlobal: visible ? expanded : false },
-      timestamp: Date.now(),
-    });
-    // #endregion
     if (!visible) {
       setTransitMapExpanded(false);
       return;

@@ -5869,10 +5869,18 @@ export default function DashboardScreen() {
                                 );
                               }
                               try {
-                                await apiFetch(`/api/operations/tasks/${selectedTask.id}/reject`, {
-                                  method: 'POST',
-                                  body: JSON.stringify({ reason: rejectReason }),
-                                });
+                                const rid = String(selectedTask.id || '').trim();
+                                if ((selectedTask as any).broadcastClaimPending === true) {
+                                  await apiFetch('/api/checklists/reject-broadcast-invite', {
+                                    method: 'POST',
+                                    body: JSON.stringify({ taskId: rid, reason: rejectReason }),
+                                  });
+                                } else {
+                                  await apiFetch(`/api/operations/tasks/${encodeURIComponent(rid)}/reject`, {
+                                    method: 'POST',
+                                    body: JSON.stringify({ reason: rejectReason }),
+                                  });
+                                }
                                 const rStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
                                 let rejArr: string[] = [];
                                 try {

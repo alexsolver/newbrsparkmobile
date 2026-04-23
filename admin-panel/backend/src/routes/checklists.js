@@ -1042,6 +1042,8 @@ router.post('/executions/:taskId/claim', authUser, async (req, res) => {
     }
 });
 
+/** Recusa broadcast: rotas montadas em `index.js` antes de `app.use('/api/checklists', …)`. */
+
 router.post('/executions', authUser, async (req, res) => {
     try {
         let nextRoutineTaskPayload = null;

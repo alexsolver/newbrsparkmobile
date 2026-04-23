@@ -19,7 +19,10 @@ const {
   chatTranslationEnabled,
 } = require('../lib/chatTranslation');
 const { assertTenantAccess, isPlatformAdmin, resolveScopedTenantId } = require('../lib/authorization');
-const { findChecklistExecutionForAppUser } = require('../lib/fieldTaskExecutionAccess');
+const {
+  findChecklistExecutionForAppUser,
+  canAppUserAccessFieldTaskExecution,
+} = require('../lib/fieldTaskExecutionAccess');
 
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
@@ -57,13 +60,20 @@ router.post('/tasks/:id/reject', rejectOsAuth, async (req, res) => {
     const { reason } = req.body;
     let ex;
     if (req.appUser) {
-      ex = await findChecklistExecutionForAppUser(
-        prisma,
-        id,
-        req.appUser.email,
-        req.appUser.tenantId,
-        undefined
-      );
+      /**
+       * Mesma ideia que `POST /checklists/executions/:taskId/claim`: carregar por `id` e validar acesso.
+       * `findChecklistExecutionForAppUser` aplicava filtro de tenant na query BROADCAST+OPEN e devolvia
+       * null (404 «OS não encontrada») para convidados válidos quando o tenant do JWT não coincidia
+       * com o do template (formulários globais / convites cruzados).
+       */
+      ex = await prisma.checklistExecution.findUnique({
+        where: { id },
+        include: { template: true },
+      });
+      if (!ex) return res.status(404).json({ error: 'OS não encontrada.' });
+      if (!canAppUserAccessFieldTaskExecution(ex, req.appUser.email)) {
+        return res.status(403).json({ error: 'Acesso negado a esta OS.' });
+      }
     } else {
       ex = await prisma.checklistExecution.findFirst({
         where: mergeExecutionWhere({ id }, req),

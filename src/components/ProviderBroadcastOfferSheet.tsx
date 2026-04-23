@@ -15,7 +15,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Pressable,
   Platform,
   ScrollView,
   useWindowDimensions,
@@ -33,19 +32,11 @@ import { stripFormTemplateTitleLabelPrefix } from '../utils/stripFormTemplateTit
 import { taskOsLabel } from '../utils/taskOsLabel';
 import { TAB_BAR_INSETS_BOTTOM_MIN } from './FloatingRadialMenu';
 import { useTransitMapExpanded } from '../context/TransitMapExpandedContext';
-import { agentDebugPost } from '../debug/agentDebugIngest';
-
-export type BroadcastOfferSheetMode = 'expanded' | 'minimized';
 
 export type BroadcastOfferSheetModel = {
   visible: boolean;
-  /** Primeira vez / nova OS: expandido; tocar fora: minimiza até aceitar/rejeitar. */
-  sheetExpanded: boolean;
-  onDismiss: () => void;
-  renderLayer: (
-    embeddedInTransitModal: boolean,
-    mode: BroadcastOfferSheetMode
-  ) => React.ReactElement | null;
+  /** Folha sempre expandida: só sai após Aceitar ou Recusar (sem minimizar). */
+  renderLayer: (embeddedInTransitModal: boolean) => React.ReactElement | null;
 };
 
 const BroadcastOfferSheetModelContext = createContext<BroadcastOfferSheetModel | null>(null);
@@ -262,9 +253,8 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
   } = useProviderBroadcastOffer();
 
   /**
-   * Com várias ofertas, o sort pode colocar uma nova OS à frente — trocar `task` disparava o efeito
-   * que reabria o modal e remontava o MapView (Android: toque preso). Mantemos a OS em foco até
-   * sair da fila (aceitar/recusar/sync).
+   * Com várias entradas na fila, o sort pode trazer outra OS à frente — mantemos a mesma OS em foco (pin)
+   * até aceitar, recusar ou a fila mudar de forma que o pin deixe de existir.
    */
   const pinnedOfferIdRef = useRef<string | null>(null);
   const task = useMemo(() => {
@@ -282,7 +272,6 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
   }, [broadcastOfferTasks]);
 
   const visible = broadcastOfferTasks.length > 0;
-  const offerQueueLen = broadcastOfferTasks.length;
 
   const dest = task ? parseCoordLatLng(task) : null;
   /** Primitivos estáveis — o objeto `dest` muda de referência a cada render e quebrava useCallback/useEffect. */
@@ -393,14 +382,8 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
   );
 
   useEffect(() => {
-    if (offerQueueLen > 1) {
-      setDistText('—');
-      setEtaText('—');
-      setMetricsLoading(false);
-      return;
-    }
     void loadOsrm(task);
-  }, [task?.id, destLat, destLng, loadOsrm, offerQueueLen]);
+  }, [task?.id, destLat, destLng, loadOsrm, task]);
 
   /** Se algum await nativo ignorar deadline, o spinner não pode ficar eterno. */
   useEffect(() => {
@@ -415,171 +398,21 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
 
   const countdownSec = useOfferCountdownSeconds(task);
   const [busy, setBusy] = useState<'accept' | 'reject' | null>(null);
-  /**
-   * Falso por omissão: com `visible` ainda falso, «true» aqui deixava o primeiro paint da oferta
-   * inconsistente com os efeitos (popup a piscar e faixa a não aparecer). Só expandimos no efeito
-   * quando entra uma OS nova (`lastOfferTaskIdRef`).
-   */
-  const [sheetExpanded, setSheetExpanded] = useState(false);
-  /** Último id de oferta visto — não limpar quando `task` fica null entre syncs (evita reabrir o modal e «saltar»). */
-  const lastOfferTaskIdRef = useRef<string | null>(null);
-  /**
-   * Depois de minimizar (backdrop), qualquer sync/re-render que volte a pôr `sheetExpanded` a true
-   * reabria o «popup» sem parar. Enquanto for a mesma `task.id`, bloqueamos reabertura automática até
-   * o utilizador tocar na faixa (`onExpandFromMinimized` limpa isto) ou até mudar a oferta em foco.
-   */
-  const blockAutoExpandForTaskIdRef = useRef<string | null>(null);
-  /** Com 2+ ofertas, ecrã inteiro + MapView nativo instabilizam o toque — voltamos à faixa ao crescer a fila. */
-  const prevOfferQueueLenRef = useRef(-1);
-
-  /**
-   * Só `visible` e `task?.id` nas dependências — **não** `offerQueueLen`: mudar 1↔2 sem trocar o id
-   * voltava a correr o efeito e competia com o efeito da fila, gerando loops de expand/minimize.
-   * Regras: (1) `block===tid` → sempre minimizar; (2) primeira oferta visível (`last==null`) → expandir só se fila ≤1;
-   * (3) mudança de foco (`last!==tid`) → expandir só com **uma** OS na fila; com 2+ ficar na faixa.
-   */
-  useEffect(() => {
-    const tid = task?.id != null ? String(task.id) : null;
-    if (tid == null || !visible) {
-      return;
-    }
-    setBusy(null);
-
-    if (blockAutoExpandForTaskIdRef.current === tid) {
-      lastOfferTaskIdRef.current = tid;
-      setSheetExpanded(false);
-      // #region agent log
-      agentDebugPost({
-        sessionId: '98653d',
-        runId: 'pre',
-        hypothesisId: 'D',
-        location: 'ProviderBroadcastOfferSheet.tsx:sheet_visibility_effect',
-        message: 'respect_minimize_block',
-        data: { tid },
-        timestamp: Date.now(),
-      });
-      // #endregion
-      return;
-    }
-
-    const last = lastOfferTaskIdRef.current;
-    if (last === null) {
-      lastOfferTaskIdRef.current = tid;
-      blockAutoExpandForTaskIdRef.current = null;
-      setSheetExpanded(offerQueueLen <= 1);
-      // #region agent log
-      agentDebugPost({
-        sessionId: '98653d',
-        runId: 'pre',
-        hypothesisId: 'D',
-        location: 'ProviderBroadcastOfferSheet.tsx:sheet_visibility_effect',
-        message: 'first_visible_offer',
-        data: { tid, offerQueueLen },
-        timestamp: Date.now(),
-      });
-      // #endregion
-      return;
-    }
-
-    if (last !== tid) {
-      const prevLast = last;
-      lastOfferTaskIdRef.current = tid;
-      blockAutoExpandForTaskIdRef.current = null;
-      if (offerQueueLen > 1) {
-        setSheetExpanded(false);
-        // #region agent log
-        agentDebugPost({
-          sessionId: '98653d',
-          runId: 'pre',
-          hypothesisId: 'D',
-          location: 'ProviderBroadcastOfferSheet.tsx:sheet_visibility_effect',
-          message: 'focus_change_multi_stay_bar',
-          data: { tid, prevLast, offerQueueLen },
-          timestamp: Date.now(),
-        });
-        // #endregion
-      } else {
-        setSheetExpanded(true);
-        // #region agent log
-        agentDebugPost({
-          sessionId: '98653d',
-          runId: 'pre',
-          hypothesisId: 'D',
-          location: 'ProviderBroadcastOfferSheet.tsx:sheet_visibility_effect',
-          message: 'focus_change_single_expand',
-          data: { tid, prevLast },
-          timestamp: Date.now(),
-        });
-        // #endregion
-      }
-    }
-  }, [visible, task?.id]);
-
-  /** Se algo voltou a expandir após o utilizador ter minimizado a mesma OS, fecha outra vez (sem layout sync). */
-  useEffect(() => {
-    const tid = task?.id != null ? String(task.id) : null;
-    if (tid == null) return;
-    if (blockAutoExpandForTaskIdRef.current === tid && sheetExpanded) {
-      // #region agent log
-      agentDebugPost({
-        sessionId: '98653d',
-        runId: 'pre',
-        hypothesisId: 'D_G',
-        location: 'ProviderBroadcastOfferSheet.tsx:block_reexpand',
-        message: 'force_minimize_blocked_task',
-        data: { tid },
-        timestamp: Date.now(),
-      });
-      // #endregion
-      setSheetExpanded(false);
-    }
-  }, [task?.id, sheetExpanded]);
-
-  useEffect(() => {
-    const n = broadcastOfferTasks.length;
-    const prev = prevOfferQueueLenRef.current;
-    if (n > 1 && prev <= 1) {
-      setSheetExpanded(false);
-    }
-    prevOfferQueueLenRef.current = n;
-  }, [broadcastOfferTasks.length]);
 
   useEffect(() => {
     if (!visible) {
-      // #region agent log
-      agentDebugPost({
-        sessionId: '98653d',
-        runId: 'pre',
-        hypothesisId: 'D',
-        location: 'ProviderBroadcastOfferSheet.tsx:visible_false',
-        message: 'visible_cleared',
-        data: { queueWasCleared: true, keptBlock: true },
-        timestamp: Date.now(),
-      });
-      // #endregion
       setBusy(null);
-      /** Não limpar `blockAutoExpandForTaskIdRef`: um sync que esvazia a fila um instante e repõe a mesma OS
-       *  apagava o bloqueio e permitia `auto_expand` / popup em loop; a faixa «sumia» do rodapé no intervalo. */
     }
   }, [visible]);
 
-  /** Toque fora (backdrop): minimiza; não remove a oferta. Sempre libera `busy` (recuperação de estado preso). */
-  const onDismiss = useCallback(() => {
-    setBusy(null);
-    const tid = task?.id != null ? String(task.id) : null;
-    if (tid != null) {
-      blockAutoExpandForTaskIdRef.current = tid;
+  useEffect(() => {
+    if (task?.id != null) {
+      setBusy(null);
     }
-    setSheetExpanded(false);
   }, [task?.id]);
 
-  const onExpandFromMinimized = useCallback(() => {
-    blockAutoExpandForTaskIdRef.current = null;
-    setSheetExpanded(true);
-  }, []);
-
   const renderLayer = useCallback(
-    (embeddedInTransitModal: boolean, mode: BroadcastOfferSheetMode) => {
+    (embeddedInTransitModal: boolean) => {
       if (!visible || !task) return null;
       const footerPad =
         Platform.OS === 'android'
@@ -588,83 +421,17 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
             : footerBottomPadAndroidRoot
           : footerBottomPadIos;
 
-      if (mode === 'minimized') {
-        const bottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 8);
-        return (
-          <View
-            style={[
-              styles.minimizedBar,
-              {
-                backgroundColor: C.cardWhite,
-                paddingBottom: bottomPad,
-                paddingTop: 10,
-                borderColor: C.border,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={onExpandFromMinimized}
-              accessibilityRole="button"
-              accessibilityLabel="Abrir oferta de demanda"
-              style={styles.minimizedBarInner}
-            >
-              <View style={[styles.handle, { backgroundColor: C.border, marginBottom: 8 }]} />
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                <View
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    backgroundColor: `${C.accent}22`,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Ionicons name="flash" size={20} color={C.accent} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: C.textLight }} numberOfLines={1}>
-                    {taskOsLabel(task)}
-                  </Text>
-                  <Text style={{ fontSize: 14, fontWeight: '800', color: C.slate }} numberOfLines={2}>
-                    {offerQueueLen > 1
-                      ? `${offerQueueLen} ofertas na fila · toque para ver`
-                      : 'Nova demanda · toque para ver'}
-                  </Text>
-                </View>
-                {countdownSec != null ? (
-                  <Text
-                    style={{
-                      fontSize: 15,
-                      fontWeight: '900',
-                      color: '#DC2626',
-                      fontVariant: ['tabular-nums'],
-                    }}
-                  >
-                    {formatMmSs(countdownSec)}
-                  </Text>
-                ) : null}
-                <Ionicons name="chevron-up" size={22} color={C.textSecondary} />
-              </View>
-            </TouchableOpacity>
-          </View>
-        );
-      }
-
+      /**
+       * Área escura acima da folha: absorve toques (não fecha — só Aceitar/Recusam retiram a oferta).
+       */
       return (
         <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={onDismiss}
-            android_disableSound
-            delayPressIn={Platform.OS === 'android' ? 100 : 100}
-          />
+          <View style={styles.overlayDismissArea} pointerEvents="auto" accessible={false} />
           <View
+            collapsable={false}
             style={[
               styles.sheetWrap,
-              Platform.OS === 'android' ? { elevation: 9999 } : null,
-              { zIndex: 9999 },
+              Platform.OS === 'android' ? { elevation: 26 } : null,
             ]}
           >
             <View
@@ -684,6 +451,8 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
                     showsVerticalScrollIndicator
                     bounces={false}
                     nestedScrollEnabled
+                    scrollEnabled
+                    removeClippedSubviews={Platform.OS === 'android'}
                     style={styles.sheetScroll}
                     contentContainerStyle={styles.sheetScrollContent}
                   >
@@ -716,33 +485,7 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
                     ) : null}
 
                     <View style={[styles.mapWrap, { height: mapPreviewHeight, borderColor: C.border }]}>
-                      {offerQueueLen > 1 ? (
-                        <View
-                          style={[
-                            StyleSheet.absoluteFill,
-                            {
-                              justifyContent: 'center',
-                              alignItems: 'center',
-                              paddingHorizontal: 14,
-                              backgroundColor: C.divider,
-                            },
-                          ]}
-                        >
-                          <Ionicons name="map-outline" size={36} color={C.textSecondary} style={{ marginBottom: 8 }} />
-                          <Text
-                            style={{
-                              color: C.textSecondary,
-                              fontSize: 13,
-                              fontWeight: '700',
-                              textAlign: 'center',
-                              lineHeight: 19,
-                            }}
-                          >
-                            Com várias ofertas, o mapa fica desligado para estabilizar o ecrã. Quando restar uma
-                            oferta, o mapa volta.
-                          </Text>
-                        </View>
-                      ) : dest ? (
+                      {dest ? (
                         <MapView
                           key={`broadcast-offer-map-${String(task?.id ?? '')}`}
                           style={StyleSheet.absoluteFill}
@@ -922,7 +665,6 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
       footerBottomPadAndroidRoot,
       footerBottomPadIos,
       visible,
-      offerQueueLen,
       task,
       C,
       insets.bottom,
@@ -936,15 +678,13 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
       busy,
       dest,
       mapRegion,
-      onDismiss,
-      onExpandFromMinimized,
       invokeAcceptOffer,
       invokeRejectOffer,
       setBroadcastOfferTasks,
     ]
   );
 
-  return { visible, sheetExpanded, onDismiss, renderLayer };
+  return { visible, renderLayer };
 }
 
 /**
@@ -954,50 +694,25 @@ function useBroadcastOfferSheetLayer(): BroadcastOfferSheetModel {
  */
 export function ProviderBroadcastOfferSheet() {
   const { transitMapExpanded } = useTransitMapExpanded();
-  const { visible, sheetExpanded, onDismiss, renderLayer } = useBroadcastOfferSheetModel();
+  const { visible, renderLayer } = useBroadcastOfferSheetModel();
 
+  /** Voltar do Android não fecha a oferta — só Aceitar/Recusar. */
   useEffect(() => {
-    // #region agent log
-    agentDebugPost({
-      sessionId: '98653d',
-      runId: 'pre',
-      hypothesisId: 'F',
-      location: 'ProviderBroadcastOfferSheet.tsx:root_render_state',
-      message: 'root_sheet_flags',
-      data: { visible, sheetExpanded, transitMapExpanded },
-      timestamp: Date.now(),
-    });
-    // #endregion
-  }, [visible, sheetExpanded, transitMapExpanded]);
-
-  useEffect(() => {
-    if (Platform.OS !== 'android' || transitMapExpanded || !visible || !sheetExpanded) {
+    if (Platform.OS !== 'android' || transitMapExpanded || !visible) {
       return undefined;
     }
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      onDismiss();
-      return true;
-    });
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
     return () => sub.remove();
-  }, [visible, sheetExpanded, transitMapExpanded, onDismiss]);
+  }, [visible, transitMapExpanded]);
 
   if (transitMapExpanded) return null;
   if (!visible) return null;
 
-  /** Minimizado: sem Modal de ecrã inteiro — toques passam à app; só a faixa inferior é interactiva. */
-  if (!sheetExpanded) {
-    return (
-      <View style={styles.floatingMinimizedHost} pointerEvents="box-none" collapsable={false}>
-        {renderLayer(false, 'minimized')}
-      </View>
-    );
-  }
-
-  /** Android: `Modal` nativo + reordenação da fila costumava deixar o toque morto; overlay em `View` como no mapa embutido. */
+  /** Android: overlay em `View` (evita segundo Modal atrás do mapa de deslocamento). */
   if (Platform.OS === 'android') {
     return (
       <View style={styles.rootExpandedOverlay} pointerEvents="auto" collapsable={false}>
-        {renderLayer(false, 'expanded')}
+        {renderLayer(false)}
       </View>
     );
   }
@@ -1007,10 +722,10 @@ export function ProviderBroadcastOfferSheet() {
       visible
       transparent
       animationType="slide"
-      onRequestClose={onDismiss}
+      onRequestClose={() => {}}
       {...(Platform.OS === 'ios' ? { presentationStyle: 'overFullScreen' as const } : {})}
     >
-      {renderLayer(false, 'expanded')}
+      {renderLayer(false)}
     </Modal>
   );
 }
@@ -1024,86 +739,52 @@ export function ProviderBroadcastOfferSheet() {
  */
 export function BroadcastOfferSheetEmbedded() {
   const { transitMapExpanded } = useTransitMapExpanded();
-  const { visible, sheetExpanded, renderLayer } = useBroadcastOfferSheetModel();
+  const { visible, renderLayer } = useBroadcastOfferSheetModel();
   if (!transitMapExpanded || !visible) return null;
-
-  if (!sheetExpanded) {
-    return (
-      <View style={styles.embeddedMinimizedHost} pointerEvents="box-none" collapsable={false}>
-        {renderLayer(true, 'minimized')}
-      </View>
-    );
-  }
 
   return (
     <View style={styles.embeddedRoot} pointerEvents="box-none" collapsable={false}>
-      {renderLayer(true, 'expanded')}
+      {renderLayer(true)}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  /** Folha expandida na raiz (Android) — mesmo padrão que `embeddedRoot`, acima da tab e do stack. */
+  /**
+   * Folha expandida na raiz (Android). Elevation/zIndex extremos degradam compositor e toques com 2+ ofertas.
+   */
   rootExpandedOverlay: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 300000,
-    elevation: 300000,
-  },
-  /** Folha minimizada sobre o dashboard (fora de Modal — toques no resto da tela passam). */
-  floatingMinimizedHost: {
-    ...Platform.select({
-      ios: { zIndex: 200000 },
-      android: { elevation: 200000 },
-      default: {},
-    }),
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-  },
-  /** Barra compacta — mesmo estilo no mapa embutido (só fundo local). */
-  embeddedMinimizedHost: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 100000,
-    elevation: 100000,
-  },
-  minimizedBar: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: -2 },
-  },
-  minimizedBarInner: {
-    width: '100%',
+    zIndex: 2000,
+    elevation: 24,
   },
   /** Cobre todo o `Modal` do mapa de deslocamento — folha acima do conteúdo nativo. */
   embeddedRoot: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 10000,
-    elevation: 10000,
+    zIndex: 2000,
+    elevation: 24,
     ...Platform.select({
       ios: {
-        /** Acima do MapView e restantes overlays no modal de deslocamento. */
-        zIndex: 999999,
+        zIndex: 2500,
       },
       default: {},
     }),
   },
   overlay: {
     flex: 1,
-    justifyContent: 'flex-end',
+    width: '100%',
+    height: '100%',
+    flexDirection: 'column',
   },
-  /** Garante stacking acima da tab (Android). */
+  /** Área acima da folha: bloqueia toques na app por baixo (não fecha a oferta). */
+  overlayDismissArea: {
+    flex: 1,
+    minHeight: 0,
+    width: '100%',
+  },
   sheetWrap: {
     width: '100%',
+    flexShrink: 0,
   },
   sheet: {
     borderTopLeftRadius: 24,
