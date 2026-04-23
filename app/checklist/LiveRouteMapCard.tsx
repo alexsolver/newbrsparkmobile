@@ -115,6 +115,11 @@ interface Props {
   reimbursementMode?: boolean;
   /** Patrulhamento: trajeto KML/geometria da OS — mesmo mapa que serviço, com indicação no ecrã. */
   patrolMode?: boolean;
+  /**
+   * ETA efetivamente mostrado no badge (pai ou OSRM interno) — o pai grava no servidor para o link público.
+   * `null` quando o mapa deixa de estar visível (limpar snapshot no servidor).
+   */
+  onPublicTrackingEtaChange?: (minutes: number | null) => void;
 }
 
 /** Destino OSRM: target explícito ou último vértice da rota (evita lista vazia só com polígono) */
@@ -586,6 +591,7 @@ export default function LiveRouteMapCard({
   keepScreenAwake = false,
   reimbursementMode = false,
   patrolMode = false,
+  onPublicTrackingEtaChange,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [windowDims, setWindowDims] = useState(() => Dimensions.get('window'));
@@ -1261,6 +1267,30 @@ export default function LiveRouteMapCard({
   const hasNumericEta =
     typeof displayEtaMinutes === 'number' && Number.isFinite(displayEtaMinutes);
   const noDestinationForEta = !hasNumericEta && osrmDest == null;
+
+  useEffect(() => {
+    if (!onPublicTrackingEtaChange || !taskId || reimbursementMode) return;
+    if (!visible) {
+      onPublicTrackingEtaChange(null);
+      return;
+    }
+    /** Pausa local da rota: o badge some; não limpar o snapshot público (pausa do link é outro fluxo). */
+    if (isPaused) return;
+    if (hasNumericEta) {
+      onPublicTrackingEtaChange(displayEtaMinutes as number);
+      return;
+    }
+    /** Só limpar quando o mapa some; em «calculando…» manter o último snapshot no servidor. */
+    if (!visible) onPublicTrackingEtaChange(null);
+  }, [
+    onPublicTrackingEtaChange,
+    taskId,
+    reimbursementMode,
+    visible,
+    isPaused,
+    hasNumericEta,
+    displayEtaMinutes,
+  ]);
 
   const [elapsedTick, setElapsedTick] = useState(0);
   useEffect(() => {

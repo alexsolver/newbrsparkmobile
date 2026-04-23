@@ -6,6 +6,10 @@
 #   export BRSPARK_SSH_KEY="$HOME/Downloads/alex.pem"
 #   ./scripts/prod-postgres-tunnel.sh
 #
+# Ou, no BrsparkWeb (túnel + Laravel + fila + logs + Vite na mesma sessão):
+#   export BRSPARK_SSH_KEY="$HOME/Downloads/alex.pem"
+#   cd BrsparkWeb/backend && composer run dev:with-prod-db
+#
 # Depois no .env do admin-panel/backend (Prisma):
 #   DATABASE_URL="postgresql://USER:PASS@127.0.0.1:5433/brspark_admin?schema=public"
 # e no BrsparkWeb backend (Laravel): DB_HOST=127.0.0.1 DB_PORT=5433

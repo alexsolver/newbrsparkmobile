@@ -34,6 +34,11 @@ const {
     broadcastCandidateArray,
 } = require('../lib/fieldTaskExecutionAccess');
 const { notifyBroadcastLosers } = require('../lib/fieldTaskBroadcastNotify');
+const {
+    TRANSIT_ETA_DISPLAY_SNAPSHOT_AT,
+    TRANSIT_ETA_DISPLAY_REMAINING_MIN,
+    stripTransitEtaDisplayFields,
+} = require('../lib/transitEtaDisplaySnapshot');
 
 const DUPLICATE_TEMPLATE_TITLE_PT =
     'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
@@ -713,6 +718,58 @@ router.get('/executions/:taskId', authUser, async (req, res) => {
         res.json(exec);
     } catch (err) {
         console.error("GET /api/checklists/executions/:taskId error:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PATCH /api/checklists/executions/:taskId/transit-eta-display
+// Snapshot do ETA igual ao do mapa (Google/OSRM + contagem no relógio) para o link de acompanhamento.
+router.patch('/executions/:taskId/transit-eta-display', authUser, async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const exec = await prisma.checklistExecution.findUnique({
+            where: { id: taskId },
+            select: { id: true, ownerEmail: true, metadata: true },
+        });
+        if (!exec) return res.status(404).json({ error: 'OS não encontrada' });
+        if (!canAppUserAccessFieldTaskExecution(exec, req.user.email)) {
+            return res.status(403).json({ error: 'Acesso negado a esta OS.' });
+        }
+
+        let meta =
+            typeof exec.metadata === 'object' && exec.metadata && !Array.isArray(exec.metadata)
+                ? { ...exec.metadata }
+                : {};
+
+        const clear = req.body && (req.body.clear === true || req.body.clear === 'true');
+        if (clear) {
+            stripTransitEtaDisplayFields(meta);
+        } else {
+            const snapshotAtRaw = req.body && req.body.snapshotAt;
+            const remRaw = req.body && req.body.remainingMinutes;
+            const ts = typeof snapshotAtRaw === 'string' ? Date.parse(snapshotAtRaw) : NaN;
+            const remainingMinutes = Number(remRaw);
+            if (!Number.isFinite(ts) || !Number.isFinite(remainingMinutes)) {
+                return res.status(400).json({ error: 'Use snapshotAt (ISO) e remainingMinutes (número).' });
+            }
+            if (remainingMinutes < 1 || remainingMinutes > 36 * 60) {
+                return res.status(400).json({ error: 'remainingMinutes inválido.' });
+            }
+            const skewMs = Math.abs(Date.now() - ts);
+            if (skewMs > 300000) {
+                return res.status(400).json({ error: 'snapshotAt fora da janela de relógio permitida.' });
+            }
+            meta[TRANSIT_ETA_DISPLAY_SNAPSHOT_AT] = new Date(ts).toISOString();
+            meta[TRANSIT_ETA_DISPLAY_REMAINING_MIN] = Math.round(remainingMinutes);
+        }
+
+        await prisma.checklistExecution.update({
+            where: { id: taskId },
+            data: { metadata: meta },
+        });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('PATCH /executions/:taskId/transit-eta-display error:', err);
         res.status(500).json({ error: err.message });
     }
 });

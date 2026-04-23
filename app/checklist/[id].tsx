@@ -3217,6 +3217,9 @@ export default function ChecklistEngine() {
   const transitEtaLegKeyRef = useRef('');
   const transitEtaGoogleInvocationsRef = useRef(0);
   const transitEtaSnapshotRef = useRef<{ atMs: number; remainingMin: number } | null>(null);
+  /** Para enviar `clear` ao servidor uma vez ao sair do deslocamento operacional (link público). */
+  const prevHadOperationalTransitRef = useRef(false);
+  const publicEtaPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentTaskRef = useRef<any>(null);
   const [geoMapChecked, setGeoMapChecked]   = useState(false);
   const [geofenceFailMode, setGeofenceFailMode] = useState<'block' | 'warn'>('warn');
@@ -3273,6 +3276,47 @@ export default function ChecklistEngine() {
 
   const resolvedTaskId =
     typeof taskId === 'string' ? taskId : Array.isArray(taskId) ? taskId[0] : String(taskId || '');
+
+  const flushPublicTransitEtaDisplayNow = useCallback(
+    (minutes: number | null) => {
+      if (!resolvedTaskId || isReadOnly) return;
+      if (publicEtaPushTimerRef.current) {
+        clearTimeout(publicEtaPushTimerRef.current);
+        publicEtaPushTimerRef.current = null;
+      }
+      const path = `/api/checklists/executions/${encodeURIComponent(String(resolvedTaskId))}/transit-eta-display`;
+      if (minutes == null || !Number.isFinite(minutes)) {
+        void apiFetch(path, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clear: true }),
+        });
+        return;
+      }
+      const atMs = Date.now();
+      void apiFetch(path, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          snapshotAt: new Date(atMs).toISOString(),
+          remainingMinutes: Math.max(1, Math.round(minutes)),
+        }),
+      });
+    },
+    [resolvedTaskId, isReadOnly]
+  );
+
+  const commitPublicTrackingEtaFromBadge = useCallback(
+    (minutes: number | null) => {
+      if (!resolvedTaskId || isReadOnly) return;
+      if (publicEtaPushTimerRef.current) clearTimeout(publicEtaPushTimerRef.current);
+      publicEtaPushTimerRef.current = setTimeout(() => {
+        publicEtaPushTimerRef.current = null;
+        flushPublicTransitEtaDisplayNow(minutes);
+      }, 450);
+    },
+    [resolvedTaskId, isReadOnly, flushPublicTransitEtaDisplayNow]
+  );
 
   const resolvedRtNumber =
     typeof rtNumber === 'string'
@@ -7846,10 +7890,23 @@ export default function ChecklistEngine() {
     const op = activeTransitLeg && !activeTransitLeg.reimbursement;
 
     if (!op || !activeTransitLeg) {
+      if (prevHadOperationalTransitRef.current && resolvedTaskId) {
+        void apiFetch(
+          `/api/checklists/executions/${encodeURIComponent(String(resolvedTaskId))}/transit-eta-display`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clear: true }),
+          }
+        ).catch(() => {});
+      }
+      prevHadOperationalTransitRef.current = false;
       transitEtaLegKeyRef.current = '';
       transitEtaSnapshotRef.current = null;
       return;
     }
+
+    prevHadOperationalTransitRef.current = true;
 
     const schema = template?.schemaData || [];
     const startId = activeTransitLeg.startField.id;
@@ -7876,8 +7933,11 @@ export default function ChecklistEngine() {
 
     const applySnapshot = (remainingMin: number) => {
       const rm = Math.max(1, Math.round(remainingMin));
-      transitEtaSnapshotRef.current = { atMs: Date.now(), remainingMin: rm };
+      const atMs = Date.now();
+      transitEtaSnapshotRef.current = { atMs, remainingMin: rm };
       setMapEtaMinutes(rm);
+      /** Imediato: novo valor Google/OSRM (ex. salto 20→35); o link público não pode ficar só no OSRM da BD. */
+      flushPublicTransitEtaDisplayNow(rm);
     };
 
     const persistEta = async (minutes: number) => {
@@ -7937,13 +7997,21 @@ export default function ChecklistEngine() {
       if (!snap) return;
       const m = computeTickingEtaMinutes(snap.atMs, snap.remainingMin, Date.now());
       setMapEtaMinutes(m);
+      flushPublicTransitEtaDisplayNow(m);
     }, TRANSIT_ETA_TICK_MS);
 
     return () => {
       clearInterval(refreshIv);
       clearInterval(tickIv);
     };
-  }, [resolvedTaskId, isReadOnly, activeTransitLeg, responses, template?.schemaData]);
+  }, [
+    resolvedTaskId,
+    isReadOnly,
+    activeTransitLeg,
+    responses,
+    template?.schemaData,
+    flushPublicTransitEtaDisplayNow,
+  ]);
 
   /** Deve rodar antes de qualquer return antecipado (loading / mapa), senão viola as regras dos hooks. */
   const sessionPauseOpenEvent = useMemo(() => {
@@ -8661,6 +8729,7 @@ export default function ChecklistEngine() {
                   corridorToleranceM={corridorTol}
                   reimbursementMode={reimbursementMode}
                   patrolMode={patrolMode}
+                  onPublicTrackingEtaChange={commitPublicTrackingEtaFromBadge}
                   targetLoc={
                     targetForMap
                       ? { lat: targetForMap.lat, lng: targetForMap.lng }

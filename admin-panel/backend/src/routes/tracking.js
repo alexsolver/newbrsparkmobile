@@ -11,6 +11,7 @@ const prisma  = require('../db');
 const { Prisma } = require('@prisma/client');
 const crypto  = require('crypto');
 const { sendClientProviderEnRoutePush } = require('../lib/clientProviderEnRoutePush');
+const { sendClientTrackingLinkEmail } = require('../lib/clientTrackingLinkEmail');
 const { sendTrackingClientChatPushToTechnician } = require('../lib/trackingClientChatPush');
 const authUser = require('../middleware/authUser');
 const { COPY } = require('../lib/trackingChatModerationPolicy');
@@ -22,6 +23,11 @@ const {
   parseTranslationsJson,
   chatTranslationEnabled,
 } = require('../lib/chatTranslation');
+const { normalizeBaseUrl } = require('../lib/evaluationSurveyUrl');
+const {
+  stripTransitEtaDisplayFields,
+  resolveDisplayEtaMinutesFromMeta,
+} = require('../lib/transitEtaDisplaySnapshot');
 
 /** Sem GPS com coordenadas dentro deste intervalo → "sem sinal" no link público. Padrão 10 min (mau sinal / intervalos de GPS). Override: TRACKING_GPS_STALE_SEC. */
 const DISPLACEMENT_GPS_STALE_SEC = Math.min(
@@ -53,6 +59,56 @@ function cloneExecMetadata(raw) {
   }
   if (typeof raw === 'object' && !Array.isArray(raw)) return { ...raw };
   return {};
+}
+
+/**
+ * Origem pública para `track.html` (e-mail e push). Sem env → Host do pedido (atenção a proxies).
+ * Preferir TRACKING_PUBLIC_BASE_URL ou PUBLIC_API_BASE em produção.
+ */
+function buildPublicTrackingUrl(req, trackingToken) {
+  const tt = String(trackingToken || '').trim();
+  if (!tt) return '';
+  const path = `/track.html?t=${encodeURIComponent(tt)}`;
+  const candidates = [
+    process.env.TRACKING_PUBLIC_BASE_URL,
+    process.env.PUBLIC_API_BASE,
+    process.env.API_BASE_URL,
+    process.env.ADMIN_PANEL_PUBLIC_BASE_URL,
+    process.env.PUBLIC_PANEL_URL,
+    process.env.ADMIN_PANEL_PUBLIC_URL,
+  ];
+  for (const raw of candidates) {
+    const n = normalizeBaseUrl(raw);
+    if (n) return `${n}${path}`;
+  }
+  const xf = String(req.get('x-forwarded-proto') || '')
+    .split(',')[0]
+    .trim();
+  const proto = xf === 'https' || xf === 'http' ? xf : req.protocol || 'http';
+  const host = req.get('host') || `127.0.0.1:${String(process.env.PORT || '3001').trim() || '3001'}`;
+  return `${proto}://${host}${path}`;
+}
+
+async function notifyClientTrackingStart(executionId, trackingUrl) {
+  sendClientProviderEnRoutePush({ executionId, trackingUrl }).catch((e) =>
+    console.warn('[TRACKING] push cliente (en route):', e?.message || e)
+  );
+  try {
+    const r = await sendClientTrackingLinkEmail({ executionId, trackingUrl });
+    if (r.ok) return;
+    if (r.skipped === 'already_sent') return;
+    if (r.skipped === 'no_client_email') {
+      console.warn(
+        `[TRACKING] e-mail acompanhamento omitido: metadata da OS sem e-mail do cliente (ex.: clientEmail no despacho). executionId=${executionId}`
+      );
+      return;
+    }
+    console.warn(
+      `[TRACKING] e-mail acompanhamento ao cliente falhou. executionId=${executionId} detalhe=${r.skipped || 'n/a'} provider=${r.provider || 'n/a'}`
+    );
+  } catch (e) {
+    console.warn('[TRACKING] e-mail acompanhamento exceção:', e?.message || e);
+  }
 }
 
 const TRACKING_CHAT_KEY = 'trackingChatMessages';
@@ -491,10 +547,8 @@ router.post('/start/:taskId', authUser, async (req, res) => {
     // Idempotent: reuse existing token if already started
     const existingToken = cloneExecMetadata(exec.metadata).trackingToken;
     if (existingToken) {
-      const url = `${req.protocol}://${req.get('host')}/track.html?t=${existingToken}`;
-      sendClientProviderEnRoutePush({ executionId: taskId, trackingUrl: url }).catch((e) =>
-        console.warn('[TRACKING] push cliente (en route):', e?.message || e)
-      );
+      const url = buildPublicTrackingUrl(req, existingToken);
+      await notifyClientTrackingStart(taskId, url);
       return res.json({ token: existingToken, url });
     }
 
@@ -514,11 +568,9 @@ router.post('/start/:taskId', authUser, async (req, res) => {
       data: { metadata: metaNew },
     });
 
-    const url = `${req.protocol}://${req.get('host')}/track.html?t=${token}`;
+    const url = buildPublicTrackingUrl(req, token);
     console.log(`[TRACKING] ✅ Token criado para ${taskId}: ${token}`);
-    sendClientProviderEnRoutePush({ executionId: taskId, trackingUrl: url }).catch((e) =>
-      console.warn('[TRACKING] push cliente (en route):', e?.message || e)
-    );
+    await notifyClientTrackingStart(taskId, url);
     res.json({ token, url });
   } catch (err) {
     console.error('[TRACKING] start error:', err);
@@ -541,6 +593,7 @@ router.post('/end/:taskId', authUser, async (req, res) => {
     const meta = cloneExecMetadata(exec.metadata);
     const expiry = new Date(Date.now() + TRACKING_GRACE_AFTER_END_MS);
 
+    stripTransitEtaDisplayFields(meta);
     await prisma.checklistExecution.update({
       where: { id: taskId },
       data: {
@@ -572,6 +625,7 @@ router.post('/pause/:taskId', authUser, async (req, res) => {
     const meta = cloneExecMetadata(exec.metadata);
     meta.trackingPaused = true;
     meta.trackingPausedAt = new Date().toISOString();
+    stripTransitEtaDisplayFields(meta);
     await prisma.checklistExecution.update({
       where: { id: taskId },
       data: { metadata: meta },
@@ -978,6 +1032,14 @@ router.get('/:token', async (req, res) => {
 
     const hasDestination = Number.isFinite(destLat) && Number.isFinite(destLng);
 
+    const useDisplaySnapshot =
+      hasDestination && trackingActive && !isPausedFlag && !signalLost;
+    const etaFromTechSnapshot = useDisplaySnapshot
+      ? resolveDisplayEtaMinutesFromMeta(meta, Date.now())
+      : null;
+    const etaMinutesOut =
+      etaFromTechSnapshot != null ? etaFromTechSnapshot : hasDestination ? exec.etaMinutes : null;
+
     return res.json({
       // Technician
       techName,
@@ -1006,8 +1068,8 @@ router.get('/:token', async (req, res) => {
           ? String(exec.routineTaskNumber).trim()
           : null,
 
-      // ETA (só faz sentido com destino geográfico; senão o cron OSRM não aplica e o cliente não deve ver «previsão»)
-      etaMinutes: hasDestination ? exec.etaMinutes : null,
+      // ETA: mesmo snapshot + relógio do mapa do técnico quando disponível; senão coluna `etaMinutes` (OSRM/servidor).
+      etaMinutes: etaMinutesOut,
 
       // Route (for map polyline)
       routePolyline,
