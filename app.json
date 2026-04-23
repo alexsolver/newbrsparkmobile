@@ -38,7 +38,7 @@
         ]
       },
       "bundleIdentifier": "com.brspark",
-      "buildNumber": "5"
+      "buildNumber": "6"
     },
     "android": {
       "usesCleartextTraffic": true,

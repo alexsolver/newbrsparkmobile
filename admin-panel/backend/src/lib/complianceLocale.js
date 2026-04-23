@@ -3,7 +3,7 @@
 /**
  * Normaliza o idioma da app (i18next) para a etiqueta de locale dos documentos legais.
  * @param {string|undefined} requested
- * @returns {'pt-BR'|'en-US'|'es-ES'}
+ * @returns {'pt-BR'|'en-US'|'es-ES'|'de-DE'}
  */
 function normalizeComplianceLocale(requested) {
   const r = String(requested || 'pt-BR')
@@ -12,18 +12,23 @@ function normalizeComplianceLocale(requested) {
   const lower = r.toLowerCase();
   if (lower.startsWith('en')) return 'en-US';
   if (lower.startsWith('es')) return 'es-ES';
+  if (lower.startsWith('de')) return 'de-DE';
   return 'pt-BR';
 }
 
 /**
- * Ordem de fallback ao procurar documento publicado (ex.: en-US → pt-BR).
+ * Ordem de fallback ao procurar documento publicado (ex.: de-DE → en-US → pt-BR).
  * @param {string|undefined} requested
  * @returns {string[]}
  */
 function complianceLocaleFallbackChain(requested) {
   const primary = normalizeComplianceLocale(requested);
   const chain = [primary];
-  if (primary !== 'pt-BR') chain.push('pt-BR');
+  if (primary === 'de-DE') {
+    chain.push('en-US', 'pt-BR');
+  } else if (primary !== 'pt-BR') {
+    chain.push('pt-BR');
+  }
   return [...new Set(chain)];
 }
 

@@ -662,6 +662,22 @@ async function main() {
       title: 'BrSpark — Política de privacidad',
       content: complianceLocalized.PRIVACY_ES,
     },
+    {
+      id: 'terms-v1-de',
+      type: 'TERMS_OF_USE',
+      locale: 'de-DE',
+      version: '1.0',
+      title: 'BrSpark-Plattform — Nutzungsbedingungen',
+      content: complianceLocalized.TERMS_DE,
+    },
+    {
+      id: 'privacy-v1-de',
+      type: 'PRIVACY_POLICY',
+      locale: 'de-DE',
+      version: '1.0',
+      title: 'BrSpark — Datenschutzerklärung',
+      content: complianceLocalized.PRIVACY_DE,
+    },
   ];
 
   for (const doc of complianceDocs) {
@@ -672,7 +688,7 @@ async function main() {
       create: { ...doc, locale: loc, isActive: true, publishedAt: new Date(), createdBy: adminEmail },
     });
   }
-  console.log(`✅ Compliance docs: ${complianceDocs.length} documentos (ToU + Privacidade + DPA + EN/ES)`);
+  console.log(`✅ Compliance docs: ${complianceDocs.length} documentos (ToU + Privacidade + DPA + EN/ES/DE)`);
 
 
   // ── Notification Templates ─────────────────────────────

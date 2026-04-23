@@ -62,6 +62,7 @@ const LANGUAGES = [
   { code: 'pt-BR' as const, label: 'Português', short: 'PT' },
   { code: 'en-US' as const, label: 'English',   short: 'EN' },
   { code: 'es-ES' as const, label: 'Español',   short: 'ES' },
+  { code: 'de-DE' as const, label: 'Deutsch',   short: 'DE' },
 ];
 
 // Regiões / Países (conformidade, moeda, fuso)
@@ -70,6 +71,7 @@ const REGIONS = [
   { code: 'US', label: 'USA',       detail: 'CCPA · $' },
   { code: 'ES', label: 'España',    detail: 'GDPR · €' },
   { code: 'AR', label: 'Argentina', detail: 'LGPD · $' },
+  { code: 'DE', label: 'Deutschland', detail: 'DSGVO · €' },
 ];
 
 const { width: SCREEN_W } = Dimensions.get('window');

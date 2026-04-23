@@ -39,6 +39,7 @@ function providerCategoryLabel(t: TFunction, category: string, chips: DirectoryC
 function numberLocaleForApp(lang: string): string {
   const l = (lang || '').toLowerCase();
   if (l.startsWith('es')) return 'es-ES';
+  if (l.startsWith('de')) return 'de-DE';
   if (l.startsWith('en')) return 'en-US';
   return 'pt-BR';
 }

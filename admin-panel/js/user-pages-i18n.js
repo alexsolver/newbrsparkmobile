@@ -1,9 +1,10 @@
 /**
- * Textos da listagem e ficha de usuários (painel admin), pt-BR, en-US e es-ES.
+ * Textos da listagem e ficha de usuários (painel admin), pt-BR, en-US, es-ES e de-DE.
  * Preferência: localStorage `brspark_admin_ui_locale`; se vazio, **pt-BR** (painel).
  */
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
 import { USER_PAGES_ES_MERGE } from './user-pages-es-merge.js';
+import { USER_PAGES_DE_MERGE } from './user-pages-de-merge.js';
 
 const LS_LOCALE = 'brspark_admin_ui_locale';
 
@@ -14,6 +15,7 @@ const M = {
     localePt: 'Português (Brasil)',
     localeEn: 'English (US)',
     localeEs: 'Español',
+    localeDe: 'Deutsch',
     nav_home_title: 'BrSpark, Início',
     nav_sidebar_expand: 'Expandir menu',
     nav_sidebar_collapse: 'Recolher menu',
@@ -541,6 +543,7 @@ const M = {
     localePt: 'Portuguese (Brazil)',
     localeEn: 'English (US)',
     localeEs: 'Spanish',
+    localeDe: 'German',
     nav_home_title: 'BrSpark, Home',
     nav_sidebar_expand: 'Expand menu',
     nav_sidebar_collapse: 'Collapse menu',
@@ -1061,6 +1064,7 @@ const M = {
   },
 };
 M['es-ES'] = Object.assign({}, M['en-US'], USER_PAGES_ES_MERGE);
+M['de-DE'] = Object.assign({}, M['en-US'], USER_PAGES_DE_MERGE);
 
 /** Valores persistidos (JSON), documentos de identificação / pessoais */
 export const DOC_TYPE_ROWS_PERSONAL = {
@@ -1090,6 +1094,15 @@ export const DOC_TYPE_ROWS_PERSONAL = {
     ['CNS', 'ID de salud'],
     ['PIS/PASEP', 'ID social / laboral'],
     ['Outro', 'Otro'],
+  ],
+  'de-DE': [
+    ['CPF', 'Steuer-ID (CPF)'],
+    ['RG', 'Personalausweis'],
+    ['CNH', 'Führerschein'],
+    ['Passaporte', 'Reisepass'],
+    ['CNS', 'Gesundheits-ID'],
+    ['PIS/PASEP', 'Sozial-/Arbeits-ID'],
+    ['Outro', 'Sonstiges'],
   ],
 };
 
@@ -1137,6 +1150,19 @@ export const DOC_TYPE_ROWS_PROFESSIONAL = {
     ['Habilitacao', 'Habilitación / credencial'],
     ['Outro', 'Otro'],
   ],
+  'de-DE': [
+    ['ASO', 'Arbeitsmedizinisches Attest (ASO)'],
+    ['NR-06', 'NR-06 (PSA / Arbeitssicherheit)'],
+    ['NR-10', 'NR-10 (Elektrosicherheit)'],
+    ['NR-11', 'NR-11 (Transport / Ergonomie)'],
+    ['NR-12', 'NR-12 (Maschinen & Anlagen)'],
+    ['NR-33', 'NR-33 (Behälter / engen Raum)'],
+    ['NR-35', 'NR-35 (Höhenarbeit)'],
+    ['Certificacao', 'Zertifikat / Schulung'],
+    ['RegistroProfissional', 'Berufsregister (z. B. CREA)'],
+    ['Habilitacao', 'Lizenz / Berechtigung'],
+    ['Outro', 'Sonstiges'],
+  ],
 };
 
 /** @deprecated Preferir `DOC_TYPE_ROWS_PERSONAL`, mantido por compatibilidade com imports antigos */
@@ -1169,11 +1195,20 @@ const DAYS_ES = [
   { key: 'sat', label: 'Sábado' },
   { key: 'sun', label: 'Domingo' },
 ];
+const DAYS_DE = [
+  { key: 'mon', label: 'Montag' },
+  { key: 'tue', label: 'Dienstag' },
+  { key: 'wed', label: 'Mittwoch' },
+  { key: 'thu', label: 'Donnerstag' },
+  { key: 'fri', label: 'Freitag' },
+  { key: 'sat', label: 'Samstag' },
+  { key: 'sun', label: 'Sonntag' },
+];
 
 export function getAdminUiLocale() {
   try {
     const ls = localStorage.getItem(LS_LOCALE);
-    if (ls === 'en-US' || ls === 'pt-BR' || ls === 'es-ES') return ls;
+    if (ls === 'en-US' || ls === 'pt-BR' || ls === 'es-ES' || ls === 'de-DE') return ls;
   } catch {
     /* ignore */
   }
@@ -1182,7 +1217,7 @@ export function getAdminUiLocale() {
 
 export function setAdminUiLocale(code) {
   try {
-    if (code === 'en-US' || code === 'pt-BR' || code === 'es-ES') localStorage.setItem(LS_LOCALE, code);
+    if (code === 'en-US' || code === 'pt-BR' || code === 'es-ES' || code === 'de-DE') localStorage.setItem(LS_LOCALE, code);
   } catch {
     /* ignore */
   }
@@ -1271,6 +1306,7 @@ export function weekdaysForLocale() {
   const loc = getAdminUiLocale();
   if (loc === 'en-US') return DAYS_EN;
   if (loc === 'es-ES') return DAYS_ES;
+  if (loc === 'de-DE') return DAYS_DE;
   return DAYS_PT;
 }
 
@@ -1465,10 +1501,11 @@ export function applyUsersListPageI18n() {
     });
   }
   const upLoc = document.getElementById('users-panel-locale');
-  if (upLoc && upLoc.options.length >= 3) {
+  if (upLoc && upLoc.options.length >= 4) {
     upLoc.options[0].textContent = t('localePt');
     upLoc.options[1].textContent = t('localeEn');
     upLoc.options[2].textContent = t('localeEs');
+    upLoc.options[3].textContent = t('localeDe');
   }
   syncUsersListFiltersToggle();
 }
@@ -1607,10 +1644,11 @@ export function applyUserEditStaticPageI18n() {
     });
   }
   const ueLoc = document.getElementById('ue-panel-locale');
-  if (ueLoc && ueLoc.options.length >= 3) {
+  if (ueLoc && ueLoc.options.length >= 4) {
     ueLoc.options[0].textContent = t('localePt');
     ueLoc.options[1].textContent = t('localeEn');
     ueLoc.options[2].textContent = t('localeEs');
+    ueLoc.options[3].textContent = t('localeDe');
   }
   setT('ue-locale-label', 'localeLabel');
   const pref = document.getElementById('f-preferred-locale');
@@ -1621,6 +1659,7 @@ export function applyUserEditStaticPageI18n() {
       else if (v === 'pt-BR') op.textContent = t('localePt');
       else if (v === 'en-US') op.textContent = t('localeEn');
       else if (v === 'es-ES') op.textContent = t('localeEs');
+      else if (v === 'de-DE') op.textContent = t('localeDe');
     });
   }
 }

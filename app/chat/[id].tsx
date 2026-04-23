@@ -110,6 +110,8 @@ export default function ChatRoomScreen() {
   
   const lastTs = useRef(0);
   const pollRef = useRef<any>(null);
+  /** Evita PUT /read a cada 3s quando o poll não traz mensagens novas; a primeira oportunidade sincroniza já. */
+  const lastMarkReadOnEmptyPollRef = useRef<number | null>(null);
 
   // Modal Settings
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -167,8 +169,17 @@ export default function ChatRoomScreen() {
           return next;
         });
         lastTs.current = msgs[msgs.length - 1].timestamp;
-        // Atualiza lastReadAt no servidor para o badge da lista baixar ao ver mensagens novas no fio.
         ChatService.markAsRead(roomId!).catch(() => {});
+      } else {
+        /** Poll com 0 linhas: antes nunca se chamava `markAsRead`, logo o badge podia ficar errado
+         * se a primeira gravação de leitura tivesse falhado. Primeira oportunidade + no máx. ~10s. */
+        const now = Date.now();
+        const prev = lastMarkReadOnEmptyPollRef.current;
+        const EMPTY_POLL_MARK_MS = 10_000;
+        if (prev == null || now - prev >= EMPTY_POLL_MARK_MS) {
+          lastMarkReadOnEmptyPollRef.current = now;
+          ChatService.markAsRead(roomId!).catch(() => {});
+        }
       }
     },
     [roomId, user?.id, isOnline, isOpsChat],
@@ -198,7 +209,9 @@ export default function ChatRoomScreen() {
   useFocusEffect(
     useCallback(() => {
       void runFlush();
-      if (roomId && !isOpsChat && isOnline === true) {
+      /** Não exigir `isOnline === true`: com `null` ou falha transitória do ping, o cleanup já
+       * gravava leitura mas a entrada não — badge «não lido» recorrente. O PUT falha em silêncio se offline. */
+      if (roomId && !isOpsChat) {
         ChatService.markAsRead(roomId).catch(() => {});
       }
       return () => {
@@ -207,7 +220,7 @@ export default function ChatRoomScreen() {
           ChatService.markAsRead(roomId).catch(() => {});
         }
       };
-    }, [runFlush, roomId, isOpsChat, isOnline]),
+    }, [runFlush, roomId, isOpsChat]),
   );
 
   useEffect(() => {
@@ -216,6 +229,7 @@ export default function ChatRoomScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    lastMarkReadOnEmptyPollRef.current = null;
     (async () => {
       if (!roomId || !user?.id) return;
 

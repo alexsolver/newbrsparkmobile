@@ -6,10 +6,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import ptBR from './locales/pt-BR.json';
 import enUS from './locales/en-US.json';
 import esES from './locales/es-ES.json';
+import deDE from './locales/de-DE.json';
 
 const LANG_KEY = '@brspark_language';
 
-const SUPPORTED = ['pt-BR', 'en-US', 'es-ES'] as const;
+const SUPPORTED = ['pt-BR', 'en-US', 'es-ES', 'de-DE'] as const;
 type SupportedLang = typeof SUPPORTED[number];
 
 // Maps device locale tag → supported i18n language
@@ -20,13 +21,14 @@ function getDeviceLanguage(): SupportedLang {
       const tag = locales[0].languageTag; // e.g. 'pt-BR', 'en-US', 'es-MX', 'es-AR'
       if (tag.startsWith('pt')) return 'pt-BR';
       if (tag.startsWith('es')) return 'es-ES'; // covers es-AR, es-MX, es-ES, etc.
+      if (tag.startsWith('de')) return 'de-DE';
       if (tag.startsWith('en')) return 'en-US';
     }
   } catch {}
   return 'pt-BR';
 }
 
-const REGISTER_REGION_CODES = ['BR', 'US', 'ES', 'AR'] as const;
+const REGISTER_REGION_CODES = ['BR', 'US', 'ES', 'AR', 'DE'] as const;
 export type RegisterRegionCode = (typeof REGISTER_REGION_CODES)[number];
 
 /**
@@ -57,6 +59,8 @@ export function getDeviceRegion(): RegisterRegionCode {
 
       // Espanhol genérico / América Latina sem opção própria → Espanha como locale es-ES
       if (tag.startsWith('es')) return 'ES';
+
+      if (tag.startsWith('de') || region === 'DE' || region === 'AT' || region === 'CH') return 'DE';
     }
   } catch {}
   return 'BR';
@@ -68,6 +72,7 @@ i18n.use(initReactI18next).init({
     'pt-BR': { translation: ptBR },
     'en-US': { translation: enUS },
     'es-ES': { translation: esES },
+    'de-DE': { translation: deDE },
   },
   lng: getDeviceLanguage(),
   fallbackLng: 'en-US',

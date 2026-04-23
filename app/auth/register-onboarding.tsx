@@ -25,6 +25,7 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
 import { FlagIsoImage } from '../../src/components/FlagIsoImage';
 import { AuthService, API_BASE } from '../../src/services/auth';
+import { complianceDocFallbackUrl } from '../../src/constants/legalPublicUrls';
 import { passwordChecks } from '../../src/lib/appPasswordPolicy';
 import { setLanguage, getDeviceRegion } from '../../src/i18n';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -44,6 +45,7 @@ const COUNTRIES = [
   { code: 'US', label: 'USA', lang: 'en-US' as const },
   { code: 'ES', label: 'España', lang: 'es-ES' as const },
   { code: 'AR', label: 'Argentina', lang: 'es-ES' as const },
+  { code: 'DE', label: 'Deutschland', lang: 'de-DE' as const },
 ];
 
 type Step = 1 | 2 | 3;
@@ -339,7 +341,7 @@ export default function RegisterOnboardingScreen() {
     (async () => {
       const stored = await AsyncStorage.getItem(REGION_KEY);
       if (cancel) return;
-      const ok = ['BR', 'US', 'ES', 'AR'];
+      const ok = ['BR', 'US', 'ES', 'AR', 'DE'];
       if (stored && ok.includes(stored)) setCountry(stored);
     })();
     return () => {
@@ -418,10 +420,10 @@ export default function RegisterOnboardingScreen() {
         const doc = await res.json();
         setDocModal({ title: doc.title, content: doc.content });
       } else {
-        Linking.openURL('https://www.brspark.com/term');
+        Linking.openURL(complianceDocFallbackUrl(type));
       }
     } catch {
-      Linking.openURL('https://www.brspark.com/term');
+      Linking.openURL(complianceDocFallbackUrl(type));
     } finally {
       setDocLoading(false);
     }

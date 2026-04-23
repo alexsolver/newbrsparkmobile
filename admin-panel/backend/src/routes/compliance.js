@@ -67,7 +67,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/compliance — create new version (optionally publish immediately)
-const ALLOWED_LOCALES = new Set(['pt-BR', 'en-US', 'es-ES']);
+const ALLOWED_LOCALES = new Set(['pt-BR', 'en-US', 'es-ES', 'de-DE']);
 
 router.post('/', async (req, res) => {
   try {
@@ -76,7 +76,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Campos obrigatórios: type, version, title, content.' });
     const locale = String(localeIn || 'pt-BR').trim();
     if (!ALLOWED_LOCALES.has(locale)) {
-      return res.status(400).json({ error: 'locale deve ser pt-BR, en-US ou es-ES.' });
+      return res.status(400).json({ error: 'locale deve ser pt-BR, en-US, es-ES ou de-DE.' });
     }
     if (publish) {
       await prisma.complianceDoc.updateMany({
@@ -115,7 +115,7 @@ router.patch('/:id', async (req, res) => {
     if (localeIn !== undefined) {
       const loc = String(localeIn).trim();
       if (!ALLOWED_LOCALES.has(loc)) {
-        return res.status(400).json({ error: 'locale deve ser pt-BR, en-US ou es-ES.' });
+        return res.status(400).json({ error: 'locale deve ser pt-BR, en-US, es-ES ou de-DE.' });
       }
     }
     const updated = await prisma.complianceDoc.update({

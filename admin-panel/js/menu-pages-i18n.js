@@ -1,5 +1,5 @@
 /**
- * Páginas do menu admin sem módulo próprio, pt-BR / en-US (es-ES via fallback adminResolve).
+ * Páginas do menu admin sem módulo próprio, pt-BR / en-US / es-ES / de-DE (fallback via adminResolve).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
@@ -451,6 +451,7 @@ const M = {
     cmp_btn_publish: 'Publicar',
     cmp_lbl_type: 'Tipo',
     cmp_lbl_version: 'Versão',
+    cmp_lbl_locale: 'Idioma (locale)',
     cmp_ph_version: 'Ex: 2.0',
     cmp_lbl_doc_title: 'Título',
     cmp_ph_doc_title: 'Título completo do documento',
@@ -1042,6 +1043,7 @@ M['en-US'] = {
   cmp_btn_publish: 'Publish',
   cmp_lbl_type: 'Type',
   cmp_lbl_version: 'Version',
+  cmp_lbl_locale: 'Language (locale)',
   cmp_ph_version: 'e.g. 2.0',
   cmp_lbl_doc_title: 'Title',
   cmp_ph_doc_title: 'Full document title',
@@ -1184,6 +1186,41 @@ M['en-US'] = {
   tcm_hero_sub_html:
     'Define how much the system <strong>analyses and may intervene</strong> in messages between <strong>client</strong> and <strong>technician</strong> on the visit link, reducing abuse <strong>without blocking operations</strong>.',
   tcm_btn_refresh: 'Refresh summary',
+};
+
+M['de-DE'] = {
+  ...M['en-US'],
+  cmp_pageTitle: 'BrSpark Admin, Compliance (DSGVO/LGPD)',
+  cmp_bc_here: 'Compliance',
+  cmp_hero_title: 'Compliance & Datenschutz',
+  cmp_hero_sub:
+    'Versionen von Nutzungsbedingungen, Richtlinien und DPA; Verlauf je Typ und dokumentierte Zustimmungen. Erst nach rechtlicher Prüfung veröffentlichen.',
+  cmp_btn_new: 'Neue Version',
+  cmp_stat_versions: 'Versionen gesamt',
+  cmp_stat_active: 'Aktive Dokumente',
+  cmp_stat_accept: 'Erfasste Zustimmungen',
+  cmp_stat_last: 'Letzte Veröffentlichung',
+  cmp_table_title: 'Rechtstexte',
+  cmp_editor_back: '← Zurück',
+  cmp_editor_new_title: 'Neue Version',
+  cmp_btn_draft: 'Entwurf speichern',
+  cmp_btn_publish: 'Veröffentlichen',
+  cmp_lbl_type: 'Typ',
+  cmp_lbl_version: 'Version',
+  cmp_lbl_locale: 'Sprache (Locale)',
+  cmp_ph_version: 'z. B. 2.0',
+  cmp_lbl_doc_title: 'Titel',
+  cmp_ph_doc_title: 'Vollständiger Dokumenttitel',
+  cmp_lbl_content: 'Inhalt (Markdown)',
+  cmp_ph_content: '# Titel\n\nInhalt in Markdown…',
+  cmp_type_TERMS: 'Nutzungsbedingungen',
+  cmp_type_PRIVACY: 'Datenschutzerklärung',
+  cmp_type_DPA: 'Auftragsverarbeitung (LGPD)',
+  cmp_type_COOKIE: 'Cookie-Richtlinie',
+  cmp_alert_err: 'Fehler: {detail}',
+  cmp_editor_editing: 'Bearbeitung: {title}',
+  common_loading: 'Laden…',
+  common_cancel: 'Abbrechen',
 };
 
 function interp(str, vars) {
@@ -1679,6 +1716,7 @@ export function applyCompliancePageI18n() {
     });
   }
   setText('cmp-lbl-version', 'cmp_lbl_version');
+  setText('cmp-lbl-locale', 'cmp_lbl_locale');
   const vv = document.getElementById('editor-version');
   if (vv) vv.placeholder = mpT('cmp_ph_version');
   setText('cmp-lbl-doc-title', 'cmp_lbl_doc_title');

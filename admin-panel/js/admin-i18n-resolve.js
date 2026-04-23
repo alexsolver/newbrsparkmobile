@@ -1,6 +1,6 @@
 /**
- * Resolução de textos do painel admin por locale (pt-BR / en-US / es-ES)
- * com cadeia de fallback para chaves ainda não traduzidas ao espanhol.
+ * Resolução de textos do painel admin por locale (pt-BR / en-US / es-ES / de-DE)
+ * com cadeia de fallback para chaves ainda não traduzidas.
  */
 
 /** Ordem de fallback por locale persistido. */
@@ -8,6 +8,7 @@ export function adminI18nChain(loc) {
   if (loc === 'pt-BR') return ['pt-BR', 'en-US'];
   if (loc === 'en-US') return ['en-US', 'pt-BR'];
   if (loc === 'es-ES') return ['es-ES', 'en-US', 'pt-BR'];
+  if (loc === 'de-DE') return ['de-DE', 'en-US', 'pt-BR'];
   return ['pt-BR', 'en-US'];
 }
 
@@ -28,6 +29,7 @@ export function adminResolve(M, loc, key) {
 export function adminDocumentLang(loc) {
   if (loc === 'en-US') return 'en-US';
   if (loc === 'es-ES') return 'es-ES';
+  if (loc === 'de-DE') return 'de-DE';
   return 'pt-BR';
 }
 

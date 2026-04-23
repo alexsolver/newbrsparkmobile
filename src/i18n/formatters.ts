@@ -11,6 +11,7 @@ const LOCALE_CURRENCY: Record<string, string> = {
   'es-CO': 'COP',
   'es-AR': 'ARS',
   'es-ES': 'EUR',
+  'de-DE': 'EUR',
   'en-GB': 'GBP',
 };
 
@@ -56,7 +57,8 @@ export async function setNumberFormat(prefs: NumberFormatPrefs) {
 export function getNumberFormat(): NumberFormatPrefs {
   if (_numberFormat) return _numberFormat;
   const lang = getCurrentLanguage();
-  const style: NumberFormatStyle = (lang === 'en-US' || lang === 'en-GB') ? 'comma-dot' : 'dot-comma';
+  const style: NumberFormatStyle =
+    lang === 'en-US' || lang === 'en-GB' ? 'comma-dot' : 'dot-comma';
   return { decimals: 2, style };
 }
 

@@ -5,6 +5,7 @@ export const USER_PAGES_ES_MERGE = {
   localePt: "Portugués (Brasil)",
   localeEn: "Inglés (EE. UU.)",
   localeEs: "Español",
+  localeDe: "Alemán",
   nav_home_title: "BrSpark — Inicio",
   nav_sidebar_expand: "Expandir menú",
   nav_sidebar_collapse: "Contraer menú",

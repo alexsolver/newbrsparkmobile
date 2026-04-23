@@ -1,5 +1,5 @@
 /**
- * Textos do Forms Builder (painel admin), pt-BR, en-US e es-ES.
+ * Textos do Forms Builder (painel admin), pt-BR, en-US, es-ES e de-DE.
  * Preferência: `getAdminUiLocale()` (localStorage `brspark_admin_ui_locale`; padrão pt-BR).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
@@ -1636,6 +1636,23 @@ Object.assign(M['es-ES'], {
     'Panel listo para «{title}». Ya existe un primer paso en el canvas, arrastre preguntas al «Área externa» o dentro de un paso (o añada más secciones).',
   fb_prop_form_complete_btn_note:
     'En la app, este bloque muestra un <strong>botón</strong> que hace lo mismo que el botón principal del pie (avanzar, volver al menú de pasos o <strong>cerrar la OS</strong>). El texto del botón es la <strong>etiqueta</strong> de arriba; si está vacío, la app usa el texto predeterminado del pie. Puede colocar el campo en el <strong>Área externa</strong> o dentro de cualquier paso.',
+});
+
+M['de-DE'] = { ...M['en-US'] };
+Object.assign(M['de-DE'], {
+  fb_locale_lbl: 'Admin-Sprache',
+  fb_pageTitle: 'BrSpark Admin, Formular-Editor',
+  fb_bc_panel: 'Start',
+  fb_bc_builder: 'Formular-Editor',
+  fb_hero_title: 'Formular-Editor',
+  fb_hero_sub:
+    'Erstellen Sie das Formularschema für die App: Felder, Regeln, Symbol und Abschnittsnavigation. Nutzen Sie das aufklappbare Panel unten für Titel, öffentliche Beschreibung, Status und App-Shortcuts.',
+  fb_save: 'Formular speichern',
+  fb_new: 'Neu erstellen',
+  fb_open: 'Formular öffnen',
+  fb_toolbox_title: 'Dynamische Felder',
+  fb_unsaved: 'Ungespeicherte Änderungen',
+  fb_unsaved_leave: 'Es gibt ungespeicherte Änderungen. Trotzdem verlassen?',
 });
 
 function interpolate(str, vars) {

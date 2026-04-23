@@ -3,13 +3,14 @@
 const { resolveOpenAiCredentials } = require('./openAiCredentials');
 const { openAiMessageContentToString } = require('./openAiChatParse');
 
-const CANON = ['pt-BR', 'en-US', 'es-ES'];
+const CANON = ['pt-BR', 'en-US', 'es-ES', 'de-DE'];
 
 /** Nomes explícitos no prompt — o modelo segue melhor do que só o código BCP-47. */
 const TARGET_LANGUAGE_LABEL = {
   'pt-BR': 'Brazilian Portuguese (pt-BR)',
   'en-US': 'American English (en-US)',
   'es-ES': 'Spanish (Spain) (es-ES)',
+  'de-DE': 'German (Germany) (de-DE)',
 };
 
 function chatTranslationEnabled() {
@@ -28,6 +29,7 @@ function normalizeChatLocale(raw) {
   if (lower === 'pt' || lower.startsWith('pt-')) return 'pt-BR';
   if (lower === 'en' || lower.startsWith('en-')) return 'en-US';
   if (lower === 'es' || lower.startsWith('es-')) return 'es-ES';
+  if (lower === 'de' || lower.startsWith('de-')) return 'de-DE';
   if (CANON.includes(s)) return s;
   return 'pt-BR';
 }

@@ -1855,10 +1855,17 @@ export default function LiveRouteMapCard({
                   <Text style={{ fontWeight: '600', color: '#0f172a', fontSize: 16 }}>{tr('chat.localeEn')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={{ paddingVertical: 14 }}
+                  style={{
+                    paddingVertical: 14,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: '#e2e8f0',
+                  }}
                   onPress={() => void applyTrackingChatLocale('es-ES')}
                 >
                   <Text style={{ fontWeight: '600', color: '#0f172a', fontSize: 16 }}>{tr('chat.localeEs')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ paddingVertical: 14 }} onPress={() => void applyTrackingChatLocale('de-DE')}>
+                  <Text style={{ fontWeight: '600', color: '#0f172a', fontSize: 16 }}>{tr('chat.localeDe')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

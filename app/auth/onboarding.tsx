@@ -48,7 +48,7 @@ function isNotificationOnboardingSatisfied(status: string | null): boolean {
 }
 
 const REGION_KEY = '@brspark_region';
-const ALLOWED_REGIONS = ['BR', 'US', 'ES', 'AR'] as const;
+const ALLOWED_REGIONS = ['BR', 'US', 'ES', 'AR', 'DE'] as const;
 
 function defaultConsents(isTechnician: boolean): ConsentState {
   return {

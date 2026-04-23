@@ -21,6 +21,7 @@ import {
   MultipleAccountsError,
   type LoginTenantOption,
 } from '../../src/services/auth';
+import { complianceDocFallbackUrl } from '../../src/constants/legalPublicUrls';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
 import { LoginOAuthNativeSection, type NativeOAuthPending } from '../../src/components/auth/LoginOAuthNativeSection';
@@ -319,10 +320,10 @@ export default function LoginScreen() {
         const doc = await res.json();
         setDocModal({ title: doc.title, content: doc.content });
       } else {
-        Linking.openURL('https://www.brspark.com/term');
+        Linking.openURL(complianceDocFallbackUrl(type));
       }
     } catch {
-      Linking.openURL('https://www.brspark.com/term');
+      Linking.openURL(complianceDocFallbackUrl(type));
     } finally {
       setDocLoading(false);
     }
