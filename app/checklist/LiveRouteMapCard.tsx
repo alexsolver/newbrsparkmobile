@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -39,6 +39,7 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 import { useTransitMapExpanded } from '../../src/context/TransitMapExpandedContext';
 import { BroadcastOfferSheetEmbedded } from '../../src/components/ProviderBroadcastOfferSheet';
+import { agentDebugPost } from '../../src/debug/agentDebugIngest';
 
 const TRANSIT_MAP_HINTS_KEY = '@brspark_transit_map_hints_v1';
 
@@ -621,8 +622,25 @@ export default function LiveRouteMapCard({
   const [myPos, setMyPos]             = useState<{ lat: number; lng: number } | null>(null);
   const [expanded, setExpanded]       = useState(true);
   const { setTransitMapExpanded } = useTransitMapExpanded();
-  /** Folha de oferta broadcast: mesmo padrão do chat — aninhar no Modal do mapa (Android). */
-  useEffect(() => {
+  /**
+   * Sincronizar `transitMapExpanded` **antes** da pintura (`useLayoutEffect`).
+   * Com `useEffect`, ao minimizar o mapa (`expanded` → false) o 1.º paint já não inclui o `Modal`
+   * (onde está `BroadcastOfferSheetEmbedded`), mas `transitMapExpanded` ainda está `true` → a folha
+   * na raiz (`ProviderBroadcastOfferSheet`) continua `return null` → faixa da oferta «some» até o efeito
+   * assíncrono correr (ou vários frames), o que coincide com «passados uns segundos / ao fechar o mapa».
+   */
+  useLayoutEffect(() => {
+    // #region agent log
+    agentDebugPost({
+      sessionId: '98653d',
+      runId: 'post-fix',
+      hypothesisId: 'F',
+      location: 'LiveRouteMapCard.tsx:transit_sync',
+      message: 'transit_layout_effect',
+      data: { visible, expanded, willSetGlobal: visible ? expanded : false },
+      timestamp: Date.now(),
+    });
+    // #endregion
     if (!visible) {
       setTransitMapExpanded(false);
       return;

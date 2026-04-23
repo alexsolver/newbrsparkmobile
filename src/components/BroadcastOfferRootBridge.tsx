@@ -20,6 +20,7 @@ import {
   BROADCAST_OS_UNAVAILABLE_SUBTITLE,
   BROADCAST_OS_UNAVAILABLE_TITLE,
 } from '../constants/broadcastOsMessages';
+import { agentDebugPost } from '../debug/agentDebugIngest';
 
 async function enqueueExecutionInProgressFromDashboard(taskId: string): Promise<void> {
   const id = String(taskId || '').trim();
@@ -45,7 +46,7 @@ async function enqueueExecutionInProgressFromDashboard(taskId: string): Promise<
   }
 }
 
-const BROADCAST_OFFERS_REFRESH_DEBOUNCE_MS = 160;
+const BROADCAST_OFFERS_REFRESH_DEBOUNCE_MS = 280;
 
 /** Ordem estável: o dashboard ordena por «recentes»; o cache FT+RT não — alternar o 1.º item fazia o sheet reabrir e «saltar». */
 function broadcastClaimExpiresAtMs(t: any): number {
@@ -71,6 +72,17 @@ function sortBroadcastOfferQueueStable(tasks: any[]): any[] {
   });
 }
 
+/**
+ * Identidade da fila para `setBroadcastOfferTasks`: só **ids na ordem de sort** (expiração já ordena em
+ * `sortBroadcastOfferQueueStable`). Incluir ISO de expiração na assinatura fazia cada `pullTasks`/sync
+ * gerar `nextSig` diferente com as **mesmas** OS → novo array → re-renders contínuos e popup da folha
+ * com 2+ ofertas até a UI «quebrar» / sumir do rodapé.
+ */
+function broadcastOfferQueueSig(tasks: any[]): string {
+  const sorted = sortBroadcastOfferQueueStable(Array.isArray(tasks) ? tasks : []);
+  return sorted.map((t) => String(t?.id ?? '')).join('|');
+}
+
 async function loadRejectedTaskIdsForBroadcast(): Promise<Set<string>> {
   try {
     const rStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
@@ -87,12 +99,54 @@ async function applyBroadcastOffersFromCache(setBroadcastOfferTasks: (v: any[]) 
     loadAllCloudTasksForExecutionLookup(),
     loadRejectedTaskIdsForBroadcast(),
   ]);
-  const pending = all.filter((t: any) => {
-    if (!Boolean(t?.broadcastClaimPending)) return false;
+  /** Mesmo `id` pode aparecer em RT+FT ou duplicado no JSON — duas entradas trocavam a ordem da fila a cada leitura e disparavam efeitos da folha. */
+  const byId = new Map<string, any>();
+  for (const t of all) {
+    if (!Boolean(t?.broadcastClaimPending)) continue;
     const id = String(t?.id || '').trim();
-    return id && !rejectedIds.has(id);
+    if (!id || rejectedIds.has(id)) continue;
+    byId.set(id, t);
+  }
+  const pending = sortBroadcastOfferQueueStable([...byId.values()]);
+  const nextSig = broadcastOfferQueueSig(next);
+  // #region agent log
+  agentDebugPost({
+    sessionId: '98653d',
+    runId: 'pre',
+    hypothesisId: 'B_E',
+    location: 'BroadcastOfferRootBridge.tsx:applyBroadcastOffersFromCache',
+    message: 'cache_apply',
+    data: {
+      allLen: Array.isArray(all) ? all.length : -1,
+      pendingLen: pending.length,
+      nextLen: next.length,
+      nextIds: next.map((t: any) => String(t?.id ?? '')).slice(0, 5),
+      nextSigTail: nextSig.slice(-80),
+    },
+    timestamp: Date.now(),
   });
-  setBroadcastOfferTasks(sortBroadcastOfferQueueStable(pending));
+  // #endregion
+  setBroadcastOfferTasks((prev) => {
+    const prevSig = broadcastOfferQueueSig(prev);
+    const unchanged = prevSig === nextSig;
+    // #region agent log
+    agentDebugPost({
+      sessionId: '98653d',
+      runId: 'pre',
+      hypothesisId: 'C',
+      location: 'BroadcastOfferRootBridge.tsx:setBroadcastOfferTasks',
+      message: 'queue_update',
+      data: {
+        prevLen: prev.length,
+        nextLen: next.length,
+        unchanged,
+      },
+      timestamp: Date.now(),
+    });
+    // #endregion
+    if (unchanged) return prev;
+    return next;
+  });
 }
 
 export function BroadcastOfferRootBridge() {
@@ -105,6 +159,20 @@ export function BroadcastOfferRootBridge() {
 
   const refreshOffersIfEligible = useCallback(() => {
     if (String(userRole || '').toUpperCase() !== 'TECHNICIAN' || mode !== 'PROVIDER') {
+      // #region agent log
+      agentDebugPost({
+        sessionId: '98653d',
+        runId: 'pre',
+        hypothesisId: 'A',
+        location: 'BroadcastOfferRootBridge.tsx:refreshOffersIfEligible',
+        message: 'clear_queue_ineligible',
+        data: {
+          userRole: String(userRole || ''),
+          mode: String(mode || ''),
+        },
+        timestamp: Date.now(),
+      });
+      // #endregion
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
