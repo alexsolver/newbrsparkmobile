@@ -26,7 +26,13 @@ export function sanitizeLeituraHtml(html: string): string {
 }
 
 const tagsStyles: MixedStyleRecord = {
-  body: { margin: 0, paddingTop: 0, paddingHorizontal: 2, paddingBottom: 8 },
+  body: {
+    margin: 0,
+    paddingTop: 0,
+    paddingHorizontal: 2,
+    paddingBottom: 8,
+    color: '#0f172a',
+  },
   p: { marginTop: 0, marginBottom: 10 },
   h1: { fontSize: 22, fontWeight: '800', marginBottom: 8, color: '#0f172a' },
   h2: { fontSize: 18, fontWeight: '800', marginBottom: 8, color: '#0f172a' },
@@ -52,6 +58,7 @@ const tagsStyles: MixedStyleRecord = {
   img: { borderRadius: 8 },
   div: {},
   span: {},
+  mark: { backgroundColor: '#fef08a', color: '#0f172a' },
 };
 
 /** Alinhamento Quill (`ql-align-*`) no render nativo. */
@@ -90,7 +97,8 @@ export function LeituraBlock({ contentHtml }: LeituraBlockProps) {
         source={baseUrl ? { html: safe, baseUrl } : { html: safe }}
         tagsStyles={tagsStyles}
         classesStyles={quillClassesStyles}
-        baseStyle={styles.htmlBase}
+        baseStyle={styles.htmlBaseTypography}
+        enableCSSInlineProcessing
         ignoredDomTags={['script', 'iframe', 'object', 'embed', 'form', 'input', 'select', 'textarea', 'button']}
         enableExperimentalMarginCollapsing
       />
@@ -108,10 +116,9 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     backgroundColor: '#fff',
   },
-  htmlBase: {
+  htmlBaseTypography: {
     fontSize: 15,
     lineHeight: 22,
-    color: '#0f172a',
   },
   empty: {
     paddingVertical: 12,
