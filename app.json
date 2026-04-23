@@ -37,8 +37,8 @@
           "remote-notification"
         ]
       },
-      "bundleIdentifier": "com.anonymous.BrsparkMobile",
-      "buildNumber": "4"
+      "bundleIdentifier": "com.brspark",
+      "buildNumber": "5"
     },
     "android": {
       "usesCleartextTraffic": true,
@@ -64,7 +64,8 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "package": "com.anonymous.BrsparkMobile"
+      "package": "com.brspark",
+      "versionCode": 3
     },
     "extra": {
       "eas": {
