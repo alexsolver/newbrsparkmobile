@@ -194,7 +194,7 @@ exports.TERMS_DE = [
   'Sie können Ihr Konto in den Einstellungen schließen. Aufbewahrung von Daten wie in der Datenschutzerklärung beschrieben.',
   '',
   '## 10. Recht & Gerichtsstand',
-  'Es gilt das Recht von **Brasil**; Gerichtsstand: **São Paulo / SP**, sofern zwingendes Verbraucherrecht nichts anderes vorschreibt.',
+  'Es gilt das Recht von **Brasilien**; Gerichtsstand: **São Paulo / SP**, sofern zwingendes Verbraucherrecht nichts anderes vorschreibt.',
   '',
   '---',
   '📧 **Kontakt**: support@brspark.com | 🌐 https://www.brspark.com',

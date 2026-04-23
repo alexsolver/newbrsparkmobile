@@ -6,6 +6,11 @@ import {
   createEmergencyOfflineBackup,
   restoreEmergencyOfflineBackupForUser,
 } from './offlineRecoveryBackup';
+import {
+  OPS_CHAT_ACK_LOGOUT_BACKUP_KEY,
+  backupOpsChatAcksForLogout,
+  restoreOpsChatAcksAfterLogin,
+} from '../lib/opsChatAckLocal';
 import * as Device from 'expo-device';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
@@ -352,6 +357,7 @@ export async function purgeAllBrSparkLocalCaches(): Promise<void> {
   const toRemove = keys.filter((k) => {
     if (!k) return false;
     if (k === ISOLATION_VERSION_KEY) return false;
+    if (k === OPS_CHAT_ACK_LOGOUT_BACKUP_KEY) return false;
     if (k === TOKEN_KEY || k === USER_KEY) return true;
     if (k.startsWith('@brspark')) return true;
     if (k.startsWith('brspark_')) return true;
@@ -394,6 +400,12 @@ export class AuthService {
     } catch (e) {
       console.warn('[AUTH] Falha ao restaurar backup offline:', e);
     }
+  }
+
+  /** Após gravar JWT + utilizador: acks do chat operacional (purge no logout) + backup de emergência. */
+  static async restorePostLoginLocalState(user: User | null): Promise<void> {
+    if (user) await restoreOpsChatAcksAfterLogin(user);
+    await AuthService.tryAutoRestoreOfflineBackup(user);
   }
 
   static async savePreservedLocalOwner(user: User | null, reason?: string): Promise<void> {
@@ -508,7 +520,7 @@ export class AuthService {
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
-    await AuthService.tryAutoRestoreOfflineBackup(data.user as User);
+    await AuthService.restorePostLoginLocalState(data.user as User);
     return data.user as User;
   }
 
@@ -555,7 +567,7 @@ export class AuthService {
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
-    await AuthService.tryAutoRestoreOfflineBackup(data.user as User);
+    await AuthService.restorePostLoginLocalState(data.user as User);
     return data.user as User;
   }
 
@@ -617,7 +629,7 @@ export class AuthService {
     await AuthService.wipeLocalDataBeforeNewSession(d.user);
     await AsyncStorage.setItem(TOKEN_KEY, d.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(d.user));
-    await AuthService.tryAutoRestoreOfflineBackup(d.user);
+    await AuthService.restorePostLoginLocalState(d.user);
     return d.user;
   }
 
@@ -674,7 +686,7 @@ export class AuthService {
     await AuthService.wipeLocalDataBeforeNewSession(d.user);
     await AsyncStorage.setItem(TOKEN_KEY, d.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(d.user));
-    await AuthService.tryAutoRestoreOfflineBackup(d.user);
+    await AuthService.restorePostLoginLocalState(d.user);
     return d.user;
   }
 
@@ -712,7 +724,7 @@ export class AuthService {
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
-    await AuthService.tryAutoRestoreOfflineBackup(data.user as User);
+    await AuthService.restorePostLoginLocalState(data.user as User);
     return data.user as User;
   }
 
@@ -810,6 +822,13 @@ export class AuthService {
           pushSyncQueue(existing.email),
           new Promise<void>((resolve) => setTimeout(resolve, 18_000)),
         ]);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (existing) {
+      try {
+        await backupOpsChatAcksForLogout(existing);
       } catch {
         /* ignore */
       }
@@ -956,7 +975,7 @@ export class AuthService {
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
-    await AuthService.tryAutoRestoreOfflineBackup(data.user as User);
+    await AuthService.restorePostLoginLocalState(data.user as User);
     return data.user as User;
   }
 

@@ -2,15 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './auth';
 import type { ChatMessage } from './chat';
 import { emitChatUnreadChanged } from '../lib/chatUnreadEvents';
+import { getOpsChatAckStorageKey } from '../lib/opsChatAckLocal';
+
+/** Re-export para módulos que importam a partir de `executionOpsChat`. */
+export { getOpsChatAckStorageKey };
 
 /** ID virtual da “sala” no cache local — evita colisão com IDs de salas do chat corporativo. */
 export function getOpsChatCacheRoomId(executionId: string): string {
   return `ops:${String(executionId || '').trim()}`;
-}
-
-/** Última vez que o técnico “viu” o fio no app (ms desde epoch) — usado para o ponto no ícone. */
-export function getOpsChatAckStorageKey(executionId: string): string {
-  return `@brspark_ops_chat_ack_${String(executionId || '').trim()}`;
 }
 
 export function mapExecutionOpsMessagesToChat(
