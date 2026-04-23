@@ -38,7 +38,7 @@
         ]
       },
       "bundleIdentifier": "com.anonymous.BrsparkMobile",
-      "buildNumber": "3"
+      "buildNumber": "4"
     },
     "android": {
       "usesCleartextTraffic": true,
