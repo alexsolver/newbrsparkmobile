@@ -1201,6 +1201,8 @@ model ChecklistExecution {
   scheduledStartAt DateTime? @map("scheduled_start_at")
   /// Snapshot: minutos previstos para preencher o formulário (sem deslocamento); múltiplos de 5; imutável após despacho.
   expectedFormDurationMinutes Int? @map("expected_form_duration_minutes")
+  /// Despacho em oferta (BROADCAST) marcado como urgente no painel — push e destaques no app/painel.
+  urgente     Boolean  @default(false)
 
   // Auditoria (Provas WFM)
   gpsLocation Json?    // {lat, lng, radius} coletado ao concluir

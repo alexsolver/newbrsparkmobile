@@ -104,6 +104,8 @@ function mapExecutionToPanelTask(ex, opts = {}) {
     syncedAt: ex.syncedAt,
     scheduledStartAt: ex.scheduledStartAt || null,
     expectedFormDurationMinutes: ex.expectedFormDurationMinutes ?? null,
+    assignmentMode: ex.assignmentMode || 'DIRECT',
+    claimStatus: ex.claimStatus ?? null,
     urgente: ex.urgente === true,
     etaMinutes: ex.etaMinutes,
     businessMetrics: ex.businessMetrics ?? null,

@@ -149,6 +149,7 @@ const M = {
       'Só disponível com dois ou mais técnicos (oferta — primeiro a aceitar). Adicione candidatos acima.',
     ops_dispatch_urgent_hint:
       'Só em oferta: grava prioridade na OS e destaca «URGENTE» na notificação push para os convidados.',
+    ops_card_urgent_offer_badge: 'Oferta urgente',
     ops_dispatch_planned_end_preview:
       'Fim previsto (formulário): {when}, {mins} min de preenchimento (sem deslocamento).',
     ops_dispatch_section_geo: 'Local de serviço (cerca eletrônica)',
@@ -352,6 +353,7 @@ const M = {
       'Only available with two or more technicians (broadcast — first to accept). Add candidates above.',
     ops_dispatch_urgent_hint:
       'Broadcast only: saves priority on the work order and highlights «URGENT» in the push to invited technicians.',
+    ops_card_urgent_offer_badge: 'Urgent offer',
     ops_dispatch_planned_end_preview:
       'Expected end (form): {when}, {mins} min of filling (no travel).',
     ops_dispatch_section_geo: 'Service location (geofence)',
@@ -421,6 +423,7 @@ M['es-ES'] = {
     'Solo con dos o más técnicos (oferta — el primero en aceptar). Añada candidatos arriba.',
   ops_dispatch_urgent_hint:
     'Solo en oferta: guarda la prioridad en la OS y resalta «URGENTE» en el push a los invitados.',
+  ops_card_urgent_offer_badge: 'Oferta urgente',
 };
 
 function interpolate(str, vars) {
