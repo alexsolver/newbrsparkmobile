@@ -1,6 +1,7 @@
 'use strict';
 const router = require('express').Router();
 const prisma  = require('../db');
+const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 const { auditActor } = require('../lib/auditActor');
 const { adminAuthThenPanel, rejectOsAuth } = require('../middleware/auth');
 const { sendExpoPushToMany } = require('../services/expoPush');
@@ -615,7 +616,7 @@ router.get('/tasks', async (req, res) => {
         (gAge == null || !Number.isFinite(gAge) || gAge > OPS_GPS_STALE_SEC);
 
       return mapExecutionToPanelTask(ex, {
-        ownerAvatar: userMap[ex.ownerEmail]?.avatarUrl || null,
+        ownerAvatar: ensureHttpsUrlForPublicInternet(userMap[ex.ownerEmail]?.avatarUrl) || null,
         includeSchemaRaw,
         lastSubmittedRevision: effectiveLastSubmittedRevision(
           ex.lastSubmittedRevision,

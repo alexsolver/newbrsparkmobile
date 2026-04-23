@@ -11,6 +11,7 @@ const {
   chatTranslationEnabled,
 } = require('../lib/chatTranslation');
 const { canManageTenantAppData } = require('../lib/authorization');
+const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 
 router.use(authUser);
 
@@ -43,10 +44,12 @@ function normRole(v) {
 }
 
 async function getTenantScopedUserByEmail(email) {
-  return prisma.user.findFirst({
+  const u = await prisma.user.findFirst({
     where: { email: normEmail(email), isActive: true },
     select: { id: true, email: true, name: true, avatarUrl: true, role: true, tenantId: true },
   });
+  if (!u) return null;
+  return { ...u, avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl) };
 }
 
 async function validateTenantScopedParticipants(requester, participantEmails) {
@@ -278,10 +281,14 @@ router.get('/contacts/pending', async (req, res) => {
       where: { email: { in: emails }, ...(tenantId ? { tenantId } : {}) },
       select: { email: true, name: true, avatarUrl: true }
     });
-    const allowed = new Set(users.map((u) => normEmail(u.email)));
+    const usersSan = users.map((u) => ({
+      ...u,
+      avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl),
+    }));
+    const allowed = new Set(usersSan.map((u) => normEmail(u.email)));
 
     const results = pending.map(p => {
-      const u = users.find(x => x.email === p.requesterId);
+      const u = usersSan.find(x => x.email === p.requesterId);
       return { ...p, user: u };
     }).filter((p) => allowed.has(normEmail(p.requesterId)));
 
@@ -377,7 +384,12 @@ router.get('/contacts', async (req, res) => {
       orderBy: [{ name: 'asc' }, { email: 'asc' }],
     });
 
-    res.json(users);
+    res.json(
+      users.map((u) => ({
+        ...u,
+        avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl),
+      })),
+    );
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -516,7 +528,12 @@ router.get('/rooms', async (req, res) => {
     });
 
     const userDict = {};
-    users.forEach(u => userDict[u.email] = u);
+    users.forEach((u) => {
+      userDict[u.email] = {
+        ...u,
+        avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl),
+      };
+    });
 
     const mapped = await Promise.all(rooms.map(async (r) => {
       let displayName = r.name;
@@ -726,7 +743,7 @@ router.get('/rooms/:roomId/messages', async (req, res) => {
     });
     const senderDict = {};
     senders.forEach((s) => {
-      senderDict[s.email] = s.avatarUrl;
+      senderDict[s.email] = ensureHttpsUrlForPublicInternet(s.avatarUrl);
     });
 
     const mapped = await Promise.all(

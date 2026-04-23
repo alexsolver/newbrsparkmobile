@@ -2,6 +2,10 @@
 const router   = require('express').Router();
 const prisma   = require('../db');
 const authUser = require('../middleware/authUser');
+const {
+  resolvePublicApiOriginForUploads,
+  ensureHttpsUrlForPublicInternet,
+} = require('../lib/publicHttpsUrl');
 const https    = require('https');
 const crypto   = require('crypto');
 
@@ -259,9 +263,9 @@ function saveLocalFallback(buffer, remotePath, req) {
   
   fs.mkdirSync(path.dirname(finalPath), { recursive: true });
   fs.writeFileSync(finalPath, buffer);
-  
-  const baseUrl = process.env.API_BASE_URL || `${req.protocol}://${req.get('host')}`;
-  return `${baseUrl}/uploads/storage/${remotePath}`;
+
+  const origin = resolvePublicApiOriginForUploads(req).replace(/\/+$/, '');
+  return ensureHttpsUrlForPublicInternet(`${origin}/uploads/storage/${remotePath}`);
 }
 
 // ── Dropbox Gerar Link Direto ──────────────────────────────
@@ -326,21 +330,21 @@ router.post('/upload', async (req, res) => {
     if (!integration) {
       console.warn('[STORAGE] Nenhuma integração configurada. Usando disco local (uploads/storage).');
       const fallbackUrl = saveLocalFallback(buffer, remotePath, req);
-      return res.json({ url: fallbackUrl, provider: 'local', path: remotePath });
+      return res.json({ url: ensureHttpsUrlForPublicInternet(fallbackUrl), provider: 'local', path: remotePath });
     }
 
     if (integration.provider === 'r2') {
       console.log(`[STORAGE] R2 upload: ${remotePath} (${buffer.length} bytes)`);
       const result = await uploadToR2(buffer, integration, remotePath, contentType);
       console.log(`[STORAGE] R2 OK → ${result.path}`);
-      return res.json({ url: result.url, provider: 'r2', path: result.path });
+      return res.json({ url: ensureHttpsUrlForPublicInternet(result.url), provider: 'r2', path: result.path });
     }
 
     if (integration.provider === 's3') {
       console.log(`[STORAGE] S3 upload: ${remotePath} (${buffer.length} bytes)`);
       const result = await uploadToS3(buffer, integration, remotePath, contentType);
       console.log(`[STORAGE] S3 OK → ${result.path}`);
-      return res.json({ url: result.url, provider: 's3', path: result.path });
+      return res.json({ url: ensureHttpsUrlForPublicInternet(result.url), provider: 's3', path: result.path });
     }
 
     if (integration.provider === 'dropbox') {
@@ -362,11 +366,15 @@ router.post('/upload', async (req, res) => {
       
       try {
         const publicUrl = await getDropboxDirectLink(token, dropboxPath);
-        return res.json({ url: publicUrl, provider: 'dropbox', path: dropboxPath });
+        return res.json({ url: ensureHttpsUrlForPublicInternet(publicUrl), provider: 'dropbox', path: dropboxPath });
       } catch (linkErr) {
         console.warn(`[STORAGE] Dropbox shared link alert: ${linkErr.message}. Fallbacking to local server...`);
         const fallbackUrl = saveLocalFallback(buffer, remotePath, req);
-        return res.json({ url: fallbackUrl, provider: 'dropbox_local_fallback', path: remotePath });
+        return res.json({
+          url: ensureHttpsUrlForPublicInternet(fallbackUrl),
+          provider: 'dropbox_local_fallback',
+          path: remotePath,
+        });
       }
     }
 
@@ -378,7 +386,11 @@ router.post('/upload', async (req, res) => {
         const { fileBase64, path: remotePath } = req.body;
         const buffer = Buffer.from(fileBase64, 'base64');
         const fallbackUrl = saveLocalFallback(buffer, remotePath, req);
-        return res.json({ url: fallbackUrl, provider: 'local_fallback_on_error', path: remotePath });
+        return res.json({
+          url: ensureHttpsUrlForPublicInternet(fallbackUrl),
+          provider: 'local_fallback_on_error',
+          path: remotePath,
+        });
     } catch(fallErr) {
         console.error('[STORAGE] Falha catastrófica no disco local:', fallErr);
         res.status(500).json({ error: `Upload externo E local falharam: ${err.message}` });

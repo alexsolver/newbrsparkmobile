@@ -15,6 +15,7 @@ const {
   isPlatformAdmin,
   resolveScopedTenantId,
 } = require('../lib/authorization');
+const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 
 function auditFromReq(req, action, resource, tenantId = null, metadata = undefined) {
   const { adminId, userId } = auditActor(req);
@@ -353,7 +354,12 @@ router.get('/:id/providers', async (req, res) => {
           score: row.providerIdentity.score,
           cft: row.providerIdentity.cft,
           specialty: row.providerIdentity.specialty,
-          user: row.providerIdentity.user,
+          user: row.providerIdentity.user
+            ? {
+                ...row.providerIdentity.user,
+                avatarUrl: ensureHttpsUrlForPublicInternet(row.providerIdentity.user.avatarUrl),
+              }
+            : null,
         },
       })),
       total: rows.length,

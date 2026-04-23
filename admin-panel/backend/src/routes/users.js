@@ -21,6 +21,7 @@ const {
 } = require('../lib/authorization');
 const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverage');
 const { validateAppPasswordPolicy } = require('../lib/appPasswordPolicy');
+const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
@@ -51,7 +52,8 @@ function buildPublicVerifyEmailLink(token) {
     .trim()
     .replace(/\/+$/, '');
   if (!base) return null;
-  return `${base}/verify-email.html?token=${encodeURIComponent(token)}`;
+  const root = ensureHttpsUrlForPublicInternet(base);
+  return `${root}/verify-email.html?token=${encodeURIComponent(token)}`;
 }
 
 /** Matrícula funcional (ponto / RH). Vazio → null. Máx. 80 caracteres. */
@@ -1177,7 +1179,7 @@ router.patch('/:id', express.json(), async (req, res) => {
       if (phone !== undefined) userPatch.phone = phone ? String(phone).trim() : null;
       if (role != null) userPatch.role = String(role).toUpperCase();
       if (avatarUrl !== undefined) {
-        const nextA = avatarUrl ? String(avatarUrl).trim() : null;
+        const nextA = avatarUrl ? ensureHttpsUrlForPublicInternet(String(avatarUrl).trim()) : null;
         const prevA = existing.avatarUrl ? String(existing.avatarUrl || '').trim() : null;
         userPatch.avatarUrl = nextA;
         if (nextA !== prevA) needsComprefaceSync = true;

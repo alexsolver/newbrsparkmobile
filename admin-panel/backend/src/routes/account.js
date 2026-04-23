@@ -30,6 +30,10 @@ const {
   APP_PASSWORD_RULES_USER_FACING_PT,
 } = require('../lib/appPasswordPolicy');
 const { assertEmailFreeAcrossAllTenants } = require('../lib/appRegistrationEmailGuard');
+const {
+  ensureHttpsUrlForPublicInternet,
+  isPrivateOrLocalHost,
+} = require('../lib/publicHttpsUrl');
 
 function buildSafeTenantForApp(tenant) {
   if (!tenant) return null;
@@ -61,7 +65,7 @@ function buildSafeAppUserPayload(user) {
     name: user.name,
     email: user.email,
     role: user.role,
-    avatarUrl: user.avatarUrl,
+    avatarUrl: ensureHttpsUrlForPublicInternet(user.avatarUrl),
     preferredChatLocale: user.preferredChatLocale ?? null,
     employeeMatricula: user.employeeMatricula ?? null,
     addressJson: user.addressJson ?? null,
@@ -181,10 +185,21 @@ function resolvePublicPanelBaseUrl(req) {
   )
     .trim()
     .replace(/\/+$/, '');
-  if (envBase) return envBase;
+  if (envBase) return ensureHttpsUrlForPublicInternet(envBase);
   const host = String(req?.get?.('host') || '').trim();
   if (!host) return null;
-  return `${req.protocol || 'http'}://${host}`.replace(/\/+$/, '');
+  const hostOnly = host.split(':')[0] || '';
+  const hdr = req?.headers?.['x-forwarded-proto'] || req?.headers?.['X-Forwarded-Proto'];
+  const xf = String(hdr || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
+  let proto =
+    xf === 'https' ? 'https' : xf === 'http' ? 'http' : String(req?.protocol || 'http').toLowerCase();
+  if (proto === 'http' && hostOnly && !isPrivateOrLocalHost(hostOnly)) {
+    proto = 'https';
+  }
+  return `${proto}://${host}`.replace(/\/+$/, '');
 }
 
 function buildPublicPasswordResetLink(req, token) {
@@ -1021,13 +1036,22 @@ router.put('/me', authUser, async (req, res) => {
       });
     }
 
+    let nextAvatarUrl = undefined;
+    if (avatarUrl !== undefined) {
+      if (avatarUrl === null || String(avatarUrl).trim() === '') {
+        nextAvatarUrl = null;
+      } else {
+        nextAvatarUrl = ensureHttpsUrlForPublicInternet(String(avatarUrl).trim());
+      }
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       const nextUser = await tx.user.update({
         where: { id: req.user.id },
         data: {
           ...(name && { name }),
           ...(email && { email }),
-          ...(avatarUrl !== undefined && { avatarUrl }),
+          ...(nextAvatarUrl !== undefined && { avatarUrl: nextAvatarUrl }),
           ...(localeUpdate !== undefined && { preferredChatLocale: localeUpdate }),
           ...(addressJson !== undefined && { addressJson }),
         },

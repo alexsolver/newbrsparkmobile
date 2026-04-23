@@ -2,6 +2,7 @@
 
 const fsp = require('fs/promises');
 const path = require('path');
+const { ensureHttpsUrlForPublicInternet } = require('./publicHttpsUrl');
 
 let _s3Client;
 function s3() {
@@ -42,7 +43,7 @@ async function putPublicObject(p) {
     if (!base) {
       return { publicUrl: `s3://${bucket}/${key}`, storage: 's3' };
     }
-    return { publicUrl: `${base}/${key}`, storage: 's3' };
+    return { publicUrl: ensureHttpsUrlForPublicInternet(`${base}/${key}`), storage: 's3' };
   }
   const dir = path.join(__dirname, '../../public/uploads', p.prefix || 'platform');
   await fsp.mkdir(dir, { recursive: true });

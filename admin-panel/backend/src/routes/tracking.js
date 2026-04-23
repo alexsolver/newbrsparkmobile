@@ -25,6 +25,10 @@ const {
 } = require('../lib/chatTranslation');
 const { normalizeBaseUrl } = require('../lib/evaluationSurveyUrl');
 const {
+  ensureHttpsUrlForPublicInternet,
+  isPrivateOrLocalHost,
+} = require('../lib/publicHttpsUrl');
+const {
   stripTransitEtaDisplayFields,
   resolveDisplayEtaMinutesFromMeta,
 } = require('../lib/transitEtaDisplaySnapshot');
@@ -79,14 +83,19 @@ function buildPublicTrackingUrl(req, trackingToken) {
   ];
   for (const raw of candidates) {
     const n = normalizeBaseUrl(raw);
-    if (n) return `${n}${path}`;
+    if (n) return ensureHttpsUrlForPublicInternet(`${n}${path}`);
   }
   const xf = String(req.get('x-forwarded-proto') || '')
     .split(',')[0]
     .trim();
-  const proto = xf === 'https' || xf === 'http' ? xf : req.protocol || 'http';
-  const host = req.get('host') || `127.0.0.1:${String(process.env.PORT || '3001').trim() || '3001'}`;
-  return `${proto}://${host}${path}`;
+  const host =
+    req.get('host') || `127.0.0.1:${String(process.env.PORT || '3001').trim() || '3001'}`;
+  const hostOnly = String(host).split(':')[0] || '';
+  let proto = xf === 'https' ? 'https' : xf === 'http' ? 'http' : req.protocol || 'http';
+  if (proto === 'http' && hostOnly && !isPrivateOrLocalHost(hostOnly)) {
+    proto = 'https';
+  }
+  return ensureHttpsUrlForPublicInternet(`${proto}://${host}${path}`);
 }
 
 async function notifyClientTrackingStart(executionId, trackingUrl) {
@@ -895,7 +904,7 @@ router.get('/:token', async (req, res) => {
       });
       if (userRecord) {
         techName   = userRecord.name  || techName;
-        techAvatar = userRecord.avatarUrl || null;
+        techAvatar = ensureHttpsUrlForPublicInternet(userRecord.avatarUrl) || null;
         techPhone  = userRecord.phone || null;
       }
     } catch(e) { /* user table may not have phone col yet */ }

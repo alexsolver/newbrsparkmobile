@@ -2,6 +2,7 @@
 
 const router = require('express').Router();
 const prisma = require('../db');
+const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 const { adminAuthThenPanel, adminOrReportsApiKey } = require('../middleware/auth');
 const { enforcePanelPermissions } = require('../middleware/panelPermissions');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
@@ -158,7 +159,7 @@ router.get(
     );
 
     const task = mapExecutionToPanelTask(ex, {
-      ownerAvatar: userMap[ex.ownerEmail]?.avatarUrl || null,
+      ownerAvatar: ensureHttpsUrlForPublicInternet(userMap[ex.ownerEmail]?.avatarUrl) || null,
       includeSchemaRaw: true,
       lastSubmittedRevision: lsr,
     });
