@@ -1,6 +1,7 @@
 /**
- * Bloqueio global (offline-first) de um único deslocamento operacional por técnico/aparelho.
- * Evita iniciar «Iniciar deslocamento» noutra OS enquanto uma ficou com transit_start sem transit_end.
+ * Bloqueio global (offline-first): no máximo um trecho de deslocamento em aberto
+ * (`transit_start` sem `transit_end` correspondente) por técnico/aparelho, em qualquer OS
+ * e para qualquer finalidade (serviço, patrulha, reembolso, etc.).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 

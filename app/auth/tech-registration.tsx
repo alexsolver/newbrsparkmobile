@@ -31,6 +31,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { API_BASE, getToken, apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
 import { useAuth } from '../../src/hooks/useAuth';
+import i18n from '../../src/i18n';
 
 /** Mínimo de fotos para o reconhecimento facial do tenant — secção à parte do passo 1 (IA). */
 const MIN_FACE_ENROLLMENT_PHOTOS = 4;
@@ -66,112 +67,48 @@ function userFacingFaceEnrollmentError(
   code: string | undefined,
   rawMessage: string | undefined
 ): { title: string; message: string } {
+  const F = (k: string) => ({
+    title: i18n.t(`appAlerts.techBio.face.${k}.title`),
+    message: i18n.t(`appAlerts.techBio.face.${k}.message`),
+  });
   const c = String(code || '');
-  if (c === 'NO_VISION_INTEGRATION') {
-    return {
-      title: 'Biometria indisponível',
-      message:
-        'O reconhecimento facial ainda não está configurado para sua organização. Entre em contato com quem administra o sistema ou com o suporte.',
-    };
-  }
-  if (c === 'NO_VERIFICATION_KEY') {
-    return {
-      title: 'Configuração incompleta',
-      message:
-        'Falta uma configuração de verificação facial no servidor. Peça ao administrador para revisar as integrações de visão no painel.',
-    };
-  }
-  if (c === 'UNSUPPORTED_ENGINE') {
-    return {
-      title: 'Biometria indisponível',
-      message: 'Este tipo de verificação facial não está disponível no momento. Entre em contato com o suporte.',
-    };
-  }
-  if (c === 'FACE_MISMATCH') {
-    return {
-      title: 'Foto não aceita',
-      message:
-        'Não conseguimos confirmar que é a mesma pessoa da foto de perfil do passo 1. Tire outra foto: rosto de frente, boa luz, sem óculos escuros ou itens cobrindo o rosto.',
-    };
-  }
-  if (c === 'VERIFY_NO_SCORE' || c === 'INVALID_IMAGE') {
-    return {
-      title: 'Imagem inválida',
-      message: 'Não foi possível usar esta foto para comparação. Tente outra imagem mais nítida, só do rosto.',
-    };
-  }
-  if (c === 'NO_FACE_DETECTED') {
-    return {
-      title: 'Rosto não detectado',
-      message:
-        'Não encontramos um rosto claro nesta foto. Fique de frente, com boa luz, e evite chapéu, máscara ou óculos escuros.',
-    };
-  }
-  if (c === 'MULTIPLE_FACES') {
-    return {
-      title: 'Muitas pessoas na foto',
-      message: 'A foto precisa mostrar só você. Tire outra imagem sem outras pessoas ao fundo.',
-    };
-  }
-  if (c === 'FACE_TOO_SMALL') {
-    return {
-      title: 'Enquadramento',
-      message: 'Aproxime-se um pouco: o rosto precisa aparecer maior e nítido na foto.',
-    };
-  }
-  if (c === 'LOW_QUALITY_FACE') {
-    return {
-      title: 'Qualidade da foto',
-      message: 'A imagem ficou fraca ou tremida. Use mais luz e segure o telefone firme.',
-    };
-  }
-  if (c === 'BIOMETRY_TIMEOUT') {
-    return {
-      title: 'Tempo esgotado',
-      message:
-        'A verificação demorou demais. Tente de novo com melhor rede ou uma imagem um pouco menor.',
-    };
-  }
-  if (c === 'TECH_IDENTITY_LOCKED') {
-    return {
-      title: 'Cadastro fechado',
-      message:
-        'A sua conta de prestador já está ativa. A foto de perfil e as fotos de reconhecimento só podem ser alteradas pela empresa no painel administrativo.',
-    };
-  }
+  if (c === 'NO_VISION_INTEGRATION') return F('NO_VISION_INTEGRATION');
+  if (c === 'NO_VERIFICATION_KEY') return F('NO_VERIFICATION_KEY');
+  if (c === 'UNSUPPORTED_ENGINE') return F('UNSUPPORTED_ENGINE');
+  if (c === 'FACE_MISMATCH') return F('FACE_MISMATCH');
+  if (c === 'VERIFY_NO_SCORE' || c === 'INVALID_IMAGE') return F('VERIFY_OR_INVALID_IMAGE');
+  if (c === 'NO_FACE_DETECTED') return F('NO_FACE_DETECTED');
+  if (c === 'MULTIPLE_FACES') return F('MULTIPLE_FACES');
+  if (c === 'FACE_TOO_SMALL') return F('FACE_TOO_SMALL');
+  if (c === 'LOW_QUALITY_FACE') return F('LOW_QUALITY_FACE');
+  if (c === 'BIOMETRY_TIMEOUT') return F('BIOMETRY_TIMEOUT');
+  if (c === 'TECH_IDENTITY_LOCKED') return F('TECH_IDENTITY_LOCKED');
   if (
     c === 'SERVER_ERROR' ||
     c === 'BIOMETRY_SERVICE_ERROR' ||
     c === 'COMPREFACE_ERROR' ||
     httpStatus >= 500
   ) {
-    return {
-      title: 'Serviço ocupado',
-      message:
-        'A verificação facial está demorando ou ficou indisponível por um instante. Aguarde um pouco e envie a foto de novo.',
-    };
+    return F('SERVICE_BUSY');
   }
   if (c === 'PROFILE_REQUIRED') {
+    const fb = F('PROFILE_REQUIRED');
     return {
-      title: 'Conclua o passo 1',
-      message: sanitizeBiometryUserText(String(rawMessage || 'Faça primeiro a foto de perfil validada.')),
+      title: fb.title,
+      message: sanitizeBiometryUserText(String(rawMessage || '')) || fb.message,
     };
   }
   const sanitized = sanitizeBiometryUserText(String(rawMessage || ''));
   if (sanitized) {
     if (looksLikeTechnicalBiometryMessage(sanitized)) {
-      return {
-        title: 'Foto não aceita',
-        message:
-          'Não conseguimos usar esta foto na verificação. Tire outra com o rosto de frente, bem iluminado e sozinho no enquadramento.',
-      };
+      return F('PHOTO_REJECTED_GENERIC');
     }
-    return { title: 'Não foi possível enviar', message: sanitized };
+    return {
+      title: i18n.t('appAlerts.techBio.face.UPLOAD_FAILED_TITLE.title'),
+      message: sanitized,
+    };
   }
-  return {
-    title: 'Não foi possível enviar',
-    message: 'Algo deu errado ao enviar a foto. Verifique a conexão e tente novamente.',
-  };
+  return F('UPLOAD_NETWORK');
 }
 
 function userFacingIdDocumentError(
@@ -179,121 +116,61 @@ function userFacingIdDocumentError(
   code: string | undefined,
   rawMessage: string | undefined
 ): { title: string; message: string } {
+  const D = (k: string) => ({
+    title: i18n.t(`appAlerts.techBio.idDoc.${k}.title`),
+    message: i18n.t(`appAlerts.techBio.idDoc.${k}.message`),
+  });
   const c = String(code || '');
-  if (c === 'TECH_IDENTITY_LOCKED') {
-    return {
-      title: 'Cadastro fechado',
-      message:
-        'A sua conta de prestador já está ativa. O documento de identidade e os dados biométricos do cadastro só podem ser alterados pela empresa no painel administrativo.',
-    };
-  }
-  if (c === 'ID_DOC_IMAGE_REQUIRED') {
-    return {
-      title: 'Envie uma foto',
-      message:
-        'Neste passo é necessária uma imagem do documento (JPEG ou PNG). PDF não permite comparar o rosto da foto do documento com a sua foto de perfil.',
-    };
-  }
-  if (c === 'FACE_STEP_REQUIRED') {
-    return {
-      title: 'Passo 2 pendente',
-      message: 'Conclua antes as fotos biométricas do passo 2.',
-    };
-  }
-  if (c === 'ID_DOC_FLOW_MISMATCH') {
-    return {
-      title: 'Fluxo indisponível',
-      message: 'Este passo não se aplica ao seu tipo de cadastro.',
-    };
-  }
+  if (c === 'TECH_IDENTITY_LOCKED') return D('TECH_IDENTITY_LOCKED');
+  if (c === 'ID_DOC_IMAGE_REQUIRED') return D('ID_DOC_IMAGE_REQUIRED');
+  if (c === 'FACE_STEP_REQUIRED') return D('FACE_STEP_REQUIRED');
+  if (c === 'ID_DOC_FLOW_MISMATCH') return D('ID_DOC_FLOW_MISMATCH');
   if (c === 'NO_OPENAI_KEY') {
     const sanitized = sanitizeBiometryUserText(String(rawMessage || ''));
-    if (sanitized) {
-      return { title: 'Serviço indisponível', message: sanitized };
-    }
-    return {
-      title: 'Serviço indisponível',
-      message:
-        'O servidor não está configurado para este passo (OpenAI). Peça ao suporte ou ao administrador.',
-    };
+    const fb = D('NO_OPENAI_DEFAULT');
+    if (sanitized) return { title: fb.title, message: sanitized };
+    return fb;
   }
   if (c === 'FACE_VERIFY_FAILED') {
+    const fb = D('FACE_VERIFY_FAILED');
     return {
-      title: 'Comparação do documento',
-      message:
-        sanitizeBiometryUserText(String(rawMessage || '')) ||
-        'Não foi possível comparar a foto do documento com a sua foto de perfil agora. Verifique a conexão e tente de novo em instantes.',
+      title: fb.title,
+      message: sanitizeBiometryUserText(String(rawMessage || '')) || fb.message,
     };
   }
   if (c === 'OCR_FAILED' || c === 'SERVER_ERROR') {
+    const fb = D('OCR_OR_SERVER');
     return {
-      title: 'Leitura do documento',
-      message:
-        sanitizeBiometryUserText(String(rawMessage || '')) ||
-        'Não foi possível extrair os dados. Tente uma foto mais nítida, sem reflexo, com o documento inteiro visível.',
+      title: fb.title,
+      message: sanitizeBiometryUserText(String(rawMessage || '')) || fb.message,
     };
   }
 
-  /** Comparação é documento (foto do RG/CNH/etc.) vs foto de perfil — não usar textos do passo 2 (selfie). */
-  const idDocVerifyMessages: Record<
-    string,
-    { title: string; message: string }
-  > = {
-    FACE_MISMATCH: {
-      title: 'Confira a foto do documento',
-      message:
-        'Não conseguimos confirmar que a fotinha do documento é a mesma pessoa da sua foto de perfil. Tire outra foto: documento aberto na página da foto, bem iluminado, sem reflexo forte no plástico, e confira se a foto de perfil (passo 1) é sua e atual.',
-    },
-    VERIFY_NO_SCORE: {
-      title: 'Foto do documento',
-      message:
-        'A comparação entre a fotografia do documento e a sua foto de perfil não ficou clara. Tente outra foto do documento com a fotinha do RG/CNH bem visível e nítida.',
-    },
-    NO_FACE_DETECTED: {
-      title: 'Fotografia no documento',
-      message:
-        'Nesta imagem a fotinha do rosto no documento não apareceu nítida o suficiente. Enquadre o documento de frente, aumente um pouco o zoom na área da foto, use luz difusa e evite reflexo no plástico.',
-    },
-    MULTIPLE_FACES: {
-      title: 'Imagem do documento',
-      message:
-        'Há mais de um rosto visível na foto (por exemplo, você e o fundo). Enquadre só o documento ou a página com a sua fotografia.',
-    },
-    FACE_TOO_SMALL: {
-      title: 'Enquadramento do documento',
-      message:
-        'A fotografia do rosto no documento ficou pequena demais. Aproxime-se um pouco, mantendo o documento inteiro legível.',
-    },
-    LOW_QUALITY_FACE: {
-      title: 'Qualidade da imagem',
-      message:
-        'A foto do documento ficou fraca ou tremida. Use mais luz e segure o telefone firme.',
-    },
-    INVALID_IMAGE: {
-      title: 'Imagem inválida',
-      message:
-        'A imagem é inválida ou muito pequena. Envie outra foto nítida do documento (JPEG ou PNG).',
-    },
-  };
-
-  const docFb = idDocVerifyMessages[c];
-  if (docFb) {
+  const idDocVerifyCodes = new Set([
+    'FACE_MISMATCH',
+    'VERIFY_NO_SCORE',
+    'NO_FACE_DETECTED',
+    'MULTIPLE_FACES',
+    'FACE_TOO_SMALL',
+    'LOW_QUALITY_FACE',
+    'INVALID_IMAGE',
+  ]);
+  if (idDocVerifyCodes.has(c)) {
+    const fb = D(c);
     const sanitized = sanitizeBiometryUserText(String(rawMessage || ''));
     if (sanitized && !looksLikeTechnicalBiometryMessage(sanitized)) {
-      return { title: docFb.title, message: sanitized };
+      return { title: fb.title, message: sanitized };
     }
-    return docFb;
+    return fb;
   }
 
-  /** Erros 5xx ou respostas sem código: não usar texto do passo 2 (selfie/biometria). */
   if (httpStatus >= 500) {
+    const fb = D('DOC_COMPARE_5XX');
     const sanitized = sanitizeBiometryUserText(String(rawMessage || ''));
     return {
-      title: 'Comparação do documento',
+      title: fb.title,
       message:
-        sanitized && !looksLikeTechnicalBiometryMessage(sanitized)
-          ? sanitized
-          : 'O servidor não conseguiu comparar a foto do documento com o seu perfil neste momento. Verifique a conexão e tente de novo em instantes.',
+        sanitized && !looksLikeTechnicalBiometryMessage(sanitized) ? sanitized : fb.message,
     };
   }
 
@@ -512,9 +389,9 @@ export default function TechRegistrationScreen() {
     if (identityLockNavRef.current) return;
     identityLockNavRef.current = true;
     Alert.alert(
-      'Prestador ativo',
-      'A sua conta já está habilitada. Não é possível alterar o cadastro de prestador por este formulário. A foto de perfil e a matrícula facial são geridas pela empresa no painel administrativo.',
-      [{ text: 'OK', onPress: () => router.back() }]
+      i18n.t('appAlerts.techReg.identityLockedNavTitle'),
+      i18n.t('appAlerts.techReg.identityLockedNavBody'),
+      [{ text: i18n.t('common.ok'), onPress: () => router.back() }]
     );
   }, [token, user, router]);
 
@@ -536,7 +413,10 @@ export default function TechRegistrationScreen() {
       const res = await fetch(basePath, { headers });
       const data = await res.json();
       if (!res.ok) {
-        Alert.alert('Erro', data.error || 'Convite inválido.');
+        Alert.alert(
+          i18n.t('common.error'),
+          data.error || i18n.t('appAlerts.techReg.invalidInvite')
+        );
         setSessionOk(false);
         setAuthRequired(false);
         setLoading(false);
@@ -687,7 +567,7 @@ export default function TechRegistrationScreen() {
         }
       }
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Falha ao carregar.');
+      Alert.alert(i18n.t('common.error'), e?.message || i18n.t('appAlerts.techReg.loadError'));
       setSessionOk(false);
       setAuthRequired(false);
     } finally {
@@ -862,7 +742,7 @@ export default function TechRegistrationScreen() {
   ) => {
     const jwt = await getToken();
     if (!jwt) {
-      Alert.alert('Sessão', 'Inicie sessão para anexar arquivos.');
+      Alert.alert(i18n.t('appAlerts.techReg.sessionTitle'), i18n.t('appAlerts.techReg.sessionAttach'));
       return;
     }
     try {
@@ -876,12 +756,15 @@ export default function TechRegistrationScreen() {
       });
       const data = await res.json();
       if (!res.ok) {
-        Alert.alert('Anexo', data.error || 'Falha no envio.');
+        Alert.alert(
+          i18n.t('appAlerts.techReg.attachmentTitle'),
+          data.error || i18n.t('appAlerts.techReg.uploadFail')
+        );
         return;
       }
       if (data.responsesJson) applyResponsesDocs(data.responsesJson);
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Falha de rede.');
+      Alert.alert(i18n.t('common.error'), e?.message || i18n.t('appAlerts.techReg.networkError'));
     }
   };
 
@@ -895,24 +778,27 @@ export default function TechRegistrationScreen() {
       });
       const data = await res.json();
       if (!res.ok) {
-        Alert.alert('Anexo', data.error || 'Falha ao remover.');
+        Alert.alert(
+          i18n.t('appAlerts.techReg.attachmentTitle'),
+          data.error || i18n.t('appAlerts.techReg.removeFail')
+        );
         return;
       }
       if (data.responsesJson) applyResponsesDocs(data.responsesJson);
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Falha de rede.');
+      Alert.alert(i18n.t('common.error'), e?.message || i18n.t('appAlerts.techReg.networkError'));
     }
   };
 
   const promptDocSource = (kind: 'personal' | 'professional', rowId: string) => {
-    Alert.alert('Anexar', 'Escolha a origem do arquivo.', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(i18n.t('appAlerts.techReg.attachSourceTitle'), i18n.t('appAlerts.techReg.attachSourceBody'), [
+      { text: i18n.t('common.cancel'), style: 'cancel' },
       {
-        text: 'Câmera',
+        text: i18n.t('appAlerts.techReg.pickFaceCamera'),
         onPress: async () => {
           const cam = await ImagePicker.requestCameraPermissionsAsync();
           if (!cam.granted) {
-            Alert.alert('Permissão', 'Precisamos da câmera para fotografar o documento.');
+            Alert.alert(i18n.t('appAlerts.techReg.permTitle'), i18n.t('appAlerts.techReg.cameraDoc'));
             return;
           }
           const result = await ImagePicker.launchCameraAsync({
@@ -928,11 +814,11 @@ export default function TechRegistrationScreen() {
         },
       },
       {
-        text: 'Galeria',
+        text: i18n.t('appAlerts.techReg.pickFaceGallery'),
         onPress: async () => {
           const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (!perm.granted) {
-            Alert.alert('Permissão', 'Precisamos da galeria para escolher a imagem.');
+            Alert.alert(i18n.t('appAlerts.techReg.permTitle'), i18n.t('appAlerts.techReg.galleryPick'));
             return;
           }
           const result = await ImagePicker.launchImageLibraryAsync({
@@ -948,7 +834,7 @@ export default function TechRegistrationScreen() {
         },
       },
       {
-        text: 'PDF',
+        text: i18n.t('appAlerts.techReg.pdf'),
         onPress: async () => {
           const res = await DocumentPicker.getDocumentAsync({
             type: 'application/pdf',
@@ -960,7 +846,7 @@ export default function TechRegistrationScreen() {
             const b64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
             await uploadDocAttachment(kind, rowId, b64, asset.mimeType || 'application/pdf');
           } catch (e: any) {
-            Alert.alert('Erro', e?.message || 'Não foi possível ler o PDF.');
+            Alert.alert(i18n.t('common.error'), e?.message || i18n.t('appAlerts.techReg.pdfReadError'));
           }
         },
       },
@@ -997,13 +883,13 @@ export default function TechRegistrationScreen() {
   ): Promise<{ ok: boolean; photoId?: string; url?: string; error?: string }> => {
     const jwt = await getToken();
     if (!jwt) {
-      Alert.alert('Sessão', 'Inicie sessão no app para enviar fotos.');
+      Alert.alert(i18n.t('appAlerts.techReg.sessionTitle'), i18n.t('appAlerts.techReg.sessionPhotos'));
       return { ok: false, error: 'no_jwt' };
     }
     if (user && isTechnicianProfileActive(user)) {
       Alert.alert(
-        'Prestador ativo',
-        'A foto de perfil só pode ser alterada pela empresa no painel administrativo.'
+        i18n.t('appAlerts.techReg.profilePhotoLockedTitle'),
+        i18n.t('appAlerts.techReg.profilePhotoLockedBody')
       );
       return { ok: false, error: 'identity_locked' };
     }
@@ -1029,7 +915,10 @@ export default function TechRegistrationScreen() {
         const { title, message } = userFacingFaceEnrollmentError(res.status, data.code, data.error);
         Alert.alert(title, message);
       } else {
-        Alert.alert('Foto de perfil', data.error || 'Falha ao gravar.');
+        Alert.alert(
+          i18n.t('appAlerts.techReg.removeFaceProfileTitle'),
+          data.error || i18n.t('appAlerts.techReg.profilePhotoFail')
+        );
       }
       return { ok: false, error: data.error || 'upload_failed' };
     }
@@ -1065,13 +954,13 @@ export default function TechRegistrationScreen() {
   ): Promise<{ ok: boolean; photo?: { id: string; url: string }; error?: string }> => {
     const jwt = await getToken();
     if (!jwt) {
-      Alert.alert('Sessão', 'Inicie sessão no app para enviar fotos.');
+      Alert.alert(i18n.t('appAlerts.techReg.sessionTitle'), i18n.t('appAlerts.techReg.sessionPhotos'));
       return { ok: false, error: 'no_jwt' };
     }
     if (user && isTechnicianProfileActive(user)) {
       Alert.alert(
-        'Prestador ativo',
-        'As fotos de reconhecimento só podem ser alteradas pela empresa no painel administrativo.'
+        i18n.t('appAlerts.techReg.faceEnrollmentLockedTitle'),
+        i18n.t('appAlerts.techReg.faceEnrollmentLockedBody')
       );
       return { ok: false, error: 'identity_locked' };
     }
@@ -1112,7 +1001,7 @@ export default function TechRegistrationScreen() {
   const addFacePhotosFromGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('Permissão', 'Precisamos de acesso à galeria para enviar fotos.');
+      Alert.alert(i18n.t('appAlerts.techReg.permTitle'), i18n.t('appAlerts.techReg.galleryPhotos'));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -1137,7 +1026,7 @@ export default function TechRegistrationScreen() {
   const addFacePhotosFromCamera = async () => {
     const cam = await ImagePicker.requestCameraPermissionsAsync();
     if (!cam.granted) {
-      Alert.alert('Permissão', 'Precisamos da câmera para fotografar o rosto.');
+      Alert.alert(i18n.t('appAlerts.techReg.permTitle'), i18n.t('appAlerts.techReg.cameraFace'));
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -1162,13 +1051,13 @@ export default function TechRegistrationScreen() {
   const postIdDocumentB64 = async (fileBase64: string, mimeType: string) => {
     const jwt = await getToken();
     if (!jwt) {
-      Alert.alert('Sessão', 'Inicie sessão no app para enviar o documento.');
+      Alert.alert(i18n.t('appAlerts.techReg.sessionTitle'), i18n.t('appAlerts.techReg.sessionDoc'));
       return false;
     }
     if (user && isTechnicianProfileActive(user)) {
       Alert.alert(
-        'Prestador ativo',
-        'O documento de identidade do cadastro só pode ser alterado pela empresa no painel administrativo.'
+        i18n.t('appAlerts.techReg.idDocLockedTitle'),
+        i18n.t('appAlerts.techReg.idDocLockedBody')
       );
       return false;
     }
@@ -1192,12 +1081,12 @@ export default function TechRegistrationScreen() {
         applyIdDocumentServerPayload(data.responsesJson as Record<string, unknown>);
       }
       Alert.alert(
-        'Documento aceite',
-        'O rosto na imagem foi conferido com a sua foto de perfil e os dados foram lidos automaticamente. Revise os campos abaixo e corrija se algo estiver incorreto.'
+        i18n.t('appAlerts.techReg.idDocAcceptedTitle'),
+        i18n.t('appAlerts.techReg.idDocAcceptedBody')
       );
       return true;
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Falha de rede.');
+      Alert.alert(i18n.t('common.error'), e?.message || i18n.t('appAlerts.techReg.networkError'));
       return false;
     } finally {
       setIdDocumentSubmitting(false);
@@ -1206,16 +1095,16 @@ export default function TechRegistrationScreen() {
 
   const pickIdDocumentSource = () => {
     Alert.alert(
-      'Documento com foto',
-      'Tire ou escolha uma foto nítida do documento (RG, CNH, CPF, passaporte, etc.). O rosto na foto do documento será comparado com a sua foto de perfil.',
+      i18n.t('appAlerts.techReg.idDocPickerTitle'),
+      i18n.t('appAlerts.techReg.idDocPickerBody'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: i18n.t('common.cancel'), style: 'cancel' },
         {
-          text: 'Câmera',
+          text: i18n.t('appAlerts.techReg.pickFaceCamera'),
           onPress: async () => {
             const cam = await ImagePicker.requestCameraPermissionsAsync();
             if (!cam.granted) {
-              Alert.alert('Permissão', 'Precisamos da câmera para fotografar o documento.');
+              Alert.alert(i18n.t('appAlerts.techReg.permTitle'), i18n.t('appAlerts.techReg.cameraDoc'));
               return;
             }
             const result = await ImagePicker.launchCameraAsync({
@@ -1230,11 +1119,11 @@ export default function TechRegistrationScreen() {
           },
         },
         {
-          text: 'Galeria',
+          text: i18n.t('appAlerts.techReg.pickFaceGallery'),
           onPress: async () => {
             const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (!perm.granted) {
-              Alert.alert('Permissão', 'Precisamos da galeria para escolher a imagem.');
+              Alert.alert(i18n.t('appAlerts.techReg.permTitle'), i18n.t('appAlerts.techReg.galleryPick'));
               return;
             }
             const result = await ImagePicker.launchImageLibraryAsync({
@@ -1276,7 +1165,7 @@ export default function TechRegistrationScreen() {
     setPrimaryValidationError(null);
     const cam = await ImagePicker.requestCameraPermissionsAsync();
     if (!cam.granted) {
-      Alert.alert('Permissão', 'Precisamos da câmera para a foto de perfil do cadastro de prestador.');
+      Alert.alert(i18n.t('appAlerts.techReg.permTitle'), i18n.t('appAlerts.techReg.cameraProviderProfile'));
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -1287,7 +1176,7 @@ export default function TechRegistrationScreen() {
     if (result.canceled) return;
     const asset = result.assets[0];
     if (!asset?.base64) {
-      Alert.alert('Foto', 'Não foi possível ler a imagem. Tente novamente.');
+      Alert.alert(i18n.t('appAlerts.techReg.photoTitle'), i18n.t('appAlerts.techReg.photoReadError'));
       return;
     }
     const mime = asset.mimeType || 'image/jpeg';
@@ -1297,7 +1186,7 @@ export default function TechRegistrationScreen() {
     try {
       const jwt = await getToken();
       if (!jwt) {
-        Alert.alert('Sessão', 'Inicie sessão para validar a foto.');
+        Alert.alert(i18n.t('appAlerts.techReg.sessionTitle'), i18n.t('appAlerts.techReg.sessionValidatePhoto'));
         return;
       }
       const valRes = await fetchProfilePhotoAiValidation(dataUrl);
@@ -1338,25 +1227,25 @@ export default function TechRegistrationScreen() {
 
   /** Fluxo legacy / secção do formulário: câmera ou galeria. */
   const pickFace = () => {
-    Alert.alert('Adicionar fotos', 'Escolha a origem. Pode repetir para enviar várias fotos.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Câmera', onPress: () => void addFacePhotosFromCamera() },
-      { text: 'Galeria', onPress: () => void addFacePhotosFromGallery() },
+    Alert.alert(i18n.t('appAlerts.techReg.addPhotosTitle'), i18n.t('appAlerts.techReg.addPhotosBody'), [
+      { text: i18n.t('common.cancel'), style: 'cancel' },
+      { text: i18n.t('appAlerts.techReg.pickFaceCamera'), onPress: () => void addFacePhotosFromCamera() },
+      { text: i18n.t('appAlerts.techReg.pickFaceGallery'), onPress: () => void addFacePhotosFromGallery() },
     ]);
   };
 
   const removeFace = async (photoId: string) => {
     if (user && isTechnicianProfileActive(user)) {
       Alert.alert(
-        'Prestador ativo',
-        'As fotos de reconhecimento só podem ser alteradas pela empresa no painel administrativo.'
+        i18n.t('appAlerts.techReg.faceEnrollmentLockedTitle'),
+        i18n.t('appAlerts.techReg.faceEnrollmentLockedBody')
       );
       return;
     }
     if (primaryProfileCapture?.photoId && String(photoId) === String(primaryProfileCapture.photoId)) {
       Alert.alert(
-        'Foto de perfil',
-        'A foto do passo 1 não pode ser removida daqui. Para trocar, volte ao passo 1 (recomeçar o fluxo ou peça suporte).',
+        i18n.t('appAlerts.techReg.removeFaceProfileTitle'),
+        i18n.t('appAlerts.techReg.removeFaceProfileBody'),
       );
       return;
     }
@@ -1372,8 +1261,10 @@ export default function TechRegistrationScreen() {
         const { title, message } = userFacingFaceEnrollmentError(res.status, data.code, data.error);
         Alert.alert(title, message);
       } else {
-        const rm = sanitizeBiometryUserText(String(data.error || '')) || 'Não foi possível remover esta foto.';
-        Alert.alert('Remover foto', rm);
+        const rm =
+          sanitizeBiometryUserText(String(data.error || '')) ||
+          i18n.t('appAlerts.techReg.removePhotoFailFallback');
+        Alert.alert(i18n.t('appAlerts.techReg.removePhotoTitle'), rm);
       }
       return;
     }
@@ -1398,14 +1289,14 @@ export default function TechRegistrationScreen() {
     const cc = String(country || 'BR').trim().toUpperCase();
     if (cc !== 'BR') {
       Alert.alert(
-        'Código postal',
-        'A busca automática por CEP é para endereços no Brasil. Para outro país, preencha rua, cidade e estado manualmente.',
+        i18n.t('appAlerts.techReg.postalNonBrTitle'),
+        i18n.t('appAlerts.techReg.postalNonBrBody'),
       );
       return;
     }
     const clean = postal.replace(/\D/g, '');
     if (clean.length !== 8) {
-      Alert.alert('CEP', 'Informe o CEP com 8 dígitos.');
+      Alert.alert(i18n.t('appAlerts.techReg.cepTitle'), i18n.t('appAlerts.techReg.cepDigits'));
       return;
     }
     setFetchingCep(true);
@@ -1413,7 +1304,7 @@ export default function TechRegistrationScreen() {
       const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
       const data = await res.json();
       if (data.erro) {
-        Alert.alert('CEP', 'CEP não encontrado. Confira os números.');
+        Alert.alert(i18n.t('appAlerts.techReg.cepTitle'), i18n.t('appAlerts.techReg.cepNotFound'));
         return;
       }
       const log = String(data.logradouro || '').trim();
@@ -1426,7 +1317,7 @@ export default function TechRegistrationScreen() {
       if (uf) setStateUf(uf);
       saveDraftSoon();
     } catch {
-      Alert.alert('Erro', 'Não foi possível consultar o CEP. Verifique a conexão e tente de novo.');
+      Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.techReg.cepLookupError'));
     } finally {
       setFetchingCep(false);
     }
@@ -1631,23 +1522,29 @@ export default function TechRegistrationScreen() {
     const otpCode = String(opts?.otpCodeOverride || '').trim();
     const otpChallengeToken = String(opts?.otpChallengeTokenOverride || '').trim();
     if (!name.trim()) {
-      Alert.alert('Validação', 'Informe o nome.');
+      Alert.alert(i18n.t('appAlerts.techReg.validationTitle'), i18n.t('appAlerts.techReg.validationName'));
       return;
     }
     if (enrollmentPhotosForUi.length < MIN_FACE_ENROLLMENT_PHOTOS) {
       Alert.alert(
-        'Fotos biométricas',
-        `Envie pelo menos ${MIN_FACE_ENROLLMENT_PHOTOS} fotos nítidas do rosto para o reconhecimento facial da organização. Atualmente: ${enrollmentPhotosForUi.length}.`
+        i18n.t('appAlerts.techReg.biometricPhotosTitle'),
+        i18n.t('appAlerts.techReg.biometricPhotosBody', {
+          min: MIN_FACE_ENROLLMENT_PHOTOS,
+          current: enrollmentPhotosForUi.length,
+        })
       );
       return;
     }
     const jwt = await getToken();
     if (!jwt) {
-      Alert.alert('Sessão', 'Inicie sessão no app para submeter a candidatura.');
+      Alert.alert(i18n.t('appAlerts.techReg.sessionTitle'), i18n.t('appAlerts.techReg.sessionSubmit'));
       return;
     }
     if (user && isTechnicianProfileActive(user)) {
-      Alert.alert('Prestador ativo', 'Não é possível reenviar a candidatura. A sua conta já está habilitada.');
+      Alert.alert(
+        i18n.t('appAlerts.techReg.providerActiveTitle'),
+        i18n.t('appAlerts.techReg.providerActiveBody')
+      );
       return;
     }
     setSaving(true);
@@ -1673,13 +1570,19 @@ export default function TechRegistrationScreen() {
           return;
         }
         if (data.code === 'OTP_INVALID') {
-          Alert.alert('Código inválido', 'O código informado não confere. Revise e tente novamente.');
+          Alert.alert(
+            i18n.t('appAlerts.techReg.codeMismatchTitle'),
+            i18n.t('appAlerts.techReg.codeMismatchBody')
+          );
           return;
         }
         if (data.code === 'OTP_EXPIRED') {
           setSubmitOtpCode('');
           setSubmitOtpChallengeToken(null);
-          Alert.alert('Código expirado', 'Solicite um novo código para concluir o envio.');
+          Alert.alert(
+            i18n.t('appAlerts.techReg.codeExpiredTitle'),
+            i18n.t('appAlerts.techReg.codeExpiredBody')
+          );
           return;
         }
         if (data.code === 'TECH_IDENTITY_LOCKED') {
@@ -1688,14 +1591,14 @@ export default function TechRegistrationScreen() {
         } else {
           const errMsg =
             sanitizeBiometryUserText(String(data.error || '')) ||
-            'Não foi possível enviar a candidatura. Tente novamente.';
-          Alert.alert('Envio', errMsg);
+            i18n.t('appAlerts.techReg.submitFallbackBody');
+          Alert.alert(i18n.t('appAlerts.techReg.submitTitle'), errMsg);
         }
         return;
       }
-      Alert.alert('Enviado', 'Sua candidatura foi enviada. Aguarde a análise da equipe.', [
+      Alert.alert(i18n.t('appAlerts.techReg.sentTitle'), i18n.t('appAlerts.techReg.sentBody'), [
         {
-          text: 'OK',
+          text: i18n.t('common.ok'),
           onPress: () =>
             user
               ? router.replace('/profile' as any)
@@ -1706,7 +1609,7 @@ export default function TechRegistrationScreen() {
       setSubmitOtpCode('');
       setSubmitOtpChallengeToken(null);
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Falha de rede.');
+      Alert.alert(i18n.t('common.error'), e?.message || i18n.t('appAlerts.techReg.networkError'));
     } finally {
       setSaving(false);
     }

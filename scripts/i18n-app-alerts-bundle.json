@@ -312,6 +312,8 @@
       "addPhotosBody": "Escolha a origem. Pode repetir para enviar várias fotos.",
       "removePhotoTitle": "Remover foto",
       "cepTitle": "CEP",
+      "validationTitle": "Validação",
+      "pdf": "PDF",
       "cepDigits": "Informe o CEP com 8 dígitos.",
       "cepNotFound": "CEP não encontrado. Confira os números.",
       "cepLookupError": "Não foi possível consultar o CEP. Verifique a conexão e tente de novo.",
@@ -327,7 +329,29 @@
       "sentBody": "Sua candidatura foi enviada. Aguarde a análise da equipe.",
       "networkError": "Falha de rede.",
       "permTitle": "Permissão",
-      "sessionTitle": "Sessão"
+      "sessionTitle": "Sessão",
+      "identityLockedNavTitle": "Prestador ativo",
+      "identityLockedNavBody": "A sua conta já está habilitada. Não é possível alterar o cadastro de prestador por este formulário. A foto de perfil e a matrícula facial são geridas pela empresa no painel administrativo.",
+      "profilePhotoLockedTitle": "Prestador ativo",
+      "profilePhotoLockedBody": "A foto de perfil só pode ser alterada pela empresa no painel administrativo.",
+      "faceEnrollmentLockedTitle": "Prestador ativo",
+      "faceEnrollmentLockedBody": "As fotos de reconhecimento só podem ser alteradas pela empresa no painel administrativo.",
+      "idDocLockedTitle": "Prestador ativo",
+      "idDocLockedBody": "O documento de identidade do cadastro só pode ser alterado pela empresa no painel administrativo.",
+      "idDocAcceptedTitle": "Documento aceite",
+      "idDocAcceptedBody": "O rosto na imagem foi conferido com a sua foto de perfil e os dados foram lidos automaticamente. Revise os campos abaixo e corrija se algo estiver incorreto.",
+      "idDocPickerTitle": "Documento com foto",
+      "idDocPickerBody": "Tire ou escolha uma foto nítida do documento (RG, CNH, CPF, passaporte, etc.). O rosto na foto do documento será comparado com a sua foto de perfil.",
+      "removeFaceProfileTitle": "Foto de perfil",
+      "removeFaceProfileBody": "A foto do passo 1 não pode ser removida daqui. Para trocar, volte ao passo 1 (recomeçar o fluxo ou peça suporte).",
+      "removePhotoFailFallback": "Não foi possível remover esta foto.",
+      "postalNonBrTitle": "Código postal",
+      "postalNonBrBody": "A busca automática por CEP é para endereços no Brasil. Para outro país, preencha rua, cidade e estado manualmente.",
+      "biometricPhotosTitle": "Fotos biométricas",
+      "biometricPhotosBody": "Envie pelo menos {{min}} fotos nítidas do rosto para o reconhecimento facial da organização. Atualmente: {{current}}.",
+      "submitFallbackBody": "Não foi possível enviar a candidatura. Tente novamente.",
+      "pickFaceCamera": "Câmera",
+      "pickFaceGallery": "Galeria"
     },
     "transit": {
       "stateTitle": "Estado do deslocamento"
@@ -337,6 +361,136 @@
       "unlinkBody": "Desvincular \"{{title}}\" deste ativo?",
       "deleteRoomTitle": "Excluir local",
       "deleteRoomBody": "Remover \"{{room}}\" dos locais?"
+    },
+    "techBio": {
+      "face": {
+        "NO_VISION_INTEGRATION": {
+          "title": "Biometria indisponível",
+          "message": "O reconhecimento facial ainda não está configurado para sua organização. Entre em contato com quem administra o sistema ou com o suporte."
+        },
+        "NO_VERIFICATION_KEY": {
+          "title": "Configuração incompleta",
+          "message": "Falta uma configuração de verificação facial no servidor. Peça ao administrador para revisar as integrações de visão no painel."
+        },
+        "UNSUPPORTED_ENGINE": {
+          "title": "Biometria indisponível",
+          "message": "Este tipo de verificação facial não está disponível no momento. Entre em contato com o suporte."
+        },
+        "FACE_MISMATCH": {
+          "title": "Foto não aceita",
+          "message": "Não conseguimos confirmar que é a mesma pessoa da foto de perfil do passo 1. Tire outra foto: rosto de frente, boa luz, sem óculos escuros ou itens cobrindo o rosto."
+        },
+        "VERIFY_OR_INVALID_IMAGE": {
+          "title": "Imagem inválida",
+          "message": "Não foi possível usar esta foto para comparação. Tente outra imagem mais nítida, só do rosto."
+        },
+        "NO_FACE_DETECTED": {
+          "title": "Rosto não detectado",
+          "message": "Não encontramos um rosto claro nesta foto. Fique de frente, com boa luz, e evite chapéu, máscara ou óculos escuros."
+        },
+        "MULTIPLE_FACES": {
+          "title": "Muitas pessoas na foto",
+          "message": "A foto precisa mostrar só você. Tire outra imagem sem outras pessoas ao fundo."
+        },
+        "FACE_TOO_SMALL": {
+          "title": "Enquadramento",
+          "message": "Aproxime-se um pouco: o rosto precisa aparecer maior e nítido na foto."
+        },
+        "LOW_QUALITY_FACE": {
+          "title": "Qualidade da foto",
+          "message": "A imagem ficou fraca ou tremida. Use mais luz e segure o telefone firme."
+        },
+        "BIOMETRY_TIMEOUT": {
+          "title": "Tempo esgotado",
+          "message": "A verificação demorou demais. Tente de novo com melhor rede ou uma imagem um pouco menor."
+        },
+        "TECH_IDENTITY_LOCKED": {
+          "title": "Cadastro fechado",
+          "message": "A sua conta de prestador já está ativa. A foto de perfil e as fotos de reconhecimento só podem ser alteradas pela empresa no painel administrativo."
+        },
+        "SERVICE_BUSY": {
+          "title": "Serviço ocupado",
+          "message": "A verificação facial está demorando ou ficou indisponível por um instante. Aguarde um pouco e envie a foto de novo."
+        },
+        "PROFILE_REQUIRED": {
+          "title": "Conclua o passo 1",
+          "message": "Faça primeiro a foto de perfil validada."
+        },
+        "PHOTO_REJECTED_GENERIC": {
+          "title": "Foto não aceita",
+          "message": "Não conseguimos usar esta foto na verificação. Tire outra com o rosto de frente, bem iluminado e sozinho no enquadramento."
+        },
+        "UPLOAD_FAILED_TITLE": {
+          "title": "Não foi possível enviar",
+          "message": ""
+        },
+        "UPLOAD_NETWORK": {
+          "title": "Não foi possível enviar",
+          "message": "Algo deu errado ao enviar a foto. Verifique a conexão e tente novamente."
+        }
+      },
+      "idDoc": {
+        "TECH_IDENTITY_LOCKED": {
+          "title": "Cadastro fechado",
+          "message": "A sua conta de prestador já está ativa. O documento de identidade e os dados biométricos do cadastro só podem ser alterados pela empresa no painel administrativo."
+        },
+        "ID_DOC_IMAGE_REQUIRED": {
+          "title": "Envie uma foto",
+          "message": "Neste passo é necessária uma imagem do documento (JPEG ou PNG). PDF não permite comparar o rosto da foto do documento com a sua foto de perfil."
+        },
+        "FACE_STEP_REQUIRED": {
+          "title": "Passo 2 pendente",
+          "message": "Conclua antes as fotos biométricas do passo 2."
+        },
+        "ID_DOC_FLOW_MISMATCH": {
+          "title": "Fluxo indisponível",
+          "message": "Este passo não se aplica ao seu tipo de cadastro."
+        },
+        "NO_OPENAI_DEFAULT": {
+          "title": "Serviço indisponível",
+          "message": "O servidor não está configurado para este passo (OpenAI). Peça ao suporte ou ao administrador."
+        },
+        "FACE_VERIFY_FAILED": {
+          "title": "Comparação do documento",
+          "message": "Não foi possível comparar a foto do documento com a sua foto de perfil agora. Verifique a conexão e tente de novo em instantes."
+        },
+        "OCR_OR_SERVER": {
+          "title": "Leitura do documento",
+          "message": "Não foi possível extrair os dados. Tente uma foto mais nítida, sem reflexo, com o documento inteiro visível."
+        },
+        "DOC_COMPARE_5XX": {
+          "title": "Comparação do documento",
+          "message": "O servidor não conseguiu comparar a foto do documento com o seu perfil neste momento. Verifique a conexão e tente de novo em instantes."
+        },
+        "FACE_MISMATCH": {
+          "title": "Confira a foto do documento",
+          "message": "Não conseguimos confirmar que a fotinha do documento é a mesma pessoa da sua foto de perfil. Tire outra foto: documento aberto na página da foto, bem iluminado, sem reflexo forte no plástico, e confira se a foto de perfil (passo 1) é sua e atual."
+        },
+        "VERIFY_NO_SCORE": {
+          "title": "Foto do documento",
+          "message": "A comparação entre a fotografia do documento e a sua foto de perfil não ficou clara. Tente outra foto do documento com a fotinha do RG/CNH bem visível e nítida."
+        },
+        "NO_FACE_DETECTED": {
+          "title": "Fotografia no documento",
+          "message": "Nesta imagem a fotinha do rosto no documento não apareceu nítida o suficiente. Enquadre o documento de frente, aumente um pouco o zoom na área da foto, use luz difusa e evite reflexo no plástico."
+        },
+        "MULTIPLE_FACES": {
+          "title": "Imagem do documento",
+          "message": "Há mais de um rosto visível na foto (por exemplo, você e o fundo). Enquadre só o documento ou a página com a sua fotografia."
+        },
+        "FACE_TOO_SMALL": {
+          "title": "Enquadramento do documento",
+          "message": "A fotografia do rosto no documento ficou pequena demais. Aproxime-se um pouco, mantendo o documento inteiro legível."
+        },
+        "LOW_QUALITY_FACE": {
+          "title": "Qualidade da imagem",
+          "message": "A foto do documento ficou fraca ou tremida. Use mais luz e segure o telefone firme."
+        },
+        "INVALID_IMAGE": {
+          "title": "Imagem inválida",
+          "message": "A imagem é inválida ou muito pequena. Envie outra foto nítida do documento (JPEG ou PNG)."
+        }
+      }
     }
   },
   "en-US": {
@@ -652,6 +806,8 @@
       "addPhotosBody": "Choose a source. You can repeat to send several photos.",
       "removePhotoTitle": "Remove photo",
       "cepTitle": "ZIP code",
+      "validationTitle": "Validation",
+      "pdf": "PDF",
       "cepDigits": "Enter the ZIP code with 8 digits.",
       "cepNotFound": "ZIP code not found. Check the numbers.",
       "cepLookupError": "Could not look up the ZIP code. Check your connection and try again.",
@@ -667,7 +823,29 @@
       "sentBody": "Your application was sent. Please wait for the team to review it.",
       "networkError": "Network error.",
       "permTitle": "Permission",
-      "sessionTitle": "Session"
+      "sessionTitle": "Session",
+      "identityLockedNavTitle": "Active provider",
+      "identityLockedNavBody": "Your account is already enabled. You cannot change provider registration in this form. Profile photo and facial enrollment are managed by your company in the admin panel.",
+      "profilePhotoLockedTitle": "Active provider",
+      "profilePhotoLockedBody": "Profile photo can only be changed by your company in the admin panel.",
+      "faceEnrollmentLockedTitle": "Active provider",
+      "faceEnrollmentLockedBody": "Recognition photos can only be changed by your company in the admin panel.",
+      "idDocLockedTitle": "Active provider",
+      "idDocLockedBody": "ID document on this registration can only be changed by your company in the admin panel.",
+      "idDocAcceptedTitle": "Document accepted",
+      "idDocAcceptedBody": "The face in the image was checked against your profile photo and data was read automatically. Review the fields below and correct anything wrong.",
+      "idDocPickerTitle": "Photo ID document",
+      "idDocPickerBody": "Take or pick a clear photo of your ID (driver license, national ID, passport, etc.). The face on the document will be compared with your profile photo.",
+      "removeFaceProfileTitle": "Profile photo",
+      "removeFaceProfileBody": "Step 1 photo cannot be removed here. To change it, go back to step 1 (restart the flow or contact support).",
+      "removePhotoFailFallback": "Could not remove this photo.",
+      "postalNonBrTitle": "Postal code",
+      "postalNonBrBody": "Automatic lookup is for Brazil addresses. For other countries, fill street, city and state manually.",
+      "biometricPhotosTitle": "Biometric photos",
+      "biometricPhotosBody": "Send at least {{min}} clear face photos for your organization’s facial recognition. Currently: {{current}}.",
+      "submitFallbackBody": "Could not submit the application. Try again.",
+      "pickFaceCamera": "Camera",
+      "pickFaceGallery": "Gallery"
     },
     "transit": {
       "stateTitle": "Transit status"
@@ -677,6 +855,136 @@
       "unlinkBody": "Unlink \"{{title}}\" from this property?",
       "deleteRoomTitle": "Delete location",
       "deleteRoomBody": "Remove \"{{room}}\" from locations?"
+    },
+    "techBio": {
+      "face": {
+        "NO_VISION_INTEGRATION": {
+          "title": "Biometrics unavailable",
+          "message": "Facial recognition is not set up for your organization yet. Contact your administrator or support."
+        },
+        "NO_VERIFICATION_KEY": {
+          "title": "Incomplete setup",
+          "message": "Face verification is not fully configured on the server. Ask an admin to review vision integrations in the panel."
+        },
+        "UNSUPPORTED_ENGINE": {
+          "title": "Biometrics unavailable",
+          "message": "This type of face verification is not available right now. Contact support."
+        },
+        "FACE_MISMATCH": {
+          "title": "Photo not accepted",
+          "message": "We could not confirm you match the step 1 profile photo. Take another photo: face forward, good light, no sunglasses or items covering your face."
+        },
+        "VERIFY_OR_INVALID_IMAGE": {
+          "title": "Invalid image",
+          "message": "We could not use this photo for comparison. Try another sharper image with only your face."
+        },
+        "NO_FACE_DETECTED": {
+          "title": "No face detected",
+          "message": "We could not find a clear face in this photo. Face the camera with good light; avoid hats, masks, or dark glasses."
+        },
+        "MULTIPLE_FACES": {
+          "title": "Too many people in the photo",
+          "message": "The photo must show only you. Take another picture without other people in the frame."
+        },
+        "FACE_TOO_SMALL": {
+          "title": "Framing",
+          "message": "Move a bit closer: your face should appear larger and sharp in the photo."
+        },
+        "LOW_QUALITY_FACE": {
+          "title": "Photo quality",
+          "message": "The image is blurry or shaky. Use more light and hold the phone steady."
+        },
+        "BIOMETRY_TIMEOUT": {
+          "title": "Timed out",
+          "message": "Verification took too long. Try again with a better network or a slightly smaller image."
+        },
+        "TECH_IDENTITY_LOCKED": {
+          "title": "Registration locked",
+          "message": "Your provider account is already active. Profile photo and recognition photos can only be changed by your company in the admin panel."
+        },
+        "SERVICE_BUSY": {
+          "title": "Service busy",
+          "message": "Face verification is slow or temporarily unavailable. Wait a moment and send the photo again."
+        },
+        "PROFILE_REQUIRED": {
+          "title": "Complete step 1",
+          "message": "Complete and validate your profile photo first."
+        },
+        "PHOTO_REJECTED_GENERIC": {
+          "title": "Photo not accepted",
+          "message": "We could not use this photo for verification. Take another with your face forward, well lit, and alone in the frame."
+        },
+        "UPLOAD_FAILED_TITLE": {
+          "title": "Could not send",
+          "message": ""
+        },
+        "UPLOAD_NETWORK": {
+          "title": "Could not send",
+          "message": "Something went wrong while sending the photo. Check your connection and try again."
+        }
+      },
+      "idDoc": {
+        "TECH_IDENTITY_LOCKED": {
+          "title": "Registration locked",
+          "message": "Your provider account is already active. ID document and biometric data can only be changed by your company in the admin panel."
+        },
+        "ID_DOC_IMAGE_REQUIRED": {
+          "title": "Send a photo",
+          "message": "This step needs an image of the document (JPEG or PNG). PDF cannot compare the face on the document with your profile photo."
+        },
+        "FACE_STEP_REQUIRED": {
+          "title": "Step 2 pending",
+          "message": "Complete the biometric photos from step 2 first."
+        },
+        "ID_DOC_FLOW_MISMATCH": {
+          "title": "Flow not available",
+          "message": "This step does not apply to your registration type."
+        },
+        "NO_OPENAI_DEFAULT": {
+          "title": "Service unavailable",
+          "message": "The server is not configured for this step (OpenAI). Contact support or your administrator."
+        },
+        "FACE_VERIFY_FAILED": {
+          "title": "Document comparison",
+          "message": "We could not compare the document photo with your profile photo now. Check your connection and try again shortly."
+        },
+        "OCR_OR_SERVER": {
+          "title": "Reading the document",
+          "message": "We could not extract the data. Try a sharper photo without glare, with the full document visible."
+        },
+        "DOC_COMPARE_5XX": {
+          "title": "Document comparison",
+          "message": "The server could not compare the document photo with your profile right now. Check your connection and try again shortly."
+        },
+        "FACE_MISMATCH": {
+          "title": "Check the document photo",
+          "message": "We could not confirm the small photo on the ID matches your profile photo. Take another photo: document open on the photo page, well lit, without strong plastic glare, and ensure your step 1 profile photo is current."
+        },
+        "VERIFY_NO_SCORE": {
+          "title": "Document photo",
+          "message": "The comparison between the document image and your profile photo was unclear. Try another document photo with the ID portrait clearly visible."
+        },
+        "NO_FACE_DETECTED": {
+          "title": "Photo on document",
+          "message": "The face photo on the document is not sharp enough. Frame the document front-on, zoom slightly on the portrait area, use diffuse light and avoid plastic glare."
+        },
+        "MULTIPLE_FACES": {
+          "title": "Document image",
+          "message": "More than one face is visible. Frame only the document or the page with your portrait."
+        },
+        "FACE_TOO_SMALL": {
+          "title": "Document framing",
+          "message": "The portrait on the document is too small. Move closer while keeping the whole document readable."
+        },
+        "LOW_QUALITY_FACE": {
+          "title": "Image quality",
+          "message": "The document photo is blurry or shaky. Use more light and hold the phone steady."
+        },
+        "INVALID_IMAGE": {
+          "title": "Invalid image",
+          "message": "The image is invalid or too small. Send another sharp document photo (JPEG or PNG)."
+        }
+      }
     }
   },
   "es-ES": {
@@ -992,6 +1300,8 @@
       "addPhotosBody": "Elige el origen. Puedes repetir para enviar varias fotos.",
       "removePhotoTitle": "Quitar foto",
       "cepTitle": "Código postal",
+      "validationTitle": "Validación",
+      "pdf": "PDF",
       "cepDigits": "Indica el código postal con 8 dígitos.",
       "cepNotFound": "Código postal no encontrado. Revisa los números.",
       "cepLookupError": "No se pudo consultar el código postal. Revisa la conexión.",
@@ -1007,7 +1317,29 @@
       "sentBody": "Tu candidatura fue enviada. Espera el análisis del equipo.",
       "networkError": "Fallo de red.",
       "permTitle": "Permiso",
-      "sessionTitle": "Sesión"
+      "sessionTitle": "Sesión",
+      "identityLockedNavTitle": "Proveedor activo",
+      "identityLockedNavBody": "Tu cuenta ya está habilitada. No puedes cambiar el registro de proveedor en este formulario. La foto de perfil y el registro facial los gestiona la empresa en el panel.",
+      "profilePhotoLockedTitle": "Proveedor activo",
+      "profilePhotoLockedBody": "La foto de perfil solo la puede cambiar la empresa en el panel.",
+      "faceEnrollmentLockedTitle": "Proveedor activo",
+      "faceEnrollmentLockedBody": "Las fotos de reconocimiento solo las puede cambiar la empresa en el panel.",
+      "idDocLockedTitle": "Proveedor activo",
+      "idDocLockedBody": "El documento de identidad del registro solo lo puede cambiar la empresa en el panel.",
+      "idDocAcceptedTitle": "Documento aceptado",
+      "idDocAcceptedBody": "El rostro de la imagen se comparó con tu foto de perfil y los datos se leyeron automáticamente. Revisa los campos y corrige si hace falta.",
+      "idDocPickerTitle": "Documento con foto",
+      "idDocPickerBody": "Toma o elige una foto nítida del documento (DNI, carnet, pasaporte, etc.). El rostro del documento se comparará con tu foto de perfil.",
+      "removeFaceProfileTitle": "Foto de perfil",
+      "removeFaceProfileBody": "La foto del paso 1 no se puede quitar aquí. Para cambiarla, vuelve al paso 1 (reinicia el flujo o contacta soporte).",
+      "removePhotoFailFallback": "No se pudo eliminar esta foto.",
+      "postalNonBrTitle": "Código postal",
+      "postalNonBrBody": "La búsqueda automática es para direcciones en Brasil. En otro país, completa calle, ciudad y provincia manualmente.",
+      "biometricPhotosTitle": "Fotos biométricas",
+      "biometricPhotosBody": "Envía al menos {{min}} fotos nítidas del rostro para el reconocimiento facial de la organización. Actualmente: {{current}}.",
+      "submitFallbackBody": "No se pudo enviar la candidatura. Inténtalo de nuevo.",
+      "pickFaceCamera": "Cámara",
+      "pickFaceGallery": "Galería"
     },
     "transit": {
       "stateTitle": "Estado del desplazamiento"
@@ -1017,6 +1349,136 @@
       "unlinkBody": "¿Desvincular \"{{title}}\" de este activo?",
       "deleteRoomTitle": "Eliminar lugar",
       "deleteRoomBody": "¿Quitar \"{{room}}\" de los lugares?"
+    },
+    "techBio": {
+      "face": {
+        "NO_VISION_INTEGRATION": {
+          "title": "Biometría no disponible",
+          "message": "El reconocimiento facial aún no está configurado para tu organización. Contacta al administrador o al soporte."
+        },
+        "NO_VERIFICATION_KEY": {
+          "title": "Configuración incompleta",
+          "message": "Falta configuración de verificación facial en el servidor. Pide al administrador que revise las integraciones de visión en el panel."
+        },
+        "UNSUPPORTED_ENGINE": {
+          "title": "Biometría no disponible",
+          "message": "Este tipo de verificación facial no está disponible ahora. Contacta al soporte."
+        },
+        "FACE_MISMATCH": {
+          "title": "Foto no aceptada",
+          "message": "No pudimos confirmar que eres la misma persona que la foto de perfil del paso 1. Toma otra foto: rostro de frente, buena luz, sin gafas oscuras ni objetos cubriendo el rostro."
+        },
+        "VERIFY_OR_INVALID_IMAGE": {
+          "title": "Imagen no válida",
+          "message": "No pudimos usar esta foto para la comparación. Prueba otra imagen más nítida, solo con tu rostro."
+        },
+        "NO_FACE_DETECTED": {
+          "title": "Rostro no detectado",
+          "message": "No encontramos un rostro claro en esta foto. Ponte de frente, con buena luz, y evita gorro, mascarilla o gafas oscuras."
+        },
+        "MULTIPLE_FACES": {
+          "title": "Demasiadas personas en la foto",
+          "message": "La foto debe mostrarte solo a ti. Toma otra imagen sin otras personas."
+        },
+        "FACE_TOO_SMALL": {
+          "title": "Encuadre",
+          "message": "Acércate un poco: el rostro debe verse más grande y nítido."
+        },
+        "LOW_QUALITY_FACE": {
+          "title": "Calidad de la foto",
+          "message": "La imagen salió borrosa o movida. Usa más luz y sujeta el teléfono con firmeza."
+        },
+        "BIOMETRY_TIMEOUT": {
+          "title": "Tiempo agotado",
+          "message": "La verificación tardó demasiado. Inténtalo de nuevo con mejor red o una imagen un poco más pequeña."
+        },
+        "TECH_IDENTITY_LOCKED": {
+          "title": "Registro cerrado",
+          "message": "Tu cuenta de proveedor ya está activa. La foto de perfil y las fotos de reconocimiento solo las puede cambiar la empresa en el panel."
+        },
+        "SERVICE_BUSY": {
+          "title": "Servicio ocupado",
+          "message": "La verificación facial va lenta o no está disponible por un momento. Espera un poco y envía la foto de nuevo."
+        },
+        "PROFILE_REQUIRED": {
+          "title": "Completa el paso 1",
+          "message": "Primero completa y valida la foto de perfil."
+        },
+        "PHOTO_REJECTED_GENERIC": {
+          "title": "Foto no aceptada",
+          "message": "No pudimos usar esta foto en la verificación. Toma otra con el rostro de frente, bien iluminado y solo en el encuadre."
+        },
+        "UPLOAD_FAILED_TITLE": {
+          "title": "No se pudo enviar",
+          "message": ""
+        },
+        "UPLOAD_NETWORK": {
+          "title": "No se pudo enviar",
+          "message": "Algo salió mal al enviar la foto. Comprueba la conexión e inténtalo de nuevo."
+        }
+      },
+      "idDoc": {
+        "TECH_IDENTITY_LOCKED": {
+          "title": "Registration locked",
+          "message": "Your provider account is already active. ID document and biometric data can only be changed by your company in the admin panel."
+        },
+        "ID_DOC_IMAGE_REQUIRED": {
+          "title": "Envía una foto",
+          "message": "Este paso requiere una imagen del documento (JPEG o PNG). Un PDF no permite comparar el rostro del documento con tu foto de perfil."
+        },
+        "FACE_STEP_REQUIRED": {
+          "title": "Paso 2 pendiente",
+          "message": "Completa antes las fotos biométricas del paso 2."
+        },
+        "ID_DOC_FLOW_MISMATCH": {
+          "title": "Flujo no disponible",
+          "message": "Este paso no aplica a tu tipo de registro."
+        },
+        "NO_OPENAI_DEFAULT": {
+          "title": "Servicio no disponible",
+          "message": "El servidor no está configurado para este paso (OpenAI). Contacta al soporte o al administrador."
+        },
+        "FACE_VERIFY_FAILED": {
+          "title": "Comparación del documento",
+          "message": "No pudimos comparar la foto del documento con tu foto de perfil ahora. Comprueba la conexión e inténtalo en unos instantes."
+        },
+        "OCR_OR_SERVER": {
+          "title": "Lectura del documento",
+          "message": "No pudimos extraer los datos. Prueba una foto más nítida, sin reflejo, con el documento entero visible."
+        },
+        "DOC_COMPARE_5XX": {
+          "title": "Comparación del documento",
+          "message": "El servidor no pudo comparar la foto del documento con tu perfil ahora. Comprueba la conexión e inténtalo de nuevo en unos instantes."
+        },
+        "FACE_MISMATCH": {
+          "title": "Revisa la foto del documento",
+          "message": "No pudimos confirmar que la foto pequeña del documento es la misma persona que tu foto de perfil. Toma otra foto: documento abierto en la página de la foto, bien iluminado, sin reflejo fuerte en el plástico."
+        },
+        "VERIFY_NO_SCORE": {
+          "title": "Foto del documento",
+          "message": "La comparación entre la foto del documento y tu perfil no quedó clara. Prueba otra foto con la fotito del DNI/Carnet bien visible."
+        },
+        "NO_FACE_DETECTED": {
+          "title": "Fotografía en el documento",
+          "message": "La fotito del rostro en el documento no se ve lo bastante nítida. Encuadra el documento de frente, acerca un poco el zoom, luz difusa y evita reflejo en el plástico."
+        },
+        "MULTIPLE_FACES": {
+          "title": "Imagen del documento",
+          "message": "Hay más de un rostro visible. Encuadre solo el documento o la página con tu fotografía."
+        },
+        "FACE_TOO_SMALL": {
+          "title": "Encuadre del documento",
+          "message": "La foto del rostro en el documento quedó demasiado pequeña. Acércate un poco manteniendo el documento legible."
+        },
+        "LOW_QUALITY_FACE": {
+          "title": "Calidad de la imagen",
+          "message": "La foto del documento salió borrosa o movida. Usa más luz y sujeta el teléfono firme."
+        },
+        "INVALID_IMAGE": {
+          "title": "Imagen no válida",
+          "message": "La imagen no es válida o es demasiado pequeña. Envía otra foto nítida del documento (JPEG o PNG)."
+        }
+      }
     }
   },
   "de-DE": {
@@ -1332,6 +1794,8 @@
       "addPhotosBody": "Quelle wählen. Mehrfach zum Senden mehrerer Fotos.",
       "removePhotoTitle": "Foto entfernen",
       "cepTitle": "PLZ",
+      "validationTitle": "Validierung",
+      "pdf": "PDF",
       "cepDigits": "Postleitzahl mit 8 Ziffern eingeben.",
       "cepNotFound": "PLZ nicht gefunden. Ziffern prüfen.",
       "cepLookupError": "PLZ-Abfrage fehlgeschlagen. Verbindung prüfen und erneut versuchen.",
@@ -1347,7 +1811,29 @@
       "sentBody": "Ihre Bewerbung wurde gesendet. Bitte auf die Prüfung warten.",
       "networkError": "Netzwerkfehler.",
       "permTitle": "Berechtigung",
-      "sessionTitle": "Sitzung"
+      "sessionTitle": "Sitzung",
+      "identityLockedNavTitle": "Aktiver Anbieter",
+      "identityLockedNavBody": "Ihr Konto ist bereits aktiv. Die Anbieterregistrierung kann hier nicht geändert werden. Profilfoto und Gesichtserfassung verwaltet die Firma im Admin-Panel.",
+      "profilePhotoLockedTitle": "Aktiver Anbieter",
+      "profilePhotoLockedBody": "Das Profilfoto kann nur im Admin-Panel der Firma geändert werden.",
+      "faceEnrollmentLockedTitle": "Aktiver Anbieter",
+      "faceEnrollmentLockedBody": "Erkennungsfotos können nur im Admin-Panel der Firma geändert werden.",
+      "idDocLockedTitle": "Aktiver Anbieter",
+      "idDocLockedBody": "Das Ausweisdokument in dieser Registrierung kann nur im Admin-Panel der Firma geändert werden.",
+      "idDocAcceptedTitle": "Dokument akzeptiert",
+      "idDocAcceptedBody": "Das Gesicht im Bild wurde mit Ihrem Profilfoto abgeglichen und die Daten automatisch gelesen. Prüfen Sie die Felder und korrigieren Sie bei Bedarf.",
+      "idDocPickerTitle": "Ausweis mit Foto",
+      "idDocPickerBody": "Machen oder wählen Sie ein scharfes Foto des Ausweises (Personalausweis, Reisepass usw.). Das Gesicht auf dem Dokument wird mit Ihrem Profilfoto verglichen.",
+      "removeFaceProfileTitle": "Profilfoto",
+      "removeFaceProfileBody": "Das Foto aus Schritt 1 kann hier nicht entfernt werden. Zum Wechseln gehen Sie zurück zu Schritt 1 (Fluss neu starten oder Support).",
+      "removePhotoFailFallback": "Foto konnte nicht entfernt werden.",
+      "postalNonBrTitle": "Postleitzahl",
+      "postalNonBrBody": "Die automatische Suche gilt für Adressen in Brasilien. Für andere Länder Straße, Ort und Bundesland manuell eintragen.",
+      "biometricPhotosTitle": "Biometriefotos",
+      "biometricPhotosBody": "Senden Sie mindestens {{min}} klare Gesichtsfotos für die Gesichtserkennung der Organisation. Aktuell: {{current}}.",
+      "submitFallbackBody": "Bewerbung konnte nicht gesendet werden. Bitte erneut versuchen.",
+      "pickFaceCamera": "Kamera",
+      "pickFaceGallery": "Galerie"
     },
     "transit": {
       "stateTitle": "Fahrtstatus"
@@ -1357,6 +1843,136 @@
       "unlinkBody": "\"{{title}}\" von diesem Objekt entkoppeln?",
       "deleteRoomTitle": "Ort löschen",
       "deleteRoomBody": "\"{{room}}\" aus den Orten entfernen?"
+    },
+    "techBio": {
+      "face": {
+        "NO_VISION_INTEGRATION": {
+          "title": "Biometrie nicht verfügbar",
+          "message": "Die Gesichtserkennung ist für Ihre Organisation noch nicht eingerichtet. Wenden Sie sich an den Administrator oder den Support."
+        },
+        "NO_VERIFICATION_KEY": {
+          "title": "Einrichtung unvollständig",
+          "message": "Die Gesichtsverifikation ist auf dem Server nicht vollständig konfiguriert. Bitte Admin um Prüfung der Vision-Integrationen im Panel."
+        },
+        "UNSUPPORTED_ENGINE": {
+          "title": "Biometrie nicht verfügbar",
+          "message": "Diese Art der Gesichtsverifikation ist derzeit nicht verfügbar. Kontaktieren Sie den Support."
+        },
+        "FACE_MISMATCH": {
+          "title": "Foto nicht akzeptiert",
+          "message": "Wir konnten nicht bestätigen, dass Sie mit dem Profilfoto aus Schritt 1 übereinstimmen. Neues Foto: Gesicht frontal, gutes Licht, keine Sonnenbrille oder verdeckende Gegenstände."
+        },
+        "VERIFY_OR_INVALID_IMAGE": {
+          "title": "Ungültiges Bild",
+          "message": "Dieses Foto konnte nicht für den Vergleich genutzt werden. Versuchen Sie ein schärferes Bild nur mit Ihrem Gesicht."
+        },
+        "NO_FACE_DETECTED": {
+          "title": "Kein Gesicht erkannt",
+          "message": "Wir sehen kein klares Gesicht. Blicken Sie in die Kamera, gute Beleuchtung, keine Mütze, Maske oder dunkle Brille."
+        },
+        "MULTIPLE_FACES": {
+          "title": "Zu viele Personen im Bild",
+          "message": "Das Foto muss nur Sie zeigen. Nehmen Sie ein Bild ohne andere Personen."
+        },
+        "FACE_TOO_SMALL": {
+          "title": "Bildausschnitt",
+          "message": "Kommen Sie näher: Das Gesicht soll größer und scharf im Bild sein."
+        },
+        "LOW_QUALITY_FACE": {
+          "title": "Bildqualität",
+          "message": "Das Bild ist unscharf oder verwackelt. Mehr Licht und ruhig halten."
+        },
+        "BIOMETRY_TIMEOUT": {
+          "title": "Zeitüberschreitung",
+          "message": "Die Prüfung dauerte zu lange. Erneut versuchen mit besserem Netz oder etwas kleinerem Bild."
+        },
+        "TECH_IDENTITY_LOCKED": {
+          "title": "Registrierung gesperrt",
+          "message": "Ihr Anbieterkonto ist bereits aktiv. Profilfoto und Erkennungsfotos kann nur die Firma im Admin-Panel ändern."
+        },
+        "SERVICE_BUSY": {
+          "title": "Dienst ausgelastet",
+          "message": "Die Gesichtsverifikation ist langsam oder kurz nicht verfügbar. Kurz warten und Foto erneut senden."
+        },
+        "PROFILE_REQUIRED": {
+          "title": "Schritt 1 abschließen",
+          "message": "Bitte zuerst das Profilfoto fertigstellen und validieren."
+        },
+        "PHOTO_REJECTED_GENERIC": {
+          "title": "Foto nicht akzeptiert",
+          "message": "Dieses Foto konnte nicht für die Prüfung genutzt werden. Neues Foto: Gesicht frontal, gut beleuchtet, allein im Bild."
+        },
+        "UPLOAD_FAILED_TITLE": {
+          "title": "Senden fehlgeschlagen",
+          "message": ""
+        },
+        "UPLOAD_NETWORK": {
+          "title": "Senden fehlgeschlagen",
+          "message": "Beim Senden des Fotos ist ein Fehler aufgetreten. Verbindung prüfen und erneut versuchen."
+        }
+      },
+      "idDoc": {
+        "TECH_IDENTITY_LOCKED": {
+          "title": "Registration locked",
+          "message": "Your provider account is already active. ID document and biometric data can only be changed by your company in the admin panel."
+        },
+        "ID_DOC_IMAGE_REQUIRED": {
+          "title": "Foto senden",
+          "message": "Für diesen Schritt wird ein Bild des Dokuments (JPEG oder PNG) benötigt. PDF erlaubt keinen Vergleich des Gesichtsfotos mit Ihrem Profilfoto."
+        },
+        "FACE_STEP_REQUIRED": {
+          "title": "Schritt 2 ausstehend",
+          "message": "Schließen Sie zuerst die Biometriefotos aus Schritt 2 ab."
+        },
+        "ID_DOC_FLOW_MISMATCH": {
+          "title": "Ablauf nicht verfügbar",
+          "message": "Dieser Schritt gilt nicht für Ihren Registrierungstyp."
+        },
+        "NO_OPENAI_DEFAULT": {
+          "title": "Dienst nicht verfügbar",
+          "message": "Der Server ist für diesen Schritt nicht konfiguriert (OpenAI). Kontaktieren Sie Support oder Administrator."
+        },
+        "FACE_VERIFY_FAILED": {
+          "title": "Dokumentvergleich",
+          "message": "Dokumentfoto und Profilfoto konnten jetzt nicht verglichen werden. Verbindung prüfen und kurz darauf erneut versuchen."
+        },
+        "OCR_OR_SERVER": {
+          "title": "Dokument lesen",
+          "message": "Daten konnten nicht extrahiert werden. Versuchen Sie ein schärferes Foto ohne Spiegelungen, vollständig lesbar."
+        },
+        "DOC_COMPARE_5XX": {
+          "title": "Dokumentvergleich",
+          "message": "Der Server konnte Dokumentfoto und Profil gerade nicht vergleichen. Verbindung prüfen und später erneut versuchen."
+        },
+        "FACE_MISMATCH": {
+          "title": "Check the document photo",
+          "message": "We could not confirm the small photo on the ID matches your profile photo. Take another photo: document open on the photo page, well lit, without strong plastic glare, and ensure your step 1 profile photo is current."
+        },
+        "VERIFY_NO_SCORE": {
+          "title": "Document photo",
+          "message": "The comparison between the document image and your profile photo was unclear. Try another document photo with the ID portrait clearly visible."
+        },
+        "NO_FACE_DETECTED": {
+          "title": "Photo on document",
+          "message": "The face photo on the document is not sharp enough. Frame the document front-on, zoom slightly on the portrait area, use diffuse light and avoid plastic glare."
+        },
+        "MULTIPLE_FACES": {
+          "title": "Document image",
+          "message": "More than one face is visible. Frame only the document or the page with your portrait."
+        },
+        "FACE_TOO_SMALL": {
+          "title": "Document framing",
+          "message": "The portrait on the document is too small. Move closer while keeping the whole document readable."
+        },
+        "LOW_QUALITY_FACE": {
+          "title": "Image quality",
+          "message": "The document photo is blurry or shaky. Use more light and hold the phone steady."
+        },
+        "INVALID_IMAGE": {
+          "title": "Invalid image",
+          "message": "The image is invalid or too small. Send another sharp document photo (JPEG or PNG)."
+        }
+      }
     }
   }
 }

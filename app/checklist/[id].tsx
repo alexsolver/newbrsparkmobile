@@ -4071,7 +4071,7 @@ export default function ChecklistEngine() {
       }
     }
 
-    if (label === 'SAIDA' && !isReimbursementTransitField(template?.schemaData, fieldId)) {
+    if (label === 'SAIDA') {
       const curTid = String(resolvedTaskId || '').trim();
       let lock = await getOperationalTransitLock();
       if (lock?.taskId && lock.taskId !== curTid) {
@@ -4085,7 +4085,7 @@ export default function ChecklistEngine() {
       if (lock?.taskId && lock.taskId !== curTid) {
         Alert.alert(
           'Atenção',
-          'Já existe um deslocamento operacional em curso noutra ordem de serviço. Abra essa OS e utilize «Finalizar deslocamento», ou conclua o fluxo, antes de iniciar aqui.'
+          'Já existe um deslocamento em curso noutra ordem de serviço. Abra essa OS e utilize «Finalizar deslocamento», ou conclua o fluxo, antes de iniciar aqui.'
         );
         return;
       }
@@ -4327,7 +4327,7 @@ export default function ChecklistEngine() {
       
       handleInput(fieldId, JSON.stringify(payload), scope);
 
-      if (label === 'SAIDA' && !isReimbursementTransit) {
+      if (label === 'SAIDA') {
         await setOperationalTransitLock(String(resolvedTaskId || '').trim());
         await refreshGlobalOperationalTransitLock();
       }
@@ -4335,6 +4335,8 @@ export default function ChecklistEngine() {
       // Link público: só no deslocamento operacional (não «apenas registo»)
       if (label === 'CHEGADA' && !isReimbursementTransit) {
         void endTrackingLink();
+      }
+      if (label === 'CHEGADA') {
         await clearOperationalTransitLockForTask(String(resolvedTaskId || '').trim());
         await refreshGlobalOperationalTransitLock();
       }

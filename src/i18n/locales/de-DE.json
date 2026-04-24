@@ -2669,6 +2669,8 @@
       "addPhotosBody": "Quelle wählen. Mehrfach zum Senden mehrerer Fotos.",
       "removePhotoTitle": "Foto entfernen",
       "cepTitle": "PLZ",
+      "validationTitle": "Validierung",
+      "pdf": "PDF",
       "cepDigits": "Postleitzahl mit 8 Ziffern eingeben.",
       "cepNotFound": "PLZ nicht gefunden. Ziffern prüfen.",
       "cepLookupError": "PLZ-Abfrage fehlgeschlagen. Verbindung prüfen und erneut versuchen.",
@@ -2684,7 +2686,29 @@
       "sentBody": "Ihre Bewerbung wurde gesendet. Bitte auf die Prüfung warten.",
       "networkError": "Netzwerkfehler.",
       "permTitle": "Berechtigung",
-      "sessionTitle": "Sitzung"
+      "sessionTitle": "Sitzung",
+      "identityLockedNavTitle": "Aktiver Anbieter",
+      "identityLockedNavBody": "Ihr Konto ist bereits aktiv. Die Anbieterregistrierung kann hier nicht geändert werden. Profilfoto und Gesichtserfassung verwaltet die Firma im Admin-Panel.",
+      "profilePhotoLockedTitle": "Aktiver Anbieter",
+      "profilePhotoLockedBody": "Das Profilfoto kann nur im Admin-Panel der Firma geändert werden.",
+      "faceEnrollmentLockedTitle": "Aktiver Anbieter",
+      "faceEnrollmentLockedBody": "Erkennungsfotos können nur im Admin-Panel der Firma geändert werden.",
+      "idDocLockedTitle": "Aktiver Anbieter",
+      "idDocLockedBody": "Das Ausweisdokument in dieser Registrierung kann nur im Admin-Panel der Firma geändert werden.",
+      "idDocAcceptedTitle": "Dokument akzeptiert",
+      "idDocAcceptedBody": "Das Gesicht im Bild wurde mit Ihrem Profilfoto abgeglichen und die Daten automatisch gelesen. Prüfen Sie die Felder und korrigieren Sie bei Bedarf.",
+      "idDocPickerTitle": "Ausweis mit Foto",
+      "idDocPickerBody": "Machen oder wählen Sie ein scharfes Foto des Ausweises (Personalausweis, Reisepass usw.). Das Gesicht auf dem Dokument wird mit Ihrem Profilfoto verglichen.",
+      "removeFaceProfileTitle": "Profilfoto",
+      "removeFaceProfileBody": "Das Foto aus Schritt 1 kann hier nicht entfernt werden. Zum Wechseln gehen Sie zurück zu Schritt 1 (Fluss neu starten oder Support).",
+      "removePhotoFailFallback": "Foto konnte nicht entfernt werden.",
+      "postalNonBrTitle": "Postleitzahl",
+      "postalNonBrBody": "Die automatische Suche gilt für Adressen in Brasilien. Für andere Länder Straße, Ort und Bundesland manuell eintragen.",
+      "biometricPhotosTitle": "Biometriefotos",
+      "biometricPhotosBody": "Senden Sie mindestens {{min}} klare Gesichtsfotos für die Gesichtserkennung der Organisation. Aktuell: {{current}}.",
+      "submitFallbackBody": "Bewerbung konnte nicht gesendet werden. Bitte erneut versuchen.",
+      "pickFaceCamera": "Kamera",
+      "pickFaceGallery": "Galerie"
     },
     "transit": {
       "stateTitle": "Fahrtstatus"
@@ -2694,6 +2718,136 @@
       "unlinkBody": "\"{{title}}\" von diesem Objekt entkoppeln?",
       "deleteRoomTitle": "Ort löschen",
       "deleteRoomBody": "\"{{room}}\" aus den Orten entfernen?"
+    },
+    "techBio": {
+      "face": {
+        "NO_VISION_INTEGRATION": {
+          "title": "Biometrie nicht verfügbar",
+          "message": "Die Gesichtserkennung ist für Ihre Organisation noch nicht eingerichtet. Wenden Sie sich an den Administrator oder den Support."
+        },
+        "NO_VERIFICATION_KEY": {
+          "title": "Einrichtung unvollständig",
+          "message": "Die Gesichtsverifikation ist auf dem Server nicht vollständig konfiguriert. Bitte Admin um Prüfung der Vision-Integrationen im Panel."
+        },
+        "UNSUPPORTED_ENGINE": {
+          "title": "Biometrie nicht verfügbar",
+          "message": "Diese Art der Gesichtsverifikation ist derzeit nicht verfügbar. Kontaktieren Sie den Support."
+        },
+        "FACE_MISMATCH": {
+          "title": "Foto nicht akzeptiert",
+          "message": "Wir konnten nicht bestätigen, dass Sie mit dem Profilfoto aus Schritt 1 übereinstimmen. Neues Foto: Gesicht frontal, gutes Licht, keine Sonnenbrille oder verdeckende Gegenstände."
+        },
+        "VERIFY_OR_INVALID_IMAGE": {
+          "title": "Ungültiges Bild",
+          "message": "Dieses Foto konnte nicht für den Vergleich genutzt werden. Versuchen Sie ein schärferes Bild nur mit Ihrem Gesicht."
+        },
+        "NO_FACE_DETECTED": {
+          "title": "Kein Gesicht erkannt",
+          "message": "Wir sehen kein klares Gesicht. Blicken Sie in die Kamera, gute Beleuchtung, keine Mütze, Maske oder dunkle Brille."
+        },
+        "MULTIPLE_FACES": {
+          "title": "Zu viele Personen im Bild",
+          "message": "Das Foto muss nur Sie zeigen. Nehmen Sie ein Bild ohne andere Personen."
+        },
+        "FACE_TOO_SMALL": {
+          "title": "Bildausschnitt",
+          "message": "Kommen Sie näher: Das Gesicht soll größer und scharf im Bild sein."
+        },
+        "LOW_QUALITY_FACE": {
+          "title": "Bildqualität",
+          "message": "Das Bild ist unscharf oder verwackelt. Mehr Licht und ruhig halten."
+        },
+        "BIOMETRY_TIMEOUT": {
+          "title": "Zeitüberschreitung",
+          "message": "Die Prüfung dauerte zu lange. Erneut versuchen mit besserem Netz oder etwas kleinerem Bild."
+        },
+        "TECH_IDENTITY_LOCKED": {
+          "title": "Registrierung gesperrt",
+          "message": "Ihr Anbieterkonto ist bereits aktiv. Profilfoto und Erkennungsfotos kann nur die Firma im Admin-Panel ändern."
+        },
+        "SERVICE_BUSY": {
+          "title": "Dienst ausgelastet",
+          "message": "Die Gesichtsverifikation ist langsam oder kurz nicht verfügbar. Kurz warten und Foto erneut senden."
+        },
+        "PROFILE_REQUIRED": {
+          "title": "Schritt 1 abschließen",
+          "message": "Bitte zuerst das Profilfoto fertigstellen und validieren."
+        },
+        "PHOTO_REJECTED_GENERIC": {
+          "title": "Foto nicht akzeptiert",
+          "message": "Dieses Foto konnte nicht für die Prüfung genutzt werden. Neues Foto: Gesicht frontal, gut beleuchtet, allein im Bild."
+        },
+        "UPLOAD_FAILED_TITLE": {
+          "title": "Senden fehlgeschlagen",
+          "message": ""
+        },
+        "UPLOAD_NETWORK": {
+          "title": "Senden fehlgeschlagen",
+          "message": "Beim Senden des Fotos ist ein Fehler aufgetreten. Verbindung prüfen und erneut versuchen."
+        }
+      },
+      "idDoc": {
+        "TECH_IDENTITY_LOCKED": {
+          "title": "Registration locked",
+          "message": "Your provider account is already active. ID document and biometric data can only be changed by your company in the admin panel."
+        },
+        "ID_DOC_IMAGE_REQUIRED": {
+          "title": "Foto senden",
+          "message": "Für diesen Schritt wird ein Bild des Dokuments (JPEG oder PNG) benötigt. PDF erlaubt keinen Vergleich des Gesichtsfotos mit Ihrem Profilfoto."
+        },
+        "FACE_STEP_REQUIRED": {
+          "title": "Schritt 2 ausstehend",
+          "message": "Schließen Sie zuerst die Biometriefotos aus Schritt 2 ab."
+        },
+        "ID_DOC_FLOW_MISMATCH": {
+          "title": "Ablauf nicht verfügbar",
+          "message": "Dieser Schritt gilt nicht für Ihren Registrierungstyp."
+        },
+        "NO_OPENAI_DEFAULT": {
+          "title": "Dienst nicht verfügbar",
+          "message": "Der Server ist für diesen Schritt nicht konfiguriert (OpenAI). Kontaktieren Sie Support oder Administrator."
+        },
+        "FACE_VERIFY_FAILED": {
+          "title": "Dokumentvergleich",
+          "message": "Dokumentfoto und Profilfoto konnten jetzt nicht verglichen werden. Verbindung prüfen und kurz darauf erneut versuchen."
+        },
+        "OCR_OR_SERVER": {
+          "title": "Dokument lesen",
+          "message": "Daten konnten nicht extrahiert werden. Versuchen Sie ein schärferes Foto ohne Spiegelungen, vollständig lesbar."
+        },
+        "DOC_COMPARE_5XX": {
+          "title": "Dokumentvergleich",
+          "message": "Der Server konnte Dokumentfoto und Profil gerade nicht vergleichen. Verbindung prüfen und später erneut versuchen."
+        },
+        "FACE_MISMATCH": {
+          "title": "Check the document photo",
+          "message": "We could not confirm the small photo on the ID matches your profile photo. Take another photo: document open on the photo page, well lit, without strong plastic glare, and ensure your step 1 profile photo is current."
+        },
+        "VERIFY_NO_SCORE": {
+          "title": "Document photo",
+          "message": "The comparison between the document image and your profile photo was unclear. Try another document photo with the ID portrait clearly visible."
+        },
+        "NO_FACE_DETECTED": {
+          "title": "Photo on document",
+          "message": "The face photo on the document is not sharp enough. Frame the document front-on, zoom slightly on the portrait area, use diffuse light and avoid plastic glare."
+        },
+        "MULTIPLE_FACES": {
+          "title": "Document image",
+          "message": "More than one face is visible. Frame only the document or the page with your portrait."
+        },
+        "FACE_TOO_SMALL": {
+          "title": "Document framing",
+          "message": "The portrait on the document is too small. Move closer while keeping the whole document readable."
+        },
+        "LOW_QUALITY_FACE": {
+          "title": "Image quality",
+          "message": "The document photo is blurry or shaky. Use more light and hold the phone steady."
+        },
+        "INVALID_IMAGE": {
+          "title": "Invalid image",
+          "message": "The image is invalid or too small. Send another sharp document photo (JPEG or PNG)."
+        }
+      }
     }
   }
 }
