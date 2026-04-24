@@ -274,7 +274,7 @@ export default function MediaScreen() {
     try {
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
-        Alert.alert(t('common.attention'), 'Compartilhamento não disponível neste dispositivo.');
+        Alert.alert(t('common.attention'), t('media.shareUnavailable'));
         return;
       }
       await Sharing.shareAsync(item.uri, {
@@ -283,7 +283,7 @@ export default function MediaScreen() {
         UTI: item.type === 'video' ? 'public.movie' : 'public.image',
       });
     } catch {
-      Alert.alert(t('common.error'), 'Não foi possível compartilhar este arquivo.');
+      Alert.alert(t('common.error'), t('media.shareFailed'));
     }
   }, [t]);
 

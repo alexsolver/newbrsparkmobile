@@ -125,18 +125,19 @@ export default function PrivacySettings() {
     newValue: boolean,
   ) => {
     if (!newValue) {
-      Alert.alert(
-        'Revogar permissão',
-        `Tem certeza que deseja revogar "${consentLabelForRole(consentType, isTechnician).title}"? Isso pode limitar algumas funcionalidades.`,
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Revogar', style: 'destructive', onPress: () => doToggle(consentType, false, record?.id) },
-        ]
-      );
+      const label = consentLabelForRole(consentType, isTechnician).title;
+      Alert.alert(t('profile.privacyRevokeTitle'), t('profile.privacyRevokeBody', { label }), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('profile.privacyRevokeCta'),
+          style: 'destructive',
+          onPress: () => doToggle(consentType, false, record?.id),
+        },
+      ]);
       return;
     }
     await doToggle(consentType, true, record?.id);
-  }, [ownerEmail, policy, isTechnician]);
+  }, [ownerEmail, policy, isTechnician, t]);
 
   const doToggle = async (consentType: string, accepted: boolean, oldId?: string) => {
     setSaving(consentType);

@@ -178,10 +178,7 @@ export default function NewAssetScreen() {
       // 1. Verifica se serviços de localização estão habilitados no dispositivo
       const servicesEnabled = await Location.hasServicesEnabledAsync();
       if (!servicesEnabled) {
-        Alert.alert(
-          'GPS Desabilitado',
-          'Os serviços de localização estão desligados. Ative o GPS nas configurações do dispositivo.',
-        );
+        Alert.alert(t('newAsset.gpsServicesDisabledTitle'), t('newAsset.gpsServicesDisabledBody'));
         setFetchingGps(false);
         return;
       }
@@ -235,15 +232,12 @@ export default function NewAssetScreen() {
 
       const accuracyText = accuracy ? ` (±${Math.round(accuracy)}m)` : '';
       Alert.alert(
-        '📍 GPS Capturado',
-        `Coordenadas: ${coordStr}${accuracyText}\n\nSe estiver usando o simulador, a localização é a configurada em Features → Location no Xcode.`,
+        t('newAsset.gpsCaptureSuccessTitle'),
+        t('newAsset.gpsCaptureSuccessBody', { coords: coordStr, accuracySuffix: accuracyText }),
       );
     } catch (e: any) {
       console.warn('[GPS]', e);
-      Alert.alert(
-        t('newAsset.gpsFailed'),
-        'Não foi possível obter a localização. Verifique se o GPS está ativo e as permissões foram concedidas.\n\nNo simulador iOS: use Xcode → Features → Location para simular coordenadas.',
-      );
+      Alert.alert(t('newAsset.gpsFailed'), t('newAsset.gpsCaptureErrorDetail'));
     }
 
     setFetchingGps(false);
