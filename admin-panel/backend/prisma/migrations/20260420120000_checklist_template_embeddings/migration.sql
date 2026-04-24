@@ -1,4 +1,4 @@
--- Embeddings para RAG semântico da biblioteca de formulários (Copiloto).
+-- Embeddings para RAG semântico da biblioteca de formulários (Composer).
 CREATE TABLE "ChecklistTemplateEmbedding" (
     "id" TEXT NOT NULL,
     "templateId" TEXT NOT NULL,

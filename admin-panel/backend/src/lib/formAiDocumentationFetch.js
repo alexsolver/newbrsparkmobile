@@ -2,7 +2,7 @@
 
 const MAX_BYTES = 400_000;
 const MAX_CHARS_OUT = 28_000;
-/** Texto combinado máximo quando várias URLs são carregadas para o copiloto. */
+/** Texto combinado máximo quando várias URLs são carregadas para o Composer. */
 const MAX_CHARS_COMBINED_REFERENCES = 36_000;
 
 /**
@@ -66,7 +66,7 @@ function normalizeHttpsReferenceUrls(rawList, maxUrls = 5) {
 }
 
 /**
- * Obtém texto de uma página (HTTPS público) para contexto do copiloto.
+ * Obtém texto de uma página (HTTPS público) para contexto do Composer.
  * @param {string} rawUrl
  * @param {{ maxCharsOut?: number }} [opts]
  * @returns {Promise<{ ok: boolean, text: string, error: string | null, finalUrl?: string }>}

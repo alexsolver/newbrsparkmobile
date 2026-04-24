@@ -321,7 +321,7 @@ function isEtapa1Label(label) {
 }
 
 /**
- * Reaproveita a primeira "Etapa 1" vazia (placeholder) quando o copiloto cria
+ * Reaproveita a primeira "Etapa 1" vazia (placeholder) quando o Composer cria
  * uma segunda section_break logo abaixo, evitando duplicação visual no canvas.
  * Mantém o id da primeira etapa para preservar a UX do admin no editor.
  * @param {object[]} schemaData

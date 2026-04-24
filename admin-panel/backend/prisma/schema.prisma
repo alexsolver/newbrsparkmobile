@@ -1068,7 +1068,7 @@ model ChecklistTemplateVersion {
   @@index([templateId, version])
 }
 
-/// Vetor de embedding (OpenAI etc.) para RAG semântico da biblioteca de modelos no Copiloto.
+/// Vetor de embedding (OpenAI etc.) para RAG semântico da biblioteca de modelos no Composer.
 model ChecklistTemplateEmbedding {
   id          String            @id @default(cuid())
   templateId  String            @unique

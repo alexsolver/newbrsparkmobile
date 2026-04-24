@@ -2,7 +2,7 @@
 
 /**
  * Deteta quando o canvas não espelha um artigo com esboço ##/### (muitos textos genéricos, poucas secções temáticas).
- * Usado para disparar uma segunda passagem automática no copiloto.
+ * Usado para disparar uma segunda passagem automática no Composer.
  */
 
 /** @param {unknown} label */

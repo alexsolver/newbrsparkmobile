@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Gera embeddings para modelos de checklist ativos (Copiloto — RAG semântico).
+ * Gera embeddings para modelos de checklist ativos (Composer — RAG semântico).
  * Uso: node scripts/backfillChecklistTemplateEmbeddings.js [--limit=200]
  */
 

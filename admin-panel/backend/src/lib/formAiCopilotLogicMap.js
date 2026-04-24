@@ -4,7 +4,7 @@ const { normalizeLabelKey } = require('./formAiNormalize');
 const { analyzeLogicSuggestionIssues } = require('./formAiLogicConflicts');
 
 /**
- * URLs aceites para sugestões API_FETCH do copiloto (bloqueia javascript:, file:, etc.).
+ * URLs aceites para sugestões API_FETCH do Composer (bloqueia javascript:, file:, etc.).
  * @param {string} raw
  * @returns {string|null}
  */

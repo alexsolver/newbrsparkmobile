@@ -2,7 +2,7 @@
 
 /**
  * Tenta extrair títulos ##/### do texto vindo do fetch (markdown ou parecido) para
- * forçar o copiloto a espelhar capítulos reais — evita esboço genérico («Descrição…», «Procedimentos…»).
+ * forçar o Composer a espelhar capítulos reais — evita esboço genérico («Descrição…», «Procedimentos…»).
  */
 
 const SKIP_HEADING = new RegExp(
