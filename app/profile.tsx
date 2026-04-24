@@ -864,13 +864,13 @@ export default function ProfileScreen() {
           <>
             <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
               <Ionicons name="build" size={14} color="#64748B" style={{marginRight: 6}} />
-              <Text style={styles.sectionHeaderLabel}>MODO DE USO</Text>
+              <Text style={styles.sectionHeaderLabel}>{t('profile.usageModeTitle').toUpperCase()}</Text>
             </View>
             <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
               <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>
                 {isTechnicianProfileActive(user)
-                  ? 'Alterne entre Cliente Regular e Prestador (ativa política severa de rastreamento).'
-                  : 'Conta interna: use Prestador para OS, tarefas de rotina e sincronização de campo (sem cadastro FaceMatch).'}
+                  ? t('profile.usageModeHintTechnician')
+                  : t('profile.usageModeHintInternal')}
               </Text>
             </View>
             <View style={[styles.listCard, { paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
@@ -885,15 +885,12 @@ export default function ProfileScreen() {
                     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20
                   }}
                 >
-                  <Text style={{ color: userRole === 'CLIENT' ? '#fff' : '#64748B', fontWeight: '800' }}>Cliente</Text>
+                  <Text style={{ color: userRole === 'CLIENT' ? '#fff' : '#64748B', fontWeight: '800' }}>{t('profile.personaClient')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={async () => {
                     if (!canUseProviderMode(user)) {
-                      Alert.alert(
-                        'Prestador indisponível',
-                        'Sua conta de prestador ainda não foi habilitada. Não é possível alternar para este modo.',
-                      );
+                      Alert.alert(t('profile.providerUnavailableTitle'), t('profile.providerUnavailableBody'));
                       return;
                     }
                     const providerOnboardingDone = await isProviderOnboardingComplete();
@@ -909,7 +906,7 @@ export default function ProfileScreen() {
                     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20
                   }}
                 >
-                  <Text style={{ color: userRole === 'TECHNICIAN' ? '#fff' : '#64748B', fontWeight: '800' }}>Prestador</Text>
+                  <Text style={{ color: userRole === 'TECHNICIAN' ? '#fff' : '#64748B', fontWeight: '800' }}>{t('profile.personaProvider')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -953,9 +950,7 @@ export default function ProfileScreen() {
           <Text style={styles.sectionHeaderLabel}>{(t('profile.selectLanguage') || 'Idioma').toUpperCase()}</Text>
         </View>
         <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
-          <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>
-            Escolha o idioma da interface do app.
-          </Text>
+          <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>{t('profile.languageInterfaceHint')}</Text>
         </View>
         <View style={[styles.listCard, { paddingVertical: 0, paddingHorizontal: 0, flexDirection: 'column', alignItems: 'stretch' }]}>
           <TouchableOpacity 
@@ -1002,12 +997,10 @@ export default function ProfileScreen() {
         {/* ─── País / Região (conformidade, moeda, fuso) ─── */}
         <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
           <Ionicons name="globe" size={14} color="#64748B" style={{marginRight: 6}} />
-          <Text style={styles.sectionHeaderLabel}>PAÍS / REGIÃO</Text>
+          <Text style={styles.sectionHeaderLabel}>{t('profile.regionSectionTitle').toUpperCase()}</Text>
         </View>
         <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
-          <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>
-            Afeta LGPD/GDPR, moeda e prestadores próximos a você.
-          </Text>
+          <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>{t('profile.regionHint')}</Text>
         </View>
         <View style={[styles.listCard, { paddingVertical: 0, paddingHorizontal: 0, flexDirection: 'column', alignItems: 'stretch' }]}>
           <TouchableOpacity 

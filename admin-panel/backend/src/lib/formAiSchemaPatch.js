@@ -4,11 +4,148 @@ const {
   MAX_VISION_SIMNAO_QUESTIONS,
   MAX_VISION_STRUCTURED_PROMPT_CHARS,
 } = require('../constants/visionSimNaoQuestions');
+const { ALLOWED_FIELD_TYPES } = require('./formAiFieldCatalog');
 const { normalizeSchemaItem } = require('./formAiNormalize');
 
 const MAX_OPS = 30;
 const MAX_FIELDS = 250;
 const MAX_FIELD_DESCRIPTION_CHARS = 500;
+
+/** Sinónimos que o LLM usa em vez de `op` (único campo aceite no contrato original). */
+const SCHEMA_PATCH_OP_ALIASES = {
+  delete_field: 'remove_field',
+  del_field: 'remove_field',
+  remove: 'remove_field',
+  rm_field: 'remove_field',
+  edit_field: 'update_field',
+  modify_field: 'update_field',
+  change_field: 'update_field',
+  patch_field: 'update_field',
+  update: 'update_field',
+  insert_field: 'add_field',
+  create_field: 'add_field',
+  new_field: 'add_field',
+  append_field: 'add_field',
+  add: 'add_field',
+};
+
+const OP_KEYS = ['op', 'operation', 'action', 'kind', 'verb'];
+
+/**
+ * Expande `add_fields` / lista solta de campos numa sequência de operações `add_field`.
+ * @param {object[]} ops
+ * @returns {object[]}
+ */
+function expandCopilotSchemaOperations(ops) {
+  if (!Array.isArray(ops)) return [];
+  const out = [];
+  for (const raw of ops) {
+    if (!raw || typeof raw !== 'object') continue;
+    const op0 = String(raw.op || '').trim().toLowerCase();
+    if (
+      (op0 === 'add_field' || op0 === 'add_fields') &&
+      Array.isArray(raw.fields) &&
+      raw.fields.length &&
+      (raw.field == null || typeof raw.field !== 'object')
+    ) {
+      for (const f of raw.fields) {
+        if (f && typeof f === 'object') out.push({ op: 'add_field', field: f, afterId: raw.afterId });
+      }
+      continue;
+    }
+    if (Array.isArray(raw.fields) && raw.field == null && op0 !== 'update_field' && op0 !== 'remove_field') {
+      const looksLikeOnlyFields =
+        !raw.patch &&
+        raw.id == null &&
+        raw.fields.length > 0 &&
+        raw.fields.every((x) => x && typeof x === 'object');
+      if (looksLikeOnlyFields) {
+        for (const f of raw.fields) out.push({ op: 'add_field', field: f, afterId: raw.afterId });
+        continue;
+      }
+    }
+    out.push(raw);
+  }
+  return out;
+}
+
+/**
+ * Normaliza uma linha de `schemaPatch.operations` para o formato esperado pelo motor.
+ * @param {object} raw
+ * @returns {object|null}
+ */
+function normalizeCopilotSchemaPatchOperationRow(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = { ...raw };
+  if (row.field == null && row.item && typeof row.item === 'object') row.field = row.item;
+  if (row.field == null && row.data && typeof row.data === 'object' && !Array.isArray(row.data)) {
+    row.field = row.data;
+  }
+  if (row.field == null && Array.isArray(row.fields) && row.fields.length === 1 && row.fields[0]) {
+    row.field = row.fields[0];
+  }
+  if (row.patch == null && row.updates && typeof row.updates === 'object') row.patch = row.updates;
+  if (row.patch == null && row.changes && typeof row.changes === 'object') row.patch = row.changes;
+  if (row.id == null && row.fieldId != null) row.id = row.fieldId;
+  if (row.id == null && row.targetId != null) row.id = row.targetId;
+
+  let op = '';
+  for (const k of OP_KEYS) {
+    if (row[k] == null) continue;
+    const v = String(row[k]).trim().toLowerCase();
+    if (v) {
+      op = v;
+      break;
+    }
+  }
+  if (!op && row.type != null) {
+    const t = String(row.type).trim().toLowerCase();
+    if (t === 'add_field' || t === 'update_field' || t === 'remove_field') op = t;
+  }
+  if (SCHEMA_PATCH_OP_ALIASES[op]) op = SCHEMA_PATCH_OP_ALIASES[op];
+
+  if (!op && row.field && typeof row.field === 'object') op = 'add_field';
+
+  if (
+    !op &&
+    row.id != null &&
+    String(row.id).trim() &&
+    row.patch &&
+    typeof row.patch === 'object' &&
+    Object.keys(row.patch).length
+  ) {
+    op = 'update_field';
+  }
+
+  if (!op && row.id != null && String(row.id).trim() && row.remove === true) op = 'remove_field';
+
+  if (!op) {
+    const t = row.type != null ? String(row.type).trim().toLowerCase().replace(/[\s-]+/g, '_') : '';
+    if (t && ALLOWED_FIELD_TYPES.has(t)) op = 'add_field';
+  }
+  if (!op && row.label != null && String(row.label).trim() && !row.patch) {
+    op = 'add_field';
+  }
+
+  if (op === 'add_field') {
+    let fieldObj = row.field && typeof row.field === 'object' ? row.field : null;
+    if (!fieldObj) {
+      fieldObj = { ...row };
+      for (const k of OP_KEYS.concat(['afterId', 'beforeId', 'patch', 'field', 'item', 'data', 'fields'])) {
+        delete fieldObj[k];
+      }
+    }
+    return { op: 'add_field', field: fieldObj, afterId: row.afterId };
+  }
+  if (op === 'update_field') {
+    return { op: 'update_field', id: row.id, patch: row.patch };
+  }
+  if (op === 'remove_field') {
+    return { op: 'remove_field', id: row.id };
+  }
+  if (!op) return null;
+  return { ...row, op };
+}
 
 /**
  * O campo `description` no builder é «Instruções ao técnico». O LLM às vezes despeja
@@ -262,9 +399,15 @@ function applySchemaPatch(schemaData, patch) {
     finalizeDescriptionOnField(cur);
   }
 
-  const slice = ops.slice(0, MAX_OPS);
-  for (const raw of slice) {
-    if (!raw || typeof raw !== 'object') continue;
+  const expandedOps = expandCopilotSchemaOperations(ops);
+  const slice = expandedOps.slice(0, MAX_OPS);
+  for (const rawIn of slice) {
+    if (!rawIn || typeof rawIn !== 'object') continue;
+    const raw = normalizeCopilotSchemaPatchOperationRow(rawIn);
+    if (!raw || typeof raw !== 'object') {
+      warnings.push('Operação de schemaPatch ignorada (sem `op` reconhecível — use add_field, update_field ou remove_field).');
+      continue;
+    }
     const op = String(raw.op || '').toLowerCase();
     if (op === 'add_field') {
       const fieldRaw = raw.field && typeof raw.field === 'object' ? raw.field : null;

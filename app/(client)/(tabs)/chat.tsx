@@ -24,6 +24,7 @@ import { usePersona } from '../../../src/context/PersonaContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CHAT_UNREAD_CHANGED_EVENT } from '../../../src/lib/chatUnreadEvents';
 import { DeviceEventEmitter } from 'react-native';
+import { relTimeShort } from '../../../src/i18n/relativeTime';
 
 const ARCHIVED_KEY = '@brspark_archived_rooms';
 const ROOM_ARCHIVE_PREFIX = 'room:';
@@ -54,19 +55,6 @@ function removeRoomArchiveEntry(next: Set<string>, roomId: string) {
   next.delete(roomArchiveKey(id));
 }
 
-function timeAgo(ts?: number) {
-  if (!ts) return '';
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'Agora';
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d`;
-  return new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-}
-
 function sortByLastMessageDesc<T extends { lastMessageAt?: number | string | null }>(items: T[]): T[] {
   return [...items].sort((a, b) => {
     const ta =
@@ -87,16 +75,9 @@ function sortByLastMessageDesc<T extends { lastMessageAt?: number | string | nul
 
 type FilterTab = 'PENDING' | 'OPS' | 'GROUPS' | 'ARCHIVED';
 
-const FILTERS: { id: FilterTab; label: string }[] = [
-  { id: 'PENDING', label: 'Pendentes' },
-  { id: 'OPS', label: 'Operacionais' },
-  { id: 'GROUPS', label: 'Grupos' },
-  { id: 'ARCHIVED', label: 'Arquivadas' },
-];
-
 export default function ChatScreen() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const isManager = String(user?.role || '').toUpperCase() === 'MANAGER';
   const { isOnline } = useConnectivity(8000);
@@ -104,10 +85,15 @@ export default function ChatScreen() {
   const { activePersona } = usePersona();
   const isClientApp = activePersona === 'client';
   const styles = useMemo(() => createChatStyles(C), [C]);
-  const filterTabs = useMemo(
-    () => (isClientApp ? FILTERS.filter((f) => f.id !== 'OPS') : FILTERS),
-    [isClientApp],
-  );
+  const filterTabs = useMemo(() => {
+    const all: { id: FilterTab; label: string }[] = [
+      { id: 'PENDING', label: t('chat.filterPending') },
+      { id: 'OPS', label: t('chat.filterOps') },
+      { id: 'GROUPS', label: t('chat.filterGroups') },
+      { id: 'ARCHIVED', label: t('chat.filterArchived') },
+    ];
+    return isClientApp ? all.filter((f) => f.id !== 'OPS') : all;
+  }, [isClientApp, t]);
 
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [opsThreads, setOpsThreads] = useState<OpsChatThreadSummary[]>([]);
@@ -411,7 +397,7 @@ export default function ChatScreen() {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator color={C.primary} size="large" />
-        <Text style={{ color: C.textSecondary, marginTop: 12, fontWeight: '600' }}>Conectando ao servidor...</Text>
+        <Text style={{ color: C.textSecondary, marginTop: 12, fontWeight: '600' }}>{t('chat.connectingServer')}</Text>
       </View>
     );
   }
@@ -420,10 +406,10 @@ export default function ChatScreen() {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
         <Ionicons name="chatbubbles-outline" size={56} color={C.textLight} />
-        <Text style={{ fontSize: 20, fontWeight: '800', color: C.primary, marginTop: 20 }}>Chat Corporativo</Text>
-        <Text style={{ fontSize: 14, color: C.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>Crie uma conta para conversar com sua rede e suporte.</Text>
+        <Text style={{ fontSize: 20, fontWeight: '800', color: C.primary, marginTop: 20 }}>{t('chat.guestTitle')}</Text>
+        <Text style={{ fontSize: 14, color: C.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>{t('chat.guestBody')}</Text>
         <TouchableOpacity style={{ backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 36, borderRadius: 14, marginTop: 24 }} onPress={() => router.replace('/auth/login' as any)}>
-          <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>Criar Conta ou Entrar</Text>
+          <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>{t('profile.createOrLogin')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -444,7 +430,7 @@ export default function ChatScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 13, fontWeight: '800', color: C.status.warning.fg }}>{p.user?.name || p.requesterId}</Text>
-              <Text style={{ fontSize: 11, color: C.warning.text, fontWeight: '600' }}>Solicitação de contato</Text>
+              <Text style={{ fontSize: 11, color: C.warning.text, fontWeight: '600' }}>{t('chat.contactRequestLabel')}</Text>
             </View>
             <View style={{ flexDirection: 'row', gap: 6 }}>
               <TouchableOpacity style={styles.pendBtnReject} onPress={() => handleAcceptRequest(p.id, false)}>
@@ -495,14 +481,24 @@ export default function ChatScreen() {
               {item.name}
             </Text>
             <Text style={[styles.roomTime, unread > 0 && { color: C.accent, fontWeight: '800' }]}>
-              {timeAgo(item.lastMessageAt)}
+              {relTimeShort(
+                typeof item.lastMessageAt === 'number'
+                  ? item.lastMessageAt
+                  : item.lastMessageAt
+                    ? new Date(item.lastMessageAt).getTime()
+                    : undefined,
+                t,
+                i18n.language,
+              )}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={[styles.roomPreview, unread > 0 && { fontWeight: '700', color: C.slate }]} numberOfLines={1}>
               {item.lastMessage
                 ? `${item.lastSender ? item.lastSender + ': ' : ''}${item.lastMessage}`
-                : (item.isGroup ? `${item.memberCount} membros` : 'Nova conversa iniciada')}
+                : item.isGroup
+                  ? t('chat.previewMembers', { count: item.memberCount ?? 0 })
+                  : t('chat.previewNewChat')}
             </Text>
             {/* Unread Badge */}
             {unread > 0 && (
@@ -539,7 +535,7 @@ export default function ChatScreen() {
               </View>
             )}
           </View>
-          <Text style={styles.headerSub}>Caixa de entrada corporativa</Text>
+          <Text style={styles.headerSub}>{t('chat.listSub')}</Text>
         </View>
         <TouchableOpacity
           style={styles.headerAction}
@@ -588,7 +584,7 @@ export default function ChatScreen() {
         <Ionicons name="search-outline" size={18} color={C.textLight} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Buscar por conversa, OS/FT ou mensagem"
+          placeholder={t('chat.searchPlaceholder')}
           placeholderTextColor={C.textLight}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -606,9 +602,7 @@ export default function ChatScreen() {
       {isOnline === false && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={20} color={C.status.warning.fg} />
-          <Text style={styles.offlineBannerText}>
-            Sem conexão. A lista abaixo reflete a última sincronização neste aparelho.
-          </Text>
+          <Text style={styles.offlineBannerText}>{t('chat.offlineBanner')}</Text>
         </View>
       )}
 
@@ -625,10 +619,10 @@ export default function ChatScreen() {
               }}
             >
               {activeFilter === 'PENDING'
-                ? 'Pendências operacionais'
+                ? t('chat.opsSectionPending')
                 : activeFilter === 'ARCHIVED'
-                  ? 'Operacionais arquivadas'
-                  : 'Chat operacional'}
+                  ? t('chat.opsSectionArchived')
+                  : t('chat.opsSectionActive')}
             </Text>
           </View>
           {filteredOpsThreads.map((row) => {
@@ -640,9 +634,9 @@ export default function ChatScreen() {
             const preview = String(row.lastPreview || '').trim();
             const who =
               String(row.lastSenderKind || '').toUpperCase() === 'GESTOR'
-                ? 'Gestor: '
+                ? t('chat.opsPreviewGestor')
                 : String(row.lastSenderKind || '').toUpperCase() === 'TECH'
-                  ? 'Você: '
+                  ? t('chat.opsPreviewYou')
                   : '';
             const ts = row.lastMessageAt ? new Date(row.lastMessageAt).getTime() : undefined;
             const isPending = pendingOpsIds.has(row.executionId);
@@ -650,34 +644,34 @@ export default function ChatScreen() {
             const stateMeta =
               activeFilter === 'ARCHIVED'
                 ? {
-                    label: 'Arquivada',
+                    label: t('chat.opsMetaArchived'),
                     bg: C.background,
                     border: C.border,
                     fg: C.textSecondary,
                   }
                 : isResolved
                   ? {
-                      label: 'Resolvida',
+                      label: t('chat.opsMetaResolved'),
                       bg: C.status.success.bg,
                       border: C.status.success.border,
                       fg: C.status.success.fg,
                     }
                 : isPending
                   ? {
-                      label: 'Aguardando você',
+                      label: t('chat.opsMetaAwaitingYou'),
                       bg: C.status.warning.bg,
                       border: C.status.warning.border,
                       fg: C.status.warning.fg,
                     }
                   : String(row.lastSenderKind || '').toUpperCase() === 'TECH'
                     ? {
-                        label: 'Aguardando retorno',
+                        label: t('chat.opsMetaAwaitingReply'),
                         bg: C.status.info.bg,
                         border: C.status.info.border,
                         fg: C.status.info.fg,
                       }
                     : {
-                        label: 'Em andamento',
+                        label: t('chat.opsMetaInProgress'),
                         bg: C.background,
                         border: C.border,
                         fg: C.textSecondary,
@@ -693,7 +687,7 @@ export default function ChatScreen() {
                     params: {
                       id: row.executionId,
                       ops: '1',
-                      name: `Gestor · ${label}`,
+                      name: t('chat.opsThreadNavTitle', { label }),
                       color: '#1d4ed8',
                     },
                   } as never)
@@ -708,7 +702,7 @@ export default function ChatScreen() {
                       {label}
                     </Text>
                     <Text style={[styles.roomTime, isPending && { color: C.accent, fontWeight: '800' }]}>
-                      {ts != null && Number.isFinite(ts) ? timeAgo(ts) : ''}
+                      {ts != null && Number.isFinite(ts) ? relTimeShort(ts, t, i18n.language) : ''}
                     </Text>
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -754,20 +748,20 @@ export default function ChatScreen() {
             />
             <Text style={styles.emptyText}>
               {activeFilter === 'ARCHIVED'
-                ? 'Nenhuma conversa arquivada.'
+                ? t('chat.emptyArchived')
                 : activeFilter === 'PENDING'
-                ? normalizedSearch
-                  ? 'Nenhuma pendência encontrada para a busca.'
-                  : 'Nenhuma pendência no chat.'
-                : activeFilter === 'OPS'
-                ? normalizedSearch
-                  ? 'Nenhuma conversa operacional encontrada para a busca.'
-                  : 'Nenhuma conversa operacional.'
-                : activeFilter === 'GROUPS'
-                ? normalizedSearch
-                  ? 'Nenhum grupo encontrado para a busca.'
-                  : 'Nenhum grupo ainda.'
-                : 'Sem mensagens ainda.\nAdicione contatos para começar.'}
+                  ? normalizedSearch
+                    ? t('chat.emptyPendingSearch')
+                    : t('chat.emptyPending')
+                  : activeFilter === 'OPS'
+                    ? normalizedSearch
+                      ? t('chat.emptyOpsSearch')
+                      : t('chat.emptyOps')
+                    : activeFilter === 'GROUPS'
+                      ? normalizedSearch
+                        ? t('chat.emptyGroupsSearch')
+                        : t('chat.emptyGroups')
+                      : t('chat.emptyGeneric')}
             </Text>
           </View>
         )}
@@ -778,9 +772,7 @@ export default function ChatScreen() {
       {longPressedRoom && (
         <View style={styles.hintBar}>
           <Ionicons name="information-circle-outline" size={16} color={SERVICE_CATEGORY_COLORS.Tecnologia} />
-          <Text style={{ fontSize: 12, color: C.status.info.fg, fontWeight: '600', marginLeft: 6 }}>
-            Toque no ícone de arquivo para arquivar/desarquivar
-          </Text>
+          <Text style={{ fontSize: 12, color: C.status.info.fg, fontWeight: '600', marginLeft: 6 }}>{t('chat.longPressHint')}</Text>
         </View>
       )}
 

@@ -205,7 +205,7 @@ Retorne **apenas JSON** (sem markdown), com as chaves:
 - **uxLayer**: { "headline": string|null, "bullets": string[], "troubleshoot": { "symptomClass": string|null, "hypotheses": [ { "rank": number, "title": string, "detail": string, "recommendedFix": string } ] } | null } | null
 - **replyText**: texto completo para o chat (obrigatório), sem terminar em promessa vazia.
 - **clarifyOptions**: igual ao legado (até 6 perguntas, multi-opção) ou null.
-- **schemaPatch**: { "operations": [ add_field | update_field | remove_field ] } ou null — mesmas operações e campos **field**/**patch** que o builder já aceita (inclui tipos avançados: visão, matriz, etc.).
+- **schemaPatch**: { "operations": [ { "op": "add_field", "field": { ... }, "afterId"?: string }, { "op": "update_field", "id": string, "patch": { ... } }, { "op": "remove_field", "id": string } ] } ou null — **cada operação tem obrigatoriamente a chave `op`** (não use `operation`, `action` nem `type` no lugar de `op`); o builder só aplica estes três verbos (inclui tipos avançados no objeto `field`: visão, matriz, etc.).
 - **logicSuggestions**: lista ou null — monitor/target por **id** preferencialmente; ações SHOW, HIDE, REQUIRE, OPTIONAL, API_FETCH (URL https ou localhost dev); operadores conforme motor BrSpark.
 - **settingsPatch**, **templateTitlePatch**, **templateMetadataPatch** — como antes.
 

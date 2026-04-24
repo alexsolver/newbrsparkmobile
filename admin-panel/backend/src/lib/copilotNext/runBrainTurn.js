@@ -149,7 +149,7 @@ function buildSequentialEvidenceRepairUserMessage(miss) {
     'Campos sem evidencia sequencial obrigatoria detectados:\n' +
     lines +
     '\n\n' +
-    'Corrija agora com `schemaPatch` (add_field / move/update quando necessario), preservando ids existentes sempre que possivel. Nao responda so com texto: devolva JSON com patch aplicavel.'
+    'Corrija agora com `schemaPatch` (apenas `add_field`, `update_field`, `remove_field`), preservando ids existentes sempre que possivel. Nao responda so com texto: devolva JSON com patch aplicavel.'
   );
 }
 

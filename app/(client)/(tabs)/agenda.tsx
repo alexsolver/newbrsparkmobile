@@ -21,6 +21,7 @@ import { LocationZoneTypeBadge } from '../../../src/components/LocationZoneTypeB
 import { ColorPalette, MEDIA_TAG_COLORS } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { useTranslation } from 'react-i18next';
+import { appLangToLocaleTag } from '../../../src/i18n/relativeTime';
 import { cacheChecklistTemplateIfMissing } from '../../../src/services/routineTaskService';
 import {
   AGENDA_DAY_SLOT_MINUTES,
@@ -50,6 +51,36 @@ LocaleConfig.locales['pt-br'] = {
   dayNames: ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'],
   dayNamesShort: ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'],
   today: 'Hoje'
+};
+LocaleConfig.locales['en'] = {
+  monthNames: [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ],
+  monthNamesShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+  dayNames: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  dayNamesShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+  today: 'Today',
+};
+LocaleConfig.locales['es'] = {
+  monthNames: [
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  ],
+  monthNamesShort: ['ene.', 'feb.', 'mar.', 'abr.', 'may.', 'jun.', 'jul.', 'ago.', 'sep.', 'oct.', 'nov.', 'dic.'],
+  dayNames: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'],
+  dayNamesShort: ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'],
+  today: 'Hoy',
+};
+LocaleConfig.locales['de'] = {
+  monthNames: [
+    'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+    'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+  ],
+  monthNamesShort: ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'],
+  dayNames: ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'],
+  dayNamesShort: ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'],
+  today: 'Heute',
 };
 LocaleConfig.defaultLocale = 'pt-br';
 
@@ -93,7 +124,7 @@ function canOpenChecklistActivity(ev: AgendaEvent): boolean {
 }
 
 function formatEventPeriod(ev: AgendaEvent, locale: string): string | null {
-  const tag = locale.startsWith('en') ? 'en-US' : locale.startsWith('es') ? 'es-ES' : 'pt-BR';
+  const tag = appLangToLocaleTag(locale);
   if (ev.agendaStartAt && ev.agendaEndAt) {
     const s = new Date(ev.agendaStartAt);
     const e = new Date(ev.agendaEndAt);
@@ -133,6 +164,12 @@ export default function AgendaScreen() {
   useEffect(() => {
       setAssets(getLocalAssets(undefined, { includeMobileWarehouse: false }) || []);
   }, []);
+
+  useEffect(() => {
+    const lang = String(i18n.language || 'pt-BR');
+    const map: Record<string, string> = { 'pt-BR': 'pt-br', 'en-US': 'en', 'es-ES': 'es', 'de-DE': 'de' };
+    LocaleConfig.defaultLocale = map[lang] || 'pt-br';
+  }, [i18n.language]);
 
   useEffect(() => {
     const ev = activityPreview?.event;
@@ -276,8 +313,9 @@ export default function AgendaScreen() {
 
   const renderSectionHeader = ({ section: { title } }: any) => {
     const dateObj = new Date(title + 'T12:00:00Z');
-    const dayName = dateObj.toLocaleDateString('pt-BR', { weekday: 'long' });
-    const dayNum = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+    const loc = appLangToLocaleTag(i18n.language);
+    const dayName = dateObj.toLocaleDateString(loc, { weekday: 'long' });
+    const dayNum = dateObj.toLocaleDateString(loc, { day: '2-digit', month: 'short' });
     return (
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionHeaderText}>{dayName}, {dayNum}</Text>
@@ -1007,7 +1045,7 @@ export default function AgendaScreen() {
             <TouchableOpacity style={styles.retouchHandle} onPress={toggleExpand} activeOpacity={0.8}>
               <View style={styles.handleBar} />
               <Text style={{ fontSize: 10, color: C.textLight, fontWeight: '700', marginTop: 4 }}>
-                {isExpanded ? 'Recolher para Semana' : 'Expandir Calendário'}
+                {isExpanded ? t('agenda.collapseToWeek') : t('agenda.expandCalendar')}
               </Text>
               <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={14} color={C.textLight} />
             </TouchableOpacity>
@@ -1029,8 +1067,8 @@ export default function AgendaScreen() {
               ListEmptyComponent={
                 <View style={styles.emptyData}>
                   <Ionicons name="calendar-clear-outline" size={48} color={C.border} />
-                  <Text style={styles.emptyDataTitle}>Agenda Livre</Text>
-                  <Text style={styles.emptyDataDesc}>Você não possui compromissos futuros no momento.</Text>
+                  <Text style={styles.emptyDataTitle}>{t('agenda.emptyFreeTitle')}</Text>
+                  <Text style={styles.emptyDataDesc}>{t('agenda.emptyFreeDesc')}</Text>
                 </View>
               }
             />

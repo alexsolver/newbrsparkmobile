@@ -297,6 +297,7 @@ function injectGlobalTopbarActions() {
         <option value="pt-BR">PT</option>
         <option value="en-US">EN</option>
         <option value="es-ES">ES</option>
+        <option value="de-DE">DE</option>
       </select>
     </label>
     <details class="topbar-user-details" id="brspark-topbar-user-wrap">

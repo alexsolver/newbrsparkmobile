@@ -335,7 +335,8 @@ const M = {
     fb_prop_voice_help_html:
       'A transcrição usa <b>OpenAI Whisper</b> no servidor (mesma <b>API key</b> da integração «OpenAI» em Integrações). O técnico precisa de <b>internet</b> ao tocar em «Parar e transcrever».',
     fb_prop_voice_lang_lbl: 'Idioma (Whisper)',
-    fb_prop_voice_lang_hint: 'Ex.: <code>pt</code>, <code>en</code>, <code>es</code>. Opcional, mas ajuda com sotaque e ruído.',
+    fb_prop_voice_lang_hint:
+      'Lista derivada dos <b>perfis regionais ativos</b> na plataforma (SaaS). Opcional, mas ajuda com sotaque e ruído.',
 
     fb_prop_file_upload_title: 'Anexar arquivo (app)',
     fb_prop_file_upload_help:
@@ -1083,7 +1084,8 @@ const M = {
     fb_prop_voice_help_html:
       'Transcription uses <b>OpenAI Whisper</b> on the server (same <b>API key</b> as the “OpenAI” integration under Integrations). The technician needs <b>internet</b> when tapping “Stop and transcribe”.',
     fb_prop_voice_lang_lbl: 'Language (Whisper)',
-    fb_prop_voice_lang_hint: 'e.g. <code>pt</code>, <code>en</code>, <code>es</code>. Optional but helps with accent and noise.',
+    fb_prop_voice_lang_hint:
+      'List is built from <b>active regional profiles</b> on the platform (SaaS). Optional but helps with accent and noise.',
 
     fb_prop_file_upload_title: 'Attach file (app)',
     fb_prop_file_upload_help:
@@ -1508,6 +1510,8 @@ const M = {
 M['es-ES'] = { ...M['en-US'] };
 Object.assign(M['es-ES'], {
   fb_tb_currency: 'Moneda (importe)',
+  fb_prop_voice_lang_hint:
+    'Lista basada en los <b>perfiles regionales activos</b> de la plataforma (SaaS). Opcional; ayuda con acento y ruido.',
   mdl_forms_sub:
     'Vista en árbol: expanda carpetas, arrastre formularios para mover. Pulse una carpeta para definir dónde crear un modelo nuevo.',
   mdl_forms_filter_non_archived: 'Solo no archivados',
@@ -1653,6 +1657,8 @@ Object.assign(M['de-DE'], {
   fb_toolbox_title: 'Dynamische Felder',
   fb_unsaved: 'Ungespeicherte Änderungen',
   fb_unsaved_leave: 'Es gibt ungespeicherte Änderungen. Trotzdem verlassen?',
+  fb_prop_voice_lang_hint:
+    'Liste aus den <b>aktiven regionalen Profilen</b> der Plattform (SaaS). Optional; hilft bei Akzent und Rauschen.',
 });
 
 function interpolate(str, vars) {

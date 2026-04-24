@@ -3286,6 +3286,8 @@ export default function ChecklistEngine() {
   // -- Novo Estado de Webhook API --
   const [validatingFieldId, setValidatingFieldId] = useState<string|null>(null);
   const [visionAnalyzeBusyId, setVisionAnalyzeBusyId] = useState<string | null>(null);
+  /** Verificação facial no servidor (`/api/vision/verify-face`) — mesma chave que visão por campo+scope. */
+  const [facialVerifyBusyId, setFacialVerifyBusyId] = useState<string | null>(null);
   const [visionGridCompose, setVisionGridCompose] = useState<{
     uris: string[];
     cols: number;
@@ -3787,35 +3789,13 @@ export default function ChecklistEngine() {
       }
     };
 
+    const facialBusyKey = visionAnalyzeBusyKey(fieldId, scope ?? null);
+    const clearFacialBusy = () =>
+      setFacialVerifyBusyId((cur) => (cur === facialBusyKey ? null : cur));
+
     if (strictOnline) {
-      const result = await postVerifyFaceForField(fieldData, imgBase64);
-      if (result.ok) {
-        writeSuccessAudit(result.data as any);
-      } else if (result.kind === 'error_msg') {
-        Alert.alert(
-          t('appAlerts.checklist.faceRecognitionErrorTitle'),
-          sanitizeFacialUserFacingCopy(result.message) || result.message,
-        );
-        return false;
-      } else if (result.kind === 'no_match') {
-        Alert.alert(
-          t('appAlerts.checklist.faceNoMatchTitle'),
-          sanitizeFacialUserFacingCopy(result.message) || t('appAlerts.checklist.faceNoMatchBodyDefault'),
-        );
-        return false;
-      } else {
-        Alert.alert(t('appAlerts.checklist.faceAiEngineFailTitle'), t('appAlerts.checklist.faceAiEngineFailBody'));
-        return false;
-      }
-    } else {
-      let usePending = false;
+      setFacialVerifyBusyId(facialBusyKey);
       try {
-        const netState = await Network.getNetworkStateAsync();
-        if (netState.isConnected === false) usePending = true;
-      } catch {
-        usePending = true;
-      }
-      if (!usePending) {
         const result = await postVerifyFaceForField(fieldData, imgBase64);
         if (result.ok) {
           writeSuccessAudit(result.data as any);
@@ -3832,7 +3812,43 @@ export default function ChecklistEngine() {
           );
           return false;
         } else {
-          usePending = true;
+          Alert.alert(t('appAlerts.checklist.faceAiEngineFailTitle'), t('appAlerts.checklist.faceAiEngineFailBody'));
+          return false;
+        }
+      } finally {
+        clearFacialBusy();
+      }
+    } else {
+      let usePending = false;
+      try {
+        const netState = await Network.getNetworkStateAsync();
+        if (netState.isConnected === false) usePending = true;
+      } catch {
+        usePending = true;
+      }
+      if (!usePending) {
+        setFacialVerifyBusyId(facialBusyKey);
+        try {
+          const result = await postVerifyFaceForField(fieldData, imgBase64);
+          if (result.ok) {
+            writeSuccessAudit(result.data as any);
+          } else if (result.kind === 'error_msg') {
+            Alert.alert(
+              t('appAlerts.checklist.faceRecognitionErrorTitle'),
+              sanitizeFacialUserFacingCopy(result.message) || result.message,
+            );
+            return false;
+          } else if (result.kind === 'no_match') {
+            Alert.alert(
+              t('appAlerts.checklist.faceNoMatchTitle'),
+              sanitizeFacialUserFacingCopy(result.message) || t('appAlerts.checklist.faceNoMatchBodyDefault'),
+            );
+            return false;
+          } else {
+            usePending = true;
+          }
+        } finally {
+          clearFacialBusy();
         }
       }
       if (usePending) writePendingAudit();
@@ -6291,7 +6307,14 @@ export default function ChecklistEngine() {
           } catch {
             return;
           }
-          const result = await postVerifyFaceForField(f, b64);
+          const fk = visionAnalyzeBusyKey(f.id, scope);
+          setFacialVerifyBusyId(fk);
+          let result: VerifyFaceApiResult;
+          try {
+            result = await postVerifyFaceForField(f, b64);
+          } finally {
+            setFacialVerifyBusyId((cur) => (cur === fk ? null : cur));
+          }
           const bioKey = facialBiometricStorageKey(f.id);
           const hiFlush = handleInputRef.current;
           if (typeof hiFlush !== 'function') return;
@@ -9501,6 +9524,10 @@ export default function ChecklistEngine() {
           if (!isFieldVisible(field)) return null;
           if (useSectionHub && preambleHubCompleteFieldIdSet.has(field.id)) return null;
 
+          const facialFieldBusy =
+            field.type === 'facial_recognition' &&
+            facialVerifyBusyId === visionAnalyzeBusyKey(field.id, scope ?? null);
+
           const renderFieldIcon = (f: any) => {
             return renderSchemaIcon(f, 24);
           };
@@ -10840,90 +10867,163 @@ export default function ChecklistEngine() {
                       }
                       if (hasPhoto && fieldAllowsMultiple(field)) {
                         return (
+                          <View style={{ position: 'relative', borderRadius: 16, overflow: 'hidden' }}>
+                            <TouchableOpacity
+                              onPress={() =>
+                                ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type, scope))
+                              }
+                              activeOpacity={0.85}
+                              disabled={facialFieldBusy || isReadOnly}
+                              style={[
+                                styles.cameraBox,
+                                {
+                                  borderColor: '#fda4af',
+                                  backgroundColor: '#fff1f2',
+                                  opacity: facialFieldBusy ? 0.72 : 1,
+                                },
+                              ]}
+                            >
+                              <Ionicons name="scan" size={28} color="#e11d48" />
+                              <Text style={[styles.cameraText, { color: '#9f1239' }]}>
+                                Adicionar outra validação facial
+                              </Text>
+                            </TouchableOpacity>
+                            {facialFieldBusy ? (
+                              <View
+                                pointerEvents="none"
+                                style={{
+                                  position: 'absolute',
+                                  left: 0,
+                                  right: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  zIndex: 6,
+                                  backgroundColor: 'rgba(248, 250, 252, 0.92)',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <ActivityIndicator size="large" color="#e11d48" />
+                                <Text
+                                  style={{
+                                    marginTop: 10,
+                                    fontSize: 12,
+                                    fontWeight: '700',
+                                    color: '#475569',
+                                    textAlign: 'center',
+                                    paddingHorizontal: 14,
+                                  }}
+                                >
+                                  {t('appAlerts.checklist.facialVerifyingServer')}
+                                </Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        );
+                      }
+                      return (
+                        <View style={{ position: 'relative', marginVertical: 4, borderRadius: 16, overflow: 'hidden' }}>
                           <TouchableOpacity
                             onPress={() =>
                               ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type, scope))
                             }
-                            activeOpacity={0.85}
-                            style={[styles.cameraBox, { borderColor: '#fda4af', backgroundColor: '#fff1f2' }]}
+                            activeOpacity={0.8}
+                            disabled={facialFieldBusy || isReadOnly}
+                            style={{
+                              borderRadius: 16,
+                              overflow: 'hidden',
+                              shadowColor: '#e11d48',
+                              shadowOffset: { width: 0, height: 6 },
+                              shadowOpacity: 0.25,
+                              shadowRadius: 10,
+                              elevation: 6,
+                              backgroundColor: '#fff',
+                              borderWidth: 1,
+                              borderColor: '#fda4af',
+                              opacity: facialFieldBusy ? 0.72 : 1,
+                            }}
                           >
-                            <Ionicons name="scan" size={28} color="#e11d48" />
-                            <Text style={[styles.cameraText, { color: '#9f1239' }]}>
-                              Adicionar outra validação facial
-                            </Text>
+                            <LinearGradient
+                              colors={['#fff1f2', '#ffe4e6']}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={{ padding: 24, alignItems: 'center', justifyContent: 'center' }}
+                            >
+                              <View
+                                style={{
+                                  width: 68,
+                                  height: 68,
+                                  borderRadius: 34,
+                                  backgroundColor: '#f43f5e',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  marginBottom: 16,
+                                  shadowColor: '#9f1239',
+                                  shadowOpacity: 0.3,
+                                  shadowRadius: 8,
+                                  shadowOffset: { width: 0, height: 4 },
+                                }}
+                              >
+                                <Ionicons name="scan" size={40} color="#fff" />
+                                <View style={{ position: 'absolute' }}>
+                                  <Ionicons name="person" size={20} color="#fff" style={{ marginTop: 2 }} />
+                                </View>
+                              </View>
+                              <Text
+                                style={{
+                                  fontSize: 16,
+                                  fontWeight: '900',
+                                  color: '#881337',
+                                  textTransform: 'uppercase',
+                                  letterSpacing: 0.5,
+                                }}
+                              >
+                                Validar Biometria
+                              </Text>
+                              <Text
+                                style={{
+                                  fontSize: 13,
+                                  color: '#be123c',
+                                  fontWeight: '500',
+                                  marginTop: 4,
+                                  textAlign: 'center',
+                                }}
+                              >
+                                Toque para escanear a face do operador e autenticar esta operação.
+                              </Text>
+                            </LinearGradient>
                           </TouchableOpacity>
-                        );
-                      }
-                      return (
-                        <TouchableOpacity
-                          onPress={() =>
-                            ensureOnlineValidation(field, () => handleMediaPicker(field.id, field.type, scope))
-                          }
-                          activeOpacity={0.8}
-                          style={{
-                            borderRadius: 16,
-                            overflow: 'hidden',
-                            marginVertical: 4,
-                            shadowColor: '#e11d48',
-                            shadowOffset: { width: 0, height: 6 },
-                            shadowOpacity: 0.25,
-                            shadowRadius: 10,
-                            elevation: 6,
-                            backgroundColor: '#fff',
-                            borderWidth: 1,
-                            borderColor: '#fda4af',
-                          }}
-                        >
-                          <LinearGradient
-                            colors={['#fff1f2', '#ffe4e6']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={{ padding: 24, alignItems: 'center', justifyContent: 'center' }}
-                          >
+                          {facialFieldBusy ? (
                             <View
+                              pointerEvents="none"
                               style={{
-                                width: 68,
-                                height: 68,
-                                borderRadius: 34,
-                                backgroundColor: '#f43f5e',
+                                position: 'absolute',
+                                left: 0,
+                                right: 0,
+                                top: 0,
+                                bottom: 0,
+                                zIndex: 6,
+                                backgroundColor: 'rgba(248, 250, 252, 0.92)',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                marginBottom: 16,
-                                shadowColor: '#9f1239',
-                                shadowOpacity: 0.3,
-                                shadowRadius: 8,
-                                shadowOffset: { width: 0, height: 4 },
                               }}
                             >
-                              <Ionicons name="scan" size={40} color="#fff" />
-                              <View style={{ position: 'absolute' }}>
-                                <Ionicons name="person" size={20} color="#fff" style={{ marginTop: 2 }} />
-                              </View>
+                              <ActivityIndicator size="large" color="#e11d48" />
+                              <Text
+                                style={{
+                                  marginTop: 10,
+                                  fontSize: 12,
+                                  fontWeight: '700',
+                                  color: '#475569',
+                                  textAlign: 'center',
+                                  paddingHorizontal: 14,
+                                }}
+                              >
+                                {t('appAlerts.checklist.facialVerifyingServer')}
+                              </Text>
                             </View>
-                            <Text
-                              style={{
-                                fontSize: 16,
-                                fontWeight: '900',
-                                color: '#881337',
-                                textTransform: 'uppercase',
-                                letterSpacing: 0.5,
-                              }}
-                            >
-                              Validar Biometria
-                            </Text>
-                            <Text
-                              style={{
-                                fontSize: 13,
-                                color: '#be123c',
-                                fontWeight: '500',
-                                marginTop: 4,
-                                textAlign: 'center',
-                              }}
-                            >
-                              Toque para escanear a face do operador e autenticar esta operação.
-                            </Text>
-                          </LinearGradient>
-                        </TouchableOpacity>
+                          ) : null}
+                        </View>
                       );
                     })()
                   ) : (
@@ -10986,7 +11086,7 @@ export default function ChecklistEngine() {
                         ? getFacialStampIdentity(frAudit, user)
                         : { fullName: '', loginEmail: '' };
                     return (
-                    <View style={{ marginTop: 10, gap: 10 }}>
+                    <View style={{ marginTop: 10, gap: 10, position: 'relative' }}>
                       {field.type === 'facial_recognition' &&
                         (() => {
                           const audit = parseFacialBiometricAudit(
@@ -11117,7 +11217,12 @@ export default function ChecklistEngine() {
                            >
                              {String(oneUri).split('/').pop()}
                            </Text>
-                           <TouchableOpacity onPress={() => {
+                           <TouchableOpacity
+                             disabled={
+                               isReadOnly ||
+                               (field.type === 'facial_recognition' && facialFieldBusy)
+                             }
+                             onPress={() => {
                              const ck = mediaCaptionStorageKey(field.id);
                              const rowForCap =
                                scope && responses[sectionRepeatStorageKey(scope.sectionId)]?.[scope.rowIndex];
@@ -11143,8 +11248,18 @@ export default function ChecklistEngine() {
                                  hi(ck, '');
                                }
                              }
-                           }}>
-                               <Ionicons name="trash" size={24} color="#dc2626" />
+                           }}
+                           >
+                               <Ionicons
+                                 name="trash"
+                                 size={24}
+                                 color={
+                                   isReadOnly ||
+                                   (field.type === 'facial_recognition' && facialFieldBusy)
+                                     ? '#cbd5e1'
+                                     : '#dc2626'
+                                 }
+                               />
                            </TouchableOpacity>
                        </View>
                        {field.allowMediaDescription ? (
@@ -11165,6 +11280,9 @@ export default function ChecklistEngine() {
                              <TextInput
                                style={[styles.input, { minHeight: 44, paddingVertical: 8, textAlignVertical: 'top' }]}
                                placeholder="Opcional, notas sobre este item…"
+                               editable={
+                                 !(field.type === 'facial_recognition' && facialFieldBusy) && !isReadOnly
+                               }
                                value={getMediaCaptionAtScoped(field, responses, scope, midx)}
                                onChangeText={(t) => {
                                  const ck = mediaCaptionStorageKey(field.id);
@@ -11186,6 +11304,36 @@ export default function ChecklistEngine() {
                        ) : null}
                     </View>
                       ))}
+                      {field.type === 'facial_recognition' && facialFieldBusy ? (
+                        <View
+                          style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: 0,
+                            bottom: 0,
+                            zIndex: 20,
+                            backgroundColor: 'rgba(248, 250, 252, 0.93)',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: 12,
+                          }}
+                        >
+                          <ActivityIndicator size="large" color="#e11d48" />
+                          <Text
+                            style={{
+                              marginTop: 12,
+                              fontSize: 13,
+                              fontWeight: '700',
+                              color: '#334155',
+                              textAlign: 'center',
+                              paddingHorizontal: 20,
+                            }}
+                          >
+                            {t('appAlerts.checklist.facialVerifyingServer')}
+                          </Text>
+                        </View>
+                      ) : null}
                     </View>
                     );
                    })()}

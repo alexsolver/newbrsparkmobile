@@ -483,7 +483,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
                   ellipsizeMode="tail"
                   style={{ fontSize: fontSize.lg, fontWeight: fontWeight.black, color: C.slate, letterSpacing: -0.5 }}
                 >
-                  Configurações
+                  {t('profile.settingsScreenTitle')}
                 </Text>
               </View>
             ) : null}

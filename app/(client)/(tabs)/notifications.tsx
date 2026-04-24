@@ -21,26 +21,20 @@ import { useTheme } from '../../../src/theme/ThemeContext';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { usePersona } from '../../../src/context/PersonaContext';
 import { useTranslation } from 'react-i18next';
+import { relTimeAgo } from '../../../src/i18n/relativeTime';
 
-function buildCategoryConfig(C: ColorPalette): Record<string, { icon: any; color: string; label: string }> {
+function buildCategoryConfig(
+  C: ColorPalette,
+  tr: (k: string) => string,
+): Record<string, { icon: any; color: string; label: string }> {
   return {
-    maintenance: { icon: 'build', color: MEDIA_TAG_COLORS.DURING, label: 'Manutenção' },
-    expiry: { icon: 'alarm', color: MEDIA_TAG_COLORS.DAMAGE, label: 'Vencimento' },
-    sync: { icon: 'cloud-done', color: MEDIA_TAG_COLORS.AFTER, label: 'Sincronismo' },
-    alert: { icon: 'warning', color: C.branding, label: 'Alerta' },
-    info: { icon: 'information-circle', color: MEDIA_TAG_COLORS.BEFORE, label: 'Info' },
-    evaluation: { icon: 'star-half', color: C.accent, label: 'Desempenho' },
+    maintenance: { icon: 'build', color: MEDIA_TAG_COLORS.DURING, label: tr('notificationHub.catMaintenance') },
+    expiry: { icon: 'alarm', color: MEDIA_TAG_COLORS.DAMAGE, label: tr('notificationHub.catExpiry') },
+    sync: { icon: 'cloud-done', color: MEDIA_TAG_COLORS.AFTER, label: tr('notificationHub.catSync') },
+    alert: { icon: 'warning', color: C.branding, label: tr('notificationHub.catAlert') },
+    info: { icon: 'information-circle', color: MEDIA_TAG_COLORS.BEFORE, label: tr('notificationHub.catInfo') },
+    evaluation: { icon: 'star-half', color: C.accent, label: tr('notificationHub.catEvaluation') },
   };
-}
-
-function timeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'Agora';
-  if (m < 60) return `${m}m atrás`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h atrás`;
-  return `${Math.floor(h / 24)}d atrás`;
 }
 
 export default function NotificationsScreen() {
@@ -51,8 +45,7 @@ export default function NotificationsScreen() {
   const persona: NotificationPersona = activePersona;
   const { colors: C, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createNotificationsStyles(C), [C]);
-  const categoryConfig = useMemo(() => buildCategoryConfig(C), [C]);
-
+  const categoryConfig = useMemo(() => buildCategoryConfig(C, (k) => t(k)), [C, t]);
   const [items, setItems] = useState<AppNotification[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<string>('all');
@@ -183,7 +176,7 @@ export default function NotificationsScreen() {
             <View style={[styles.categoryChip, { backgroundColor: cfg.color + '18' }]}>
               <Text style={[styles.categoryLabel, { color: cfg.color }]}>{cfg.label}</Text>
             </View>
-            <Text style={styles.cardTime}>{timeAgo(item.timestamp)}</Text>
+            <Text style={styles.cardTime}>{relTimeAgo(item.timestamp, t)}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -194,15 +187,15 @@ export default function NotificationsScreen() {
     return (
       <SafeAreaView edges={['left', 'right']} style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 }]}>
         <Ionicons name="notifications-outline" size={56} color={C.textLight} />
-        <Text style={{ fontSize: 20, fontWeight: '800', color: C.primary, marginTop: 20 }}>Avisos</Text>
+        <Text style={{ fontSize: 20, fontWeight: '800', color: C.primary, marginTop: 20 }}>{t('notificationHub.guestTitle')}</Text>
         <Text style={{ fontSize: 14, color: C.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>
-          Crie uma conta para receber avisos e alertas importantes.
+          {t('notificationHub.guestBody')}
         </Text>
         <TouchableOpacity
           style={{ backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 36, borderRadius: 14, marginTop: 24 }}
           onPress={() => router.replace('/auth/login' as any)}
         >
-          <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 15 }}>Criar Conta ou Entrar</Text>
+          <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 15 }}>{t('profile.createOrLogin')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -213,9 +206,14 @@ export default function NotificationsScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerBrand}>{appDisplayName}</Text>
-          <Text style={styles.headerTitle}>Central de Avisos</Text>
+          <Text style={styles.headerTitle}>{t('notificationHub.screenTitle')}</Text>
           <Text style={styles.headerSub}>
-            {unread > 0 ? `${unread} não lido${unread > 1 ? 's' : ''}` : 'Tudo em dia ✓'} · {appTagline}
+            {unread === 0
+              ? t('notificationHub.allCaughtUp')
+              : unread === 1
+                ? t('notificationHub.unreadOne', { count: unread })
+                : t('notificationHub.unreadMany', { count: unread })}{' '}
+            · {appTagline}
           </Text>
         </View>
         <View style={styles.headerActions}>
@@ -243,7 +241,9 @@ export default function NotificationsScreen() {
           return (
             <TouchableOpacity key={cat} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => setFilter(cat)}>
               {cfg && <Ionicons name={cfg.icon} size={11} color={active ? C.menuChipActiveFg : cfg.color} style={{ marginRight: 4 }} />}
-              <Text style={[styles.filterText, active && styles.filterTextActive]}>{cat === 'all' ? 'Todos' : cfg!.label}</Text>
+              <Text style={[styles.filterText, active && styles.filterTextActive]}>
+                {cat === 'all' ? t('notificationHub.filterAll') : cfg!.label}
+              </Text>
             </TouchableOpacity>
           );
         })}
@@ -259,7 +259,7 @@ export default function NotificationsScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="notifications-off-outline" size={56} color={C.textLight} />
-              <Text style={styles.emptyText}>Nenhum aviso nesta categoria</Text>
+              <Text style={styles.emptyText}>{t('notificationHub.emptyCategory')}</Text>
             </View>
           }
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}

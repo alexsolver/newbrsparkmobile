@@ -6,7 +6,7 @@ import { getAdminUiLocale } from './user-pages-i18n.js';
 
 const ARCHIVED_KEY = 'brspark_panel_archived_chat_rooms';
 const VIEWER_LOCALE_KEY = 'brspark_panel_chat_viewer_locale';
-const VIEWER_LOCALE_OPTIONS = ['pt-BR', 'en-US', 'es-ES'];
+const VIEWER_LOCALE_OPTIONS = ['pt-BR', 'en-US', 'es-ES', 'de-DE'];
 const ROOM_ARCHIVE_PREFIX = 'room:';
 const OPS_ARCHIVE_PREFIX = 'ops:';
 const AUTO_ARCHIVE_GENERAL_MS = 30 * 24 * 60 * 60 * 1000;

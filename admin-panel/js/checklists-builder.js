@@ -132,6 +132,166 @@ function adminJsonHeaders() {
   return h;
 }
 
+/** Opções do seletor «Idioma (Whisper)»: derivadas dos LocaleProfile ativos no SaaS (GET /i18n/entries?source=locales). */
+const DEFAULT_WHISPER_LANG_OPTIONS = [
+  { value: 'pt', text: 'Português (pt)' },
+  { value: 'en', text: 'English (en)' },
+  { value: 'es', text: 'Español (es)' },
+  { value: 'de', text: 'Deutsch (de)' },
+];
+
+const WHISPER_LABEL_FALLBACK = {
+  pt: 'Português',
+  en: 'English',
+  es: 'Español',
+  de: 'Deutsch',
+  fr: 'Français',
+};
+
+let __fbWhisperLocaleOptsCache = null;
+let __fbWhisperLocaleOptsPromise = null;
+
+function bcp47ToWhisperPrimary(lang) {
+  const raw = String(lang || '')
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, '-');
+  if (!raw) return '';
+  if (raw.startsWith('pt')) return 'pt';
+  if (raw.startsWith('en')) return 'en';
+  if (raw.startsWith('es')) return 'es';
+  if (raw.startsWith('de')) return 'de';
+  if (raw.startsWith('fr')) return 'fr';
+  const m = raw.match(/^([a-z]{2})(?:-|$)/i);
+  return m ? String(m[1]).toLowerCase() : '';
+}
+
+function buildWhisperOptionsFromLocales(locales) {
+  const arr = Array.isArray(locales) ? locales : [];
+  const buckets = new Map();
+  for (const L of arr) {
+    if (!L || L.isActive === false) continue;
+    const whisper = bcp47ToWhisperPrimary(L.language || 'pt-BR');
+    if (!whisper) continue;
+    if (!buckets.has(whisper)) buckets.set(whisper, { countries: [] });
+    const b = buckets.get(whisper);
+    if (L.countryCode) b.countries.push(String(L.countryCode).toUpperCase());
+  }
+
+  /** pt / en / es / de aparecem sempre (alinhado à app); países do SaaS enriquecem o rótulo quando existirem. */
+  const coreOrder = ['pt', 'en', 'es', 'de'];
+  const result = [];
+  const seen = new Set();
+
+  function labelForCoreOrBucket(w) {
+    const base = WHISPER_LABEL_FALLBACK[w] || w;
+    if (!buckets.has(w)) {
+      const def = DEFAULT_WHISPER_LANG_OPTIONS.find((o) => o.value === w);
+      return def ? def.text : `${base} (${w})`;
+    }
+    const cc = [...new Set(buckets.get(w).countries)].sort().join(', ');
+    return cc ? `${base} (${w}) — ${cc}` : `${base} (${w})`;
+  }
+
+  for (const w of coreOrder) {
+    seen.add(w);
+    result.push({ value: w, text: labelForCoreOrBucket(w) });
+  }
+
+  if (buckets.has('fr')) {
+    seen.add('fr');
+    const base = WHISPER_LABEL_FALLBACK.fr;
+    const cc = [...new Set(buckets.get('fr').countries)].sort().join(', ');
+    result.push({
+      value: 'fr',
+      text: cc ? `${base} (fr) — ${cc}` : `${base} (fr)`,
+    });
+  }
+
+  for (const w of buckets.keys()) {
+    if (seen.has(w)) continue;
+    seen.add(w);
+    const cc = [...new Set(buckets.get(w).countries)].sort().join(', ');
+    const base = WHISPER_LABEL_FALLBACK[w] || w;
+    result.push({
+      value: w,
+      text: cc ? `${base} (${w}) — ${cc}` : `${String(w).toUpperCase()} (${w})`,
+    });
+  }
+
+  return result;
+}
+
+async function fetchWhisperLangOptionsFromSaas() {
+  if (__fbWhisperLocaleOptsCache) return __fbWhisperLocaleOptsCache;
+  if (__fbWhisperLocaleOptsPromise) return __fbWhisperLocaleOptsPromise;
+  __fbWhisperLocaleOptsPromise = (async () => {
+    try {
+      const res = await fetch(`${brsparkApiBase()}/i18n/entries?source=locales`, { headers: adminJsonHeaders() });
+      const raw = await res.text();
+      let data = [];
+      try {
+        data = raw ? JSON.parse(raw) : [];
+      } catch (_) {
+        data = [];
+      }
+      if (!res.ok) throw new Error('locales');
+      __fbWhisperLocaleOptsCache = buildWhisperOptionsFromLocales(data);
+      return __fbWhisperLocaleOptsCache;
+    } catch (_) {
+      __fbWhisperLocaleOptsCache = DEFAULT_WHISPER_LANG_OPTIONS.slice();
+      return __fbWhisperLocaleOptsCache;
+    } finally {
+      __fbWhisperLocaleOptsPromise = null;
+    }
+  })();
+  return __fbWhisperLocaleOptsPromise;
+}
+
+function buildVoiceWhisperLanguageSelectHtml(field) {
+  const currentRaw = String(field.voiceTranscribeLanguage || 'pt')
+    .trim()
+    .toLowerCase()
+    .slice(0, 12);
+  const current = currentRaw || 'pt';
+  const opts =
+    __fbWhisperLocaleOptsCache && __fbWhisperLocaleOptsCache.length
+      ? __fbWhisperLocaleOptsCache
+      : DEFAULT_WHISPER_LANG_OPTIONS;
+  const byVal = new Map(opts.map((o) => [o.value, o.text]));
+  let optionsHtml = '';
+  for (const o of opts) {
+    const sel = o.value === current ? ' selected' : '';
+    optionsHtml += `<option value="${escapeHtmlAttr(o.value)}"${sel}>${escapeHtml(o.text)}</option>`;
+  }
+  if (!byVal.has(current)) {
+    optionsHtml =
+      `<option value="${escapeHtmlAttr(current)}" selected>${escapeHtml(
+        current,
+      )}</option>` + optionsHtml;
+  }
+  return `<select id="fb-voice-whisper-lang" class="prop-input" style="font-size:12px;" aria-label="${escapeHtmlAttr(
+    fbStr('fb_prop_voice_lang_lbl', null, 'Idioma (Whisper)'),
+  )}" onchange="window.handleFieldUpdate('voiceTranscribeLanguage', this.value)">${optionsHtml}</select>`;
+}
+
+window.fbPrefetchWhisperLangOptions = function () {
+  fetchWhisperLangOptionsFromSaas()
+    .then(() => {
+      try {
+        const f = typeof fields !== 'undefined' && Array.isArray(fields) ? fields.find((x) => x.id === selectedFieldId) : null;
+        if (f && f.type === 'voice_note' && typeof renderProperties === 'function') renderProperties();
+      } catch (_) {
+        /* ignore */
+      }
+    })
+    .catch(() => {});
+};
+
+window.fbClearWhisperLangOptionsCache = function () {
+  __fbWhisperLocaleOptsCache = null;
+};
+
 function checklistVersionBadgeHtml(form) {
   const version = Number(form && form.version ? form.version : 1);
   const archived = !!(form && form.isActive === false);
@@ -3981,7 +4141,6 @@ function renderProperties() {
             <div style="font-size:9px; color:#64748b; margin-top:6px;">${visionPromptHintBlock}</div>
         </div>`;
     } else if (f.type === 'voice_note') {
-        const vLang = escapeHtmlLogic(String(f.voiceTranscribeLanguage || 'pt').slice(0, 12));
         const voiceHelp = fbStr(
             'fb_prop_voice_help_html',
             null,
@@ -3990,8 +4149,21 @@ function renderProperties() {
         const voiceLangHint = fbStr(
             'fb_prop_voice_lang_hint',
             null,
-            'Ex.: <code>pt</code>, <code>en</code>, <code>es</code>. Opcional, mas ajuda com sotaque e ruído.',
+            'Lista derivada dos <b>perfis regionais ativos</b> em Configurações regionais (SaaS). Opcional, mas ajuda com sotaque e ruído.',
         );
+        const whisperOptsAlreadyCached = !!__fbWhisperLocaleOptsCache;
+        void fetchWhisperLangOptionsFromSaas()
+            .then(() => {
+                if (whisperOptsAlreadyCached) return;
+                try {
+                    const cur = fields.find((x) => x.id === selectedFieldId);
+                    if (cur && cur.type === 'voice_note') renderProperties();
+                } catch (_) {
+                    /* ignore */
+                }
+            })
+            .catch(() => {});
+        const voiceLangSelect = buildVoiceWhisperLanguageSelectHtml(f);
         extraProps = `
         <div class="prop-group" style="background:#f5f3ff;border:1px solid #c4b5fd;padding:12px;border-radius:8px;margin-top:16px;">
             <div style="font-size:11px;font-weight:800;color:#5b21b6;margin-bottom:8px;"><ion-icon name="mic-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_voice_title', null, 'Nota de voz'))}</div>
@@ -3999,7 +4171,7 @@ function renderProperties() {
               ${voiceHelp}
             </div>
             <label class="prop-label" style="font-size:10px;color:#5b21b6;">${escapeHtmlLogic(fbStr('fb_prop_voice_lang_lbl', null, 'Idioma (Whisper)'))}</label>
-            <input class="prop-input" type="text" maxlength="12" placeholder="pt" value="${vLang}" onchange="window.handleFieldUpdate('voiceTranscribeLanguage', this.value)" />
+            ${voiceLangSelect}
             <div style="font-size:9px;color:#64748b;margin-top:6px;">${voiceLangHint}</div>
         </div>`;
     } else if (f.type === 'file_upload') {
