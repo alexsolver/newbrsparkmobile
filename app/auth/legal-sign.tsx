@@ -65,11 +65,11 @@ export default function LegalSignScreen() {
         if (can) {
           await Linking.openURL((ed as { url: string }).url);
         } else {
-          Alert.alert('Assinatura', (ed as { url: string }).url);
+          Alert.alert(t('appAlerts.legal.signatureTitle'), (ed as { url: string }).url);
         }
       }
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || '—');
+      Alert.alert(t('common.error'), e?.message || t('appAlerts.legal.errorFallback'));
     } finally {
       setLoad(false);
     }

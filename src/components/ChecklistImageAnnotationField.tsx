@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Alert,
   Image,
@@ -141,6 +142,7 @@ export function ChecklistImageAnnotationField({
   penColor = '#dc2626',
   strokeWidth = 4,
 }: Props) {
+  const { t } = useTranslation();
   const parsed = useMemo(() => parseValue(value), [value]);
   const [modalOpen, setModalOpen] = useState(false);
   const [draftUri, setDraftUri] = useState<string | null>(null);
@@ -169,7 +171,7 @@ export function ChecklistImageAnnotationField({
     if (readOnly) return;
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('Permissão', 'Autorize o acesso à galeria ou use a câmera.');
+      Alert.alert(t('appAlerts.techReg.permTitle'), t('appAlerts.imageAnnot.galleryOrCamera'));
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -178,13 +180,13 @@ export function ChecklistImageAnnotationField({
     });
     if (res.canceled || !res.assets?.[0]?.uri) return;
     openEditor(res.assets[0].uri, parsed, 'gallery');
-  }, [openEditor, parsed, readOnly]);
+  }, [openEditor, parsed, readOnly, t]);
 
   const takePhoto = useCallback(async () => {
     if (readOnly) return;
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (perm.status !== 'granted') {
-      Alert.alert('Câmera', 'Permissão negada.');
+      Alert.alert(t('appAlerts.imageAnnot.cameraTitle'), t('appAlerts.imageAnnot.cameraDenied'));
       return;
     }
     const res = await ImagePicker.launchCameraAsync({ quality: 0.85 });
@@ -192,7 +194,7 @@ export function ChecklistImageAnnotationField({
     const base = res.assets[0].uri.split('?')[0];
     const qs = await buildAnnotationCameraQuerySuffix();
     openEditor(base + qs, parsed, 'camera');
-  }, [openEditor, parsed, readOnly]);
+  }, [openEditor, parsed, readOnly, t]);
 
   const panResponder = useMemo(
     () =>

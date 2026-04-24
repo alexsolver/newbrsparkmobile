@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { ColorPalette, MEDIA_TAG_COLORS } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -27,6 +28,7 @@ const TYPE_ICONS: Record<string, { icon: any; color: string }> = {
 };
 
 export default function AssetNotesListScreen() {
+  const { t } = useTranslation();
   const { assetId } = useLocalSearchParams<{ assetId: string }>();
   const router = useRouter();
   const { user } = useAuth();
@@ -55,9 +57,9 @@ export default function AssetNotesListScreen() {
   );
 
   const handleDelete = (noteId: string) => {
-    Alert.alert('Excluir', 'Tem certeza que deseja apagar essa anotação?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Apagar', style: 'destructive', onPress: () => {
+    Alert.alert(t('appAlerts.assetNotes.deleteTitle'), t('appAlerts.assetNotes.deleteBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: () => {
         deleteAssetNoteLocal(noteId, user?.email || '');
         loadData();
       }}

@@ -154,10 +154,13 @@ export function DocumentModule({ assetId }: { assetId: string }) {
           const cloudUri = res?.url || res?.path || uri;
           await AssetDocService.saveDocument({ ...newDoc, uri: cloudUri }, user.email);
         } else {
-          Alert.alert('Diagnóstico Storage', `RES: ${JSON.stringify(res)}\nSe for nulo, a API recusou o arquivo.`);
+          Alert.alert(
+            t('appAlerts.diag.storageTitle'),
+            t('appAlerts.diag.storageResBody', { payload: JSON.stringify(res) }),
+          );
         }
       }).catch((e) => {
-        Alert.alert('Diagnóstico Storage', `Catch: ${e}`);
+        Alert.alert(t('appAlerts.diag.storageTitle'), t('appAlerts.diag.storageCatchBody', { payload: String(e) }));
       });
     }
 

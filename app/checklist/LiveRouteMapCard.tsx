@@ -1660,15 +1660,11 @@ export default function LiveRouteMapCard({
 
   const openNavOptions = () => {
     if (zoneType === 'segment' && route && route.length >= 2) {
-      Alert.alert(
-        'Navegar para OS',
-        'Para qual extremidade do trecho deseja navegar?',
-        [
-          { text: 'Ponto A', onPress: () => openDestInMaps(route[0][0], route[0][1]) },
-          { text: 'Ponto B', onPress: () => openDestInMaps(route[1][0], route[1][1]) },
-          { text: 'Cancelar', style: 'cancel' }
-        ]
-      );
+      Alert.alert(tr('appAlerts.geofence.navigateTitle'), tr('appAlerts.geofence.navigateSegmentBody'), [
+        { text: tr('appAlerts.geofence.segmentPointA'), onPress: () => openDestInMaps(route[0][0], route[0][1]) },
+        { text: tr('appAlerts.geofence.segmentPointB'), onPress: () => openDestInMaps(route[1][0], route[1][1]) },
+        { text: tr('appAlerts.home.mapPickerCancel'), style: 'cancel' },
+      ]);
       return;
     }
     
@@ -1679,27 +1675,32 @@ export default function LiveRouteMapCard({
   const openDestInMaps = (lat?: number | null, lng?: number | null) => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     const options: any[] = [
-      { text: 'Waze', onPress: () => Linking.openURL(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`) },
-      { text: 'Google Maps', onPress: () => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`) }
+      { text: tr('appAlerts.home.mapPickerWaze'), onPress: () => Linking.openURL(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`) },
+      {
+        text: tr('appAlerts.home.mapPickerGoogle'),
+        onPress: () => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`),
+      },
     ];
     if (Platform.OS === 'ios') {
-      options.push({ text: 'Apple Maps', onPress: () => Linking.openURL(`maps://?daddr=${lat},${lng}`) });
-      options.push({ text: 'Cancelar', style: 'cancel' });
-      Alert.alert('Navegar para OS', 'Escolha seu aplicativo favorito:', options);
+      options.push({ text: tr('appAlerts.home.mapPickerApple'), onPress: () => Linking.openURL(`maps://?daddr=${lat},${lng}`) });
+      options.push({ text: tr('appAlerts.home.mapPickerCancel'), style: 'cancel' });
+      Alert.alert(tr('appAlerts.liveRoute.navigateTitle'), tr('appAlerts.liveRoute.navigateBody'), options);
     } else {
-      Linking.openURL(`geo:0,0?q=${lat},${lng}(Local da OS)`);
+      Linking.openURL(`geo:0,0?q=${lat},${lng}(${tr('appAlerts.home.mapAndroidGeoLabel')})`);
     }
   };
 
   const sendTrackingChat = async (opts?: { moderationOverrideAck?: boolean }) => {
-    const t = trackingChatDraft.trim();
-    if (!t || !taskId || trackingChatSending) return;
+    const messageText = trackingChatDraft.trim();
+    if (!messageText || !taskId || trackingChatSending) return;
     setTrackingChatSending(true);
     try {
       const r = await apiFetch(`/api/tracking/task/${encodeURIComponent(taskId)}/chat`, {
         method: 'POST',
         body: JSON.stringify(
-          opts?.moderationOverrideAck ? { text: t, ackModerationWarning: true } : { text: t }
+          opts?.moderationOverrideAck
+            ? { text: messageText, ackModerationWarning: true }
+            : { text: messageText }
         ),
       });
       const j = (await r.json().catch(() => ({}))) as {
@@ -1714,26 +1715,29 @@ export default function LiveRouteMapCard({
         const um =
           typeof j.userMessage === 'string' && j.userMessage.trim()
             ? j.userMessage.trim()
-            : 'A mensagem não foi enviada. Revise o texto.';
+            : tr('appAlerts.liveRoute.chatModerationDefaultBody');
         if (j.canOverride) {
           Alert.alert(
-            'Moderação do chat',
-            `${um}\n\nSe foi um falso alarme leve, pode confirmar o reenvio.`,
+            tr('appAlerts.liveRoute.chatModerationTitle'),
+            `${um}\n\n${tr('appAlerts.liveRoute.chatModerationOverrideSuffix')}`,
             [
-              { text: 'Cancelar', style: 'cancel' },
+              { text: tr('appAlerts.home.mapPickerCancel'), style: 'cancel' },
               {
-                text: 'Enviar mesmo',
+                text: tr('appAlerts.liveRoute.sendAnyway'),
                 onPress: () => void sendTrackingChat({ moderationOverrideAck: true }),
               },
             ]
           );
         } else {
-          Alert.alert('Moderação do chat', um);
+          Alert.alert(tr('appAlerts.liveRoute.chatModerationTitle'), um);
         }
         return;
       }
       if (!r.ok) {
-        Alert.alert('Chat', typeof j.error === 'string' ? j.error : 'Não foi possível enviar.');
+        Alert.alert(
+          tr('appAlerts.liveRoute.chatTitle'),
+          typeof j.error === 'string' ? j.error : tr('appAlerts.liveRoute.chatSendFail')
+        );
         return;
       }
       setTrackingChatDraft('');
@@ -1743,7 +1747,7 @@ export default function LiveRouteMapCard({
         void fetchTrackingChat();
       }
     } catch {
-      Alert.alert('Chat', 'Sem ligação. Tente de novo.');
+      Alert.alert(tr('appAlerts.liveRoute.chatTitle'), tr('appAlerts.liveRoute.chatOffline'));
     } finally {
       setTrackingChatSending(false);
     }
@@ -1771,7 +1775,10 @@ export default function LiveRouteMapCard({
       Alert.alert('', tr('chat.localeSaved'));
       if (trackingChatOpen && taskId) void fetchTrackingChat();
     } catch (e: unknown) {
-      Alert.alert('Erro', (e as Error)?.message || 'Falha ao guardar idioma');
+      Alert.alert(
+        tr('common.error'),
+        (e as Error)?.message || tr('appAlerts.chat.localeSaveError')
+      );
     }
   };
 
@@ -2090,7 +2097,7 @@ export default function LiveRouteMapCard({
           : `${pct}%`;
 
   const showTransitStatusDetail = () => {
-    Alert.alert('Estado do deslocamento', transitHeaderLong);
+    Alert.alert(tr('appAlerts.transit.stateTitle'), transitHeaderLong);
   };
 
   // Full Screen Modal View

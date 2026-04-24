@@ -43,7 +43,7 @@ export default function NewTechnicianStockScreen() {
     if (!permission?.granted) {
       const p = await requestPermission();
       if (!p.granted) {
-        Alert.alert('Atenção', 'É necessário permitir o uso da câmera para escanear o código.');
+        Alert.alert(t('common.attention'), t('appAlerts.stockTech.cameraForScan'));
         return;
       }
     }
@@ -70,13 +70,13 @@ export default function NewTechnicianStockScreen() {
 
   const handleSave = async () => {
     if (!name || !sku) {
-      Alert.alert('Atenção', 'Informe nome e SKU.');
+      Alert.alert(t('common.attention'), t('appAlerts.stockTech.nameSku'));
       return;
     }
     const email = user?.email || undefined;
     const all = await TechnicianStockService.getItems(email);
     if (all.some((i) => i.sku.toUpperCase() === sku.toUpperCase())) {
-      return Alert.alert('Erro', `Já existe um item técnico com SKU ${sku}.`);
+      return Alert.alert(t('common.error'), t('appAlerts.stockTech.skuExists', { sku }));
     }
 
     const it: StockItem = {
@@ -92,8 +92,8 @@ export default function NewTechnicianStockScreen() {
       locationId: '',
     };
     await TechnicianStockService.saveItem(it, email);
-    Alert.alert('Guardado', 'Material adicionado ao seu estoque técnico.', [
-      { text: 'OK', onPress: () => router.back() },
+    Alert.alert(t('appAlerts.stockTech.savedTitle'), t('appAlerts.stockTech.savedBody'), [
+      { text: t('common.ok'), onPress: () => router.back() },
     ]);
   };
 

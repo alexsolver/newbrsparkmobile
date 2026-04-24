@@ -10,8 +10,10 @@ import { StockService } from '../../src/services/stockService';
 import { BarcodeService } from '../../src/services/barcodeService';
 import { useAuth } from '../../src/hooks/useAuth';
 import { getLocalAssets } from '../../src/database';
+import { useTranslation } from 'react-i18next';
 
 export default function NewStockScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
   const styles = useMemo(() => createStockNewStyles(C), [C]);
@@ -32,7 +34,7 @@ export default function NewStockScreen() {
     if (!permission?.granted) {
       const p = await requestPermission();
       if (!p.granted) {
-        Alert.alert('Atenção', 'É necessário permitir o uso da câmera para escanear o código.');
+        Alert.alert(t('common.attention'), t('appAlerts.stock.cameraForScan'));
         return;
       }
     }
@@ -62,7 +64,7 @@ export default function NewStockScreen() {
 
   const handleSave = async () => {
     if (!name || !sku) {
-      Alert.alert('Atenção', 'Informe pelo menos um nome e SKU base.');
+      Alert.alert(t('common.attention'), t('appAlerts.stock.nameSkuBase'));
       return;
     }
 
@@ -83,9 +85,13 @@ export default function NewStockScreen() {
         user?.email
       );
 
-      Alert.alert('Estoque Adicionado', `${quantity} unidade(s) salvas com sucesso.`, [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert(
+        t('appAlerts.stock.addedTitle'),
+        t('appAlerts.stock.savedCount', { count: quantity }),
+        [{ text: t('common.ok'), onPress: () => router.back() }],
+      );
     } catch (e) {
-      Alert.alert('Erro', 'Houve um problema ao salvar.');
+      Alert.alert(t('common.error'), t('appAlerts.stock.saveProblem'));
     }
   };
 

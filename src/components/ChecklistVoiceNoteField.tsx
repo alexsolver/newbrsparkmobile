@@ -10,6 +10,7 @@ import {
 import { Audio } from 'expo-av';
 import * as Network from 'expo-network';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { apiFetch, getToken, handleUnauthorizedMaybeSessionInvalidated } from '../services/auth';
 
 const VOICE_NOTE_PHASE_PENDING = 'pending_transcription';
@@ -63,6 +64,7 @@ export function ChecklistVoiceNoteField({
   readOnly,
   transcribeLanguage = 'pt-br',
 }: Props) {
+  const { t } = useTranslation();
   const parsed = parseVoiceNoteValue(value);
   const [phase, setPhase] = useState<VoiceNoteStoredValue['phase']>(parsed.phase || 'idle');
   const [transcript, setTranscript] = useState(String(parsed.transcript || '').trim());
@@ -362,7 +364,7 @@ export function ChecklistVoiceNoteField({
     try {
       const perm = await Audio.requestPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permissão', 'É necessário permitir o microfone para gravar a nota de voz.');
+        Alert.alert(t('appAlerts.techReg.permTitle'), t('appAlerts.voice.micRequired'));
         return;
       }
       await Audio.setAudioModeAsync({
@@ -384,7 +386,7 @@ export function ChecklistVoiceNoteField({
       setPhase('error');
       emitState({ phase: 'error', error: msg });
     }
-  }, [emitState, readOnly]);
+  }, [emitState, readOnly, t]);
 
   const stopAndTranscribe = useCallback(async () => {
     const rec = recordingRef.current;

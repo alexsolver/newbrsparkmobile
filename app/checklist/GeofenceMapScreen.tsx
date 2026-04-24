@@ -11,6 +11,7 @@ import {
 import MapView, { Circle, Marker, Polygon, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
@@ -70,6 +71,7 @@ function nearestRoutePoint(lat: number, lng: number, route: number[][]): number 
 }
 
 export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, onCancel }: Props) {
+  const { t } = useTranslation();
   const { colors: C } = useTheme();
   const { user } = useAuth();
   const avatarUri = useResolvedAvatarUri(user);
@@ -219,12 +221,12 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
       const gzt = String(gfm?.geometry?.zoneType || '').toLowerCase();
       if (gzt === 'segment' && gPoly.length >= 2) {
         Alert.alert(
-          'Navegar para OS',
-          'Para qual extremidade do trecho deseja navegar?',
+          t('appAlerts.geofence.navigateTitle'),
+          t('appAlerts.geofence.navigateSegmentBody'),
           [
-            { text: 'Ponto A', onPress: () => openDestInMaps(gPoly[0][0], gPoly[0][1]) },
-            { text: 'Ponto B', onPress: () => openDestInMaps(gPoly[1][0], gPoly[1][1]) },
-            { text: 'Cancelar', style: 'cancel' },
+            { text: t('appAlerts.geofence.segmentPointA'), onPress: () => openDestInMaps(gPoly[0][0], gPoly[0][1]) },
+            { text: t('appAlerts.geofence.segmentPointB'), onPress: () => openDestInMaps(gPoly[1][0], gPoly[1][1]) },
+            { text: t('appAlerts.home.mapPickerCancel'), style: 'cancel' },
           ],
         );
         return;
@@ -247,13 +249,13 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
     // Caso seja Trecho, mostrar alerta para escolher Ponto A ou Ponto B
     if (zoneType === 'segment' && polygon.length >= 2) {
       Alert.alert(
-        'Navegar para OS',
-        'Para qual extremidade do trecho deseja navegar?',
+        t('appAlerts.geofence.navigateTitle'),
+        t('appAlerts.geofence.navigateSegmentBody'),
         [
-          { text: 'Ponto A', onPress: () => openDestInMaps(polygon[0][0], polygon[0][1]) },
-          { text: 'Ponto B', onPress: () => openDestInMaps(polygon[1][0], polygon[1][1]) },
-          { text: 'Cancelar', style: 'cancel' }
-        ]
+          { text: t('appAlerts.geofence.segmentPointA'), onPress: () => openDestInMaps(polygon[0][0], polygon[0][1]) },
+          { text: t('appAlerts.geofence.segmentPointB'), onPress: () => openDestInMaps(polygon[1][0], polygon[1][1]) },
+          { text: t('appAlerts.home.mapPickerCancel'), style: 'cancel' },
+        ],
       );
       return;
     }
@@ -285,16 +287,19 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
     
     const options: any[] = [
-      { text: 'Waze', onPress: () => Linking.openURL(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`) },
-      { text: 'Google Maps', onPress: () => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`) }
+      { text: t('appAlerts.home.mapPickerWaze'), onPress: () => Linking.openURL(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`) },
+      {
+        text: t('appAlerts.home.mapPickerGoogle'),
+        onPress: () => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`),
+      },
     ];
-    
+
     if (Platform.OS === 'ios') {
-      options.push({ text: 'Apple Maps', onPress: () => Linking.openURL(`maps://?daddr=${lat},${lng}`) });
-      options.push({ text: 'Cancelar', style: 'cancel' });
-      Alert.alert('Navegar para OS', 'Escolha seu aplicativo favorito:', options);
+      options.push({ text: t('appAlerts.home.mapPickerApple'), onPress: () => Linking.openURL(`maps://?daddr=${lat},${lng}`) });
+      options.push({ text: t('appAlerts.home.mapPickerCancel'), style: 'cancel' });
+      Alert.alert(t('appAlerts.geofence.navigateTitle'), t('appAlerts.geofence.navigateBody'), options);
     } else {
-      Linking.openURL(`geo:0,0?q=${lat},${lng}(Local da OS)`);
+      Linking.openURL(`geo:0,0?q=${lat},${lng}(${t('appAlerts.home.mapAndroidGeoLabel')})`);
     }
   };
 
@@ -305,13 +310,13 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
       return;
     }
     if (status === 'outside' && failMode === 'block') {
-      Alert.alert('Acesso Bloqueado', 'Você precisa estar na área de serviço para iniciar esta OS.\n\n' + statusMsg);
+      Alert.alert(t('appAlerts.geofence.blockedTitle'), t('appAlerts.geofence.blockedBodyPrefix') + statusMsg);
       return;
     }
     if (status === 'outside' && failMode === 'warn') {
-      Alert.alert('Atenção', statusMsg + '\n\nVocê pode continuar, mas o desvio será registrado como evidência.', [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Iniciar mesmo assim', onPress: onProceed },
+      Alert.alert(t('common.attention'), statusMsg + t('appAlerts.geofence.evidenceSuffix'), [
+        { text: t('appAlerts.home.mapPickerCancel'), style: 'cancel' },
+        { text: t('appAlerts.geofence.proceedAnyway'), onPress: onProceed },
       ]);
       return;
     }

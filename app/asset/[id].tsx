@@ -2252,9 +2252,9 @@ export default function AssetDetailScreen() {
                         setLinkModalVisible(true);
                       }}
                       onUnlinkItem={c => {
-                        Alert.alert('Desvincular ativo', `Desvincular "${c.title}" deste ativo?`, [
-                          { text: 'Cancelar', style: 'cancel' },
-                          { text: 'Desvincular', style: 'destructive', onPress: () => {
+                        Alert.alert(t('appAlerts.asset.unlinkTitle'), t('appAlerts.asset.unlinkBody', { title: c.title }), [
+                          { text: t('common.cancel'), style: 'cancel' },
+                          { text: t('appAlerts.asset.unlinkButton'), style: 'destructive', onPress: () => {
                             if (user?.email) {
                               updateAssetParent(c.id, null, user.email);
                               logAssetHistory(asset.id, 'Desvinculação', `${c.title} foi desvinculado`, user.email);
@@ -2267,15 +2267,15 @@ export default function AssetDetailScreen() {
                         const loc = group.location!;
                         if (loc.isStock) {
                           Alert.alert(
-                            '⚠️ Local de Estoque',
-                            `"${loc.room}" é usado como ponto de estoque.\nPara excluí-lo, acesse o módulo Estoque e remova o estoque primeiro.`,
-                            [{ text: 'Entendi', style: 'cancel' }]
+                            t('appAlerts.asset.deleteStockRoomTitle'),
+                            t('appAlerts.asset.deleteStockRoomBody', { room: loc.room }),
+                            [{ text: t('appAlerts.asset.stockLocationOk'), style: 'cancel' }]
                           );
                           return;
                         }
-                        Alert.alert('Excluir local', `Remover "${loc.room}" dos locais?`, [
-                          { text: 'Cancelar', style: 'cancel' },
-                          { text: 'Excluir', style: 'destructive', onPress: () => { 
+                        Alert.alert(t('appAlerts.asset.deleteRoomTitle'), t('appAlerts.asset.deleteRoomBody', { room: loc.room }), [
+                          { text: t('common.cancel'), style: 'cancel' },
+                          { text: t('common.delete'), style: 'destructive', onPress: () => { 
                             if (user?.email) {
                               deleteAssetLocation(loc.id, user.email); 
                               loadAssetData(); 

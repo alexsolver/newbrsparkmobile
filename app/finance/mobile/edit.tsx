@@ -136,8 +136,8 @@ export default function EditTechnicianFinanceScreen() {
         if (parts.length !== entryIds.length || parts.some((p) => p.source !== 'manual')) {
           if (!cancelled) {
             setBlocked(true);
-            Alert.alert('Não editável', 'Lançamento inválido ou proveniente do checklist.', [
-              { text: 'OK', onPress: () => router.back() },
+            Alert.alert(t('appAlerts.finance.notEditableTitle'), t('appAlerts.finance.notEditableBody'), [
+              { text: t('common.ok'), onPress: () => router.back() },
             ]);
           }
           return;
@@ -190,8 +190,8 @@ export default function EditTechnicianFinanceScreen() {
       } catch {
         if (!cancelled) {
           setBlocked(true);
-          Alert.alert('Erro', 'Não foi possível carregar o lançamento.', [
-            { text: 'OK', onPress: () => router.back() },
+          Alert.alert(t('common.error'), t('appAlerts.finance.loadError'), [
+            { text: t('common.ok'), onPress: () => router.back() },
           ]);
         }
       } finally {
@@ -201,7 +201,7 @@ export default function EditTechnicianFinanceScreen() {
     return () => {
       cancelled = true;
     };
-  }, [entryIds, router]);
+  }, [entryIds, router, t]);
 
   const toggleOs = (id: string) => {
     setSelectedOsIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -217,7 +217,7 @@ export default function EditTechnicianFinanceScreen() {
         _localId: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
       }));
       if (items.length > room) {
-        Alert.alert('Atenção', `Só é possível anexar até ${MAX_ATTACHMENTS} arquivos por lançamento.`);
+        Alert.alert(t('common.attention'), t('appAlerts.finance.attachLimit', { max: MAX_ATTACHMENTS }));
       }
       return [...prev, ...next];
     });
@@ -225,23 +225,20 @@ export default function EditTechnicianFinanceScreen() {
 
   const pickAttachments = () => {
     if (valueFieldsLocked) {
-      Alert.alert(
-        'Anexos fechados',
-        'Só o escritório pode devolver o lançamento para revisão para alterar anexos, valor ou descrição. Aqui pode mudar apenas as OS do rateio.'
-      );
+      Alert.alert(t('appAlerts.finance.attachClosedTitle'), t('appAlerts.finance.attachClosedBody'));
       return;
     }
     if (attachments.length >= MAX_ATTACHMENTS) {
-      Alert.alert('Atenção', `Limite de ${MAX_ATTACHMENTS} anexos atingido.`);
+      Alert.alert(t('common.attention'), t('appAlerts.finance.attachLimitReached', { max: MAX_ATTACHMENTS }));
       return;
     }
-    Alert.alert('Anexos', 'Como deseja adicionar?', [
+    Alert.alert(t('appAlerts.finance.attachPickerTitle'), t('appAlerts.finance.attachPickerBody'), [
       {
-        text: 'Câmera',
+        text: t('documents.camera'),
         onPress: async () => {
           const perm = await ImagePicker.requestCameraPermissionsAsync();
           if (!perm.granted) {
-            Alert.alert('Permissão', 'É necessário permitir o uso da câmera.');
+            Alert.alert(t('appAlerts.techReg.permTitle'), t('appAlerts.finance.cameraRequired'));
             return;
           }
           const res = await ImagePicker.launchCameraAsync({ quality: 0.75 });
@@ -252,7 +249,7 @@ export default function EditTechnicianFinanceScreen() {
         },
       },
       {
-        text: 'Galeria',
+        text: t('documents.gallery'),
         onPress: async () => {
           const res = await ImagePicker.launchImageLibraryAsync({
             quality: 0.75,
@@ -270,7 +267,7 @@ export default function EditTechnicianFinanceScreen() {
         },
       },
       {
-        text: 'Documento / arquivo',
+        text: t('documents.file'),
         onPress: async () => {
           const res = await DocumentPicker.getDocumentAsync({
             type: ['image/*', 'application/pdf', '*/*'],
@@ -287,7 +284,7 @@ export default function EditTechnicianFinanceScreen() {
           );
         },
       },
-      { text: 'Cancelar', style: 'cancel' },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   };
 
@@ -304,11 +301,11 @@ export default function EditTechnicianFinanceScreen() {
         : amountStr;
     const amount = Math.max(0, parseLocaleAmountString(rawSrc));
     if (amount <= 0) {
-      Alert.alert('Atenção', 'Indique um valor maior que zero.');
+      Alert.alert(t('common.attention'), t('appAlerts.finance.valuePositive'));
       return;
     }
     if (kind === 'expense' && categoryKey === 'outros' && !description.trim()) {
-      Alert.alert('Atenção', 'Para a categoria "Outros", preencha a descrição.');
+      Alert.alert(t('common.attention'), t('appAlerts.finance.othersDescription'));
       return;
     }
     const email = user?.email || undefined;
@@ -330,9 +327,11 @@ export default function EditTechnicianFinanceScreen() {
         },
         email
       );
-      Alert.alert('Guardado', 'Lançamento atualizado.', [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert(t('appAlerts.finance.savedEditTitle'), t('appAlerts.finance.savedEditBody'), [
+        { text: t('common.ok'), onPress: () => router.back() },
+      ]);
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Não foi possível guardar.');
+      Alert.alert(t('common.error'), e?.message || t('appAlerts.finance.saveEditError'));
     }
   };
 

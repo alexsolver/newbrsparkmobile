@@ -376,12 +376,12 @@ export default function ChatRoomScreen() {
     if (isOpsChat) {
       if (!executionIdForOps || !user?.id) return;
       if (attach) {
-        Alert.alert('', 'Neste chat só é possível enviar texto.');
+        Alert.alert(t('common.attention'), t('appAlerts.chat.textOnly'));
         return;
       }
       if (!trimmed) return;
       if (isOnline === false) {
-        Alert.alert('Sem conexão', 'Este chat precisa de internet para enviar.');
+        Alert.alert(t('appAlerts.chat.offlineTitle'), t('appAlerts.chat.offlineNeedsNet'));
         return;
       }
       setSending(true);
@@ -400,7 +400,7 @@ export default function ChatRoomScreen() {
         const fullRows = await fetchExecutionOpsChat(executionIdForOps, opsViewerLocale);
         await persistOpsChatReadAck(executionIdForOps, fullRows);
       } catch (e: any) {
-        Alert.alert('Erro', e?.message || 'Falha ao enviar mensagem');
+        Alert.alert(t('common.error'), e?.message || t('appAlerts.chat.sendError'));
       } finally {
         setSending(false);
       }
@@ -408,10 +408,7 @@ export default function ChatRoomScreen() {
     }
 
     if (attach && isOnline === false) {
-      Alert.alert(
-        'Sem conexão',
-        'Anexos e mídia precisam de internet. Envie uma mensagem de texto; ela ficará na fila até reconectar.',
-      );
+      Alert.alert(t('appAlerts.chat.offlineTitle'), t('appAlerts.chat.offlineMediaQueueBody'));
       return;
     }
 
@@ -488,7 +485,7 @@ export default function ChatRoomScreen() {
       if (!attach && trimmed && isLikelyNetworkFailure(e)) {
         await persistLocalTextMessage();
       } else {
-        Alert.alert('Erro', e?.message || 'Falha ao enviar mensagem');
+        Alert.alert(t('common.error'), e?.message || t('appAlerts.chat.sendError'));
       }
     } finally {
       setSending(false);
@@ -499,7 +496,8 @@ export default function ChatRoomScreen() {
 
   const pickImage = async () => {
     const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!granted) return Alert.alert('Permissão negada');
+    if (!granted)
+      return Alert.alert(t('appAlerts.chat.permDeniedTitle'), t('appAlerts.chat.permDeniedShort'));
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
     if (!result.canceled && result.assets[0]) { setAttach({ type: 'image', uri: result.assets[0].uri }); setShowAttach(false); }
   };
@@ -508,7 +506,7 @@ export default function ChatRoomScreen() {
     try {
       const permRes = await ImagePicker.requestCameraPermissionsAsync();
       if (!permRes.granted) {
-        Alert.alert('Permissão Negada', 'Conceda acesso à câmera nas configurações.');
+        Alert.alert(t('appAlerts.chat.permDeniedTitle'), t('appAlerts.chat.cameraSettings'));
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
@@ -521,10 +519,7 @@ export default function ChatRoomScreen() {
       }
     } catch (e: any) {
       console.warn('[Camera]', e);
-      Alert.alert(
-        'Câmera Indisponível',
-        'A câmera não está disponível no simulador iOS. Teste em um dispositivo físico.',
-      );
+      Alert.alert(t('appAlerts.chat.cameraUnavailableTitle'), t('appAlerts.chat.cameraUnavailableBody'));
     }
   };
 
@@ -533,10 +528,10 @@ export default function ChatRoomScreen() {
     try {
       await ChatService.updateGroupMembers(roomId!, selectedContacts);
       await loadRoomInfo();
-      Alert.alert('Sucesso', 'Membros do grupo atualizados');
+      Alert.alert(t('common.success'), t('appAlerts.chat.membersUpdated'));
       setSettingsVisible(false);
     } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Falha ao atualizar grupo');
+      Alert.alert(t('common.error'), error.message || t('appAlerts.chat.groupUpdateError'));
     }
     setSavingMembers(false);
   };
@@ -647,7 +642,7 @@ export default function ChatRoomScreen() {
       if (remote.length) lastTs.current = remote[remote.length - 1]!.timestamp;
       Alert.alert('', t('chat.localeSaved'));
     } catch (e: unknown) {
-      Alert.alert('Erro', (e as Error)?.message || 'Falha ao guardar idioma');
+      Alert.alert(t('common.error'), (e as Error)?.message || t('appAlerts.chat.localeSaveError'));
     }
   };
 
