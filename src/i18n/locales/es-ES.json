@@ -2441,12 +2441,16 @@
       "textOnly": "En este chat solo se puede enviar texto.",
       "cameraSettings": "Permite el acceso a la cámara en Ajustes.",
       "permDeniedTitle": "Permiso denegado",
+      "offlineTitle": "Sin conexión",
       "offlineNeedsNet": "Este chat necesita internet para enviar.",
+      "offlineMediaQueueBody": "Los adjuntos y la multimedia necesitan internet. Envía un mensaje de texto; quedará en cola hasta reconectar.",
       "sendError": "Error al enviar el mensaje",
       "permDeniedShort": "Permiso denegado",
       "membersUpdated": "Miembros del grupo actualizados",
       "groupUpdateError": "Error al actualizar el grupo",
-      "localeSaveError": "Error al guardar el idioma"
+      "localeSaveError": "Error al guardar el idioma",
+      "cameraUnavailableTitle": "Cámara no disponible",
+      "cameraUnavailableBody": "La cámara no está disponible en el simulador de iOS. Prueba en un dispositivo físico."
     },
     "chatTab": {
       "invalidEmail": "Correo no válido",
@@ -2530,7 +2534,9 @@
       "loadError": "No se pudo cargar el asiento.",
       "savedEditTitle": "Guardado",
       "savedEditBody": "Asiento actualizado.",
-      "saveEditError": "No se pudo guardar."
+      "saveEditError": "No se pudo guardar.",
+      "attachClosedTitle": "Adjuntos bloqueados",
+      "attachClosedBody": "Solo la oficina puede devolver el movimiento a revisión para cambiar adjuntos, importe o descripción. Aquí solo puedes cambiar las OT del reparto."
     },
     "costs": {
       "selectAsset": "Selecciona un activo para este asiento.",
@@ -2553,7 +2559,11 @@
       "navigateBody": "Elige tu aplicación preferida:",
       "blockedTitle": "Acceso bloqueado",
       "blockedBodyPrefix": "Debes estar en el área de servicio para iniciar esta OS.\n\n",
-      "evidenceSuffix": "\n\nPuedes continuar, pero la desviación quedará registrada como evidencia."
+      "evidenceSuffix": "\n\nPuedes continuar, pero la desviación quedará registrada como evidencia.",
+      "navigateSegmentBody": "¿A qué extremo del tramo quieres navegar?",
+      "segmentPointA": "Punto A",
+      "segmentPointB": "Punto B",
+      "proceedAnyway": "Iniciar de todas formas"
     },
     "liveRoute": {
       "navigateTitle": "Navegar a la OS",
@@ -2561,7 +2571,10 @@
       "chatSendFail": "No se pudo enviar.",
       "chatOffline": "Sin conexión. Inténtalo de nuevo.",
       "chatTitle": "Chat",
-      "chatModerationTitle": "Moderación del chat"
+      "chatModerationTitle": "Moderación del chat",
+      "chatModerationDefaultBody": "El mensaje no se envió. Revisa el texto.",
+      "chatModerationOverrideSuffix": "Si fue una falsa alarma, puedes confirmar el reenvío.",
+      "sendAnyway": "Enviar igualmente"
     },
     "imageAnnot": {
       "galleryOrCamera": "Autoriza la galería o usa la cámara.",
@@ -2751,7 +2764,11 @@
       "unlinkTitle": "Desvincular activo",
       "unlinkBody": "¿Desvincular \"{{title}}\" de este activo?",
       "deleteRoomTitle": "Eliminar lugar",
-      "deleteRoomBody": "¿Quitar \"{{room}}\" de los lugares?"
+      "deleteRoomBody": "¿Quitar \"{{room}}\" de los lugares?",
+      "deleteStockRoomTitle": "Ubicación de stock",
+      "deleteStockRoomBody": "\"{{room}}\" se usa como punto de stock.\nPara eliminarla, abre el módulo Stock y vacía el stock allí primero.",
+      "unlinkButton": "Desvincular",
+      "stockLocationOk": "Entendido"
     },
     "techBio": {
       "face": {

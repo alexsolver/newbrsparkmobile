@@ -11,6 +11,8 @@ import {
 import MapView, { Marker, type Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import * as Network from 'expo-network';
+import i18next from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
 /** Igual ao deslocamento no checklist: moradas completam em segundo plano quando não há «validação online obrigatória». */
@@ -21,15 +23,18 @@ async function assertConnectedWhenOnlineRequired(): Promise<boolean> {
     const netState = await Network.getNetworkStateAsync();
     if (!netState.isConnected) {
       Alert.alert(
-        'Validação Online Obrigatória',
-        'Esta etapa da OS possui regras de segurança e não pode ser preenchida offline.\n\nPor favor, conecte-se à internet para continuar.',
-        [{ text: 'OK' }],
+        i18next.t('appAlerts.checklist.onlineRequiredTitle'),
+        i18next.t('appAlerts.checklist.onlineRequiredBody'),
+        [{ text: i18next.t('common.ok') }],
       );
       return false;
     }
     return true;
   } catch {
-    Alert.alert('Erro de Conexão', 'Não foi possível verificar a conectividade.');
+    Alert.alert(
+      i18next.t('appAlerts.checklist.connectionErrorTitle'),
+      i18next.t('appAlerts.checklist.connectionErrorBody'),
+    );
     return false;
   }
 }
@@ -169,6 +174,7 @@ export function ChecklistLocationPickField({
   primaryColor,
   requireOnlineValidation = false,
 }: Props) {
+  const { t } = useTranslation();
   const { height: windowH } = useWindowDimensions();
   const mapHeight = useMemo(() => Math.round(Math.min(200, Math.max(120, windowH * 0.22))), [windowH]);
   const networkState = Network.useNetworkState();
@@ -271,7 +277,7 @@ export function ChecklistLocationPickField({
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('GPS', 'Permissão de localização negada. Ative nas configurações do celular.');
+        Alert.alert(t('appAlerts.location.gpsTitle'), t('appAlerts.location.gpsDenied'));
         return;
       }
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
@@ -289,11 +295,11 @@ export function ChecklistLocationPickField({
       });
       pushAdjustmentPending(g, { lat, lng });
     } catch (e: any) {
-      Alert.alert('GPS', e?.message || 'Não foi possível obter a posição.');
+      Alert.alert(t('appAlerts.location.gpsTitle'), e?.message || t('appAlerts.location.gpsError'));
     } finally {
       setLoadingGps(false);
     }
-  }, [disabled, requireOnlineValidation, pushAdjustmentPending]);
+  }, [disabled, requireOnlineValidation, pushAdjustmentPending, t]);
 
   const confirmPick = useCallback(async () => {
     if (!gps || !pin || disabled) return;

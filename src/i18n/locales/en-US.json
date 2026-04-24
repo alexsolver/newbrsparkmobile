@@ -2441,12 +2441,16 @@
       "textOnly": "This chat only allows text.",
       "cameraSettings": "Allow camera access in Settings.",
       "permDeniedTitle": "Permission denied",
+      "offlineTitle": "Offline",
       "offlineNeedsNet": "This chat needs internet to send messages.",
+      "offlineMediaQueueBody": "Attachments and media need internet. Send a text message; it will stay queued until you reconnect.",
       "sendError": "Failed to send message",
       "permDeniedShort": "Permission denied",
       "membersUpdated": "Group members updated",
       "groupUpdateError": "Could not update group",
-      "localeSaveError": "Could not save language preference"
+      "localeSaveError": "Could not save language preference",
+      "cameraUnavailableTitle": "Camera unavailable",
+      "cameraUnavailableBody": "The camera is not available on the iOS simulator. Test on a physical device."
     },
     "chatTab": {
       "invalidEmail": "Invalid email",
@@ -2530,7 +2534,9 @@
       "loadError": "Could not load the entry.",
       "savedEditTitle": "Saved",
       "savedEditBody": "Entry updated.",
-      "saveEditError": "Could not save."
+      "saveEditError": "Could not save.",
+      "attachClosedTitle": "Attachments locked",
+      "attachClosedBody": "Only the office can send the entry back for review to change attachments, amount, or description. Here you can only change the work orders for allocation."
     },
     "costs": {
       "selectAsset": "Select an asset for this entry.",
@@ -2553,7 +2559,11 @@
       "navigateBody": "Choose your preferred app:",
       "blockedTitle": "Access blocked",
       "blockedBodyPrefix": "You must be in the service area to start this work order.\n\n",
-      "evidenceSuffix": "\n\nYou may continue, but the deviation will be recorded as evidence."
+      "evidenceSuffix": "\n\nYou may continue, but the deviation will be recorded as evidence.",
+      "navigateSegmentBody": "Which end of the segment do you want to navigate to?",
+      "segmentPointA": "Point A",
+      "segmentPointB": "Point B",
+      "proceedAnyway": "Start anyway"
     },
     "liveRoute": {
       "navigateTitle": "Navigate to work order",
@@ -2561,7 +2571,10 @@
       "chatSendFail": "Could not send.",
       "chatOffline": "No connection. Try again.",
       "chatTitle": "Chat",
-      "chatModerationTitle": "Chat moderation"
+      "chatModerationTitle": "Chat moderation",
+      "chatModerationDefaultBody": "The message was not sent. Please review the text.",
+      "chatModerationOverrideSuffix": "If this was a false alarm, you can confirm resending.",
+      "sendAnyway": "Send anyway"
     },
     "imageAnnot": {
       "galleryOrCamera": "Allow gallery access or use the camera.",
@@ -2751,7 +2764,11 @@
       "unlinkTitle": "Unlink property",
       "unlinkBody": "Unlink \"{{title}}\" from this property?",
       "deleteRoomTitle": "Delete location",
-      "deleteRoomBody": "Remove \"{{room}}\" from locations?"
+      "deleteRoomBody": "Remove \"{{room}}\" from locations?",
+      "deleteStockRoomTitle": "Stock location",
+      "deleteStockRoomBody": "\"{{room}}\" is used as a stock point.\nTo remove it, open the Stock module and clear stock there first.",
+      "unlinkButton": "Unlink",
+      "stockLocationOk": "Got it"
     },
     "techBio": {
       "face": {
