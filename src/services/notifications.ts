@@ -9,6 +9,7 @@ import { AssetExtensionsService } from './assetExtensionsService';
 import {
   ANDROID_CHANNEL_CLIENT,
   ANDROID_CHANNEL_TECH,
+  ANDROID_CHANNEL_TRACKING_CLIENT_CHAT,
   CLIENT_PUSH_ACTION_TRACK,
   PUSH_CATEGORY_CLIENT_TRACKING,
   PUSH_CATEGORY_TECH_ACTIVITY,
@@ -41,6 +42,13 @@ async function ensureAndroidPushChannels(): Promise<void> {
     importance: Notifications.AndroidImportance.DEFAULT,
     lightColor: '#059669',
     sound: 'default',
+  });
+  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_TRACKING_CLIENT_CHAT, {
+    name: 'BrSpark · Mensagem no chat (deslocamento)',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    lightColor: '#EF4444',
+    sound: 'default',
+    vibrationPattern: [0, 120],
   });
 }
 
@@ -98,13 +106,31 @@ export async function registerInteractivePushCategories(): Promise<void> {
 
 // ─── Configuração Global do Handler ────────────────────────────────────────────
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
+  handleNotification: async (notification) => {
+    const raw = notification.request.content.data;
+    const d =
+      raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? (raw as Record<string, unknown>)
+        : null;
+    const type = d ? String(d.type || '') : '';
+    /** Cliente escreveu no chat do link — só som no 1.º plano; o mapa mostra aura no ícone. */
+    if (type === 'tracking_client_chat') {
+      return {
+        shouldShowAlert: false,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
+      };
+    }
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    };
+  },
 });
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────────

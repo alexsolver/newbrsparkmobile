@@ -11,3 +11,5 @@ export const CLIENT_PUSH_ACTION_TRACK = 'CLIENT_TRACK';
 /** Canais Android (registados em `NotificationService.registerForPushNotificationsAsync`). */
 export const ANDROID_CHANNEL_TECH = 'brspark-tecnico';
 export const ANDROID_CHANNEL_CLIENT = 'brspark-cliente';
+/** Chat do link de acompanhamento — som discreto; alerta visual suprimido em primeiro plano no handler. */
+export const ANDROID_CHANNEL_TRACKING_CLIENT_CHAT = 'brspark-tracking-client-chat';

@@ -2,6 +2,9 @@
 
 const { sendExpoPushToMany } = require('../services/expoPush');
 
+/** Canal Android alinhado a `ANDROID_CHANNEL_TRACKING_CLIENT_CHAT` no app (notifications.ts). */
+const CHANNEL_TRACKING_CLIENT_CHAT = 'brspark-tracking-client-chat';
+
 const LOG_LABEL = 'trackingClientChatPush';
 
 /**
@@ -72,22 +75,21 @@ async function sendTrackingClientChatPushToTechnician(prisma, opts) {
     return { sent: 0, skipped: 'no_tokens' };
   }
 
-  const body = preview
-    ? preview.length > 120
-      ? `${preview.slice(0, 117)}…`
-      : preview
-    : 'O cliente enviou uma mensagem no chat do deslocamento.';
-
+  /**
+   * Push quase só sonoro: título/corpo mínimos (o OS ainda pode mostrar uma linha na gaveta).
+   * No app em 1.º plano o handler suprime alerta/banner e mantém som; o mapa usa aura no ícone de chat.
+   */
   const pushRes = await sendExpoPushToMany(pushTokens, {
-    title: 'Mensagem do cliente',
-    body,
-    subtitle: 'Toque para abrir a OS e responder no chat.',
-    interruptionLevel: 'active',
-    channelId: 'brspark-tecnico',
+    title: ' ',
+    body: ' ',
+    priority: 'default',
+    interruptionLevel: 'passive',
+    channelId: CHANNEL_TRACKING_CLIENT_CHAT,
     data: {
       type: 'tracking_client_chat',
       taskId: executionId,
       executionId,
+      messagePreview: preview.slice(0, 200),
     },
   });
 

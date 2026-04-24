@@ -39,6 +39,7 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 import { useTransitMapExpanded } from '../../src/context/TransitMapExpandedContext';
 import { BroadcastOfferSheetEmbedded } from '../../src/components/ProviderBroadcastOfferSheet';
+import { subscribeTrackingClientChatPing } from '../../src/lib/trackingClientChatPing';
 
 const TRANSIT_MAP_HINTS_KEY = '@brspark_transit_map_hints_v1';
 
@@ -69,6 +70,111 @@ function mapServerChatMessages(raw: unknown): TrackingChatRow[] {
     next.push({ id, text: display, at: at || new Date().toISOString(), role, senderLabel, kind });
   }
   return next;
+}
+
+function maxClientMessageTimeMs(messages: TrackingChatRow[]): number {
+  let t = 0;
+  for (const m of messages) {
+    if (m.role !== 'client') continue;
+    const x = Date.parse(m.at);
+    if (Number.isFinite(x) && x > t) t = x;
+  }
+  return t;
+}
+
+const trackingChatEntryStyles = StyleSheet.create({
+  wrapMap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  wrapMin: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  btnMap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  btnMin: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+  },
+  auraMap: {
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(239,68,68,0.7)',
+    margin: -4,
+  },
+  auraMin: {
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'rgba(239,68,68,0.75)',
+  },
+  btnMapUnread: { borderWidth: 2, borderColor: '#fca5a5' },
+  btnMinUnread: { borderColor: '#f87171', backgroundColor: '#fef2f2' },
+});
+
+function TrackingChatMapEntryButton({
+  variant,
+  unread,
+  accentColor,
+  onPress,
+}: {
+  variant: 'map' | 'minimized';
+  unread: boolean;
+  accentColor: string;
+  onPress: () => void;
+}) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!unread) {
+      pulse.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.18, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [unread, pulse]);
+  const mini = variant === 'minimized';
+  const iconColor = unread ? '#dc2626' : mini ? accentColor : '#475569';
+  return (
+    <View style={mini ? trackingChatEntryStyles.wrapMin : trackingChatEntryStyles.wrapMap}>
+      {unread ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            mini ? trackingChatEntryStyles.auraMin : trackingChatEntryStyles.auraMap,
+            { transform: [{ scale: pulse }] },
+          ]}
+        />
+      ) : null}
+      <TouchableOpacity
+        style={[
+          mini ? trackingChatEntryStyles.btnMin : trackingChatEntryStyles.btnMap,
+          unread && (mini ? trackingChatEntryStyles.btnMinUnread : trackingChatEntryStyles.btnMapUnread),
+        ]}
+        onPress={onPress}
+        {...(mini ? { hitSlop: { top: 10, bottom: 10, left: 10, right: 10 } } : {})}
+        accessibilityLabel="Abrir chat com o cliente"
+      >
+        <Ionicons name="chatbubbles-outline" size={22} color={iconColor} />
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 /** Modal: todas as orientações usuais (tipo mutável para compatibilidade com `ModalProps`). */
@@ -663,7 +769,22 @@ export default function LiveRouteMapCard({
   const [trackingChatSending, setTrackingChatSending] = useState(false);
   const [trackingChatError, setTrackingChatError] = useState<string | null>(null);
   const [trackingChatLocaleOpen, setTrackingChatLocaleOpen] = useState(false);
+  const [trackingChatClientUnread, setTrackingChatClientUnread] = useState(false);
   const trackingChatListRef = useRef<FlatList<TrackingChatRow>>(null);
+  const trackingChatMessagesRef = useRef<TrackingChatRow[]>([]);
+  const clientUnreadBaselineDoneRef = useRef(false);
+  const lastSeenClientMsgMsRef = useRef(0);
+
+  useEffect(() => {
+    trackingChatMessagesRef.current = trackingChatMessages;
+  }, [trackingChatMessages]);
+
+  useEffect(() => {
+    if (!taskId || String(taskId).trim() === '') return;
+    clientUnreadBaselineDoneRef.current = false;
+    lastSeenClientMsgMsRef.current = 0;
+    setTrackingChatClientUnread(false);
+  }, [taskId]);
 
   useEffect(() => {
     if (!trackingChatOpen) setTrackingChatLocaleOpen(false);
@@ -896,12 +1017,35 @@ export default function LiveRouteMapCard({
     if (!visible) setTrackingChatOpen(false);
   }, [visible]);
 
+  /** Com mapa visível, mantém mensagens frescas mesmo com o modal fechado (aura de não lidas do cliente). */
   useEffect(() => {
-    if (!trackingChatOpen || !taskId || !visible) return;
+    if (!taskId || !visible || reimbursementMode) return;
+    const pollMs = trackingChatOpen ? 3500 : 4000;
     void fetchTrackingChat();
-    const tid = setInterval(() => void fetchTrackingChat(), 3500);
+    const tid = setInterval(() => void fetchTrackingChat(), pollMs);
     return () => clearInterval(tid);
-  }, [trackingChatOpen, taskId, visible, fetchTrackingChat]);
+  }, [taskId, visible, reimbursementMode, trackingChatOpen, fetchTrackingChat]);
+
+  useEffect(() => {
+    if (!taskId || !visible || reimbursementMode) return;
+    const tid = String(taskId).trim();
+    return subscribeTrackingClientChatPing((pingTaskId) => {
+      if (pingTaskId === tid) setTrackingChatClientUnread(true);
+    });
+  }, [taskId, visible, reimbursementMode]);
+
+  useEffect(() => {
+    if (!taskId || !visible || reimbursementMode) return;
+    const msgs = trackingChatMessages;
+    if (!clientUnreadBaselineDoneRef.current) {
+      clientUnreadBaselineDoneRef.current = true;
+      lastSeenClientMsgMsRef.current = maxClientMessageTimeMs(msgs);
+      return;
+    }
+    if (trackingChatOpen) return;
+    const maxC = maxClientMessageTimeMs(msgs);
+    if (maxC > lastSeenClientMsgMsRef.current) setTrackingChatClientUnread(true);
+  }, [trackingChatMessages, taskId, visible, reimbursementMode, trackingChatOpen]);
 
   useEffect(() => {
     if (!visible) {
@@ -1617,12 +1761,24 @@ export default function LiveRouteMapCard({
     }
   };
 
+  const openTrackingChatFromMap = useCallback(() => {
+    lastSeenClientMsgMsRef.current = maxClientMessageTimeMs(trackingChatMessagesRef.current);
+    setTrackingChatClientUnread(false);
+    setTrackingChatOpen(true);
+  }, []);
+
+  const closeTrackingChatModal = useCallback(() => {
+    lastSeenClientMsgMsRef.current = maxClientMessageTimeMs(trackingChatMessagesRef.current);
+    setTrackingChatClientUnread(false);
+    setTrackingChatOpen(false);
+  }, []);
+
   const trackingChatModalEl =
     taskId != null && String(taskId).trim() !== '' ? (
       <Modal
         visible={trackingChatOpen && visible}
         animationType="slide"
-        onRequestClose={() => setTrackingChatOpen(false)}
+        onRequestClose={closeTrackingChatModal}
         supportedOrientations={TRANSIT_MODAL_SUPPORTED_ORIENTATIONS}
       >
         <View style={{ flex: 1, backgroundColor: '#fff', paddingTop: insets.top + 8 }}>
@@ -1637,7 +1793,7 @@ export default function LiveRouteMapCard({
             }}
           >
             <TouchableOpacity
-              onPress={() => setTrackingChatOpen(false)}
+              onPress={closeTrackingChatModal}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityLabel="Fechar chat"
             >
@@ -1874,10 +2030,6 @@ export default function LiveRouteMapCard({
       </Modal>
     ) : null;
 
-  const openTrackingChatFromMap = () => {
-    setTrackingChatOpen(true);
-  };
-
   // Minimized view (shows inline in scrollview)
   if (!expanded) {
     return (
@@ -1897,14 +2049,12 @@ export default function LiveRouteMapCard({
             <Ionicons name="expand" size={20} color={C.accent} />
           </TouchableOpacity>
           {taskId ? (
-            <TouchableOpacity
-              style={styles.minimizedChatBtn}
+            <TrackingChatMapEntryButton
+              variant="minimized"
+              unread={trackingChatClientUnread}
+              accentColor={C.accent}
               onPress={openTrackingChatFromMap}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityLabel="Abrir chat com o cliente"
-            >
-              <Ionicons name="chatbubbles-outline" size={22} color={C.accent} />
-            </TouchableOpacity>
+            />
           ) : null}
         </View>
         {trackingChatModalEl}
@@ -2309,13 +2459,12 @@ export default function LiveRouteMapCard({
             />
           </TouchableOpacity>
           {taskId ? (
-            <TouchableOpacity
-              style={styles.recenterBtn}
+            <TrackingChatMapEntryButton
+              variant="map"
+              unread={trackingChatClientUnread}
+              accentColor={C.accent}
               onPress={openTrackingChatFromMap}
-              accessibilityLabel="Abrir chat com o cliente"
-            >
-              <Ionicons name="chatbubbles-outline" size={22} color="#475569" />
-            </TouchableOpacity>
+            />
           ) : null}
           {embedNativeMap && (
             <TouchableOpacity

@@ -23,6 +23,7 @@ import {
   startTechTaskLiveActivity,
   stopTechTaskLiveActivityForTask,
 } from '../services/techTaskLiveActivity';
+import { emitTrackingClientChatPing } from '../lib/trackingClientChatPing';
 
 const REJECT_REASON_FROM_PUSH =
   'Recusada pelo alerta no dispositivo sem motivo adicional fornecido.';
@@ -281,6 +282,11 @@ export function PushNotificationResponseBridge() {
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
       const d = raw as Record<string, unknown>;
       const t = String(d.type || '');
+      if (t === 'tracking_client_chat') {
+        const taskId = String(d.taskId || d.executionId || '').trim();
+        if (taskId) emitTrackingClientChatPing(taskId);
+        return;
+      }
       if (t === 'os_broadcast_taken') {
         void pullTasks().catch(() => {});
         return;
