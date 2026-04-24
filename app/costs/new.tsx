@@ -53,14 +53,14 @@ export default function NewCostScreen() {
     if (!user?.email) return;
 
     if (!selectedAsset) {
-      Alert.alert('Atenção', 'Você precisa selecionar um ativo para este lançamento.', [{ text: 'OK', onPress: () => {} }]);
+      Alert.alert(t('common.attention'), t('appAlerts.costs.selectAsset'), [{ text: t('common.ok'), onPress: () => {} }]);
       return;
     }
 
     try {
       if (transactionType === 'single') {
         if (!newRecord.description || newRecord.amount <= 0) {
-          Alert.alert('Atenção', 'Preencha a descrição e um valor maior que zero.');
+          Alert.alert(t('common.attention'), t('appAlerts.costs.fillDescValue'));
           return;
         }
         await CostService.saveExpense({
@@ -71,7 +71,7 @@ export default function NewCostScreen() {
       } 
       else if (transactionType === 'recurring') {
         if (!newRec.description || newRec.amount <= 0) {
-          Alert.alert('Atenção', 'Preencha a descrição e um valor maior que zero.');
+          Alert.alert(t('common.attention'), t('appAlerts.costs.fillDescValue'));
           return;
         }
         await CostService.saveRecurringCost({
@@ -83,7 +83,7 @@ export default function NewCostScreen() {
       else if (transactionType === 'budget') {
         const val = parseLocaleAmountString(budgetLimit) || 0;
         if (val <= 0) {
-           Alert.alert('Atenção', 'Defina um limite válido maior que zero.');
+           Alert.alert(t('common.attention'), t('appAlerts.costs.validLimit'));
            return;
         }
         await CostService.saveBudget({
@@ -94,12 +94,12 @@ export default function NewCostScreen() {
         }, user.email);
       }
 
-      Alert.alert('Sucesso', 'Operação realizada com sucesso!', [
-        { text: 'OK', onPress: () => router.back() }
+      Alert.alert(t('common.success'), t('appAlerts.costs.success'), [
+        { text: t('common.ok'), onPress: () => router.back() },
       ]);
     } catch (e) {
       console.error(e);
-      Alert.alert('Erro', 'Não foi possível salvar.');
+      Alert.alert(t('common.error'), t('appAlerts.costs.saveError'));
     }
   };
 

@@ -2477,7 +2477,9 @@
       "clearAllTitle": "Alle Konflikte löschen",
       "clearAllBody": "Damit werden alle Elemente aus der Konflikt-Quarantäne entfernt.",
       "itemRequeuedTitle": "Element erneut eingereiht",
-      "allRequeuedTitle": "Konflikte erneut eingereiht"
+      "allRequeuedTitle": "Konflikte erneut eingereiht",
+      "discardButton": "Verwerfen",
+      "clearAllButton": "Alle löschen"
     },
     "push": {
       "trackingUnavailable": "Tracking-Link nicht verfügbar.",

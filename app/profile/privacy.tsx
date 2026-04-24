@@ -16,6 +16,7 @@ import { apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
 import { useAuth } from '../../src/hooks/useAuth';
 import { canUseProviderMode } from '../../src/services/auth';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 interface ConsentRecord {
   id: string;
@@ -64,6 +65,7 @@ function consentLabelForRole(
 }
 
 export default function PrivacySettings() {
+  const { t } = useTranslation();
   const { colors: C } = useTheme();
   const { user, userRole } = useAuth();
   const isTechnician = userRole === 'TECHNICIAN' && canUseProviderMode(user) && isTechnicianProfileActive(user);
@@ -163,7 +165,7 @@ export default function PrivacySettings() {
       }
       await loadConsents();
     } catch (e) {
-      Alert.alert('Erro', 'Não foi possível salvar sua preferência. Tente novamente.');
+      Alert.alert(t('common.error'), t('appAlerts.privacy.preferenceError'));
     } finally {
       setSaving(null);
     }

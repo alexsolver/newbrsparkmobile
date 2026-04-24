@@ -20,6 +20,7 @@ import {
   resolveChecklistConflictRowTaskId,
 } from '../../src/services/syncService';
 import { ApiService } from '../../src/services/api';
+import { useTranslation } from 'react-i18next';
 
 function reasonLabel(reason: string): string {
   const r = String(reason || '').toLowerCase();
@@ -43,6 +44,7 @@ function fmtWhen(ts: number): string {
 }
 
 export default function SyncConflictsScreen() {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -84,22 +86,25 @@ export default function SyncConflictsScreen() {
         const res = await requeueChecklistOutboxConflicts([row.id]);
         await ApiService.sync();
         await load(true);
-        Alert.alert('Item reenfileirado', `1 item reenfileirado. Conflitos restantes: ${res.remaining}.`);
+        Alert.alert(
+          t('appAlerts.syncConflict.itemRequeuedTitle'),
+          t('appAlerts.syncConflict.requeuedOne', { remaining: res.remaining }),
+        );
       } catch (e: any) {
-        Alert.alert('Erro', e?.message || 'Não foi possível reenfileirar este item.');
+        Alert.alert(t('common.error'), e?.message || t('appAlerts.syncConflict.requeueError'));
       } finally {
         setBusyId(null);
       }
     },
-    [load],
+    [load, t],
   );
 
   const dropOne = useCallback(
     async (row: ChecklistOutboxConflict) => {
-      Alert.alert('Descartar conflito', 'Este item será removido da quarentena de conflitos.', [
-        { text: 'Cancelar', style: 'cancel' },
+      Alert.alert(t('appAlerts.syncConflict.discardTitle'), t('appAlerts.syncConflict.discardBody'), [
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Descartar',
+          text: t('appAlerts.syncConflict.discardButton'),
           style: 'destructive',
           onPress: async () => {
             setBusyId(row.id);
@@ -113,7 +118,7 @@ export default function SyncConflictsScreen() {
         },
       ]);
     },
-    [load],
+    [load, t],
   );
 
   const requeueAll = useCallback(async () => {
@@ -123,20 +128,23 @@ export default function SyncConflictsScreen() {
       const res = await requeueChecklistOutboxConflicts();
       await ApiService.sync();
       await load(true);
-      Alert.alert('Conflitos reenfileirados', `${res.requeued} reenfileirado(s). Restantes: ${res.remaining}.`);
+      Alert.alert(
+        t('appAlerts.syncConflict.allRequeuedTitle'),
+        t('appAlerts.syncConflict.requeuedMany', { count: res.requeued, remaining: res.remaining }),
+      );
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Falha ao reenfileirar conflitos.');
+      Alert.alert(t('common.error'), e?.message || t('appAlerts.syncConflict.requeueAllError'));
     } finally {
       setBulkBusy(false);
     }
-  }, [bulkBusy, rows.length, load]);
+  }, [bulkBusy, rows.length, load, t]);
 
   const clearAll = useCallback(async () => {
     if (bulkBusy || rows.length === 0) return;
-    Alert.alert('Limpar todos os conflitos', 'Isso remove todos os itens da quarentena de conflitos.', [
-      { text: 'Cancelar', style: 'cancel' },
+    Alert.alert(t('appAlerts.syncConflict.clearAllTitle'), t('appAlerts.syncConflict.clearAllBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Limpar tudo',
+        text: t('appAlerts.syncConflict.clearAllButton'),
         style: 'destructive',
         onPress: async () => {
           setBulkBusy(true);
@@ -149,7 +157,7 @@ export default function SyncConflictsScreen() {
         },
       },
     ]);
-  }, [bulkBusy, rows.length, load]);
+  }, [bulkBusy, rows.length, load, t]);
 
   return (
     <View style={s.container}>

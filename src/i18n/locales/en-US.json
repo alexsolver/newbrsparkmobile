@@ -2477,7 +2477,9 @@
       "clearAllTitle": "Clear all conflicts",
       "clearAllBody": "This removes every item from the conflict quarantine.",
       "itemRequeuedTitle": "Item re-queued",
-      "allRequeuedTitle": "Conflicts re-queued"
+      "allRequeuedTitle": "Conflicts re-queued",
+      "discardButton": "Discard",
+      "clearAllButton": "Clear all"
     },
     "push": {
       "trackingUnavailable": "Tracking link unavailable.",

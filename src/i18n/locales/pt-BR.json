@@ -2477,7 +2477,9 @@
       "clearAllTitle": "Limpar todos os conflitos",
       "clearAllBody": "Isso remove todos os itens da quarentena de conflitos.",
       "itemRequeuedTitle": "Item reenfileirado",
-      "allRequeuedTitle": "Conflitos reenfileirados"
+      "allRequeuedTitle": "Conflitos reenfileirados",
+      "discardButton": "Descartar",
+      "clearAllButton": "Limpar tudo"
     },
     "push": {
       "trackingUnavailable": "Link de acompanhamento indisponível.",

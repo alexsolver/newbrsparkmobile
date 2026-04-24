@@ -2477,7 +2477,9 @@
       "clearAllTitle": "Borrar todos los conflictos",
       "clearAllBody": "Esto elimina todos los elementos de la cuarentena de conflictos.",
       "itemRequeuedTitle": "Elemento reencolado",
-      "allRequeuedTitle": "Conflictos reencolados"
+      "allRequeuedTitle": "Conflictos reencolados",
+      "discardButton": "Descartar",
+      "clearAllButton": "Borrar todo"
     },
     "push": {
       "trackingUnavailable": "Enlace de seguimiento no disponible.",
