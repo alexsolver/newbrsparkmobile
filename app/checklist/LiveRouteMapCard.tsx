@@ -1515,6 +1515,19 @@ export default function LiveRouteMapCard({
     return Math.round(haversineM(lat, lng, osrmDest.lat, osrmDest.lng));
   }, [hasRoute, osrmDest, myPos?.lat, myPos?.lng, update?.currentLat, update?.currentLng]);
 
+  /** Deve ficar antes de `if (!visible) return null` — hooks não podem vir depois de retorno condicional. */
+  const openTrackingChatFromMap = useCallback(() => {
+    lastSeenClientMsgMsRef.current = maxClientMessageTimeMs(trackingChatMessagesRef.current);
+    setTrackingChatClientUnread(false);
+    setTrackingChatOpen(true);
+  }, []);
+
+  const closeTrackingChatModal = useCallback(() => {
+    lastSeenClientMsgMsRef.current = maxClientMessageTimeMs(trackingChatMessagesRef.current);
+    setTrackingChatClientUnread(false);
+    setTrackingChatOpen(false);
+  }, []);
+
   if (!visible) return null;
 
   const dimLandscape = windowDims.width > windowDims.height;
@@ -1760,18 +1773,6 @@ export default function LiveRouteMapCard({
       Alert.alert('Erro', (e as Error)?.message || 'Falha ao guardar idioma');
     }
   };
-
-  const openTrackingChatFromMap = useCallback(() => {
-    lastSeenClientMsgMsRef.current = maxClientMessageTimeMs(trackingChatMessagesRef.current);
-    setTrackingChatClientUnread(false);
-    setTrackingChatOpen(true);
-  }, []);
-
-  const closeTrackingChatModal = useCallback(() => {
-    lastSeenClientMsgMsRef.current = maxClientMessageTimeMs(trackingChatMessagesRef.current);
-    setTrackingChatClientUnread(false);
-    setTrackingChatOpen(false);
-  }, []);
 
   const trackingChatModalEl =
     taskId != null && String(taskId).trim() !== '' ? (
