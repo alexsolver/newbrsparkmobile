@@ -684,11 +684,10 @@ const etaStyles = StyleSheet.create({
 const { width, height } = Dimensions.get('window');
 
 /**
- * Só monta quando `visible` — evita violações das regras dos Hooks ao alternar o mapa
- * (o corpo anterior corria sempre os hooks e depois `return null`, o que em cenários de
- * Fast Refresh / transições podia desalinhar com versões antigas do bundle).
+ * O pai (`[id].tsx`) só monta este componente quando o mapa deve existir (`isVisible`).
+ * Não usar um wrapper `visible ? <Impl /> : null` aqui: o pai já controla a montagem.
  */
-function LiveRouteMapCardImpl({
+export default function LiveRouteMapCard({
   route,
   visible,
   zoneType,
@@ -2583,11 +2582,6 @@ function LiveRouteMapCardImpl({
     </Modal>
     </>
   );
-}
-
-export default function LiveRouteMapCard(props: Props) {
-  if (!props.visible) return null;
-  return <LiveRouteMapCardImpl {...props} />;
 }
 
 const styles = StyleSheet.create({

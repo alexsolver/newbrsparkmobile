@@ -8723,6 +8723,8 @@ export default function ChecklistEngine() {
           findFieldValueInResponses(responses, activeStartField.id, schema);
 
         const isVisible = showLiveMap || activeTransitLeg != null;
+        /** Só montar o mapa quando visível — evita alternar «wrapper vazio» vs árvore com hooks (Rules of Hooks no dev). */
+        if (!isVisible) return null;
 
         const routeDest = getDestFromTaskLike(currentTask || {});
         const routeEndCoord =
