@@ -42,12 +42,20 @@ export function mapExecutionOpsMessagesToChat(
 
 export async function persistOpsChatReadAck(executionId: string, rows: ExecutionOpsChatMessage[]): Promise<void> {
   try {
+    /** Com `rows` vazio, `maxMs` ficava 0 e sobrescrevia o ack — o badge OS/gestor voltava a marcar tudo como não lido. */
+    if (!rows.length) return;
+
     let maxMs = 0;
     for (const m of rows) {
       const t = new Date(m.createdAt).getTime();
       if (Number.isFinite(t) && t > maxMs) maxMs = t;
     }
-    await AsyncStorage.setItem(getOpsChatAckStorageKey(executionId), String(maxMs));
+    const key = getOpsChatAckStorageKey(executionId);
+    const prevRaw = await AsyncStorage.getItem(key);
+    const prevMs = prevRaw != null && String(prevRaw).trim() !== '' ? Number(prevRaw) : 0;
+    const prevOk = Number.isFinite(prevMs) && prevMs > 0 ? prevMs : 0;
+    const nextMs = Math.max(maxMs, prevOk);
+    await AsyncStorage.setItem(key, String(nextMs));
     emitChatUnreadChanged();
   } catch {
     /* ignore */

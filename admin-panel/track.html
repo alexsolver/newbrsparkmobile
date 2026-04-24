@@ -143,11 +143,31 @@
 
     #eta-row {
       display: flex; justify-content: space-between; align-items: center;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #eta-row:focus-visible {
+      outline: 2px solid var(--brand);
+      outline-offset: 2px;
+      border-radius: 8px;
     }
     #eta-text {
       font-size: 14px; font-weight: 600; color: var(--text);
     }
     #eta-value { font-weight: 800; }
+    #eta-chevron {
+      flex-shrink: 0;
+      font-size: 22px;
+      color: var(--text3);
+      transition: transform 0.2s ease;
+    }
+    #eta-row[aria-expanded="true"] #eta-chevron {
+      transform: rotate(180deg);
+    }
+    #top-card-details.collapsed {
+      display: none;
+    }
 
     #info-row {
       display: flex; justify-content: space-between; align-items: center;
@@ -485,18 +505,26 @@
     <div class="bar-seg" id="pbar-3"><div class="bar-fill" id="fill-3" style="width:0%"></div></div>
   </div>
 
-  <div id="eta-row">
+  <div
+    id="eta-row"
+    role="button"
+    tabindex="0"
+    aria-expanded="false"
+    aria-controls="top-card-details"
+  >
     <div id="eta-text"><span id="eta-prefix"></span><span id="eta-value">--</span></div>
-    <ion-icon name="chevron-down-outline" style="color:var(--text3)"></ion-icon>
+    <ion-icon id="eta-chevron" name="chevron-down-outline" aria-hidden="true"></ion-icon>
   </div>
 
-  <div id="info-row">
-    <div id="info-label"><span id="info-label-text"></span> <ion-icon name="information-circle-outline"></ion-icon></div>
-    <div id="info-badge" id="service-title-container"><span id="service-title">--</span></div>
-  </div>
-  <div id="ft-row" aria-live="polite">
-    <div id="ft-label"></div>
-    <div id="ft-badge"></div>
+  <div id="top-card-details" class="collapsed">
+    <div id="info-row">
+      <div id="info-label"><span id="info-label-text"></span> <ion-icon name="information-circle-outline"></ion-icon></div>
+      <div id="info-badge" id="service-title-container"><span id="service-title">--</span></div>
+    </div>
+    <div id="ft-row" aria-live="polite">
+      <div id="ft-label"></div>
+      <div id="ft-badge"></div>
+    </div>
   </div>
 </div>
 
@@ -626,6 +654,7 @@
       chatLocaleEn: 'English',
       chatLocaleEs: 'Español',
       chatLocaleSaved: 'Preferência guardada.',
+      topCardDetailsToggle: 'Mostrar ou ocultar detalhes do serviço',
     },
     en: {
       pageTitle: 'Track your technician · BrSpark',
@@ -701,6 +730,7 @@
       chatLocaleEn: 'English',
       chatLocaleEs: 'Spanish',
       chatLocaleSaved: 'Preference saved.',
+      topCardDetailsToggle: 'Show or hide service details',
     },
     es: {
       pageTitle: 'Siga a su técnico · BrSpark',
@@ -776,6 +806,7 @@
       chatLocaleEn: 'Inglés',
       chatLocaleEs: 'Español',
       chatLocaleSaved: 'Preferencia guardada.',
+      topCardDetailsToggle: 'Mostrar u ocultar detalles del servicio',
     },
     fr: {
       pageTitle: 'Suivez votre technicien · BrSpark',
@@ -852,6 +883,7 @@
       chatLocaleEn: 'Anglais',
       chatLocaleEs: 'Espagnol',
       chatLocaleSaved: 'Préférence enregistrée.',
+      topCardDetailsToggle: 'Afficher ou masquer les détails du service',
     },
   };
 
@@ -973,6 +1005,23 @@
     return trackLocale;
   }
 
+  function syncTopCardDetailsToggleUi() {
+    const row = document.getElementById('eta-row');
+    const panel = document.getElementById('top-card-details');
+    if (!row || !panel) return;
+    const open = row.getAttribute('aria-expanded') !== 'false';
+    if (open) panel.classList.remove('collapsed');
+    else panel.classList.add('collapsed');
+  }
+
+  function toggleTopCardDetails() {
+    const row = document.getElementById('eta-row');
+    if (!row) return;
+    const open = row.getAttribute('aria-expanded') === 'false';
+    row.setAttribute('aria-expanded', open ? 'true' : 'false');
+    syncTopCardDetailsToggleUi();
+  }
+
   function applyTrackI18n() {
     document.documentElement.lang = htmlDocLang();
     const tit = document.querySelector('title');
@@ -1002,6 +1051,8 @@
     setTxt('status-title', T('statusWaiting'));
     setTxt('pause-ribbon-msg', T('pauseMsg'));
     setTxt('info-label-text', T('infoInProgress'));
+    const etaRow = document.getElementById('eta-row');
+    if (etaRow) etaRow.setAttribute('aria-label', T('topCardDetailsToggle'));
     setTxt('tech-name', T('techShort'));
     setTxt('tech-role', T('rolePartner'));
     setTxt('arrived-title', T('arrivedTitle'));
@@ -1045,6 +1096,23 @@
   }
 
   applyTrackI18n();
+
+  (function wireTopCardDetailsToggle() {
+    const row = document.getElementById('eta-row');
+    if (!row) return;
+    if (!row.getAttribute('aria-expanded')) row.setAttribute('aria-expanded', 'false');
+    syncTopCardDetailsToggleUi();
+    row.addEventListener('click', function (e) {
+      e.preventDefault();
+      toggleTopCardDetails();
+    });
+    row.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleTopCardDetails();
+      }
+    });
+  })();
 
   (function wireTrackingChatSend() {
     var sendBtn = document.getElementById('chat-send');

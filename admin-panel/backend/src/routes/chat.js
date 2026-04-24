@@ -541,7 +541,7 @@ router.get('/rooms', async (req, res) => {
       /** Várias linhas `ChatRoomMember` com o mesmo e-mail e casing distinto (legado) —
        * `markAsRead` só actualizava uma; aqui usamos o `lastReadAt` mais recente para o badge. */
       const myMembers = r.members.filter((m) => normEmail(m.userId) === email);
-      const myLastReadMs = myMembers.length
+      let myLastReadMs = myMembers.length
         ? Math.max(
             ...myMembers.map((m) => {
               const d = m.lastReadAt;
@@ -550,6 +550,16 @@ router.get('/rooms', async (req, res) => {
             }),
           )
         : 0;
+      /** Se o include não trouxe a linha do viewer (legado / normalização), ir buscar `lastReadAt` à BD
+       * — evita `myLastReadMs === 0` → `Date(0)` e todas as mensagens contadas como não lidas. */
+      if (!myMembers.length) {
+        const agg = await prisma.chatRoomMember.aggregate({
+          where: { roomId: r.id, userId: { equals: email, mode: 'insensitive' } },
+          _max: { lastReadAt: true },
+        });
+        const d = agg._max.lastReadAt;
+        if (d) myLastReadMs = d instanceof Date ? d.getTime() : new Date(d).getTime() || 0;
+      }
       const myLastReadAt = new Date(myLastReadMs);
 
       if (!r.isGroup) {

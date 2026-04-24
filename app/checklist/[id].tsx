@@ -3949,7 +3949,20 @@ export default function ChecklistEngine() {
     scope?: SectionRepeatScope | null
   ) => {
     if (isReadOnly) return;
-    if (serverPausedExecution || responses.__form_paused_since) {
+    /** Usar o ref (actualizado nos `setResponses` de pausa/retoma) — o `responses` do closure pode ficar desactualizado face ao rascunho. */
+    const formPausedSince = responsesRefForFacial.current?.__form_paused_since;
+    const formPaused =
+      formPausedSince != null && String(formPausedSince).trim() !== '' && String(formPausedSince).trim() !== 'null';
+    if (formPaused) {
+      Alert.alert(t('common.attention'), t('pause.pausedTitle'));
+      return;
+    }
+    /**
+     * `CHEGADA` fecha o deslocamento — alinhar com `handleInput` (transit_* já permitidos).
+     * Bloquear também com `serverPausedExecution` órfão impedia finalizar o trecho após retomar a OS
+     * quando só o flag React ficava desactualizado em relação ao rascunho.
+     */
+    if (serverPausedExecution && label !== 'CHEGADA') {
       Alert.alert(t('common.attention'), t('pause.pausedTitle'));
       return;
     }
@@ -5286,6 +5299,7 @@ export default function ChecklistEngine() {
       metadata: { executionPaused: false, lastResumedAt: ts },
     });
     setServerPausedExecution(false);
+    setCurrentTask((prev: any) => (prev ? { ...prev, status: 'IN_PROGRESS' } : prev));
     fgSegmentStartRef.current = Date.now();
   }, [resolvedTaskId, updateLocalCloudTaskFields]);
 
@@ -5332,6 +5346,7 @@ export default function ChecklistEngine() {
         [PAUSE_HISTORY_KEY]: [...hist, ev],
       };
       void AsyncStorage.setItem(draftKeyForForm, JSON.stringify(next));
+      responsesRefForFacial.current = next;
       if (resolvedTaskId) {
         const summary = getOpenPauseSummaryFromResponses(next);
         const tid = resolvedTaskId;
@@ -5361,6 +5376,8 @@ export default function ChecklistEngine() {
       }
       return next;
     });
+    setCurrentTask((prev: any) => (prev ? { ...prev, status: 'PAUSED' } : prev));
+    setServerPausedExecution(true);
     setPauseReasonModalVisible(false);
     setPausePickerStep('category');
     setPauseSelectedCategory(null);
@@ -5370,6 +5387,8 @@ export default function ChecklistEngine() {
 
   const resumeFromPauseOverlay = () => {
     const endedAt = new Date().toISOString();
+    setServerPausedExecution(false);
+    setCurrentTask((prev: any) => (prev ? { ...prev, status: 'IN_PROGRESS' } : prev));
     setResponses((prev: any) => {
       const hist = [...parsePauseHistory(prev)];
       for (let i = hist.length - 1; i >= 0; i--) {
@@ -5388,6 +5407,7 @@ export default function ChecklistEngine() {
       delete next.__form_paused_since;
       next[PAUSE_HISTORY_KEY] = hist;
       void AsyncStorage.setItem(draftKeyForForm, JSON.stringify(next));
+      responsesRefForFacial.current = next;
       return next;
     });
     void routeTracker.resume();
@@ -5403,10 +5423,7 @@ export default function ChecklistEngine() {
           status: 'IN_PROGRESS',
           metadata: { executionPaused: false, lastResumedAt: endedAt },
         });
-        setServerPausedExecution(false);
       })();
-    } else {
-      setServerPausedExecution(false);
     }
   };
 
