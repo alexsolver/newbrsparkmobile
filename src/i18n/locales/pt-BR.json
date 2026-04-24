@@ -2190,6 +2190,8 @@
     "listBadgeMinutesUnit": "min",
     "listBadgeA11y": "Pausada há {{count}} minutos",
     "validationDetail": "Descreva o motivo (mín. 12 caracteres).",
+    "blockOsPauseDuringTransitTitle": "Deslocamento em curso",
+    "blockOsPauseDuringTransitBody": "Não é possível pausar a OS com um deslocamento aberto. Finalize o deslocamento (chegada) ou use «Pausar» no mapa para pausar só o rastreio da rota.",
     "cat": {
       "personal": "Pessoal / necessidades",
       "operational": "Operacional no serviço",

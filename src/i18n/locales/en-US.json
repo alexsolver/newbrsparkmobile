@@ -2190,6 +2190,8 @@
     "listBadgeMinutesUnit": "min",
     "listBadgeA11y": "Paused for {{count}} minutes",
     "validationDetail": "Describe the reason (min. 12 characters).",
+    "blockOsPauseDuringTransitTitle": "Trip in progress",
+    "blockOsPauseDuringTransitBody": "You can't pause the work order while a trip is open. Finish the trip (arrival) or use Pause on the map to pause route tracking only.",
     "cat": {
       "personal": "Personal needs",
       "operational": "On-site operations",

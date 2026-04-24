@@ -2190,6 +2190,8 @@
     "listBadgeMinutesUnit": "min",
     "listBadgeA11y": "Angehalten für{{count}}Minuten",
     "validationDetail": "Beschreiben Sie den Grund (mind. 12 Zeichen).",
+    "blockOsPauseDuringTransitTitle": "Fahrt läuft",
+    "blockOsPauseDuringTransitBody": "Sie können den Arbeitsauftrag nicht pausieren, solange eine Fahrt offen ist. Beenden Sie die Fahrt (Ankunft) oder nutzen Sie «Pause» auf der Karte, um nur die Routenverfolgung zu pausieren.",
     "cat": {
       "personal": "Persönliche Bedürfnisse",
       "operational": "Einsätze vor Ort",

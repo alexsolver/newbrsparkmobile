@@ -5347,6 +5347,14 @@ export default function ChecklistEngine() {
       Alert.alert(t('common.attention'), t('pause.validationDetail'));
       return;
     }
+    const openLeg = getActiveTransitLegInfo(
+      template?.schemaData,
+      (responsesRefForFacial.current || responses) as Record<string, unknown>
+    );
+    if (openLeg) {
+      Alert.alert(t('pause.blockOsPauseDuringTransitTitle'), t('pause.blockOsPauseDuringTransitBody'));
+      return;
+    }
     void routeTracker.pause();
 
     const catLabel = t(cat.i18nKey);
@@ -8608,7 +8616,7 @@ export default function ChecklistEngine() {
               ) : null}
             </TouchableOpacity>
           ) : null}
-          {taskId && !isReadOnly && !responses.__form_paused_since ? (
+          {taskId && !isReadOnly && !responses.__form_paused_since && !activeTransitLeg ? (
             <TouchableOpacity
               onPress={() => {
                 setPausePickerStep('category');
