@@ -111,6 +111,51 @@ function isExecutionPausedFalseish(v) {
     return s === 'false' || s === '0';
 }
 
+/**
+ * Retoma no servidor sem `responses` no PATCH deixava `__form_paused_since` na execução —
+ * o app fundia servidor+rascunho e o deslocamento continuava bloqueado.
+ */
+function clearStaleFormPauseFromExistingResponses(existingResponses, lastResumedAtIso) {
+    if (!existingResponses || typeof existingResponses !== 'object' || Array.isArray(existingResponses)) return null;
+    if (!existingResponses.__form_paused_since) return null;
+    let copy;
+    try {
+        copy = JSON.parse(JSON.stringify(existingResponses));
+    } catch {
+        return null;
+    }
+    delete copy.__form_paused_since;
+    const endedAt = typeof lastResumedAtIso === 'string' && lastResumedAtIso.trim() ? lastResumedAtIso : new Date().toISOString();
+    let hist = copy.__pause_history;
+    if (typeof hist === 'string') {
+        try {
+            hist = JSON.parse(hist);
+        } catch {
+            hist = null;
+        }
+    }
+    if (Array.isArray(hist)) {
+        for (let i = hist.length - 1; i >= 0; i--) {
+            const ev = hist[i];
+            if (ev && (ev.endedAt == null || ev.endedAt === '') && ev.startedAt) {
+                const st = new Date(ev.startedAt).getTime();
+                const en = new Date(endedAt).getTime();
+                hist[i] = {
+                    ...ev,
+                    endedAt,
+                    durationSec:
+                        Number.isFinite(st) && Number.isFinite(en) && en >= st
+                            ? Math.max(0, Math.floor((en - st) / 1000))
+                            : ev.durationSec ?? null,
+                };
+                break;
+            }
+        }
+        copy.__pause_history = hist;
+    }
+    return copy;
+}
+
 function execMetaReopenRevisionPending(m) {
     if (!m || typeof m !== 'object' || Array.isArray(m)) return false;
     const r = m.reopenForRevisionPending;
@@ -945,6 +990,13 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
         if ((willInProgress || resumeExecFromMeta) && !formPauseApplied) {
             delete mergedMeta.trackingPaused;
             delete mergedMeta.trackingPausedAt;
+            if (!updateData.responses) {
+                const cleared = clearStaleFormPauseFromExistingResponses(
+                    existing.responses,
+                    mergedMeta.lastResumedAt || req.body?.timestamp
+                );
+                if (cleared) updateData.responses = cleared;
+            }
         }
 
         mergedMeta = preserveDispatchClientContactMetadata(metadataSnapshotBeforePatch, mergedMeta);

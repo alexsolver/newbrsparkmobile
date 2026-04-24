@@ -281,6 +281,33 @@ function mergeResponsesDraftOverServerPreserveTransitDisplacement(
       base[k] = transitRawPreferNonempty(draftRes[k], serverR[k]);
     }
   }
+  /** Servidor pode manter `__form_paused_since` após retoma só com metadata; o rascunho já não traz a chave — não reintroduzir pausa «fantasma». */
+  try {
+    const hist = base[PAUSE_HISTORY_KEY];
+    let arr: unknown = hist;
+    if (typeof arr === 'string') {
+      try {
+        arr = JSON.parse(arr);
+      } catch {
+        arr = null;
+      }
+    }
+    let hasOpenPause = false;
+    if (Array.isArray(arr)) {
+      for (const ev of arr) {
+        const o = ev as { endedAt?: unknown; startedAt?: unknown } | null;
+        if (o && (o.endedAt == null || o.endedAt === '') && o.startedAt) {
+          hasOpenPause = true;
+          break;
+        }
+      }
+    }
+    if (!hasOpenPause && base.__form_paused_since != null && String(base.__form_paused_since).trim() !== '') {
+      delete base.__form_paused_since;
+    }
+  } catch {
+    /* ignore */
+  }
   return base;
 }
 
@@ -5289,10 +5316,16 @@ export default function ChecklistEngine() {
   const unpauseExecutionFromServer = useCallback(async () => {
     if (!resolvedTaskId) return;
     const ts = new Date().toISOString();
+    const cur = responsesRefForFacial.current;
+    const rb =
+      cur && typeof cur === 'object' && !Array.isArray(cur) ? ({ ...cur } as Record<string, unknown>) : {};
+    if (rb.__form_paused_since != null) delete rb.__form_paused_since;
+    const hasResp = Object.keys(rb).length > 0;
     await enqueueExecutionStatusPatch(resolvedTaskId, {
       status: 'IN_PROGRESS',
       timestamp: ts,
       metadata: { executionPaused: false, lastResumedAt: ts },
+      ...(hasResp ? { responses: rb } : {}),
     });
     await updateLocalCloudTaskFields(resolvedTaskId, {
       status: 'IN_PROGRESS',
@@ -5389,6 +5422,7 @@ export default function ChecklistEngine() {
     const endedAt = new Date().toISOString();
     setServerPausedExecution(false);
     setCurrentTask((prev: any) => (prev ? { ...prev, status: 'IN_PROGRESS' } : prev));
+    let resumedResponses: Record<string, any> | null = null;
     setResponses((prev: any) => {
       const hist = [...parsePauseHistory(prev)];
       for (let i = hist.length - 1; i >= 0; i--) {
@@ -5408,16 +5442,19 @@ export default function ChecklistEngine() {
       next[PAUSE_HISTORY_KEY] = hist;
       void AsyncStorage.setItem(draftKeyForForm, JSON.stringify(next));
       responsesRefForFacial.current = next;
+      resumedResponses = next;
       return next;
     });
     void routeTracker.resume();
     fgSegmentStartRef.current = Date.now();
     if (resolvedTaskId) {
       void (async () => {
+        const snap = resumedResponses;
         await enqueueExecutionStatusPatch(resolvedTaskId, {
           status: 'IN_PROGRESS',
           timestamp: endedAt,
           metadata: { executionPaused: false, lastResumedAt: endedAt },
+          ...(snap && typeof snap === 'object' ? { responses: snap } : {}),
         });
         await updateLocalCloudTaskFields(resolvedTaskId, {
           status: 'IN_PROGRESS',
