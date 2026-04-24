@@ -1750,8 +1750,8 @@
           <button type="button" class="btn btn-ghost btn-sm" data-fb-action="new-form" onclick="window.createNewChecklist()" title="Novo Formulário Limpo"><ion-icon name="add-circle-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-new-lbl">Criar Novo</span></button>
           <button type="button" class="btn btn-ghost btn-sm" data-fb-action="import-json" onclick="window.importJSON()" title="Importar JSON" style="color:var(--text3);"><ion-icon name="cloud-download-outline"></ion-icon></button>
           <button type="button" class="btn btn-ghost btn-sm" data-fb-action="export-json" onclick="window.exportJSON()" title="Exportar Schema (Download)" style="color:var(--text3);"><ion-icon name="cloud-upload-outline"></ion-icon></button>
-          <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-toggle-btn" onclick="window.toggleAiCopilotPanel()" title="Copiloto: ajustar formulário, regras e ícones com IA" style="border-color:#6366f1;color:#4f46e5;">
-            <ion-icon name="chatbubbles-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-copilot-lbl">Copiloto</span>
+          <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-toggle-btn" onclick="window.toggleAiCopilotPanel()" title="Composer: ajustar formulário, regras e ícones com IA" style="border-color:#6366f1;color:#4f46e5;">
+            <ion-icon name="chatbubbles-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-copilot-lbl">Composer</span>
           </button>
         </div>
         <div class="data-toolbar-actions">
@@ -2223,11 +2223,11 @@
     </div>
 </div>
 
-<!-- Copiloto IA (painel lateral) -->
+<!-- Composer IA (painel lateral) -->
 <div id="ai-copilot-panel" class="ai-copilot-menu-collapsed" aria-hidden="true">
   <div class="ai-copilot-head">
     <h4 title="Arraste pelo cabeçalho para mover o painel. Duplo clique aqui repõe a posição.">
-      <ion-icon name="chatbubbles" style="color:#6366f1"></ion-icon> <span id="mdl-copilot-head-text">Copiloto</span>
+      <ion-icon name="chatbubbles" style="color:#6366f1"></ion-icon> <span id="mdl-copilot-head-text">Composer</span>
     </h4>
     <div class="ai-copilot-head-actions">
       <button
@@ -2242,7 +2242,7 @@
         <ion-icon name="options-outline" style="font-size:20px;vertical-align:-3px"></ion-icon>
         <span class="ai-copilot-menu-toggle-label">Opções</span>
       </button>
-      <button type="button" id="ai-copilot-close-btn" class="btn btn-ghost btn-sm" onclick="window.toggleAiCopilotPanel()" aria-label="Fechar copiloto"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
+      <button type="button" id="ai-copilot-close-btn" class="btn btn-ghost btn-sm" onclick="window.toggleAiCopilotPanel()" aria-label="Fechar Composer"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
     </div>
   </div>
   <div class="ai-copilot-body">
@@ -2250,8 +2250,8 @@
       <div class="ai-copilot-chat-scroll">
         <div id="ai-copilot-insights" class="ai-copilot-insights" hidden></div>
         <div class="ai-copilot-journey-row">
-          <label for="copilot-journey-mode">Jornada do copiloto</label>
-          <select id="copilot-journey-mode" aria-label="Modo de jornada do copiloto">
+          <label for="copilot-journey-mode">Jornada do Composer</label>
+          <select id="copilot-journey-mode" aria-label="Modo de jornada do Composer">
             <option value="auto">Automática — a IA interpreta o pedido</option>
             <option value="create">Criar ou expandir o formulário</option>
             <option value="refine">Ajustar campos existentes</option>
@@ -2263,7 +2263,7 @@
         </div>
         <div id="copilot-troubleshoot-panel" class="ai-copilot-ts-panel" hidden>
           <p class="ai-copilot-ts-intro" id="copilot-ts-intro-txt">
-            Passo a passo: escolha o tipo de sintoma e descreva o que vê no técnico ou no editor. O copiloto rankeia hipóteses e sugere correções.
+            Passo a passo: escolha o tipo de sintoma e descreva o que vê no técnico ou no editor. O Composer rankeia hipóteses e sugere correções.
           </p>
           <label for="copilot-ts-symptom">Tipo de problema</label>
           <select id="copilot-ts-symptom" aria-label="Tipo de problema no formulário ou app">
@@ -2288,7 +2288,7 @@
             id="copilot-ts-send-btn"
             onclick="window.brsparkCopilotSendTroubleshootBundle()"
           >
-            Pedir diagnóstico ao copiloto
+            Pedir diagnóstico ao Composer
           </button>
         </div>
         <div id="ai-copilot-quick-actions" class="ai-copilot-quick-actions">
@@ -2316,7 +2316,7 @@
     <div
       id="ai-copilot-side-menu"
       class="ai-copilot-col-menu"
-      aria-label="Opções e contexto do copiloto"
+      aria-label="Opções e contexto do Composer"
       role="region"
       aria-hidden="true"
     >
@@ -2342,7 +2342,7 @@
             <button type="button" class="btn btn-outline btn-sm" id="copilot-pin-selection-btn" onclick="window.brsparkCopilotSyncFocusFromCanvasSelection()">Fixar seleção atual</button>
             <button type="button" class="btn btn-ghost btn-sm" id="copilot-clear-focus-btn" style="display:none;" onclick="window.brsparkCopilotClearFocusedField()">Limpar foco</button>
           </div>
-          <div id="copilot-focus-chip" class="copilot-canvas-focus-chip" style="display:none;" aria-label="Campo em foco para o copiloto"></div>
+          <div id="copilot-focus-chip" class="copilot-canvas-focus-chip" style="display:none;" aria-label="Campo em foco para o Composer"></div>
         </div>
         <p id="ai-copilot-clarify-hint" class="ai-copilot-clarify-hint" style="display:none;">Marque uma ou mais opções em cada pergunta (toque de novo para desmarcar) e use «Enviar escolhas»; ou escreva livremente na caixa de texto.</p>
         <div id="ai-copilot-clarify"></div>
@@ -2351,7 +2351,7 @@
           <div class="ai-copilot-details-body">
             <div class="ai-copilot-ctx-mini">
               <label for="copilot-ctx-objective">Contexto e objetivo (opcional)</label>
-              <textarea id="copilot-ctx-objective" class="prop-input" rows="3" placeholder="Ex.: vistoria em campo com foto de evidência, leitura do patrimônio por etiqueta, chegada só perto do cliente… O Copiloto infere carimbo, barras, GPS, cerca e deslocamento a partir disto e da conversa." style="font-size:12px; margin-bottom:8px;"></textarea>
+              <textarea id="copilot-ctx-objective" class="prop-input" rows="3" placeholder="Ex.: vistoria em campo com foto de evidência, leitura do patrimônio por etiqueta, chegada só perto do cliente… O Composer infere carimbo, barras, GPS, cerca e deslocamento a partir disto e da conversa." style="font-size:12px; margin-bottom:8px;"></textarea>
               <p style="font-size:11px;color:var(--color-text-light);margin:0 0 8px;line-height:1.45;">Não é preciso marcar recursos à mão: a IA sugere e combina com você conforme o caso de uso.</p>
               <div class="copilot-doc-url-strip" style="padding:10px 0 0; margin-top:10px; border-top:1px solid var(--color-border);">
                 <label for="copilot-ctx-ref-urls" class="prop-label" style="font-size:11px;">Links web de referência (opcional)</label>
@@ -2386,9 +2386,9 @@
           </div>
         </details>
         <div class="ai-copilot-confirm-block">
-          <p style="font-size:11px;color:var(--color-text-light);margin:0 0 10px;line-height:1.45;">O Copiloto aplica as alterações logo no formulário. Use o botão abaixo para desfazer só a última rodada (canvas + configurações + regras sugeridas nessa mensagem).</p>
+          <p style="font-size:11px;color:var(--color-text-light);margin:0 0 10px;line-height:1.45;">O Composer aplica as alterações logo no formulário. Use o botão abaixo para desfazer só a última rodada (canvas + configurações + regras sugeridas nessa mensagem).</p>
           <div class="ai-copilot-actions">
-            <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-undo-btn" onclick="window.brsparkCopilotUndo()" disabled title="Reverte o formulário ao estado antes da última alteração aplicada pelo Copiloto">Desfazer última alteração</button>
+            <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-undo-btn" onclick="window.brsparkCopilotUndo()" disabled title="Reverte o formulário ao estado antes da última alteração aplicada pelo Composer">Desfazer última alteração</button>
           </div>
           <div class="ai-copilot-footer-toolbar" style="margin-top:10px;margin-bottom:0;">
             <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-clear-btn" onclick="window.brsparkCopilotClear()">Limpar conversa</button>
@@ -2402,7 +2402,7 @@
   <button type="button" id="ai-copilot-suggest-logic-btn" style="display:none;" aria-hidden="true" tabindex="-1"></button>
 </div>
 
-<!-- Revisão de campos (Copiloto) — antes de aplicar no canvas -->
+<!-- Revisão de campos (Composer) — antes de aplicar no canvas -->
 <div id="copilot-schema-preview-modal" role="dialog" aria-modal="true" aria-labelledby="copilot-schema-preview-title" aria-hidden="true" onclick="if(event.target===this)window.brsparkCopilotCloseSchemaPreview(false)">
   <div class="copilot-preview-dialog" onclick="event.stopPropagation()">
     <div class="copilot-preview-head">

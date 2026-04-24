@@ -313,7 +313,7 @@ router.post('/ai/session/chat', adminAuthThenPanel, async (req, res) => {
       return res.status(502).json({ error: e.message, code: e.code });
     }
     console.error('[checklists/ai] session/chat:', e);
-    res.status(502).json({ error: e.message || 'Falha no copiloto IA.', code: e.code || 'COPILOT_CHAT_FAILED' });
+    res.status(502).json({ error: e.message || 'Falha no Composer IA.', code: e.code || 'COPILOT_CHAT_FAILED' });
   }
 });
 
@@ -353,7 +353,7 @@ router.post('/ai/session/chat-stream', adminAuthThenPanel, async (req, res) => {
   } catch (e) {
     send({
       type: 'error',
-      error: e.message || 'Falha no copiloto IA.',
+      error: e.message || 'Falha no Composer IA.',
       code: e.code || null,
     });
     res.end();

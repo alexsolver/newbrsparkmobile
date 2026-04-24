@@ -199,7 +199,7 @@ function buildAnalyzeFieldTypesList(formContext = {}) {
 }
 
 /**
- * Lista completa de tipos de campo para o Copiloto (sem filtro por checkboxes do painel).
+ * Lista completa de tipos de campo para o Composer (sem filtro por checkboxes do painel).
  * @returns {string[]}
  */
 function buildCopilotFieldTypesList() {
@@ -313,7 +313,7 @@ function formatSchemaTypeDocBlock() {
 }
 
 /**
- * Regras BrSpark para deslocamento — incluir nos system prompts (Copiloto, análise de planilha, geração de schema).
+ * Regras BrSpark para deslocamento — incluir nos system prompts (Composer, análise de planilha, geração de schema).
  * @returns {string}
  */
 function formatTransitDisplacementRulesForPrompt() {
@@ -401,11 +401,11 @@ function applyDefaultTypeIconsToSchemaItems(schemaData) {
 }
 
 /**
- * Regras de ícones para prompts (Copiloto, geração canônica de schema, etc.).
+ * Regras de ícones para prompts (Composer, geração canônica de schema, etc.).
  * @returns {string}
  */
 function formatAutomaticIconRulesForPrompt() {
-  return `### Ícones no formulário (obrigatório — copiloto e geração)
+  return `### Ícones no formulário (obrigatório — Composer e geração)
 - **Etapa** (\`section_break\`) e **cada campo** operacional: **sempre** \`icon\` (Ionicons kebab-case, preferir \`-outline\`), \`iconLibrary\`: \`Ionicons\` e \`iconColor\` (hex legível). **Nunca** omita ícone em \`add_field\`; em \`update_field\`, se o item ficar sem ícone visível no schema, **preencha** ícone/cor.
 - Escolha pelo **tipo** e **rótulo** (ex.: foto → camera-outline; assinatura → pencil-outline; etapa «Dados» → person-outline; etapa «Riscos» → warning-outline).
 - **Varie** \`iconColor\` entre etapas para distinguir secções no telemóvel; coerência dentro da mesma etapa.

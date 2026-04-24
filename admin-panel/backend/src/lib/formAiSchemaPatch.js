@@ -244,7 +244,7 @@ function applySchemaPatch(schemaData, patch) {
     if (p.multiple === true || p.multiple === false) cur.multiple = p.multiple;
     if (p.sectionFillMode != null) cur.sectionFillMode = String(p.sectionFillMode).trim();
     if (p.geofenceRadius != null) cur.geofenceRadius = String(p.geofenceRadius).trim();
-    /* dependsOn* não é aplicado via copiloto — visibilidade só por regras SHOW/HIDE (logicSuggestions). */
+    /* dependsOn* não é aplicado via Composer — visibilidade só por regras SHOW/HIDE (logicSuggestions). */
     if (p.requireOnlineValidation === true || p.requireOnlineValidation === false) {
       cur.requireOnlineValidation = p.requireOnlineValidation;
     }
@@ -489,7 +489,7 @@ function applySchemaPatch(schemaData, patch) {
 
   if (strippedMetaDescriptions > 0) {
     warnings.push(
-      'Uma ou mais «instruções ao técnico» (campo description) foram limpas por conterem metatexto do copiloto (entrevista, URLs ou instruções ao modelo). Use o chat para esse contexto, não o campo do técnico.'
+      'Uma ou mais «instruções ao técnico» (campo description) foram limpas por conterem metatexto do Composer (entrevista, URLs ou instruções ao modelo). Use o chat para esse contexto, não o campo do técnico.'
     );
   }
 

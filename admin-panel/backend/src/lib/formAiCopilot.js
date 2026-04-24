@@ -2,7 +2,7 @@
 
 const { resolveOpenAiCredentials } = require('./openAiCredentials');
 
-/** Só chamadas `openAiCopilotJson` (copiloto + regras); resto da app usa `resolveOpenAiCredentials().model`. */
+/** Só chamadas `openAiCopilotJson` (Composer + regras); resto da app usa `resolveOpenAiCredentials().model`. */
 const COPILOT_CHAT_MODEL_DEFAULT = 'gpt-4o';
 const {
   buildFormContextBlock,
@@ -112,7 +112,7 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
  * @param {string} systemPrompt
  * @param {{ role: string, content: string }[]} messages
  * @param {number} [temperature]
- * @param {{ maxTokens?: number }} [opts] — limite de conclusão (o copiloto devolve JSON grande; omissão = 16384)
+ * @param {{ maxTokens?: number }} [opts] — limite de conclusão (o Composer devolve JSON grande; omissão = 16384)
  */
 async function openAiCopilotJson(systemPrompt, messages, temperature = 0.32, opts = {}) {
   const creds = await resolveOpenAiCredentials();
@@ -122,7 +122,7 @@ async function openAiCopilotJson(systemPrompt, messages, temperature = 0.32, opt
     process.env.OPENAI_COPILOT_MODEL != null && String(process.env.OPENAI_COPILOT_MODEL).trim()
       ? String(process.env.OPENAI_COPILOT_MODEL).trim()
       : '';
-  /** Modelo da integração (ex.: gpt-4o-mini) não se aplica aqui — copiloto usa por defeito modelo mais capaz. */
+  /** Modelo da integração (ex.: gpt-4o-mini) não se aplica aqui — Composer usa por defeito modelo mais capaz. */
   const model = copilotModelEnv || COPILOT_CHAT_MODEL_DEFAULT;
   if (!key || !String(key).trim()) {
     const err = new Error(

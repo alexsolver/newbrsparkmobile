@@ -28,7 +28,7 @@ function applyTemplateSettingsPatch(current, patch) {
 
   for (const [k, v] of Object.entries(patch)) {
     if (!ALLOWED_KEYS.has(k)) {
-      warnings.push(`Definição ignorada (não permitida ao copiloto): ${k}`);
+      warnings.push(`Definição ignorada (não permitida ao Composer): ${k}`);
       continue;
     }
     if (k === 'requireGlobalGeofence') {

@@ -23,8 +23,8 @@ const M = {
     fb_new_title: 'Novo formulário em branco',
     fb_import_title: 'Importar JSON',
     fb_export_title: 'Exportar schema (transferência)',
-    fb_copilot: 'Copiloto',
-    fb_copilot_title: 'Copiloto: ajustar formulário, regras e ícones com IA',
+    fb_copilot: 'Composer',
+    fb_copilot_title: 'Composer: ajustar formulário, regras e ícones com IA',
     fb_preview: 'Pré-visualização no app',
     fb_geofence: 'Cerca global',
     fb_duration: 'Tempo do formulário',
@@ -451,7 +451,7 @@ const M = {
     fb_val_empty_labels: 'Há campos sem rótulo (etapas ignoradas). Corrija antes de salvar.',
     fb_val_dup_ids: 'IDs de campo duplicados: {ids}. Corrija antes de salvar.',
     fb_val_no_operational:
-      'O formulário ainda não tem perguntas operacionais. Adicione pelo menos um campo ou use o copiloto para gerar um rascunho.',
+      'O formulário ainda não tem perguntas operacionais. Adicione pelo menos um campo ou use o Composer para gerar um rascunho.',
     fb_val_choice_no_options:
       'Existem campos de escolha (lista, múltipla ou escala) sem opções definidas. Corrija antes de salvar.',
 
@@ -648,7 +648,7 @@ const M = {
     mdl_copilot_drag_title: 'Arraste pelo cabeçalho para mover o painel. Duplo clique aqui repõe a posição.',
     mdl_copilot_options: 'Opções',
     mdl_copilot_options_title: 'Mostrar ou ocultar opções, arquivos de referência e contexto',
-    mdl_copilot_close_aria: 'Fechar copiloto',
+    mdl_copilot_close_aria: 'Fechar Composer',
     mdl_copilot_thinking: 'A IA está pensando…',
     mdl_copilot_input_ph: 'Descreva o processo ou o ajuste desejado… (Enter envia, Shift+Enter nova linha)',
     mdl_copilot_send: 'Enviar',
@@ -663,9 +663,9 @@ const M = {
       'Marque uma ou mais opções em cada pergunta (toque de novo para desmarcar) e use «Enviar escolhas»; ou escreva livremente na caixa de texto.',
     mdl_copilot_adv_summary: 'Avançado: contexto, integrações e Excel',
     mdl_copilot_undo_hint:
-      'O Copiloto aplica as alterações logo no formulário. Use o botão abaixo para desfazer só a última rodada (canvas + configurações + regras sugeridas nessa mensagem).',
+      'O Composer aplica as alterações logo no formulário. Use o botão abaixo para desfazer só a última rodada (canvas + configurações + regras sugeridas nessa mensagem).',
     mdl_copilot_undo: 'Desfazer última alteração',
-    mdl_copilot_undo_title: 'Reverte o formulário ao estado antes da última alteração aplicada pelo Copiloto',
+    mdl_copilot_undo_title: 'Reverte o formulário ao estado antes da última alteração aplicada pelo Composer',
     mdl_copilot_clear_chat: 'Limpar conversa',
     mdl_copilot_preview_title: 'Rever campos sugeridos',
     mdl_copilot_preview_intro:
@@ -685,13 +685,13 @@ const M = {
     mdl_copilot_prev_reprocess: 'Reprocessar com instruções',
     mdl_copilot_prev_apply: 'Aplicar no canvas',
     mdl_copilot_feedback_applied:
-      '**Alterações no editor:** esta proposta foi aplicada **só no canvas local** (definições do modelo e/ou regras sugeridas), **sem gravar na nuvem** — quem **guarda** é o botão **Salvar** do construtor. **«Desfazer última alteração»** reverte a última rodada do copiloto.',
+      '**Alterações no editor:** esta proposta foi aplicada **só no canvas local** (definições do modelo e/ou regras sugeridas), **sem gravar na nuvem** — quem **guarda** é o botão **Salvar** do construtor. **«Desfazer última alteração»** reverte a última rodada do Composer.',
     mdl_copilot_feedback_preview:
       '**Estado do painel:** abriu-se a **tabela de revisão** com os campos sugeridos. Confirme com **«Aplicar no canvas»** quando estiver pronto, ou ajuste as linhas antes.',
     fb_copilot_empty_reply: '(A IA não devolveu texto, veja avisos ao lado ou tente de novo.)',
     fb_guided_title: 'Monte seu formulário com ajuda guiada',
     fb_guided_sub:
-      'Descreva o objetivo, quem vai preencher e o cenário. O copiloto monta um primeiro rascunho profissional e já sugere estrutura, evidências e próximos passos.',
+      'Descreva o objetivo, quem vai preencher e o cenário. O Composer monta um primeiro rascunho profissional e já sugere estrutura, evidências e próximos passos.',
     mdl_delete_form_title: 'Arquivar formulário?',
     mdl_delete_form_body:
       'O formulário será arquivado e poderá ser restaurado depois pelo histórico/versões. Isso evita perda acidental.',
@@ -751,7 +751,7 @@ const M = {
       'Erro de rede ao criar pasta. Abra o Form Builder pela URL do servidor Node (ex.: http://localhost:3001/checklists.html), não pelo Live Server.',
     fb_alert_clone_fail_api: 'Não foi possível clonar na API: {detail}',
     fb_alert_copilot_write_or_attach:
-      'Escreva uma mensagem ou envie arquivos de referência (Excel, Word, PDF, imagem ou JSON) no Copiloto para obter sugestões automáticas.',
+      'Escreva uma mensagem ou envie arquivos de referência (Excel, Word, PDF, imagem ou JSON) no Composer para obter sugestões automáticas.',
     fb_alert_copilot_bad_ext:
       'Extensão não suportada em: {list}. Use .xlsx, .xlsm, .docx, .pdf, .png, .jpg, .jpeg, .webp ou .json.',
     fb_alert_copilot_analyze_none_ok: 'Nenhum arquivo foi analisado com sucesso.\n\n{detail}',
@@ -772,8 +772,8 @@ const M = {
     fb_new_title: 'New blank form',
     fb_import_title: 'Import JSON',
     fb_export_title: 'Export schema (download)',
-    fb_copilot: 'Copilot',
-    fb_copilot_title: 'Copilot: adjust the form, rules, and icons with AI',
+    fb_copilot: 'Composer',
+    fb_copilot_title: 'Composer: adjust the form, rules, and icons with AI',
     fb_preview: 'App preview',
     fb_geofence: 'Global geofence',
     fb_duration: 'Form duration',
@@ -1200,7 +1200,7 @@ const M = {
     fb_val_empty_labels: 'Some fields have no label (sections ignored). Fix before saving.',
     fb_val_dup_ids: 'Duplicate field IDs: {ids}. Fix before saving.',
     fb_val_no_operational:
-      'The form has no operational fields yet. Add at least one field or use the copilot to create a draft.',
+      'The form has no operational fields yet. Add at least one field or use Composer to create a draft.',
     fb_val_choice_no_options:
       'Some choice fields (list, multiselect, or scale) are missing options. Fix before saving.',
 
@@ -1397,7 +1397,7 @@ const M = {
     mdl_copilot_drag_title: 'Drag the header to move the panel. Double-click resets position.',
     mdl_copilot_options: 'Options',
     mdl_copilot_options_title: 'Show or hide options, reference files, and context',
-    mdl_copilot_close_aria: 'Close copilot',
+    mdl_copilot_close_aria: 'Close Composer',
     mdl_copilot_thinking: 'AI is thinking…',
     mdl_copilot_input_ph: 'Describe the process or change… (Enter sends, Shift+Enter new line)',
     mdl_copilot_send: 'Send',
@@ -1412,9 +1412,9 @@ const M = {
       'Select one or more options per question (tap again to deselect) and use “Send choices”; or type freely in the text box.',
     mdl_copilot_adv_summary: 'Advanced: context, integrations, and Excel',
     mdl_copilot_undo_hint:
-      'The copilot applies changes directly to the form. Use the button below to undo only the last round (canvas + settings + suggested rules from that message).',
+      'Composer applies changes directly to the form. Use the button below to undo only the last round (canvas + settings + suggested rules from that message).',
     mdl_copilot_undo: 'Undo last change',
-    mdl_copilot_undo_title: 'Reverts the form to before the last copilot-applied change',
+    mdl_copilot_undo_title: 'Reverts the form to before the last Composer-applied change',
     mdl_copilot_clear_chat: 'Clear conversation',
     mdl_copilot_preview_title: 'Review suggested fields',
     mdl_copilot_preview_intro:
@@ -1434,13 +1434,13 @@ const M = {
     mdl_copilot_prev_reprocess: 'Reprocess with instructions',
     mdl_copilot_prev_apply: 'Apply to canvas',
     mdl_copilot_feedback_applied:
-      '**Editor changes:** this proposal was applied **only to the local canvas** (model settings and/or suggested rules), **not saved to the cloud** — use **Save** in the builder to persist. **«Undo last change»** reverts the last copilot round.',
+      '**Editor changes:** this proposal was applied **only to the local canvas** (model settings and/or suggested rules), **not saved to the cloud** — use **Save** in the builder to persist. **«Undo last change»** reverts the last Composer round.',
     mdl_copilot_feedback_preview:
       '**Panel state:** the **review table** with suggested fields is open. Confirm with **«Apply to canvas»** when ready, or adjust rows first.',
     fb_copilot_empty_reply: '(The AI returned no text, check side notes or try again.)',
     fb_guided_title: 'Build your form with guided help',
     fb_guided_sub:
-      'Describe the goal, who will fill it out, and the scenario. The copilot will create a professional first draft and suggest structure, evidence, and next steps.',
+      'Describe the goal, who will fill it out, and the scenario. Composer will create a professional first draft and suggest structure, evidence, and next steps.',
     mdl_delete_form_title: 'Archive form?',
     mdl_delete_form_body:
       'The form will be archived and can be restored later from history/versions. This helps avoid accidental loss.',
@@ -1500,7 +1500,7 @@ const M = {
       'Network error while creating the folder. Open the Form Builder from the Node server URL (e.g. http://localhost:3001/checklists.html), not from Live Server.',
     fb_alert_clone_fail_api: 'Could not clone via API: {detail}',
     fb_alert_copilot_write_or_attach:
-      'Type a message or upload reference files (Excel, Word, PDF, image, or JSON) in Copilot to get automatic suggestions.',
+      'Type a message or upload reference files (Excel, Word, PDF, image, or JSON) in Composer to get automatic suggestions.',
     fb_alert_copilot_bad_ext:
       'Unsupported extension for: {list}. Use .xlsx, .xlsm, .docx, .pdf, .png, .jpg, .jpeg, .webp, or .json.',
     fb_alert_copilot_analyze_none_ok: 'No files were analyzed successfully.\n\n{detail}',

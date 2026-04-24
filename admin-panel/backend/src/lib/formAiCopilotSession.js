@@ -12,7 +12,7 @@ const {
 } = require('./formAiDocumentationFetch');
 
 /**
- * Executa uma rodada completa do Copiloto (RAG execução + RAG biblioteca + LLM).
+ * Executa uma rodada completa do Composer (RAG execução + RAG biblioteca + LLM).
  * @param {{
  *   body: Record<string, unknown>,
  *   admin?: { tenantId?: string | null } | null,

@@ -1577,7 +1577,7 @@ function validateChecklistLightBeforeSave() {
             fbStr(
                 'fb_val_no_operational',
                 null,
-                'O formulário ainda não tem perguntas operacionais. Adicione pelo menos um campo ou use o copiloto para gerar um rascunho.'
+                'O formulário ainda não tem perguntas operacionais. Adicione pelo menos um campo ou use o Composer para gerar um rascunho.'
             )
         );
     } else {
@@ -8325,7 +8325,7 @@ function collectCopilotFormContext() {
     return out;
 }
 
-/** URLs https (até 5) a partir do textarea do copiloto ou do campo legado de uma linha. */
+/** URLs https (até 5) a partir do textarea do Composer ou do campo legado de uma linha. */
 function parseCopilotReferenceUrlsFromInput() {
     const ta = document.getElementById('copilot-ctx-ref-urls');
     const legacy = document.getElementById('copilot-ctx-doc-url');
@@ -8505,16 +8505,16 @@ function parseCopilotUndoEntry(raw) {
     return null;
 }
 
-/* ---------- Copiloto IA (chat + patch + lógica) ---------- */
+/* ---------- Composer IA (chat + patch + lógica) ---------- */
 if (typeof window.__brsparkCopilotMessages === 'undefined') window.__brsparkCopilotMessages = [];
 if (typeof window.__brsparkSchemaUndoStack === 'undefined') window.__brsparkSchemaUndoStack = [];
 if (typeof window.__brsparkCopilotSpreadsheetSummary === 'undefined') window.__brsparkCopilotSpreadsheetSummary = '';
 if (typeof window.__brsparkCopilotSpreadsheetFileName === 'undefined') window.__brsparkCopilotSpreadsheetFileName = '';
-/** @type {{ fileName: string, summary: string }[]} resumos por arquivo (referência acumulada no copiloto) */
+/** @type {{ fileName: string, summary: string }[]} resumos por arquivo (referência acumulada no Composer) */
 if (typeof window.__brsparkCopilotReferenceSummaries === 'undefined') window.__brsparkCopilotReferenceSummaries = [];
 if (typeof window.__brsparkCopilotThinkingCount === 'undefined') window.__brsparkCopilotThinkingCount = 0;
 if (typeof window.__brsparkCopilotClarifyOptions === 'undefined') window.__brsparkCopilotClarifyOptions = [];
-/** @type {Record<string, { cid: string, label: string }[]>} seleções por id de pergunta (copiloto — multi-opção). */
+/** @type {Record<string, { cid: string, label: string }[]>} seleções por id de pergunta (Composer — multi-opção). */
 if (typeof window.__brsparkCopilotClarifySelections === 'undefined') window.__brsparkCopilotClarifySelections = {};
 
 function beginCopilotThinking(label) {
@@ -8594,7 +8594,7 @@ function refreshCopilotThinkingDom() {
 function buildCopilotSpreadsheetSummaryFromAnalyze(data, fileName) {
     const parts = [];
     parts.push(
-        '### Análise do arquivo anexado ao Copiloto (Excel, Word, PDF, imagem OCR, JSON BrSpark, JSON Google Forms / outros sistemas)',
+        '### Análise do arquivo anexado ao Composer (Excel, Word, PDF, imagem OCR, JSON BrSpark, JSON Google Forms / outros sistemas)',
     );
     parts.push('Arquivo: ' + String(fileName || '—'));
     if (data && data.title) parts.push('Título sugerido pela IA: ' + String(data.title).trim());
@@ -8613,7 +8613,7 @@ function buildCopilotSpreadsheetSummaryFromAnalyze(data, fileName) {
     const w = data && data.warnings;
     if (Array.isArray(w) && w.length) parts.push('Avisos da análise: ' + w.filter(Boolean).join(' | '));
     let s = parts.join('\n');
-    if (s.length > 11800) s = s.slice(0, 11800) + '\n…[resumo truncado para o limite do copiloto]';
+    if (s.length > 11800) s = s.slice(0, 11800) + '\n…[resumo truncado para o limite do Composer]';
     return s;
 }
 
@@ -8737,7 +8737,7 @@ function renderCopilotMessages() {
         const empty = document.createElement('div');
         empty.className = 'ai-copilot-empty';
         const t1 = document.createElement('strong');
-        t1.textContent = 'Início do Copiloto';
+        t1.textContent = 'Início do Composer';
         empty.appendChild(t1);
         const t2 = document.createElement('span');
         t2.textContent =
@@ -8779,7 +8779,7 @@ function renderCopilotMessages() {
         row.className = 'ai-copilot-msg-row ' + (m.role === 'user' ? 'user' : 'assistant');
         const meta = document.createElement('div');
         meta.className = 'ai-copilot-msg-meta';
-        meta.textContent = m.role === 'user' ? 'Você' : 'Copiloto';
+        meta.textContent = m.role === 'user' ? 'Você' : 'Composer';
         const div = document.createElement('div');
         div.className = 'ai-copilot-bubble ' + (m.role === 'user' ? 'user' : 'assistant');
         if (m.role === 'assistant') {
@@ -8988,7 +8988,7 @@ function renderCopilotInsights(data) {
     host.hidden = false;
 }
 
-/** Sincroniza rótulos ARIA e texto do botão do menu lateral do copiloto. */
+/** Sincroniza rótulos ARIA e texto do botão do menu lateral do Composer. */
 function brsparkCopilotSyncSideMenuUi() {
     const p = document.getElementById('ai-copilot-panel');
     const btn = document.getElementById('ai-copilot-menu-toggle-btn');
@@ -10131,7 +10131,7 @@ function brsparkCopilotApplyChatResponse(data) {
                 fbStr(
                     'mdl_copilot_feedback_applied',
                     null,
-                    '**Alterações no editor:** esta proposta foi aplicada **só no canvas local** (definições do modelo e/ou regras sugeridas), **sem gravar na nuvem** — use **Salvar** no construtor para persistir. **«Desfazer última alteração»** reverte a última rodada do copiloto.',
+                    '**Alterações no editor:** esta proposta foi aplicada **só no canvas local** (definições do modelo e/ou regras sugeridas), **sem gravar na nuvem** — use **Salvar** no construtor para persistir. **«Desfazer última alteração»** reverte a última rodada do Composer.',
                 );
         }
     }
@@ -10309,7 +10309,7 @@ async function brsparkCopilotPostChatRound(userText, opts) {
     const ac = new AbortController();
     const to = setTimeout(function () {
         try {
-            ac.abort(new Error('Timeout do copiloto'));
+            ac.abort(new Error('Timeout do Composer'));
         } catch (eAb) {
             /* ignore */
         }
@@ -10383,7 +10383,7 @@ async function brsparkCopilotPostChatRound(userText, opts) {
                             shouldStopStream = true;
                             break;
                         } else if (ev.type === 'error') {
-                            streamErr = new Error(ev.error || 'Falha no copiloto IA.');
+                            streamErr = new Error(ev.error || 'Falha no Composer IA.');
                             if (ev.code === 'NO_OPENAI_KEY') streamErr.code = 'NO_OPENAI_KEY';
                             shouldStopStream = true;
                             break;
@@ -10415,7 +10415,7 @@ async function brsparkCopilotPostChatRound(userText, opts) {
                     try {
                         const ev = JSON.parse(line.slice(5).trim());
                         if (ev.type === 'result' && ev.payload) finalPayload = ev.payload;
-                        if (ev.type === 'error') streamErr = new Error(ev.error || 'Falha no copiloto IA.');
+                        if (ev.type === 'error') streamErr = new Error(ev.error || 'Falha no Composer IA.');
                     } catch (eT) {
                         /* ignore */
                     }
@@ -10472,7 +10472,7 @@ window.brsparkCopilotSend = async function () {
             fbAlert(
                 'fb_alert_copilot_write_or_attach',
                 null,
-                'Escreva uma mensagem ou envie arquivos de referência (Excel, Word, PDF, imagem ou JSON) no Copiloto para obter sugestões automáticas.'
+                'Escreva uma mensagem ou envie arquivos de referência (Excel, Word, PDF, imagem ou JSON) no Composer para obter sugestões automáticas.'
             );
             return;
         }
