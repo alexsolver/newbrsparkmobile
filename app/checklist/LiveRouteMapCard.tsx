@@ -683,7 +683,12 @@ const etaStyles = StyleSheet.create({
 
 const { width, height } = Dimensions.get('window');
 
-export default function LiveRouteMapCard({
+/**
+ * Só monta quando `visible` — evita violações das regras dos Hooks ao alternar o mapa
+ * (o corpo anterior corria sempre os hooks e depois `return null`, o que em cenários de
+ * Fast Refresh / transições podia desalinhar com versões antigas do bundle).
+ */
+function LiveRouteMapCardImpl({
   route,
   visible,
   zoneType,
@@ -1515,7 +1520,6 @@ export default function LiveRouteMapCard({
     return Math.round(haversineM(lat, lng, osrmDest.lat, osrmDest.lng));
   }, [hasRoute, osrmDest, myPos?.lat, myPos?.lng, update?.currentLat, update?.currentLng]);
 
-  /** Deve ficar antes de `if (!visible) return null` — hooks não podem vir depois de retorno condicional. */
   const openTrackingChatFromMap = useCallback(() => {
     lastSeenClientMsgMsRef.current = maxClientMessageTimeMs(trackingChatMessagesRef.current);
     setTrackingChatClientUnread(false);
@@ -1527,8 +1531,6 @@ export default function LiveRouteMapCard({
     setTrackingChatClientUnread(false);
     setTrackingChatOpen(false);
   }, []);
-
-  if (!visible) return null;
 
   const dimLandscape = windowDims.width > windowDims.height;
   const exoLandscape =
@@ -2581,6 +2583,11 @@ export default function LiveRouteMapCard({
     </Modal>
     </>
   );
+}
+
+export default function LiveRouteMapCard(props: Props) {
+  if (!props.visible) return null;
+  return <LiveRouteMapCardImpl {...props} />;
 }
 
 const styles = StyleSheet.create({
