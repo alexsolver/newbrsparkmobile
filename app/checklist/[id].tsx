@@ -12,6 +12,7 @@ import {
   Modal,
   AppState,
   Platform,
+  DeviceEventEmitter,
   type AppStateStatus,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -62,6 +63,10 @@ import {
   setOperationalTransitLock,
   clearOperationalTransitLockForTask,
 } from '../../src/services/operationalTransitLock';
+import {
+  BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY,
+  type BrsparkProviderTaskCompletedPayload,
+} from '../../src/constants/deviceEvents';
 import { FieldHelpInstructions, isFieldInstructionsVisible } from '../../src/components/FieldHelpInstructions';
 import { LeituraBlock } from '../../src/components/LeituraBlock';
 import { ValueInput } from '../../src/components/ValueInput';
@@ -3309,7 +3314,7 @@ export default function ChecklistEngine() {
   const resolvedTaskId =
     typeof taskId === 'string' ? taskId : Array.isArray(taskId) ? taskId[0] : String(taskId || '');
 
-  /** taskId com deslocamento operacional em curso (uma chave AsyncStorage no aparelho). */
+  /** taskId com trecho de deslocamento em aberto (qualquer tipo; uma chave AsyncStorage no aparelho). */
   const [globalOperationalTransitHolderId, setGlobalOperationalTransitHolderId] = useState<string | null>(
     null
   );
@@ -6977,6 +6982,16 @@ export default function ChecklistEngine() {
           apiFetch(`/api/metrics/calculate/${submitTaskId}`, { method: 'POST' }).catch(() => {});
         }
 
+        if (submitTaskId) {
+          const p: BrsparkProviderTaskCompletedPayload = {
+            taskId: String(submitTaskId).trim(),
+            completedAt: String(payload.completedAt || new Date().toISOString()),
+            refId: String(id),
+            title: template?.title || 'OS',
+          };
+          DeviceEventEmitter.emit(BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY, p);
+        }
+        setIsReadOnly(true);
         router.back();
     } catch (err) {
        Alert.alert("Erro Central", "Não foi possível arquivar a execução.");
@@ -11259,13 +11274,12 @@ export default function ChecklistEngine() {
                      responses as Record<string, unknown>,
                      scope ?? null
                    );
-                 const curTaskIdForOpLock = String(resolvedTaskId || '').trim();
+                 const curTaskIdForGlobalTransitLock = String(resolvedTaskId || '').trim();
                  const startBlockedGlobalOtherOs =
                    field.type === 'transit_start' &&
                    !hasValue &&
-                   !isReimbursementTransitField(template?.schemaData || [], field.id) &&
                    !!globalOperationalTransitHolderId &&
-                   globalOperationalTransitHolderId !== curTaskIdForOpLock;
+                   globalOperationalTransitHolderId !== curTaskIdForGlobalTransitLock;
                  if (startBlockedAnotherLeg) {
                    isBlocked = true;
                  }
@@ -11392,7 +11406,7 @@ export default function ChecklistEngine() {
                            Alert.alert(
                              'Atenção',
                              startBlockedGlobalOtherOs
-                               ? 'Já existe um deslocamento operacional em curso noutra ordem de serviço. Abra essa OS e utilize «Finalizar deslocamento», ou conclua o fluxo, antes de iniciar aqui.'
+                               ? 'Já existe um deslocamento em curso noutra ordem de serviço. Abra essa OS e utilize «Finalizar deslocamento», ou conclua o fluxo, antes de iniciar aqui.'
                                : startBlockedAfterDisplacementFinished
                                  ? 'Este deslocamento já foi concluído. O registo é definitivo e não pode ser reiniciado.'
                                  : startBlockedAnotherLeg

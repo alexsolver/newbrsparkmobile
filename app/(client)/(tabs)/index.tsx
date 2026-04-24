@@ -22,6 +22,7 @@ import {
   FlatList,
   Animated,
   Easing,
+  DeviceEventEmitter,
 } from 'react-native';
 import {
   SERVICE_CATEGORY_COLORS,
@@ -99,6 +100,10 @@ import {
   isProviderChecklistExecutionEvent,
   shouldRequireKnownExecutionGate,
 } from '../../../src/utils/providerTaskEventFilter';
+import {
+  BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY,
+  type BrsparkProviderTaskCompletedPayload,
+} from '../../../src/constants/deviceEvents';
 import { getLocationZoneTypeVisual, resolveLocationZoneChrome } from '../../../src/utils/locationZoneTypeDisplay';
 import { LocationZoneTypeBadge } from '../../../src/components/LocationZoneTypeBadge';
 import MapView, { Marker, Callout, Polyline, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
@@ -3211,6 +3216,43 @@ export default function DashboardScreen() {
     return loadDataChainRef.current;
   };
   loadDataRef.current = loadData;
+
+  /** Conclusão de checklist: actualização optimista das abas antes do `loadData` assíncrono terminar. */
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY,
+      (payload: BrsparkProviderTaskCompletedPayload) => {
+        const tid = String(payload?.taskId || '').trim();
+        if (!tid) return;
+        setCompletedIds((prev) => {
+          const n = new Set(prev);
+          n.add(tid);
+          return n;
+        });
+        setInprogressIds((prev) => {
+          const n = new Set(prev);
+          n.delete(tid);
+          return n;
+        });
+        setProviderTasks((prev) => {
+          if (!Array.isArray(prev) || prev.length === 0) return prev;
+          let hit = false;
+          const next = prev.map((t: any) => {
+            if (String(t?.id) !== tid) return t;
+            hit = true;
+            return {
+              ...t,
+              status: 'COMPLETED',
+              completedAt: payload.completedAt || t.completedAt,
+            };
+          });
+          return hit ? next : prev;
+        });
+        void loadDataRef.current?.(false);
+      }
+    );
+    return () => sub.remove();
+  }, []);
 
   /** Aceitar/recusar oferta broadcast: `BroadcastOfferRootBridge` no `_layout` raiz (ecrã checklist/mapa não desmonta handlers). */
 
