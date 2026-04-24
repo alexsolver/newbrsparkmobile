@@ -3980,7 +3980,11 @@ export default function ChecklistEngine() {
     const formPausedSince = responsesRefForFacial.current?.__form_paused_since;
     const formPaused =
       formPausedSince != null && String(formPausedSince).trim() !== '' && String(formPausedSince).trim() !== 'null';
-    if (formPaused) {
+    /**
+     * `CHEGADA` (ex.: «Finalizar» no mapa) deve fechar o trecho mesmo com pausa de atendimento —
+     * o `routeTracker` pode continuar «em rota» enquanto `__form_paused_since` bloqueava tudo e o técnico ficava preso no alerta «Em pausa».
+     */
+    if (formPaused && label !== 'CHEGADA') {
       Alert.alert(t('common.attention'), t('pause.pausedTitle'));
       return;
     }
