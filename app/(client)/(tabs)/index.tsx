@@ -565,11 +565,10 @@ function taskMetadataRecord(t: any): Record<string, unknown> {
   return {};
 }
 
-/** Vencimento operacional (`metadata.dueDate` / `endDate`), sem fim previsto da agenda — valor do cartão. */
+/** Vencimento explícito no despacho (`metadata.dueDate` apenas). Sem fallback em `endDate` (dia de agenda) — cartão fica em branco se não preencheram no painel. */
 function providerTaskVencimentoIso(t: any): string | null {
   const meta = taskMetadataRecord(t);
   if (meta.dueDate != null && String(meta.dueDate).trim() !== '') return String(meta.dueDate).trim();
-  if (t?.endDate != null && String(t.endDate).trim() !== '') return String(t.endDate).trim();
   return null;
 }
 
@@ -1460,7 +1459,7 @@ function ProviderTaskDetailSections({ task }: { task: any }) {
               >
                 {vencDetailIso
                   ? formatProviderTaskWindowDateTime(vencDetailIso, i18n.language || 'pt-BR')
-                  : '—'}
+                  : ''}
               </Text>
             </View>
           </View>
@@ -4690,14 +4689,14 @@ export default function DashboardScreen() {
                 const cardVencIso = providerTaskVencimentoIso(order);
                 const cardVencMs = cardVencIso ? new Date(cardVencIso).getTime() : NaN;
                 const cardVencOverdue = Number.isFinite(cardVencMs) && cardVencMs < Date.now();
-                const cardVencLine = t('home.osDueLine', {
-                  date: cardVencIso
-                    ? new Date(cardVencIso).toLocaleString(i18n.language || 'pt-BR', {
+                const cardVencLine = cardVencIso
+                  ? t('home.osDueLine', {
+                      date: new Date(cardVencIso).toLocaleString(i18n.language || 'pt-BR', {
                         dateStyle: 'short',
                         timeStyle: 'short',
-                      })
-                    : '—',
-                });
+                      }),
+                    })
+                  : '';
                 const osMapZoneVisual = getLocationZoneTypeVisual(order.locationZoneType);
                 const zoneChrome = resolveLocationZoneChrome(order.locationZoneType, C, themeDark);
                 /** Mesmo ponto que o mapinha / OSRM: destino explícito da OS ou 1.º vértice da geometria em rota/trecho. */
@@ -4745,7 +4744,7 @@ export default function DashboardScreen() {
                       dateStyle: 'short',
                       timeStyle: 'short',
                     })
-                  : '—';
+                  : '';
                 return (
                 <Animated.View
                   style={[

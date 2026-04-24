@@ -144,6 +144,10 @@ const M = {
     ops_dispatch_dur_ph: 'Usar valor do formulário (ou 60 min se vazio)',
     ops_dispatch_dur_hint:
       'Só preenchimento do checklist, sem deslocamento. Múltiplos de 5 min; mínimo 5. Se vazio, usa o definido no builder ou 60 min.',
+    ops_dispatch_due_lbl: 'Vencimento da OS (opcional)',
+    ops_dispatch_due_hint:
+      'Prazo comercial explícito para o técnico. Se vazio, o app não mostra a linha «Vencimento» no cartão.',
+    ops_dispatch_due_invalid: 'Data/hora de vencimento inválida.',
     ops_dispatch_urgent_lbl: 'Urgente',
     ops_dispatch_urgent_need_two:
       'Só disponível com dois ou mais técnicos (oferta — primeiro a aceitar). Adicione candidatos acima.',
@@ -348,6 +352,10 @@ const M = {
     ops_dispatch_dur_ph: 'Use form default (or 60 min if empty)',
     ops_dispatch_dur_hint:
       'Checklist filling only, no travel time. Multiples of 5 minutes; minimum 5. If empty, uses the builder default or 60 min.',
+    ops_dispatch_due_lbl: 'Work order due (optional)',
+    ops_dispatch_due_hint:
+      'Optional commercial deadline for the technician. If empty, the app hides the «Due» line on the card.',
+    ops_dispatch_due_invalid: 'Invalid due date/time.',
     ops_dispatch_urgent_lbl: 'Urgent',
     ops_dispatch_urgent_need_two:
       'Only available with two or more technicians (broadcast — first to accept). Add candidates above.',
@@ -706,6 +714,8 @@ export function applyOperationsModalsStaticI18n() {
   const dDur = document.getElementById('d-expected-duration-override');
   if (dDur) dDur.setAttribute('placeholder', opsT('ops_dispatch_dur_ph'));
   setHtml('d-hint-duration', 'ops_dispatch_dur_hint');
+  setLabelFor('d-due-datetime', 'ops_dispatch_due_lbl');
+  set('d-hint-due', 'ops_dispatch_due_hint');
 
   setHtml('geo-help-radius', 'ops_geo_radius_help_html');
   setHtml('geo-help-route', 'ops_geo_route_help_html');

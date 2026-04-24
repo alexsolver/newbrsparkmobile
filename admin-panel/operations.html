@@ -978,6 +978,11 @@
         <div id="d-hint-duration" style="font-size:10px; color:var(--text3); margin-top:4px;">Só preenchimento do checklist, sem deslocamento. Múltiplos de 5 min; mínimo 5. Se vazio, usa o definido no builder ou 60 min.</div>
         <div id="d-planned-end-preview" style="font-size:11px; color:var(--text2); margin-top:8px; font-weight:700; line-height:1.45;"></div>
       </div>
+      <div class="form-group">
+        <label class="form-label" for="d-due-datetime"></label>
+        <input class="form-control" id="d-due-datetime" type="datetime-local" />
+        <div id="d-hint-due" style="font-size:10px; color:var(--text3); margin-top:4px;"></div>
+      </div>
 
       <!-- BLOCO 2: LOCALIZAÇÃO -->
       <div style="border-top:1px solid var(--border); margin:18px 0 14px;"></div>
@@ -8139,6 +8144,8 @@ window.openDispatchModal = async function() {
   const dSched = document.getElementById('d-scheduled-start');
   const dDurOv = document.getElementById('d-expected-duration-override');
   if (dDurOv) dDurOv.value = '';
+  const dDue = document.getElementById('d-due-datetime');
+  if (dDue) dDue.value = '';
   if (dSched) {
     const d = new Date();
     const step = 5 * 60000;
@@ -8870,6 +8877,22 @@ window.confirmDispatch = async function() {
     expectedOverride = dm;
   }
 
+  let dueDateIso = null;
+  const dueEl = document.getElementById('d-due-datetime');
+  const dueRaw = dueEl && dueEl.value ? String(dueEl.value).trim() : '';
+  if (dueRaw) {
+    let dueDt = parseDispatchDatetimeLocal(dueRaw);
+    if (!dueDt) {
+      const dueFallback = new Date(dueRaw);
+      dueDt = Number.isFinite(dueFallback.getTime()) ? dueFallback : null;
+    }
+    if (!dueDt || !Number.isFinite(dueDt.getTime())) {
+      alert(typeof opsT === 'function' ? opsT('ops_dispatch_due_invalid') : 'Data/hora de vencimento inválida.');
+      return;
+    }
+    dueDateIso = dueDt.toISOString();
+  }
+
   // ── Build location payload baseado na aba ativa ─────────────────
   const geoMode = window._geoMode || 'none';
   let locationPayload = {};
@@ -8968,6 +8991,7 @@ window.confirmDispatch = async function() {
         icon: 'build-outline',
         ...(clientEmail ? { clientEmail } : {}),
         ...(navigationDestination ? { navigationDestination: navigationDestination } : {}),
+        ...(dueDateIso ? { dueDate: dueDateIso } : {}),
       },
       scheduledStartAt: schedDt.toISOString(),
       ...locationPayload
