@@ -6,6 +6,7 @@ import { gcm } from '@noble/ciphers/aes.js';
 import { Buffer } from 'buffer';
 import { getSyncQueue, queueOfflineAction } from '../database';
 import type { User } from './auth';
+import { OPERATIONAL_TRANSIT_LOCK_STORAGE_KEY } from './operationalTransitLock';
 
 const RECOVERY_DIR_NAME = 'brspark-offline-recovery';
 const RECOVERY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -26,6 +27,7 @@ const EXACT_KEYS = new Set<string>([
   '@brspark_executed_tasks',
   '@brspark_templates',
   '@brspark_rt_assignments_cache_v1',
+  OPERATIONAL_TRANSIT_LOCK_STORAGE_KEY,
 ]);
 
 const PREFIX_KEYS = ['@draft_tsk_', '@brspark_execution_'];

@@ -57,6 +57,11 @@ import { TransitCompletedSummaryMap, transitActualMetricsLabels } from './Transi
 import { routeTracker } from '../../src/services/routeTrackingService';
 import { computePatrolCompliance } from '../../src/services/patrolRouteMetrics';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
+import {
+  getOperationalTransitLock,
+  setOperationalTransitLock,
+  clearOperationalTransitLockForTask,
+} from '../../src/services/operationalTransitLock';
 import { FieldHelpInstructions, isFieldInstructionsVisible } from '../../src/components/FieldHelpInstructions';
 import { LeituraBlock } from '../../src/components/LeituraBlock';
 import { ValueInput } from '../../src/components/ValueInput';
@@ -3304,6 +3309,32 @@ export default function ChecklistEngine() {
   const resolvedTaskId =
     typeof taskId === 'string' ? taskId : Array.isArray(taskId) ? taskId[0] : String(taskId || '');
 
+  /** taskId com deslocamento operacional em curso (uma chave AsyncStorage no aparelho). */
+  const [globalOperationalTransitHolderId, setGlobalOperationalTransitHolderId] = useState<string | null>(
+    null
+  );
+
+  const refreshGlobalOperationalTransitLock = useCallback(async () => {
+    try {
+      const lock = await getOperationalTransitLock();
+      const tid = lock?.taskId?.trim();
+      setGlobalOperationalTransitHolderId(tid ? tid : null);
+    } catch {
+      setGlobalOperationalTransitHolderId(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshGlobalOperationalTransitLock();
+  }, [resolvedTaskId, refreshGlobalOperationalTransitLock]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshGlobalOperationalTransitLock();
+      return undefined;
+    }, [refreshGlobalOperationalTransitLock])
+  );
+
   const flushPublicTransitEtaDisplayNow = useCallback(
     (minutes: number | null) => {
       if (!resolvedTaskId || isReadOnly) return;
@@ -4040,6 +4071,26 @@ export default function ChecklistEngine() {
       }
     }
 
+    if (label === 'SAIDA' && !isReimbursementTransitField(template?.schemaData, fieldId)) {
+      const curTid = String(resolvedTaskId || '').trim();
+      let lock = await getOperationalTransitLock();
+      if (lock?.taskId && lock.taskId !== curTid) {
+        const draftRaw = await AsyncStorage.getItem(`@draft_tsk_${lock.taskId}`);
+        if (!draftRaw || !String(draftRaw).trim()) {
+          await clearOperationalTransitLockForTask(lock.taskId);
+          await refreshGlobalOperationalTransitLock();
+          lock = await getOperationalTransitLock();
+        }
+      }
+      if (lock?.taskId && lock.taskId !== curTid) {
+        Alert.alert(
+          'Atenção',
+          'Já existe um deslocamento operacional em curso noutra ordem de serviço. Abra essa OS e utilize «Finalizar deslocamento», ou conclua o fluxo, antes de iniciar aqui.'
+        );
+        return;
+      }
+    }
+
     gpsCaptureLockRef.current = true;
     setGpsBusyFieldId(fieldId);
     const isReimbursementTransit = isReimbursementTransitField(template?.schemaData, fieldId);
@@ -4272,10 +4323,17 @@ export default function ChecklistEngine() {
       }
       
       handleInput(fieldId, JSON.stringify(payload), scope);
-      
+
+      if (label === 'SAIDA' && !isReimbursementTransit) {
+        await setOperationalTransitLock(String(resolvedTaskId || '').trim());
+        await refreshGlobalOperationalTransitLock();
+      }
+
       // Link público: só no deslocamento operacional (não «apenas registo»)
       if (label === 'CHEGADA' && !isReimbursementTransit) {
-          endTrackingLink();
+        void endTrackingLink();
+        await clearOperationalTransitLockForTask(String(resolvedTaskId || '').trim());
+        await refreshGlobalOperationalTransitLock();
       }
 
       const timeBr = new Date().toLocaleTimeString('pt-BR');
@@ -5076,6 +5134,7 @@ export default function ChecklistEngine() {
           stripRevisionSessionFieldResponses(initialRes, tmpl.schemaData);
           initialRes[REVISION_TIMER_RESET_TOKEN_KEY] = resetToken;
           void routeTracker.stop().catch(() => {});
+          await clearOperationalTransitLockForTask(taskIdNorm);
           try {
             await AsyncStorage.setItem(`@draft_tsk_${taskIdNorm}`, JSON.stringify(initialRes));
           } catch {}
@@ -5297,9 +5356,11 @@ export default function ChecklistEngine() {
       }
 
       // Only mark loading done after geo state is set — prevents form flash
+      void refreshGlobalOperationalTransitLock();
       setLoading(false);
     } catch (err) {
       console.error(err);
+      void refreshGlobalOperationalTransitLock();
       setLoading(false);
     }
   };
@@ -6849,6 +6910,9 @@ export default function ChecklistEngine() {
           return next;
         });
         await AsyncStorage.removeItem(draftKey);
+        if (submitTaskId) {
+          await clearOperationalTransitLockForTask(String(submitTaskId).trim());
+        }
 
         // Após persistir payload na fila, atualiza estado local de cartão/abas.
         if (submitTaskId) {
@@ -11190,10 +11254,20 @@ export default function ChecklistEngine() {
                      responses as Record<string, unknown>,
                      scope ?? null
                    );
+                 const curTaskIdForOpLock = String(resolvedTaskId || '').trim();
+                 const startBlockedGlobalOtherOs =
+                   field.type === 'transit_start' &&
+                   !hasValue &&
+                   !isReimbursementTransitField(template?.schemaData || [], field.id) &&
+                   !!globalOperationalTransitHolderId &&
+                   globalOperationalTransitHolderId !== curTaskIdForOpLock;
                  if (startBlockedAnotherLeg) {
                    isBlocked = true;
                  }
                  if (startBlockedAfterDisplacementFinished) {
+                   isBlocked = true;
+                 }
+                 if (startBlockedGlobalOtherOs) {
                    isBlocked = true;
                  }
                  let transitLegFinalizedLock = false;
@@ -11312,11 +11386,13 @@ export default function ChecklistEngine() {
                        if (isBlocked) {
                            Alert.alert(
                              'Atenção',
-                             startBlockedAfterDisplacementFinished
-                               ? 'Este deslocamento já foi concluído. O registo é definitivo e não pode ser reiniciado.'
-                               : startBlockedAnotherLeg
-                                 ? 'Finalise o deslocamento em curso («Finalizar deslocamento») antes de iniciar outro trecho.'
-                                 : "O Técnico deve primeiro 'Iniciar Deslocamento' antes de finalizá-lo."
+                             startBlockedGlobalOtherOs
+                               ? 'Já existe um deslocamento operacional em curso noutra ordem de serviço. Abra essa OS e utilize «Finalizar deslocamento», ou conclua o fluxo, antes de iniciar aqui.'
+                               : startBlockedAfterDisplacementFinished
+                                 ? 'Este deslocamento já foi concluído. O registo é definitivo e não pode ser reiniciado.'
+                                 : startBlockedAnotherLeg
+                                   ? 'Finalise o deslocamento em curso («Finalizar deslocamento») antes de iniciar outro trecho.'
+                                   : "O Técnico deve primeiro 'Iniciar Deslocamento' antes de finalizá-lo."
                            );
                            return;
                        }
