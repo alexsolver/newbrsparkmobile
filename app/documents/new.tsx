@@ -8,8 +8,10 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { Header } from '../../src/components/Header';
 import { getRootAssets, saveMediaItem } from '../../src/database';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useTranslation } from 'react-i18next';
 
 export default function NewDocumentScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
   const styles = useMemo(() => createDocumentNewStyles(C), [C]);
@@ -51,9 +53,11 @@ export default function NewDocumentScreen() {
 
       saveMediaItem(mediaItem);
 
-      Alert.alert('Salvo', 'Documento armazenado com sucesso.', [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert(t('appAlerts.documents.savedTitle'), t('appAlerts.documents.savedBody'), [
+        { text: t('common.ok'), onPress: () => router.back() },
+      ]);
     } catch (e) {
-      Alert.alert('Erro', 'Não foi possível salvar o documento.');
+      Alert.alert(t('common.error'), t('appAlerts.documents.saveError'));
     } finally {
       setLoading(false);
     }

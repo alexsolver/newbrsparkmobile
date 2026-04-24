@@ -18,7 +18,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import i18n from 'i18next';
+import i18next from 'i18next';
 import { createVideoPlayer } from 'expo-video';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -986,8 +986,8 @@ async function assertVisionCameraVideoWithinMaxSeconds(
   }
   if (durMs != null && durMs > maxMs + slackMs) {
     Alert.alert(
-      i18n.t('checklistForm.visionVideoTooLongTitle'),
-      i18n.t('checklistForm.visionVideoTooLongBody', { seconds: VISION_CAMERA_VIDEO_MAX_SECONDS }),
+      i18next.t('checklistForm.visionVideoTooLongTitle'),
+      i18next.t('checklistForm.visionVideoTooLongBody', { seconds: VISION_CAMERA_VIDEO_MAX_SECONDS }),
     );
     return false;
   }
@@ -3792,20 +3792,19 @@ export default function ChecklistEngine() {
       if (result.ok) {
         writeSuccessAudit(result.data as any);
       } else if (result.kind === 'error_msg') {
-        Alert.alert('Erro de Reconhecimento', sanitizeFacialUserFacingCopy(result.message) || result.message);
+        Alert.alert(
+          t('appAlerts.checklist.faceRecognitionErrorTitle'),
+          sanitizeFacialUserFacingCopy(result.message) || result.message,
+        );
         return false;
       } else if (result.kind === 'no_match') {
         Alert.alert(
-          'Rosto não reconhecido',
-          sanitizeFacialUserFacingCopy(result.message) ||
-            'Não houve correspondência na galeria de rostos do servidor. No painel: Usuários → edite o usuário → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base). Depois tente novamente.'
+          t('appAlerts.checklist.faceNoMatchTitle'),
+          sanitizeFacialUserFacingCopy(result.message) || t('appAlerts.checklist.faceNoMatchBodyDefault'),
         );
         return false;
       } else {
-        Alert.alert(
-          'Falha no Motor de IA',
-          'Não foi possível conectar ao servidor para validação biométrica.'
-        );
+        Alert.alert(t('appAlerts.checklist.faceAiEngineFailTitle'), t('appAlerts.checklist.faceAiEngineFailBody'));
         return false;
       }
     } else {
@@ -3821,13 +3820,15 @@ export default function ChecklistEngine() {
         if (result.ok) {
           writeSuccessAudit(result.data as any);
         } else if (result.kind === 'error_msg') {
-          Alert.alert('Erro de Reconhecimento', sanitizeFacialUserFacingCopy(result.message) || result.message);
+          Alert.alert(
+            t('appAlerts.checklist.faceRecognitionErrorTitle'),
+            sanitizeFacialUserFacingCopy(result.message) || result.message,
+          );
           return false;
         } else if (result.kind === 'no_match') {
           Alert.alert(
-            'Rosto não reconhecido',
-            sanitizeFacialUserFacingCopy(result.message) ||
-              'Não houve correspondência na galeria de rostos do servidor. No painel: Usuários → edite o usuário → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base). Depois tente novamente.'
+            t('appAlerts.checklist.faceNoMatchTitle'),
+            sanitizeFacialUserFacingCopy(result.message) || t('appAlerts.checklist.faceNoMatchBodyDefault'),
           );
           return false;
         } else {
@@ -5783,7 +5784,10 @@ export default function ChecklistEngine() {
       const qs = getVisionQuestionsFromField(field);
       if (!qs.length) {
         if (!quiet) {
-          Alert.alert('Configuração', 'Este campo não tem prompt de análise configurado no modelo.');
+          Alert.alert(
+            i18next.t('appAlerts.checklist.analysisPromptMissingTitle'),
+            i18next.t('appAlerts.checklist.analysisPromptMissingBody'),
+          );
         }
         return;
       }
@@ -5792,7 +5796,10 @@ export default function ChecklistEngine() {
         const info = await FileSystem.getInfoAsync(pathOnly);
         if (info.exists && typeof info.size === 'number' && info.size > 92 * 1024 * 1024) {
           if (!quiet) {
-            Alert.alert('Arquivo grande', 'O arquivo excede ~92 MB. Escolha outro vídeo ou reduza a duração.');
+            Alert.alert(
+              i18next.t('appAlerts.checklist.videoTooLargeTitle'),
+              i18next.t('appAlerts.checklist.videoTooLargeBody'),
+            );
           }
           return;
         }
@@ -5837,8 +5844,8 @@ export default function ChecklistEngine() {
           persistPendingVision();
           if (!quiet) {
             Alert.alert(
-              'Guardado',
-              'Sem ligação à internet. A mídia ficou no rascunho e a análise de visão IA corre automaticamente quando houver rede.',
+              i18next.t('appAlerts.checklist.visionDraftSavedTitle'),
+              i18next.t('appAlerts.checklist.visionDraftOfflineBody'),
             );
           }
           return;
@@ -5847,8 +5854,8 @@ export default function ChecklistEngine() {
         persistPendingVision();
         if (!quiet) {
           Alert.alert(
-            'Guardado',
-            'Não foi possível confirmar a rede. A mídia ficou no rascunho para análise automática quando houver ligação.',
+            i18next.t('appAlerts.checklist.visionDraftSavedTitle'),
+            i18next.t('appAlerts.checklist.visionDraftNetworkUnknownBody'),
           );
         }
         return;
@@ -5859,8 +5866,8 @@ export default function ChecklistEngine() {
         persistPendingVision();
         if (!quiet) {
           Alert.alert(
-            'Sessão',
-            'Faça login quando houver rede para enviar a análise. A mídia foi mantida no rascunho.',
+            i18next.t('appAlerts.techReg.sessionTitle'),
+            i18next.t('appAlerts.checklist.visionSessionBody'),
           );
         }
         return;
@@ -5896,8 +5903,8 @@ export default function ChecklistEngine() {
           } catch {
             if (!quiet) {
               Alert.alert(
-                i18n.t('checklistForm.visionYoloVideoFrameTitle'),
-                i18n.t('checklistForm.visionYoloVideoFrameBody'),
+                i18next.t('checklistForm.visionYoloVideoFrameTitle'),
+                i18next.t('checklistForm.visionYoloVideoFrameBody'),
               );
             }
             return;
@@ -6014,12 +6021,12 @@ export default function ChecklistEngine() {
           persistPendingVision();
           msg =
             e?.name === 'AbortError'
-              ? 'Tempo esgotado ao enviar. A mídia foi guardada, a análise será tentada de novo automaticamente com rede.'
-              : 'Sem ligação ou servidor inacessível. A mídia foi guardada para análise automática quando a rede voltar.';
+              ? i18next.t('appAlerts.checklist.visionAnalyzeTimeoutBody')
+              : i18next.t('appAlerts.checklist.visionAnalyzeOfflineBody');
         } else {
-          msg = e?.message || 'Não foi possível analisar a mídia.';
+          msg = e?.message || i18next.t('appAlerts.checklist.visionAnalyzeGenericFail');
         }
-        if (!quiet) Alert.alert('Visão IA', msg);
+        if (!quiet) Alert.alert(i18next.t('appAlerts.checklist.visionTitle'), msg);
       } finally {
         if (!quiet) setVisionAnalyzeBusyId(null);
       }
@@ -6103,7 +6110,7 @@ export default function ChecklistEngine() {
     if (isReadOnly) return;
     const qs = getVisionQuestionsFromField(field);
     if (!qs.length) {
-      Alert.alert('Modelo', 'Configure o prompt estruturado deste campo no painel.');
+      Alert.alert(t('appAlerts.checklist.modelPromptTitle'), t('appAlerts.checklist.modelPromptBody'));
       return;
     }
     const gridLayout = getVisionAnalysisGridLayout(field);
@@ -6159,7 +6166,7 @@ export default function ChecklistEngine() {
     if (isReadOnly) return;
     const qs = getVisionQuestionsFromField(field);
     if (!qs.length) {
-      Alert.alert('Modelo', 'Configure o prompt estruturado deste campo no painel.');
+      Alert.alert(t('appAlerts.checklist.modelPromptTitle'), t('appAlerts.checklist.modelPromptBody'));
       return;
     }
     const layout = getVisionAnalysisGridLayout(field);
@@ -6224,7 +6231,10 @@ export default function ChecklistEngine() {
     }
     const slots = normalizeVisionGridSlotUris(prev?.gridSlotUris, layout.count);
     if (!slots.every((u) => u.length > 0)) {
-      Alert.alert('Fotos em falta', `Capture as ${layout.count} fotos da grelha antes de analisar.`);
+      Alert.alert(
+        t('appAlerts.checklist.gridPhotosMissingTitle'),
+        t('appAlerts.checklist.gridPhotosMissing', { count: layout.count }),
+      );
       return;
     }
     setVisionGridCompose({
@@ -6460,7 +6470,7 @@ export default function ChecklistEngine() {
       const arr = normalizeResponseArray(curVal);
       const max = multiMaxItems(fieldDef);
       if (max != null && arr.length >= max) {
-        Alert.alert('Limite', `Máximo de ${max} itens neste campo.`);
+        Alert.alert(t('appAlerts.checklist.maxItemsTitle'), t('appAlerts.checklist.maxItemsBody', { max }));
         return;
       }
       const next = [...arr, uri];
@@ -6494,8 +6504,8 @@ export default function ChecklistEngine() {
         }
         if (sizeBytes == null || !Number.isFinite(sizeBytes)) {
           Alert.alert(
-            'Anexo',
-            'Não foi possível verificar o tamanho do arquivo. Tente outro arquivo ou formato.'
+            t('appAlerts.checklist.attachmentVerifySizeTitle'),
+            t('appAlerts.checklist.attachmentSizeUnknownBody'),
           );
           return;
         }
@@ -6505,12 +6515,12 @@ export default function ChecklistEngine() {
           mimeType: asset.mimeType ?? null,
         });
         if (!gate.ok) {
-          Alert.alert('Anexo recusado', gate.message);
+          Alert.alert(t('appAlerts.checklist.attachmentRejectedTitle'), gate.message);
           return;
         }
         mergeMediaUriIntoField(fieldId, asset.uri, scope);
       } catch (e) {
-        Alert.alert('Anexo', 'Não foi possível selecionar o arquivo.');
+        Alert.alert(t('appAlerts.checklist.pickFileErrorTitle'), t('appAlerts.checklist.pickFileErrorBody'));
       }
     } else {
       try {
@@ -6847,7 +6857,7 @@ export default function ChecklistEngine() {
           osNumber: ftForStockHistory,
         });
         if (!matRes.ok) {
-          Alert.alert('Estoque', matRes.message);
+          Alert.alert(t('appAlerts.checklist.stockTitle'), matRes.message);
           setSubmitting(false);
           return;
         }
@@ -6861,7 +6871,7 @@ export default function ChecklistEngine() {
           osNumber: ftForStockHistory,
         });
         if (!recRes.ok) {
-          Alert.alert('Estoque', recRes.message);
+          Alert.alert(t('appAlerts.checklist.stockTitle'), recRes.message);
           setSubmitting(false);
           return;
         }
@@ -6874,7 +6884,7 @@ export default function ChecklistEngine() {
           ownerEmail: ownerForStock,
         });
         if (!finRes.ok) {
-          Alert.alert('Financeiro técnico', finRes.message);
+          Alert.alert(t('appAlerts.checklist.techFinanceTitle'), finRes.message);
           setSubmitting(false);
           return;
         }
@@ -6994,7 +7004,7 @@ export default function ChecklistEngine() {
         setIsReadOnly(true);
         router.back();
     } catch (err) {
-       Alert.alert("Erro Central", "Não foi possível arquivar a execução.");
+       Alert.alert(t('appAlerts.checklist.archiveErrorTitle'), t('appAlerts.checklist.archiveErrorBody'));
     } finally {
       setSubmitting(false);
     }
@@ -7077,7 +7087,7 @@ export default function ChecklistEngine() {
                       );
                   }
               } catch (err: any) {
-                  Alert.alert('Bloqueio no sistema externo', err.message);
+                  Alert.alert(t('appAlerts.checklist.externalBlockTitle'), err.message);
                   const fd = template?.schemaData?.find((f: any) => f.id === fieldId);
                   handleInput(fieldId, fieldAllowsMultiple(fd) ? [] : '');
               } finally {
@@ -7734,10 +7744,7 @@ export default function ChecklistEngine() {
 
   const openHubSection = (pageIdx: number, opts?: { repeatRowIndex?: number }) => {
     if (!hubSectionUnlocked(pageIdx)) {
-      Alert.alert(
-        'Ordem das etapas',
-        'Complete as etapas anteriores (campos obrigatórios) antes de abrir esta.'
-      );
+      Alert.alert(t('appAlerts.checklist.hubOrderTitle'), t('appAlerts.checklist.hubOrderBody'));
       return;
     }
     const repeatField = hubRepeatSectionField(pageIdx);
@@ -7833,18 +7840,17 @@ export default function ChecklistEngine() {
     const doneFlags = Array.isArray((responses as any)?.[k]) ? ((responses as any)[k] as unknown[]) : [];
     if (doneFlags[rows.length - 1] === true) return true;
     Alert.alert(
-      'Instância anterior pendente',
-      `Conclua a instância anterior em «${sectionLabel || 'Seção'}» pelo botão "Concluir" antes de adicionar uma nova.`
+      t('appAlerts.checklist.hubInstancePendingTitle'),
+      t('appAlerts.checklist.hubInstancePendingBody', {
+        sectionLabel: sectionLabel || t('appAlerts.checklist.hubDefaultSectionLabel'),
+      }),
     );
     return false;
   };
 
   const addHubRepeatInstance = (pageIdx: number) => {
     if (!hubSectionUnlocked(pageIdx)) {
-      Alert.alert(
-        'Ordem das etapas',
-        'Complete as etapas anteriores (campos obrigatórios) antes de abrir esta.'
-      );
+      Alert.alert(t('appAlerts.checklist.hubOrderTitle'), t('appAlerts.checklist.hubOrderBody'));
       return;
     }
     const rep = hubRepeatRowStats(pageIdx);
@@ -7853,7 +7859,10 @@ export default function ChecklistEngine() {
       return;
     }
     if (rep.maxRows != null && rep.rawRows.length >= rep.maxRows) {
-      Alert.alert('Limite de instâncias', `Máximo de ${rep.maxRows} instância(s) nesta seção.`);
+      Alert.alert(
+        t('appAlerts.checklist.maxInstancesTitle'),
+        t('appAlerts.checklist.maxInstancesBody', { max: rep.maxRows }),
+      );
       return;
     }
     const sectionLabel = String(pages[pageIdx]?.pageTitle || 'Seção');
@@ -8256,13 +8265,16 @@ export default function ChecklistEngine() {
       const maxR = sectionRepeatMaxRows(sb);
       if (rows.length < minR) {
         Alert.alert(
-          'Atenção',
-          `A seção "${sb.label || ''}" exige pelo menos ${minR} preenchimento(s).`
+          t('common.attention'),
+          t('appAlerts.checklist.wizardSectionMinRowsBody', {
+            label: sb.label || '',
+            min: minR,
+          }),
         );
         return;
       }
       if (maxR != null && rows.length > maxR) {
-        Alert.alert('Atenção', `Máximo de ${maxR} instâncias nesta seção.`);
+        Alert.alert(t('appAlerts.checklist.maxRepeatTitle'), t('appAlerts.checklist.maxRepeatBody', { max: maxR }));
         return;
       }
       const n = Math.max(rows.length, minR, 1);
@@ -8272,10 +8284,16 @@ export default function ChecklistEngine() {
           const ans = rows[ri]?.[f.id];
           if (fieldMustAnswerForProgress(f) && !isFieldAnswerFilled(f, ans)) {
             Alert.alert(
-              'Atenção',
+              t('common.attention'),
               f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
-                ? `Valide a localização em «${f.label || f.id}» (instância ${ri + 1}, dentro da área) antes de avançar.`
-                : `O campo '${f.label || f.id}' (instância ${ri + 1}) é obrigatório.`,
+                ? t('appAlerts.checklist.wizardFieldGeofenceRepeatBody', {
+                    label: f.label || f.id,
+                    index: ri + 1,
+                  })
+                : t('appAlerts.checklist.wizardFieldRequiredRepeatBody', {
+                    label: f.label || f.id,
+                    index: ri + 1,
+                  }),
             );
             return;
           }
@@ -8288,10 +8306,10 @@ export default function ChecklistEngine() {
           const ans = responses[f.id];
           if (!isFieldAnswerFilled(f, ans)) {
             Alert.alert(
-              'Atenção',
+              t('common.attention'),
               f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
-                ? `Valide a localização em «${f.label}» (dentro da área) antes de avançar.`
-                : `O campo '${f.label}' é obrigatório.`,
+                ? t('appAlerts.checklist.wizardFieldGeofenceSingleBody', { label: f.label })
+                : t('appAlerts.checklist.wizardFieldRequiredSingleBody', { label: f.label }),
             );
             return;
           }
@@ -8317,10 +8335,10 @@ export default function ChecklistEngine() {
       const ans = responses[cur.id];
       if (!isFieldAnswerFilled(cur, ans)) {
         Alert.alert(
-          'Atenção',
+          t('common.attention'),
           cur.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(cur)
-            ? `Valide a localização em «${cur.label}» (dentro da área) antes de avançar.`
-            : `O campo '${cur.label}' é obrigatório.`,
+            ? t('appAlerts.checklist.wizardFieldGeofenceSingleBody', { label: cur.label })
+            : t('appAlerts.checklist.wizardFieldRequiredSingleBody', { label: cur.label }),
         );
         return;
       }
@@ -8577,12 +8595,15 @@ export default function ChecklistEngine() {
               );
             } catch (e: any) {
               setVisionGridCompose(null);
-              Alert.alert('Visão IA', e?.message || 'Não foi possível preparar a grelha.');
+              Alert.alert(
+                t('appAlerts.checklist.visionTitle'),
+                e?.message || t('appAlerts.checklist.visionPrepareError'),
+              );
             }
           }}
           onError={(e) => {
             setVisionGridCompose(null);
-            Alert.alert('Visão IA', e.message);
+            Alert.alert(t('appAlerts.checklist.visionTitle'), e.message);
           }}
         />
       ) : null}
@@ -11404,19 +11425,22 @@ export default function ChecklistEngine() {
                       onPress={async () => {
                        if (isBlocked) {
                            Alert.alert(
-                             'Atenção',
+                             t('common.attention'),
                              startBlockedGlobalOtherOs
-                               ? 'Já existe um deslocamento em curso noutra ordem de serviço. Abra essa OS e utilize «Finalizar deslocamento», ou conclua o fluxo, antes de iniciar aqui.'
+                               ? t('appAlerts.checklist.transitBlockedOtherOsBody')
                                : startBlockedAfterDisplacementFinished
-                                 ? 'Este deslocamento já foi concluído. O registo é definitivo e não pode ser reiniciado.'
+                                 ? t('appAlerts.checklist.transitBlockedFinishedBody')
                                  : startBlockedAnotherLeg
-                                   ? 'Finalise o deslocamento em curso («Finalizar deslocamento») antes de iniciar outro trecho.'
-                                   : "O Técnico deve primeiro 'Iniciar Deslocamento' antes de finalizá-lo."
+                                   ? t('appAlerts.checklist.transitBlockedAnotherLegBody')
+                                   : t('appAlerts.checklist.transitBlockedNeedStartBody'),
                            );
                            return;
                        }
                        if (hasValue) {
-                           Alert.alert("Aviso", "Esta ação já foi registrada.");
+                           Alert.alert(
+                             t('appAlerts.checklist.actionAlreadyRecordedTitle'),
+                             t('appAlerts.checklist.actionAlreadyRecorded'),
+                           );
                            return;
                        }
                        const sch = template?.schemaData || [];

@@ -10,10 +10,12 @@ import { getRootAssets, saveMediaItem } from '../../src/database';
 import { useAuth } from '../../src/hooks/useAuth';
 import { SERVICE_CATEGORY_COLORS } from '../../src/theme/colors';
 import { radius, space, fontSize, fontWeight } from '../../src/theme/layout';
+import { useTranslation } from 'react-i18next';
 
 const PURPLE = SERVICE_CATEGORY_COLORS['Reformas'];
 
 export default function NewMediaScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
   const { user } = useAuth();
@@ -37,7 +39,7 @@ export default function NewMediaScreen() {
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Atenção', 'Precisamos da premissão da câmera para tirar fotos.');
+      Alert.alert(t('common.attention'), t('appAlerts.media.cameraPermission'));
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -64,9 +66,11 @@ export default function NewMediaScreen() {
       };
       saveMediaItem(mediaItem);
 
-      Alert.alert('Salvo', 'Mídia armazenada com sucesso.', [{ text: 'OK', onPress: () => router.back() }]);
+      Alert.alert(t('appAlerts.media.savedTitle'), t('appAlerts.media.savedBody'), [
+        { text: t('common.ok'), onPress: () => router.back() },
+      ]);
     } catch (e) {
-      Alert.alert('Erro', 'Não foi possível salvar a mídia.');
+      Alert.alert(t('common.error'), t('appAlerts.media.saveError'));
     } finally {
       setLoading(false);
     }

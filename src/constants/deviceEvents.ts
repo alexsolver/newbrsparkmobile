@@ -10,3 +10,10 @@ export type BrsparkProviderTaskCompletedPayload = {
   refId?: string;
   title?: string;
 };
+
+/** Lock global de deslocamento em aberto — `taskId` null quando não há trecho aberto. */
+export const BRSPARK_OPEN_TRANSIT_CHANGED = 'BRSPARK_OPEN_TRANSIT_CHANGED';
+
+export type BrsparkOpenTransitPayload = {
+  taskId: string | null;
+};

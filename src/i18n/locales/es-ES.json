@@ -148,6 +148,9 @@
       "COMPLETED": "Completada"
     }
   },
+  "providerDashboard": {
+    "openTransitBadge": "Desplazamiento iniciado"
+  },
   "agenda": {
     "activityPreviewTitle": "Orden de trabajo",
     "osNumberLabel": "N.º de OT",
@@ -2640,6 +2643,35 @@
       "maxRepeatBody": "Máximo de {{max}} instancias en esta sección.",
       "visionPrepareError": "No se pudo preparar la cuadrícula.",
       "actionAlreadyRecorded": "Esta acción ya fue registrada.",
+      "actionAlreadyRecordedTitle": "Aviso",
+      "faceNoMatchTitle": "Rostro no reconocido",
+      "faceNoMatchBodyDefault": "No hubo coincidencia en la galería de rostros del servidor. En el panel: Usuarios → edite el usuario → Reconocimiento facial → sincronice las fotos de referencia (avatar y fotos base). Luego inténtelo de nuevo.",
+      "faceAiEngineFailTitle": "Fallo del motor de IA",
+      "faceAiEngineFailBody": "No fue posible conectar con el servidor para la validación biométrica.",
+      "visionDraftSavedTitle": "Guardado",
+      "visionDraftOfflineBody": "Sin internet. El archivo quedó en borrador y el análisis de visión IA se ejecutará automáticamente cuando haya red.",
+      "visionDraftNetworkUnknownBody": "No se pudo confirmar la red. El archivo quedó en borrador para análisis automático cuando haya conexión.",
+      "visionSessionBody": "Inicie sesión cuando haya red para enviar el análisis. El archivo se mantuvo en borrador.",
+      "visionAnalyzeTimeoutBody": "Tiempo de envío agotado. El archivo se guardó; el análisis se reintentará automáticamente con red.",
+      "visionAnalyzeOfflineBody": "Sin conexión o servidor inaccesible. El archivo se guardó para análisis automático cuando vuelva la red.",
+      "visionAnalyzeGenericFail": "No fue posible analizar el archivo.",
+      "gridPhotosMissingTitle": "Fotos faltantes",
+      "attachmentSizeUnknownBody": "No se pudo verificar el tamaño del archivo. Pruebe con otro archivo o formato.",
+      "attachmentVerifySizeTitle": "Adjunto",
+      "hubOrderTitle": "Orden de pasos",
+      "hubOrderBody": "Complete los pasos anteriores (campos obligatorios) antes de abrir este.",
+      "hubInstancePendingTitle": "Instancia anterior pendiente",
+      "hubInstancePendingBody": "Termine la instancia anterior en «{{sectionLabel}}» con el botón \"Concluir\" antes de añadir una nueva.",
+      "hubDefaultSectionLabel": "Sección",
+      "wizardSectionMinRowsBody": "La sección \"{{label}}\" exige al menos {{min}} entrada(s).",
+      "wizardFieldGeofenceRepeatBody": "Valide la ubicación en «{{label}}» (instancia {{index}}, dentro del área) antes de continuar.",
+      "wizardFieldRequiredRepeatBody": "El campo \"{{label}}\" (instancia {{index}}) es obligatorio.",
+      "wizardFieldGeofenceSingleBody": "Valide la ubicación en «{{label}}» (dentro del área) antes de continuar.",
+      "wizardFieldRequiredSingleBody": "El campo \"{{label}}\" es obligatorio.",
+      "transitBlockedOtherOsBody": "Ya hay un desplazamiento en curso en otra orden de trabajo. Abra esa OS y use «Finalizar desplazamiento», o termine el flujo, antes de iniciar aquí.",
+      "transitBlockedFinishedBody": "Este desplazamiento ya finalizó. El registro es definitivo y no se puede reiniciar.",
+      "transitBlockedAnotherLegBody": "Finalice el desplazamiento en curso («Finalizar desplazamiento») antes de iniciar otro tramo.",
+      "transitBlockedNeedStartBody": "El técnico debe primero «Iniciar desplazamiento» antes de finalizarlo.",
       "geofenceBlockedPosition": "Tu posición: {{address}}"
     },
     "techReg": {

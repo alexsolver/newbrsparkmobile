@@ -58,6 +58,7 @@ import { FlingGestureHandler, Directions, State } from 'react-native-gesture-han
 import { tabBarOuterHeight } from '../../../src/components/FloatingRadialMenu';
 import { TaskMetadataGlyph } from '../../../src/components/TaskMetadataGlyph';
 import { ProviderOsListCardStudio } from '../../../src/components/ProviderOsListCardStudio';
+import { ProviderOpenTransitBadge } from '../../../src/components/ProviderOpenTransitBadge';
 import { useAppContext } from '../../../src/context/AppContext';
 import { API_BASE, apiFetch, userHasCapability, isB2CConsumerUser } from '../../../src/services/auth';
 import { getOsrmBaseUrl } from '../../../src/services/osrmConfig';
@@ -75,6 +76,7 @@ import {
   COMPLETED_BODY_LOCAL_TTL_MS,
 } from '../../../src/services/syncService';
 import { loadAllCloudTasksForExecutionLookup, patchCloudTaskById } from '../../../src/lib/cloudTasksBuckets';
+import { getOperationalTransitLock } from '../../../src/services/operationalTransitLock';
 import { taskRowIsRoutineTask } from '../../../src/lib/routineTaskQueueUi';
 import {
   appendUniqueStringToStoredArray,
@@ -101,7 +103,9 @@ import {
   shouldRequireKnownExecutionGate,
 } from '../../../src/utils/providerTaskEventFilter';
 import {
+  BRSPARK_OPEN_TRANSIT_CHANGED,
   BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY,
+  type BrsparkOpenTransitPayload,
   type BrsparkProviderTaskCompletedPayload,
 } from '../../../src/constants/deviceEvents';
 import { getLocationZoneTypeVisual, resolveLocationZoneChrome } from '../../../src/utils/locationZoneTypeDisplay';
@@ -2227,6 +2231,8 @@ export default function DashboardScreen() {
   const [providerCardVariant] = useState<ProviderCardVariant>('premium');
   const [providerCardHighContrast, setProviderCardHighContrast] = useState(false);
   const [providerReduceMotion, setProviderReduceMotion] = useState(false);
+  /** OS com trecho de deslocamento em aberto no aparelho (AsyncStorage + evento). */
+  const [providerOpenTransitTaskId, setProviderOpenTransitTaskId] = useState<string | null>(null);
   const [osrmDurations, setOsrmDurations] = useState<Record<string, number>>({});
   const [isOptimizingRoute, setIsOptimizingRoute] = useState(false);
   /** Qual modo está a ser calculado (spinner nos chips — não confundir com providerSortMode até terminar) */
@@ -3130,6 +3136,12 @@ export default function DashboardScreen() {
          setProviderTasks(mapped);
          setInprogressIds(new Set(inprogressMerged));
          setCompletedIds(completedSetForMap);
+         try {
+           const ot = await getOperationalTransitLock();
+           setProviderOpenTransitTaskId(ot?.taskId?.trim() ? ot.taskId.trim() : null);
+         } catch {
+           setProviderOpenTransitTaskId(null);
+         }
       } catch(e) {
          console.error('ERROR LOADING AGENDA:', e);
       }
@@ -3158,6 +3170,7 @@ export default function DashboardScreen() {
       setInprogressIds(new Set());
       setCompletedIds(new Set());
       setAcceptedIds(new Set());
+      setProviderOpenTransitTaskId(null);
     }
 
     ensureServiceCategoriesColorColumn();
@@ -3249,6 +3262,18 @@ export default function DashboardScreen() {
           return hit ? next : prev;
         });
         void loadDataRef.current?.(false);
+      }
+    );
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      BRSPARK_OPEN_TRANSIT_CHANGED,
+      (payload: BrsparkOpenTransitPayload) => {
+        const raw = payload?.taskId;
+        const tid = raw != null && String(raw).trim() !== '' ? String(raw).trim() : '';
+        setProviderOpenTransitTaskId(tid || null);
       }
     );
     return () => sub.remove();
@@ -4713,7 +4738,7 @@ export default function DashboardScreen() {
                       style={{ flex: 1 }}
                       data={providerOsFlatData}
                       keyExtractor={(row) => String(row.id)}
-                      extraData={`${completedIds.size}-${inprogressIds.size}-${acceptedIds.size}-${providerOsFlatData.length}-${providerTab}-${providerSortMode}-${providerCardVariant}-${providerCardHighContrast ? 1 : 0}`}
+                      extraData={`${completedIds.size}-${inprogressIds.size}-${acceptedIds.size}-${providerOsFlatData.length}-${providerTab}-${providerSortMode}-${providerCardVariant}-${providerCardHighContrast ? 1 : 0}-${providerOpenTransitTaskId || ''}`}
                       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
                       showsVerticalScrollIndicator={false}
                       keyboardShouldPersistTaps="handled"
@@ -4864,6 +4889,9 @@ export default function DashboardScreen() {
                         mapZoneChrome={zoneChrome}
                         chipsRow={
                           <>
+                            {providerOpenTransitTaskId === String(order.id) ? (
+                              <ProviderOpenTransitBadge C={C} t={t} reduceMotion={providerReduceMotion} />
+                            ) : null}
                             {listEff === 'PAUSED' ? <ProviderPausedDurationBadge task={order} /> : null}
                             {providerTab === 'PENDING' && !order.isAccepted && listEff !== 'PAUSED' ? (
                               <ProviderAwaitAcceptMinutesChip task={order} C={C} compact />
@@ -5000,6 +5028,9 @@ export default function DashboardScreen() {
                                       {cardStatusChipText}
                                     </Text>
                                   </View>
+                                ) : null}
+                                {providerOpenTransitTaskId === String(order.id) ? (
+                                  <ProviderOpenTransitBadge C={C} t={t} reduceMotion={providerReduceMotion} />
                                 ) : null}
                               </View>
                               {formBadgeText ? (

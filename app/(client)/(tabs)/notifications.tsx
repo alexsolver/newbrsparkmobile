@@ -20,6 +20,7 @@ import { ColorPalette, MEDIA_TAG_COLORS } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { usePersona } from '../../../src/context/PersonaContext';
+import { useTranslation } from 'react-i18next';
 
 function buildCategoryConfig(C: ColorPalette): Record<string, { icon: any; color: string; label: string }> {
   return {
@@ -43,6 +44,7 @@ function timeAgo(ts: number): string {
 }
 
 export default function NotificationsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuth();
   const { activePersona } = usePersona();
@@ -122,9 +124,9 @@ export default function NotificationsScreen() {
 
   const handleMarkRead = (id: string) => void NotificationService.markAsRead(id, persona);
   const handleMarkAll = () => {
-    Alert.alert('Marcar Todas', 'Marcar todas as notificações como lidas?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Confirmar', onPress: () => void NotificationService.markAllAsRead(persona) },
+    Alert.alert(t('appAlerts.notifications.markAllTitle'), t('appAlerts.notifications.markAllBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.confirm'), onPress: () => void NotificationService.markAllAsRead(persona) },
     ]);
   };
 

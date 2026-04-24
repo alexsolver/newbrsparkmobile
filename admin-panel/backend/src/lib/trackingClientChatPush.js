@@ -79,10 +79,16 @@ async function sendTrackingClientChatPushToTechnician(prisma, opts) {
    * Push com som: em iOS, `interruptionLevel: passive` não reproduz som (só entra na lista).
    * `active` permite som + apresentação normal; no app em 1.º plano, `notifications.ts` pode
    * suprimir banner e manter som; o mapa usa aura no ícone de chat.
+   * Título/corpo visíveis: antes usavam um espaço único e o sistema mostrava notificação em branco.
    */
+  const title = 'Mensagem do cliente';
+  const body =
+    preview.length > 0
+      ? preview.slice(0, 200)
+      : 'Cliente enviou uma mensagem no chat de acompanhamento.';
   const pushRes = await sendExpoPushToMany(pushTokens, {
-    title: ' ',
-    body: ' ',
+    title,
+    body,
     priority: 'high',
     interruptionLevel: 'active',
     channelId: CHANNEL_TRACKING_CLIENT_CHAT,

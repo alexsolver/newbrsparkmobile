@@ -10,6 +10,7 @@ import { AgendaEvent, EventCategory } from '../../src/types/agenda';
 import { getLocalAssets } from '../../src/database';
 import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 const CATEGORIES: { label: string; value: EventCategory; color: string; icon: string }[] = [
   { label: 'Reserva / Aluguel', value: 'BOOKING', color: AGENDA_COLORS.BOOKING, icon: 'bed-outline' },
@@ -19,6 +20,7 @@ const CATEGORIES: { label: string; value: EventCategory; color: string; icon: st
 ];
 
 export default function NewAgendaScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const params = useLocalSearchParams<{ prefillAssetId?: string }>();
   const { user } = useAuth();
@@ -49,9 +51,11 @@ export default function NewAgendaScreen() {
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!title.trim()) return Alert.alert('Erro', 'O título é obrigatório.');
-    if (startDate > endDate) return Alert.alert('Erro', 'A data inicial não pode ser maior que a final.');
-    if (!user?.email) return Alert.alert('Erro', 'Você precisa estar logado.');
+    if (!title.trim())
+      return Alert.alert(t('common.error'), t('appAlerts.agendaNew.titleRequired'));
+    if (startDate > endDate)
+      return Alert.alert(t('common.error'), t('appAlerts.agendaNew.endBeforeStart'));
+    if (!user?.email) return Alert.alert(t('common.error'), t('appAlerts.agendaNew.loginRequired'));
 
     const selectedColor = CATEGORIES.find(c => c.value === category)?.color || AGENDA_COLORS.BOOKING;
 
@@ -72,11 +76,11 @@ export default function NewAgendaScreen() {
     setSaving(true);
     try {
       await AgendaService.saveEvent(newEvent, user.email);
-      Alert.alert('Sucesso', 'Compromisso salvo na agenda!');
+      Alert.alert(t('common.success'), t('appAlerts.agendaNew.saveSuccess'));
       router.back();
     } catch (e: any) {
       console.error(e);
-      Alert.alert('Erro', 'Não foi possível salvar na agenda.');
+      Alert.alert(t('common.error'), t('appAlerts.agendaNew.saveError'));
     } finally {
       setSaving(false);
     }

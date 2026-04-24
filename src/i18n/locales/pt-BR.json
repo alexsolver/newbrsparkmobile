@@ -148,6 +148,9 @@
       "COMPLETED": "Concluída"
     }
   },
+  "providerDashboard": {
+    "openTransitBadge": "Deslocamento iniciado"
+  },
   "agenda": {
     "activityPreviewTitle": "Ordem de serviço",
     "osNumberLabel": "N.º da OS",
@@ -2640,6 +2643,35 @@
       "maxRepeatBody": "Máximo de {{max}} instâncias nesta seção.",
       "visionPrepareError": "Não foi possível preparar a grelha.",
       "actionAlreadyRecorded": "Esta ação já foi registrada.",
+      "actionAlreadyRecordedTitle": "Aviso",
+      "faceNoMatchTitle": "Rosto não reconhecido",
+      "faceNoMatchBodyDefault": "Não houve correspondência na galeria de rostos do servidor. No painel: Usuários → edite o usuário → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base). Depois tente novamente.",
+      "faceAiEngineFailTitle": "Falha no Motor de IA",
+      "faceAiEngineFailBody": "Não foi possível conectar ao servidor para validação biométrica.",
+      "visionDraftSavedTitle": "Guardado",
+      "visionDraftOfflineBody": "Sem ligação à internet. A mídia ficou no rascunho e a análise de visão IA corre automaticamente quando houver rede.",
+      "visionDraftNetworkUnknownBody": "Não foi possível confirmar a rede. A mídia ficou no rascunho para análise automática quando houver ligação.",
+      "visionSessionBody": "Faça login quando houver rede para enviar a análise. A mídia foi mantida no rascunho.",
+      "visionAnalyzeTimeoutBody": "Tempo esgotado ao enviar. A mídia foi guardada, a análise será tentada de novo automaticamente com rede.",
+      "visionAnalyzeOfflineBody": "Sem ligação ou servidor inacessível. A mídia foi guardada para análise automática quando a rede voltar.",
+      "visionAnalyzeGenericFail": "Não foi possível analisar a mídia.",
+      "gridPhotosMissingTitle": "Fotos em falta",
+      "attachmentSizeUnknownBody": "Não foi possível verificar o tamanho do arquivo. Tente outro arquivo ou formato.",
+      "attachmentVerifySizeTitle": "Anexo",
+      "hubOrderTitle": "Ordem das etapas",
+      "hubOrderBody": "Complete as etapas anteriores (campos obrigatórios) antes de abrir esta.",
+      "hubInstancePendingTitle": "Instância anterior pendente",
+      "hubInstancePendingBody": "Conclua a instância anterior em «{{sectionLabel}}» pelo botão \"Concluir\" antes de adicionar uma nova.",
+      "hubDefaultSectionLabel": "Seção",
+      "wizardSectionMinRowsBody": "A seção \"{{label}}\" exige pelo menos {{min}} preenchimento(s).",
+      "wizardFieldGeofenceRepeatBody": "Valide a localização em «{{label}}» (instância {{index}}, dentro da área) antes de avançar.",
+      "wizardFieldRequiredRepeatBody": "O campo \"{{label}}\" (instância {{index}}) é obrigatório.",
+      "wizardFieldGeofenceSingleBody": "Valide a localização em «{{label}}» (dentro da área) antes de avançar.",
+      "wizardFieldRequiredSingleBody": "O campo \"{{label}}\" é obrigatório.",
+      "transitBlockedOtherOsBody": "Já existe um deslocamento em curso noutra ordem de serviço. Abra essa OS e utilize «Finalizar deslocamento», ou conclua o fluxo, antes de iniciar aqui.",
+      "transitBlockedFinishedBody": "Este deslocamento já foi concluído. O registo é definitivo e não pode ser reiniciado.",
+      "transitBlockedAnotherLegBody": "Finalise o deslocamento em curso («Finalizar deslocamento») antes de iniciar outro trecho.",
+      "transitBlockedNeedStartBody": "O Técnico deve primeiro 'Iniciar Deslocamento' antes de finalizá-lo.",
       "geofenceBlockedPosition": "Sua posição: {{address}}"
     },
     "techReg": {

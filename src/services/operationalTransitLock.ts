@@ -4,6 +4,12 @@
  * e para qualquer finalidade (serviço, patrulha, reembolso, etc.).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DeviceEventEmitter } from 'react-native';
+import { BRSPARK_OPEN_TRANSIT_CHANGED } from '../constants/deviceEvents';
+
+function emitOpenTransit(taskId: string | null) {
+  DeviceEventEmitter.emit(BRSPARK_OPEN_TRANSIT_CHANGED, { taskId });
+}
 
 export const OPERATIONAL_TRANSIT_LOCK_STORAGE_KEY = '@brspark_active_operational_transit_v1';
 
@@ -26,6 +32,7 @@ export async function setOperationalTransitLock(taskId: string): Promise<void> {
   const tid = String(taskId || '').trim();
   if (!tid) return;
   await AsyncStorage.setItem(OPERATIONAL_TRANSIT_LOCK_STORAGE_KEY, JSON.stringify({ taskId: tid }));
+  emitOpenTransit(tid);
 }
 
 /** Remove o lock só se for da execução indicada (evita apagar lock de outra OS). */
@@ -35,5 +42,6 @@ export async function clearOperationalTransitLockForTask(taskId: string): Promis
   const cur = await getOperationalTransitLock();
   if (cur?.taskId === tid) {
     await AsyncStorage.removeItem(OPERATIONAL_TRANSIT_LOCK_STORAGE_KEY);
+    emitOpenTransit(null);
   }
 }

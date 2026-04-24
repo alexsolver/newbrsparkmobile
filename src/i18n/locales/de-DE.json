@@ -148,6 +148,9 @@
       "COMPLETED": "Vollendet"
     }
   },
+  "providerDashboard": {
+    "openTransitBadge": "Anfahrt gestartet"
+  },
   "agenda": {
     "activityPreviewTitle": "Arbeitsauftrag",
     "osNumberLabel": "WO Nr.",
@@ -2640,6 +2643,35 @@
       "maxRepeatBody": "Höchstens {{max}} Instanzen in diesem Abschnitt.",
       "visionPrepareError": "Raster konnte nicht vorbereitet werden.",
       "actionAlreadyRecorded": "Diese Aktion wurde bereits erfasst.",
+      "actionAlreadyRecordedTitle": "Hinweis",
+      "faceNoMatchTitle": "Gesicht nicht erkannt",
+      "faceNoMatchBodyDefault": "Keine Übereinstimmung in der Server-Gesichtsgalerie. Im Panel: Benutzer → Benutzer bearbeiten → Gesichtserkennung → Referenzfotos (Avatar und Basisfotos) synchronisieren. Danach erneut versuchen.",
+      "faceAiEngineFailTitle": "Fehler der KI-Engine",
+      "faceAiEngineFailBody": "Verbindung zum Server für die biometrische Validierung nicht möglich.",
+      "visionDraftSavedTitle": "Gespeichert",
+      "visionDraftOfflineBody": "Kein Internet. Die Medien blieben im Entwurf; die KI-Bildanalyse startet automatisch, sobald Sie online sind.",
+      "visionDraftNetworkUnknownBody": "Netzwerk nicht bestätigt. Medien blieben im Entwurf für die automatische Analyse bei Verbindung.",
+      "visionSessionBody": "Melden Sie sich bei Verbindung an, um die Analyse zu senden. Die Medien blieben im Entwurf.",
+      "visionAnalyzeTimeoutBody": "Zeitüberschreitung beim Senden. Medien gespeichert; Analyse wird online automatisch erneut versucht.",
+      "visionAnalyzeOfflineBody": "Offline oder Server nicht erreichbar. Medien für automatische Analyse gespeichert, sobald das Netz zurückkommt.",
+      "visionAnalyzeGenericFail": "Medien konnten nicht analysiert werden.",
+      "gridPhotosMissingTitle": "Fehlende Fotos",
+      "attachmentSizeUnknownBody": "Dateigröße konnte nicht geprüft werden. Andere Datei oder Format versuchen.",
+      "attachmentVerifySizeTitle": "Anhang",
+      "hubOrderTitle": "Schrittfolge",
+      "hubOrderBody": "Vorherige Schritte (Pflichtfelder) abschließen, bevor Sie diesen öffnen.",
+      "hubInstancePendingTitle": "Vorherige Instanz ausstehend",
+      "hubInstancePendingBody": "Schließen Sie die vorherige Instanz in „{{sectionLabel}}“ mit der Schaltfläche „Fertig“ ab, bevor Sie eine neue hinzufügen.",
+      "hubDefaultSectionLabel": "Abschnitt",
+      "wizardSectionMinRowsBody": "Abschnitt „{{label}}“ erfordert mindestens {{min}} Eintrag/Einträge.",
+      "wizardFieldGeofenceRepeatBody": "Standort in „{{label}}“ prüfen (Instanz {{index}}, innerhalb des Gebiets), bevor Sie fortfahren.",
+      "wizardFieldRequiredRepeatBody": "Feld „{{label}}“ (Instanz {{index}}) ist Pflicht.",
+      "wizardFieldGeofenceSingleBody": "Standort in „{{label}}“ (innerhalb des Gebiets) prüfen, bevor Sie fortfahren.",
+      "wizardFieldRequiredSingleBody": "Feld „{{label}}“ ist Pflicht.",
+      "transitBlockedOtherOsBody": "Auf einem anderen Auftrag läuft bereits eine Fahrt. Öffnen Sie diesen Auftrag und nutzen Sie „Fahrt beenden“, oder schließen Sie den Ablauf, bevor Sie hier starten.",
+      "transitBlockedFinishedBody": "Diese Fahrt ist bereits beendet. Der Eintrag ist endgültig und kann nicht neu gestartet werden.",
+      "transitBlockedAnotherLegBody": "Beenden Sie die laufende Fahrt („Fahrt beenden“), bevor Sie ein weiteres Teilstück starten.",
+      "transitBlockedNeedStartBody": "Der Techniker muss zuerst „Fahrt starten“, bevor er sie beendet.",
       "geofenceBlockedPosition": "Ihre Position: {{address}}"
     },
     "techReg": {

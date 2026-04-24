@@ -148,6 +148,9 @@
       "COMPLETED": "Completed"
     }
   },
+  "providerDashboard": {
+    "openTransitBadge": "Displacement started"
+  },
   "agenda": {
     "activityPreviewTitle": "Work order",
     "osNumberLabel": "WO no.",
@@ -2640,6 +2643,35 @@
       "maxRepeatBody": "Maximum of {{max}} instances in this section.",
       "visionPrepareError": "Could not prepare the grid.",
       "actionAlreadyRecorded": "This action has already been recorded.",
+      "actionAlreadyRecordedTitle": "Notice",
+      "faceNoMatchTitle": "Face not recognized",
+      "faceNoMatchBodyDefault": "No match in the server face gallery. In the panel: Users → edit user → Facial recognition → sync reference photos (avatar and base photos). Then try again.",
+      "faceAiEngineFailTitle": "AI engine failure",
+      "faceAiEngineFailBody": "Could not connect to the server for biometric validation.",
+      "visionDraftSavedTitle": "Saved",
+      "visionDraftOfflineBody": "No internet. Media was kept in draft and AI vision analysis will run automatically when you are online.",
+      "visionDraftNetworkUnknownBody": "Could not confirm the network. Media was kept in draft for automatic analysis when connection is available.",
+      "visionSessionBody": "Sign in when online to send the analysis. Media was kept in draft.",
+      "visionAnalyzeTimeoutBody": "Upload timed out. Media was saved; analysis will retry automatically when online.",
+      "visionAnalyzeOfflineBody": "Offline or server unreachable. Media was saved for automatic analysis when the network returns.",
+      "visionAnalyzeGenericFail": "Could not analyze the media.",
+      "gridPhotosMissingTitle": "Missing photos",
+      "attachmentSizeUnknownBody": "Could not verify file size. Try another file or format.",
+      "attachmentVerifySizeTitle": "Attachment",
+      "hubOrderTitle": "Step order",
+      "hubOrderBody": "Complete previous steps (required fields) before opening this one.",
+      "hubInstancePendingTitle": "Previous instance pending",
+      "hubInstancePendingBody": "Finish the previous instance in «{{sectionLabel}}» with the \"Done\" button before adding a new one.",
+      "hubDefaultSectionLabel": "Section",
+      "wizardSectionMinRowsBody": "Section \"{{label}}\" requires at least {{min}} entry(ies).",
+      "wizardFieldGeofenceRepeatBody": "Validate location in «{{label}}» (instance {{index}}, within the area) before continuing.",
+      "wizardFieldRequiredRepeatBody": "Field \"{{label}}\" (instance {{index}}) is required.",
+      "wizardFieldGeofenceSingleBody": "Validate location in «{{label}}» (within the area) before continuing.",
+      "wizardFieldRequiredSingleBody": "Field \"{{label}}\" is required.",
+      "transitBlockedOtherOsBody": "Another work order already has transit in progress. Open that order and use “End transit”, or finish the flow, before starting here.",
+      "transitBlockedFinishedBody": "This transit is already finished. The record is final and cannot be restarted.",
+      "transitBlockedAnotherLegBody": "Finish the current transit (“End transit”) before starting another leg.",
+      "transitBlockedNeedStartBody": "The technician must start transit before finishing it.",
       "geofenceBlockedPosition": "Your position: {{address}}"
     },
     "techReg": {
