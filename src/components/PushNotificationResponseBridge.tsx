@@ -11,11 +11,12 @@ import {
   TECH_PUSH_ACTION_REJECT,
 } from '../constants/pushNotifications';
 import {
-  BROADCAST_OS_UNAVAILABLE_SUBTITLE,
-  BROADCAST_OS_UNAVAILABLE_TITLE,
+  getBroadcastOsUnavailableSubtitle,
+  getBroadcastOsUnavailableTitle,
 } from '../constants/broadcastOsMessages';
 import { setPendingOpenExecutionFromPush } from '../lib/pushExecutionOpenIntent';
 import { apiFetch } from '../services/auth';
+import i18n from '../i18n';
 import { enqueueExecutionStatusPatch, pullTasks } from '../services/syncService';
 import { BRSPARK_PERSONA_STORAGE_KEY } from '../context/PersonaContext';
 import { getPersonaHomeHref } from '../navigation/personaRouting';
@@ -25,8 +26,9 @@ import {
 } from '../services/techTaskLiveActivity';
 import { emitTrackingClientChatPing } from '../lib/trackingClientChatPing';
 
-const REJECT_REASON_FROM_PUSH =
-  'Recusada pelo alerta no dispositivo sem motivo adicional fornecido.';
+function getRejectReasonFromPush(): string {
+  return i18n.t('appAlerts.push.rejectReasonFromDevice');
+}
 
 function readData(
   response: Notifications.NotificationResponse
@@ -58,15 +60,15 @@ async function handleNotificationResponse(
     if (!isDefault && action !== CLIENT_PUSH_ACTION_TRACK) return;
     const url = String(data.trackingUrl || '').trim();
     if (!url) {
-      Alert.alert('Aviso', 'Link de acompanhamento indisponível.');
+      Alert.alert(i18n.t('common.attention'), i18n.t('appAlerts.push.trackingUnavailable'));
       return;
     }
     try {
       const ok = await Linking.canOpenURL(url);
       if (ok) await Linking.openURL(url);
-      else Alert.alert('Erro', 'Não foi possível abrir o link de acompanhamento.');
+      else Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.push.trackingOpenError'));
     } catch {
-      Alert.alert('Erro', 'Não foi possível abrir o link de acompanhamento.');
+      Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.push.trackingOpenError'));
     }
     return;
   }
@@ -105,8 +107,8 @@ async function handleNotificationResponse(
     const url = String(data.surveyUrl || '').trim();
     if (!url) {
       Alert.alert(
-        'Avaliação',
-        'O link da pesquisa não veio na notificação. Peça um novo convite ou use o e-mail.',
+        i18n.t('appAlerts.push.surveyMissingUrlTitle'),
+        i18n.t('appAlerts.push.surveyMissingUrlBody'),
       );
       return;
     }
@@ -114,14 +116,14 @@ async function handleNotificationResponse(
       const can = await Linking.canOpenURL(url);
       if (!can) {
         Alert.alert(
-          'Avaliação',
-          'Não foi possível abrir este endereço. Se o link aponta para o computador de desenvolvimento (127.0.0.1), use um URL público no servidor (ADMIN_PANEL_PUBLIC_BASE_URL) ou abra o convite por e-mail.',
+          i18n.t('appAlerts.push.surveyMissingUrlTitle'),
+          i18n.t('appAlerts.push.surveyDevUrlBody'),
         );
         return;
       }
       await Linking.openURL(url);
     } catch {
-      Alert.alert('Avaliação', 'Não foi possível abrir o link. Tente de novo ou use o convite por e-mail.');
+      Alert.alert(i18n.t('appAlerts.push.ratingTitle'), i18n.t('appAlerts.push.ratingOpenError'));
     }
     return;
   }
@@ -129,7 +131,7 @@ async function handleNotificationResponse(
   /** Leilão: outro prestador aceitou primeiro — atualiza lista local. */
   if (type === 'os_broadcast_taken') {
     if (!isDefault) return;
-    Alert.alert(BROADCAST_OS_UNAVAILABLE_TITLE, BROADCAST_OS_UNAVAILABLE_SUBTITLE);
+    Alert.alert(getBroadcastOsUnavailableTitle(), getBroadcastOsUnavailableSubtitle());
     void pullTasks().catch(() => {});
     return;
   }
@@ -173,12 +175,12 @@ async function handleNotificationResponse(
             (code.toUpperCase() === 'CLAIM_LOST' ||
               /não está mais disponível|já aceitou|outro (técnico|prestador)/i.test(msg));
           if (isLost) {
-            Alert.alert(BROADCAST_OS_UNAVAILABLE_TITLE, BROADCAST_OS_UNAVAILABLE_SUBTITLE);
+            Alert.alert(getBroadcastOsUnavailableTitle(), getBroadcastOsUnavailableSubtitle());
           } else {
             const text =
-              (msg || `Não foi possível aceitar (HTTP ${res.status}).`) +
+              (msg || i18n.t('appAlerts.push.acceptFailedDetail', { status: String(res.status) })) +
               (code ? `\n\n(${code})` : '');
-            Alert.alert('Não foi possível aceitar', text.replace(/\btécnico\b/gi, 'prestador'));
+            Alert.alert(i18n.t('appAlerts.push.acceptFailedTitle'), text.replace(/\btécnico\b/gi, 'prestador'));
           }
         } else {
           void pullTasks().catch(() => {});
@@ -190,7 +192,7 @@ async function handleNotificationResponse(
         timestamp: new Date().toISOString(),
       });
     } catch {
-      Alert.alert('Erro', 'Não foi possível aceitar a atividade. Abra o app e tente de novo.');
+      Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.push.acceptActivityError'));
     }
     return;
   }
@@ -202,15 +204,18 @@ async function handleNotificationResponse(
       const res = broadcastOffer
         ? await apiFetch('/api/checklists/reject-broadcast-invite', {
             method: 'POST',
-            body: JSON.stringify({ taskId, reason: REJECT_REASON_FROM_PUSH }),
+            body: JSON.stringify({ taskId, reason: getRejectReasonFromPush() }),
           })
         : await apiFetch(`/api/operations/tasks/${encodeURIComponent(taskId)}/reject`, {
             method: 'POST',
-            body: JSON.stringify({ reason: REJECT_REASON_FROM_PUSH }),
+            body: JSON.stringify({ reason: getRejectReasonFromPush() }),
           });
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
-        Alert.alert('Erro', (txt || `Falha HTTP ${res.status}`).slice(0, 240));
+        Alert.alert(
+          i18n.t('common.error'),
+          (txt || i18n.t('appAlerts.push.httpErrorFallback', { status: String(res.status) })).slice(0, 240)
+        );
         return;
       }
       const rStr = await AsyncStorage.getItem('@brspark_rejected_tasks');
@@ -226,7 +231,7 @@ async function handleNotificationResponse(
         await AsyncStorage.setItem('@brspark_rejected_tasks', JSON.stringify(rejArr));
       }
     } catch {
-      Alert.alert('Erro', 'Não foi possível recusar a atividade. Abra o app e tente de novo.');
+      Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.push.declineActivityError'));
     }
     return;
   }

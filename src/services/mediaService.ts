@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Alert } from 'react-native';
+import i18n from '../i18n';
 
 export type MediaSource = 'camera' | 'gallery';
 export type MediaType = 'photo' | 'video';
@@ -37,7 +38,7 @@ export async function pickMedia(type: MediaType, source: MediaSource): Promise<P
   if (source === 'camera') {
     const granted = await ensureCameraPermission();
     if (!granted) {
-      Alert.alert('Permissão Negada', 'Permita o acesso à câmera nas configurações.');
+      Alert.alert(i18n.t('appAlerts.mediaService.deniedTitle'), i18n.t('appAlerts.mediaService.cameraDenied'));
       return null;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -50,7 +51,7 @@ export async function pickMedia(type: MediaType, source: MediaSource): Promise<P
   } else {
     const granted = await ensureLibraryPermission();
     if (!granted) {
-      Alert.alert('Permissão Negada', 'Permita o acesso à galeria nas configurações.');
+      Alert.alert(i18n.t('appAlerts.mediaService.deniedTitle'), i18n.t('appAlerts.mediaService.galleryDenied'));
       return null;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -67,7 +68,7 @@ export async function pickMedia(type: MediaType, source: MediaSource): Promise<P
 export async function pickFromGallery(): Promise<PickedMedia | null> {
   const granted = await ensureLibraryPermission();
   if (!granted) {
-    Alert.alert('Permissão Negada', 'Permita o acesso à galeria nas configurações.');
+    Alert.alert(i18n.t('appAlerts.mediaService.deniedTitle'), i18n.t('appAlerts.mediaService.galleryDenied'));
     return null;
   }
   const result = await ImagePicker.launchImageLibraryAsync({

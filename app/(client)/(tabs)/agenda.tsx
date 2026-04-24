@@ -168,7 +168,7 @@ export default function AgendaScreen() {
       setEvents(data);
     } catch (e: any) {
       console.error(e);
-      Alert.alert('Erro', 'Não foi possível carregar a agenda.');
+      Alert.alert(t('common.error'), t('appAlerts.agenda.loadError'));
     } finally {
       setLoading(false);
     }

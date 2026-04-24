@@ -1,6 +1,13 @@
 /**
  * Concorrência (despacho a vários prestadores): quando outro já aceitou primeiro.
- * Texto único em alertas e alinhado à mensagem devolvida pela API (CLAIM_LOST).
+ * Textos traduzidos (i18n) alinhados à mensagem devolvida pela API (CLAIM_LOST).
  */
-export const BROADCAST_OS_UNAVAILABLE_TITLE = 'Essa OS não está mais disponível';
-export const BROADCAST_OS_UNAVAILABLE_SUBTITLE = 'A lista vai atualizar.';
+import i18n from '../i18n';
+
+export function getBroadcastOsUnavailableTitle(): string {
+  return i18n.t('appAlerts.broadcast.osUnavailableTitle');
+}
+
+export function getBroadcastOsUnavailableSubtitle(): string {
+  return i18n.t('appAlerts.broadcast.osUnavailableSubtitle');
+}

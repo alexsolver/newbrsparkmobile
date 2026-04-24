@@ -419,7 +419,7 @@ export default function AssetDetailScreen() {
           text: 'Excluir',
           style: 'destructive',
           onPress: () =>
-            Alert.alert('Excluir registro?', 'Esta ação não pode ser desfeita.', [
+            Alert.alert(t('assetDetail.deleteFinancialRecordTitle'), t('assetDetail.deleteFinancialRecordMsg'), [
               { text: 'Cancelar', style: 'cancel' },
               {
                 text: 'Excluir',
@@ -471,7 +471,7 @@ export default function AssetDetailScreen() {
           text: 'Excluir',
           style: 'destructive',
           onPress: () =>
-            Alert.alert('Excluir recorrente?', 'Esta ação não pode ser desfeita.', [
+            Alert.alert(t('assetDetail.deleteRecurringRecordTitle'), t('assetDetail.deleteRecurringRecordMsg'), [
               { text: 'Cancelar', style: 'cancel' },
               {
                 text: 'Excluir',

@@ -15,10 +15,11 @@ import { BRSPARK_CLOUD_TASKS_UPDATED } from '../constants/deviceEvents';
 import { loadAllCloudTasksForExecutionLookup, patchCloudTaskById } from '../lib/cloudTasksBuckets';
 import { appendUniqueStringToStoredArray } from '../lib/asyncStorageAtomic';
 import { apiFetch } from '../services/auth';
+import i18n from '../i18n';
 import { enqueueExecutionStatusPatch, pullTasks } from '../services/syncService';
 import {
-  BROADCAST_OS_UNAVAILABLE_SUBTITLE,
-  BROADCAST_OS_UNAVAILABLE_TITLE,
+  getBroadcastOsUnavailableSubtitle,
+  getBroadcastOsUnavailableTitle,
 } from '../constants/broadcastOsMessages';
 
 async function enqueueExecutionInProgressFromDashboard(taskId: string): Promise<void> {
@@ -174,13 +175,13 @@ export function BroadcastOfferRootBridge() {
       onAccept: async (selectedTask: any) => {
         const taskIdStr = String(selectedTask.id);
         if (!selectedTask.refId) {
-          Alert.alert('Erro', 'Formulário ausente na OS.');
+          Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.home.formMissingOs'));
           return;
         }
         if (isOnline === false) {
           Alert.alert(
-            'Sem ligação',
-            'Para aceitar esta OS em concorrência é necessário estar online. Verifique a rede e tente de novo.',
+            i18n.t('appAlerts.home.offlineClaimTitle'),
+            i18n.t('appAlerts.home.offlineClaimBody'),
           );
           return;
         }
@@ -195,7 +196,7 @@ export function BroadcastOfferRootBridge() {
             data = rawBody.trim() ? JSON.parse(rawBody) : {};
           } catch {
             data = {
-              error: rawBody.trim().slice(0, 500) || 'Resposta inválida do servidor.',
+              error: rawBody.trim().slice(0, 500) || i18n.t('appAlerts.broadcast.invalidServerResponse'),
             };
           }
           const errStr =
@@ -213,14 +214,20 @@ export function BroadcastOfferRootBridge() {
               /não está mais disponível|outro.+(técnico|prestador).+já aceitou|claim_lost/i.test(errStr));
           if (!res.ok) {
             if (isClaimLost) {
-              Alert.alert(BROADCAST_OS_UNAVAILABLE_TITLE, BROADCAST_OS_UNAVAILABLE_SUBTITLE);
+              Alert.alert(getBroadcastOsUnavailableTitle(), getBroadcastOsUnavailableSubtitle());
             } else {
               const detail =
-                errStr || rawBody.trim().slice(0, 400) || `O servidor recusou o pedido (HTTP ${res.status}).`;
+                errStr ||
+                rawBody.trim().slice(0, 400) ||
+                i18n.t('appAlerts.push.acceptFailedDetail', { status: String(res.status) });
+              const codePart = codeNorm ? ` · ${codeNorm}` : '';
               Alert.alert(
-                'Não foi possível aceitar',
-                `${detail.replace(/\btécnico\b/gi, 'prestador')}\n\n` +
-                  `(HTTP ${res.status}${codeNorm ? ` · ${codeNorm}` : ''})`,
+                i18n.t('appAlerts.home.cannotAcceptTitle'),
+                i18n.t('appAlerts.home.serverRefusedBody', {
+                  detail: detail.replace(/\btécnico\b/gi, 'prestador'),
+                  status: String(res.status),
+                  codePart,
+                }),
               );
             }
             if (user?.email) await pullTasks(user.email);
@@ -231,14 +238,14 @@ export function BroadcastOfferRootBridge() {
           if (user?.email) await pullTasks(user.email);
           refreshOffersIfEligible();
         } catch (e: any) {
-          Alert.alert('Erro', e?.message || 'Falha de rede.');
+          Alert.alert(i18n.t('common.error'), e?.message || i18n.t('appAlerts.home.networkFail'));
           return;
         }
 
-        Alert.alert('OS Aceita!', 'Excelente! Deseja iniciar a execução da atividade agora mesmo?', [
-          { text: 'Agora Não', style: 'cancel' },
+        Alert.alert(i18n.t('appAlerts.home.osAcceptedTitle'), i18n.t('appAlerts.home.osAcceptedBody'), [
+          { text: i18n.t('appAlerts.home.osAcceptedNotNow'), style: 'cancel' },
           {
-            text: 'Sim, Iniciar Agora',
+            text: i18n.t('appAlerts.home.osAcceptedStartNow'),
             style: 'default',
             onPress: async () => {
               await appendUniqueStringToStoredArray('@brspark_inprogress_tasks', String(selectedTask.id));
@@ -254,10 +261,10 @@ export function BroadcastOfferRootBridge() {
       onReject: async (selectedTask: any) => {
         const idStr = String(selectedTask?.id || '').trim();
         if (!idStr) {
-          Alert.alert('Erro', 'OS inválida.');
+          Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.broadcast.invalidOs'));
           return;
         }
-        const reason = 'Recusada pelo prestador na tela de oferta (broadcast).';
+        const reason = i18n.t('appAlerts.broadcast.rejectReasonFromOfferSheet');
         try {
           /** Path curto + taskId no body — evita 404 «Route not found» em alguns deploys Express. */
           const res = await apiFetch('/api/checklists/reject-broadcast-invite', {
@@ -279,8 +286,10 @@ export function BroadcastOfferRootBridge() {
           }
           if (!res.ok) {
             Alert.alert(
-              'Não foi possível recusar',
-              errStr || `O servidor recusou o pedido (HTTP ${res.status}).`,
+              i18n.t('appAlerts.broadcast.cannotDeclineTitle'),
+              i18n.t('appAlerts.broadcast.cannotDeclineBody', {
+                detail: errStr || i18n.t('appAlerts.push.acceptFailedDetail', { status: String(res.status) }),
+              }),
             );
             return;
           }
@@ -317,9 +326,9 @@ export function BroadcastOfferRootBridge() {
           }
           if (user?.email) await pullTasks(user.email);
           applyBroadcastOffersImmediate();
-          Alert.alert('Recusada', 'A atividade foi recusada e retirada da sua fila.');
+          Alert.alert(i18n.t('appAlerts.home.rejectTitle'), i18n.t('appAlerts.broadcast.declinedBody'));
         } catch (e: any) {
-          Alert.alert('Erro', 'Falha ao recusar a atividade: ' + (e?.message || String(e)));
+          Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.broadcast.declineError') + (e?.message || String(e)));
         }
       },
     });

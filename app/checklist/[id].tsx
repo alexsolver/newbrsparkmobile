@@ -3689,7 +3689,7 @@ export default function ChecklistEngine() {
             handleInput(sigField, 'SIG_V1|' + metaStr + '|' + strokesJoined, sigScope);
           }
       } catch(e) {
-          Alert.alert("Aviso", "A assinatura foi salva sem todos os metadados ativos (GPS lento ou sem rede offline).");
+          Alert.alert(t('appAlerts.checklist.signaturePartialTitle'), t('appAlerts.checklist.signaturePartialBody'));
           // Fallback just in case
           const allStrk = [...completedStrokes];
           if(currentStrokeRef.current !== '') allStrk.push(currentStrokeRef.current);
@@ -3710,14 +3710,14 @@ export default function ChecklistEngine() {
         const netState = await Network.getNetworkStateAsync();
         if (!netState.isConnected) {
           Alert.alert(
-            'Validação Online Obrigatória',
-            'Esta etapa da OS possui regras de segurança e não pode ser preenchida offline.\n\nPor favor, conecte-se à internet para continuar.',
-            [{ text: 'OK' }]
+            t('appAlerts.checklist.onlineRequiredTitle'),
+            t('appAlerts.checklist.onlineRequiredBody'),
+            [{ text: t('common.ok') }]
           );
           return;
         }
       } catch {
-        Alert.alert('Erro de Conexão', 'Não foi possível verificar a conectividade.');
+        Alert.alert(t('appAlerts.checklist.connectionErrorTitle'), t('appAlerts.checklist.connectionErrorBody'));
         return;
       }
     }
@@ -4160,7 +4160,7 @@ export default function ChecklistEngine() {
         if (!taskLocation || (!hasTaskPoint && !hasTaskPolygon)) {
           const payload = { action: label, timestamp: new Date().toISOString(), coordinates: { lat, lng }, address, geofence: { validated: false, reason: 'NO_TASK_LOCATION' } };
           handleInput(fieldId, JSON.stringify(payload), scope);
-          Alert.alert("⚠️ Localização Registrada", `GPS capturado com sucesso.\n\n📍 ${address}\n\nEsta OS não possui zona de geofencing definida, nenhuma validação aplicada.`);
+          Alert.alert(t('appAlerts.checklist.geofenceNoZoneTitle'), t('appAlerts.checklist.geofenceNoZoneBody', { address }));
           return;
         }
 
@@ -4203,7 +4203,7 @@ export default function ChecklistEngine() {
         if (insideZone) {
           setGeofenceUnblockCtx(null);
           const distMsg = distanceMeters !== null ? `\n📏 Distância: ${distanceMeters}m (raio: ${requiredMeters}m)` : '';
-          Alert.alert("✅ Cerca Eletrônica: APROVADO", `Você está dentro da zona de serviço autorizada.${distMsg}\n\n📍 ${address}`);
+          Alert.alert(t('appAlerts.checklist.geofenceApprovedTitle'), t('appAlerts.checklist.geofenceApprovedBody', { distMsg, address }));
         } else {
           const distMsg = distanceMeters !== null
             ? `\n📏 Você está a ${distanceMeters}m do local (máx. ${requiredMeters}m).`
@@ -4212,14 +4212,17 @@ export default function ChecklistEngine() {
 
           if (effMode === 'block') {
             handleInput(fieldId, '', scope);
-            Alert.alert("🚫 Cerca Eletrônica: BLOQUEADO", `${errorMsg}\n\n📍 Sua posição: ${address}`);
+            Alert.alert(
+              t('appAlerts.checklist.geofenceBlockedTitle'),
+              `${errorMsg}\n\n📍 ${t('appAlerts.checklist.geofenceBlockedPosition', { address })}`
+            );
             if (unblockOnReentry) {
               setGeofenceUnblockCtx({ fieldId, scope: scope ?? null });
             }
           } else if (effMode === 'record_only') {
-            Alert.alert("📋 Cerca — registo", `${errorMsg}\n\nA posição foi registada para auditoria.\n\n📍 ${address}`);
+            Alert.alert(t('appAlerts.checklist.geofenceRecordTitle'), `${errorMsg}${t('appAlerts.checklist.geofenceRecordBodySuffix', { address })}`);
           } else {
-            Alert.alert("⚠️ Cerca Eletrônica: ALERTA", `${errorMsg}\n\nO desvio foi registrado como evidência. Você pode continuar.`);
+            Alert.alert(t('appAlerts.checklist.geofenceWarnTitle'), `${errorMsg}${t('appAlerts.checklist.geofenceWarnBodySuffix')}`);
           }
         }
         return;
@@ -4367,9 +4370,9 @@ export default function ChecklistEngine() {
           );
         }
       } else if (status !== 'granted' || lat === 0) {
-        Alert.alert('Atenção', `${label} registrado às ${timeBr}, mas sem rastreamento por GPS.\n\nMotivo: ${address}`);
+        Alert.alert(t('common.attention'), t('appAlerts.checklist.gpsMissingAttention', { label, timeBr, address }));
       } else {
-        Alert.alert('Sucesso', `${label} registrado com sucesso!\n\n${address}`);
+        Alert.alert(t('common.success'), t('appAlerts.checklist.gpsOkSuccess', { label, address }));
       }
 
       /** Morada + OSRM: não bloqueiam o loading do GPS (início/fim de deslocamento). */
@@ -4473,7 +4476,7 @@ export default function ChecklistEngine() {
         })();
       }
     } catch (e) {
-      Alert.alert("Erro Inesperado", "Ocorreu um erro ao tentar processar a operação.");
+      Alert.alert(t('appAlerts.checklist.unexpectedErrorTitle'), t('appAlerts.checklist.unexpectedErrorBody'));
     } finally {
       gpsCaptureLockRef.current = false;
       setGpsBusyFieldId(null);

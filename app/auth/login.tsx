@@ -458,7 +458,7 @@ export default function LoginScreen() {
       goToTechRegistrationAfterAuth();
       // Sem convite: RouteGuard trata onboarding / tabs
     } catch (e: any) {
-      Alert.alert('Código inválido', e?.message || 'Tente novamente.');
+      Alert.alert(t('appAlerts.auth.invalidCodeTitle'), e?.message || t('appAlerts.auth.invalidCodeBody'));
       setOtp('');
     } finally {
       setOtpLoading(false);

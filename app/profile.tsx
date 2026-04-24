@@ -452,11 +452,11 @@ export default function ProfileScreen() {
       const res = await requeueChecklistOutboxConflicts();
       await refreshSyncIndicators();
       Alert.alert(
-        'Conflitos reenfileirados',
-        `${res.requeued} item(ns) voltaram para a fila de envio. Restantes em conflito: ${res.remaining}.`,
+        t('profile.syncConflictsRequeuedTitle'),
+        t('profile.syncConflictsRequeuedBody', { count: res.requeued, remaining: res.remaining }),
       );
     } catch (e: any) {
-      Alert.alert('Erro', e?.message || 'Falha ao reenfileirar conflitos.');
+      Alert.alert(t('common.error'), e?.message || t('profile.requeueConflictsFailed'));
     } finally {
       setSyncConflictsBusy(false);
     }
@@ -465,12 +465,12 @@ export default function ProfileScreen() {
   const handleClearSyncConflicts = async () => {
     if (syncConflictsBusy) return;
     Alert.alert(
-      'Limpar conflitos',
-      'Isso remove apenas a quarentena de conflitos. Não remove itens já reenfileirados na outbox.',
+      t('profile.syncConflictsClearTitle'),
+      t('profile.syncConflictsClearBody'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Limpar',
+          text: t('profile.syncConflictsClearConfirm'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -496,7 +496,7 @@ export default function ProfileScreen() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || 'Não foi possível registar o pedido de prestador.');
+        throw new Error(data.error || t('profile.becomeTechRequestError'));
       }
       const profile = data as {
         id: string;
@@ -525,24 +525,24 @@ export default function ProfileScreen() {
       }
       if (String(profile.techRegistrationStatus || '').toUpperCase() === 'SUBMITTED') {
         Alert.alert(
-          'Candidatura enviada',
-          'Sua documentação já foi enviada para análise. Aguarde a aprovação da equipe para usar o modo prestador.',
+          t('profile.becomeTechApplicationSentTitle'),
+          t('profile.becomeTechApplicationSentBody'),
         );
         return;
       }
       Alert.alert(
-        'Pedido registrado',
-        'Sua candidatura de prestador será analisada. Só após aprovação você poderá receber ordens de serviço e usar o modo prestador no app.',
+        t('profile.becomeTechRequestRegisteredTitle'),
+        t('profile.becomeTechRequestRegisteredBody'),
       );
     } catch (e: any) {
-      Alert.alert('Erro', e.message);
+      Alert.alert(t('common.error'), e.message);
     } finally {
       setSyncing(false);
     }
   };
 
   const handleChangePassword = async () => {
-    if (!oldPwd || !newPwd) return Alert.alert(t('common.attention'), "Preencha todos os campos.");
+    if (!oldPwd || !newPwd) return Alert.alert(t('common.attention'), t('profile.fillAllFields'));
     const pc = passwordChecks(newPwd);
     if (!pc.len || !pc.upper || !pc.lower || !pc.num) {
       const parts: string[] = [];
@@ -559,12 +559,12 @@ export default function ProfileScreen() {
     setChangingPwd(true);
     try {
       await AuthService.changePassword(oldPwd, newPwd);
-      Alert.alert(t('common.success'), "Senha alterada com sucesso!");
+      Alert.alert(t('common.success'), t('profile.passwordChangedSuccess'));
       setShowPwdModal(false);
       setOldPwd('');
       setNewPwd('');
     } catch (err: any) {
-      Alert.alert(t('common.error'), err.message || "Erro ao alterar senha.");
+      Alert.alert(t('common.error'), err.message || t('profile.passwordChangeError'));
     } finally {
       setChangingPwd(false);
     }
@@ -586,7 +586,7 @@ export default function ProfileScreen() {
         setTfa2Action('enable');
         setShow2FaModal(true);
       } catch (e: any) {
-        Alert.alert('Erro', e.message || 'Falha ao solicitar ativação.');
+        Alert.alert(t('common.error'), e.message || t('profile.activationRequestError'));
       } finally {
         setTwoFaLoading(false);
       }
@@ -599,15 +599,15 @@ export default function ProfileScreen() {
       if (tfa2Action === 'enable' && tfaChallenge) {
         await AuthService.confirmEnableTwoFactor(tfaChallenge, tfaOtp);
         setTwoFaEnabled(true);
-        Alert.alert('2FA Ativado', 'Autenticação em dois fatores habilitada com sucesso!');
+        Alert.alert(t('profile.twoFaEnabledTitle'), t('profile.twoFaEnabledBody'));
       } else if (tfa2Action === 'disable') {
         await AuthService.disableTwoFactor(tfaDisableOtp);
         setTwoFaEnabled(false);
-        Alert.alert('2FA Desativado', 'Autenticação em dois fatores foi desabilitada.');
+        Alert.alert(t('profile.twoFaDisabledTitle'), t('profile.twoFaDisabledBody'));
       }
       setShow2FaModal(false);
     } catch (e: any) {
-      Alert.alert('Código inválido', e.message || 'Tente novamente.');
+      Alert.alert(t('profile.invalid2FACodeTitle'), e.message || t('profile.invalid2FACodeBody'));
     } finally {
       setTwoFaLoading(false);
     }
@@ -631,7 +631,7 @@ export default function ProfileScreen() {
         }
       }
       if (!fileBase64) {
-        throw new Error('Não foi possível ler a imagem. Tente outra foto.');
+        throw new Error(t('profile.avatarReadError'));
       }
 
       const ext = asset.uri.split('.').pop() || 'jpg';
@@ -693,9 +693,9 @@ export default function ProfileScreen() {
       setProfile(np);
       AsyncStorage.setItem('@user_profile', JSON.stringify(np));
       
-      Alert.alert(t('common.success') || 'Sucesso', 'Foto atualizada com sucesso!');
+      Alert.alert(t('common.success'), t('profile.photoUpdatedSuccess'));
     } catch (err: any) {
-      Alert.alert(t('common.error') || 'Erro', 'Falha ao atualizar foto: ' + err.message);
+      Alert.alert(t('common.error'), t('profile.photoUpdateFailed', { message: err.message }));
     } finally {
       setSyncing(false);
     }
@@ -1277,9 +1277,9 @@ export default function ProfileScreen() {
           <TouchableOpacity 
             style={styles.listItem} 
             onPress={() => {
-              Alert.alert("Resetar Dados", "Deseja limpar todos os dados locais e sincronizar novamente com a nuvem? Isso removerá itens que ainda não foram sincronizados.", [
-                { text: "Cancelar", style: 'cancel' },
-                { text: "Confirmar", style: 'destructive', onPress: async () => {
+              Alert.alert(t('profile.resetLocalDataTitle'), t('profile.resetLocalDataMessage'), [
+                { text: t('common.cancel'), style: 'cancel' },
+                { text: t('common.confirm'), style: 'destructive', onPress: async () => {
                    clearLocalDatabase();
                    await handleSync();
                 }}
@@ -1428,10 +1428,10 @@ export default function ProfileScreen() {
                       const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.5, aspect: [1, 1], base64: true });
                       if (!result.canceled) await uploadAvatar(result.assets[0]);
                     } else {
-                      Alert.alert(t('common.error'), t('profile.cameraPermDenied') || 'Permissão de câmera negada.');
+                      Alert.alert(t('common.error'), t('profile.cameraPermDenied'));
                     }
                   } catch (e: any) {
-                    Alert.alert(t('common.error') || 'Error', 'Câmera indisponível: ' + e.message);
+                    Alert.alert(t('common.error'), t('profile.cameraUnavailable', { message: e.message }));
                   }
                 }}
               >
@@ -1450,7 +1450,7 @@ export default function ProfileScreen() {
                     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.5, aspect: [1, 1], base64: true });
                     if (!result.canceled) await uploadAvatar(result.assets[0]);
                   } catch (e: any) {
-                    Alert.alert(t('common.error') || 'Error', 'Erro ao abrir a galeria: ' + e.message);
+                    Alert.alert(t('common.error'), t('profile.galleryOpenError', { message: e.message }));
                   }
                 }}
               >

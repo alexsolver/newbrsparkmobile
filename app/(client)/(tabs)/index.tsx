@@ -51,6 +51,7 @@ import { StockService } from '../../../src/services/stockService';
 import { StockItem } from '../../../src/types/stock';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { useTranslation } from 'react-i18next';
+import i18n from '../../../src/i18n';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlingGestureHandler, Directions, State } from 'react-native-gesture-handler';
 import { tabBarOuterHeight } from '../../../src/components/FloatingRadialMenu';
@@ -84,8 +85,8 @@ import {
   takePendingOpenExecutionFromPush,
 } from '../../../src/lib/pushExecutionOpenIntent';
 import {
-  BROADCAST_OS_UNAVAILABLE_SUBTITLE,
-  BROADCAST_OS_UNAVAILABLE_TITLE,
+  getBroadcastOsUnavailableSubtitle,
+  getBroadcastOsUnavailableTitle,
 } from '../../../src/constants/broadcastOsMessages';
 import { taskOsLabel } from '../../../src/utils/taskOsLabel';
 import { stripFormTemplateTitleLabelPrefix } from '../../../src/utils/stripFormTemplateTitleLabelPrefix';
@@ -839,11 +840,11 @@ function runProviderOsMapMiniPress(order: any, setMiniMapTask: (t: any) => void)
     const head = [name, addrText].filter(Boolean).join('\n\n');
     if (head) {
       Alert.alert(
-        'Local de atendimento',
-        `${head}\n\nNão há coordenadas geográficas para mostrar no mapa.`
+        i18n.t('appAlerts.home.serviceLocationTitle'),
+        i18n.t('appAlerts.home.mapMiniNoCoordsBody', { head })
       );
     } else {
-      Alert.alert('Local de atendimento', 'Não há local de atendimento especificado nesta OS.');
+      Alert.alert(i18n.t('appAlerts.home.serviceLocationTitle'), i18n.t('appAlerts.home.serviceLocationBody'));
     }
     return;
   }
@@ -898,30 +899,32 @@ function providerTaskMapTargetCoords(t: any): { lat: number; lng: number } | nul
 
 /** Abre apps de mapa num par lat/lng (Waze / Google / Apple no iOS; geo: no Android). */
 function openLatLngInExternalMaps(lat: number, lng: number, labelForAlert: string) {
-  const label = (labelForAlert || 'Destino').slice(0, 120);
+  const label = (labelForAlert || i18n.t('appAlerts.home.mapFallbackLabel')).slice(0, 120);
   if (Platform.OS === 'android') {
-    void Linking.openURL(`geo:0,0?q=${lat},${lng}(Local da OS)`);
+    void Linking.openURL(
+      `geo:0,0?q=${lat},${lng}(${encodeURIComponent(i18n.t('appAlerts.home.mapAndroidGeoLabel'))})`
+    );
     return;
   }
   const options: { text: string; onPress?: () => void; style?: 'cancel' }[] = [
-    { text: 'Waze', onPress: () => void Linking.openURL(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`) },
+    { text: i18n.t('appAlerts.home.mapPickerWaze'), onPress: () => void Linking.openURL(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`) },
     {
-      text: 'Google Maps',
+      text: i18n.t('appAlerts.home.mapPickerGoogle'),
       onPress: () =>
         void Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`),
     },
     {
-      text: 'Apple Maps',
+      text: i18n.t('appAlerts.home.mapPickerApple'),
       onPress: () => void Linking.openURL(`maps://?daddr=${lat},${lng}`),
     },
-    { text: 'Cancelar', style: 'cancel' },
+    { text: i18n.t('appAlerts.home.mapPickerCancel'), style: 'cancel' },
   ];
-  Alert.alert('Abrir no mapa', label, options);
+  Alert.alert(i18n.t('appAlerts.home.openMapPickerTitle'), label, options);
 }
 
 function openProviderTaskInExternalMaps(t: any) {
   const dest = providerTaskMapTargetCoords(t);
-  const label = (providerTaskServiceAddressLine(t) || 'Destino').slice(0, 120);
+  const label = (providerTaskServiceAddressLine(t) || i18n.t('appAlerts.home.mapFallbackLabel')).slice(0, 120);
   if (dest) {
     openLatLngInExternalMaps(dest.lat, dest.lng, label);
   } else {
@@ -929,10 +932,10 @@ function openProviderTaskInExternalMaps(t: any) {
     if (q) {
       const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
       void Linking.openURL(url).catch(() =>
-        Alert.alert('Erro', 'Não foi possível abrir o mapa.')
+        Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.home.openMapError'))
       );
     } else {
-      Alert.alert('Localização', 'Esta OS não tem coordenadas nem endereço para abrir no mapa.');
+      Alert.alert(i18n.t('appAlerts.home.noMapDataTitle'), i18n.t('appAlerts.home.noCoordsForMap'));
     }
   }
 }
@@ -2595,7 +2598,7 @@ export default function DashboardScreen() {
       .map((x) => ({ ...x.t, locationLat: x.c.lat, locationLng: x.c.lng }));
 
     if (pendentes.length === 0) {
-        Alert.alert("Aviso", "Não há nenhuma atividade pendente com coordenadas de destino cadastradas para criar percurso.");
+        Alert.alert(t('common.attention'), t('appAlerts.home.noActivitiesForRoute'));
         return;
     }
 
@@ -2603,8 +2606,8 @@ export default function DashboardScreen() {
     if (pendentes.length > OSRM_MAX_DESTINATIONS) {
       slice = pendentes.slice(0, OSRM_MAX_DESTINATIONS);
       Alert.alert(
-        'Limite de pontos',
-        `Só os primeiros ${OSRM_MAX_DESTINATIONS} destinos com coordenadas entram no cálculo (limite do serviço OSRM).`
+        t('appAlerts.home.osrmPointLimitTitle'),
+        t('appAlerts.home.osrmPointLimitBody', { max: OSRM_MAX_DESTINATIONS })
       );
     }
 
@@ -2612,7 +2615,7 @@ export default function DashboardScreen() {
     setOsrmOptimizingMode(mode);
     try {
         const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') throw new Error("Permissão de GPS negada.");
+        if (status !== 'granted') throw new Error(t('appAlerts.home.gpsPermissionDeniedError'));
 
         const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const oLng = location.coords.longitude;
@@ -3338,7 +3341,7 @@ export default function DashboardScreen() {
       await apiFetch(`/api/shares/${assetId}/accept`, { method: 'POST' });
       onRefresh(); // Trigger a full sync so the new asset is downloaded
     } catch(e) {
-      Alert.alert('Erro', 'Não foi possível aceitar o convite.');
+      Alert.alert(t('common.error'), t('appAlerts.home.inviteAcceptError'));
     }
   };
 
@@ -3347,7 +3350,7 @@ export default function DashboardScreen() {
       await apiFetch(`/api/shares/${assetId}/reject`, { method: 'POST' });
       loadData();
     } catch(e) {
-      Alert.alert('Erro', 'Não foi possível recusar o convite.');
+      Alert.alert(t('common.error'), t('appAlerts.home.inviteRejectError'));
     }
   };
 
@@ -5863,8 +5866,8 @@ export default function DashboardScreen() {
                             onPress={async () => {
                               if (rejectReason.trim().length < 10) {
                                 return Alert.alert(
-                                  'Atenção',
-                                  'Por favor, explique o motivo da rejeição de forma mais detalhada.'
+                                  t('appAlerts.home.rejectReasonShortTitle'),
+                                  t('appAlerts.home.rejectReasonShortBody')
                                 );
                               }
                               try {
@@ -5894,9 +5897,9 @@ export default function DashboardScreen() {
                                 setRejectReason('');
                                 setTaskModalVisible(false);
                                 loadData(false);
-                                Alert.alert('Recusada', 'A atividade foi rejeitada e retirada da sua fila.');
+                                Alert.alert(t('appAlerts.home.rejectTitle'), t('appAlerts.home.rejectActivityOk'));
                               } catch (e: any) {
-                                Alert.alert('Erro', 'Falha ao rejeitar a atividade: ' + e.message);
+                                Alert.alert(t('common.error'), t('appAlerts.home.rejectActivityErr') + e.message);
                               }
                             }}
                             style={{
@@ -5932,7 +5935,7 @@ export default function DashboardScreen() {
                           <TouchableOpacity
                             onPress={async () => {
                               if (!selectedTask.refId) {
-                                Alert.alert('Erro', 'Formulário ausente na OS.');
+                                Alert.alert(t('common.error'), t('appAlerts.home.formMissingOs'));
                                 return;
                               }
 
@@ -5942,8 +5945,8 @@ export default function DashboardScreen() {
                               if (needClaim) {
                                 if (isOnline === false) {
                                   Alert.alert(
-                                    'Sem ligação',
-                                    'Para aceitar esta OS em concorrência é necessário estar online. Verifique a rede e tente de novo.',
+                                    t('appAlerts.home.offlineClaimTitle'),
+                                    t('appAlerts.home.offlineClaimBody'),
                                   );
                                   return;
                                 }
@@ -5981,18 +5984,22 @@ export default function DashboardScreen() {
                                   if (!res.ok) {
                                     if (isClaimLost) {
                                       Alert.alert(
-                                        BROADCAST_OS_UNAVAILABLE_TITLE,
-                                        BROADCAST_OS_UNAVAILABLE_SUBTITLE
+                                        getBroadcastOsUnavailableTitle(),
+                                        getBroadcastOsUnavailableSubtitle()
                                       );
                                     } else {
                                       const detail =
                                         errStr ||
                                         rawBody.trim().slice(0, 400) ||
                                         `O servidor recusou o pedido (HTTP ${res.status}).`;
+                                      const codePart = codeNorm ? ` · ${codeNorm}` : '';
                                       Alert.alert(
-                                        'Não foi possível aceitar',
-                                        `${detail.replace(/\btécnico\b/gi, 'prestador')}\n\n` +
-                                          `(HTTP ${res.status}${codeNorm ? ` · ${codeNorm}` : ''})`
+                                        t('appAlerts.home.cannotAcceptTitle'),
+                                        t('appAlerts.home.serverRefusedBody', {
+                                          detail: detail.replace(/\btécnico\b/gi, 'prestador'),
+                                          status: String(res.status),
+                                          codePart,
+                                        })
                                       );
                                     }
                                     loadData(false);
@@ -6007,7 +6014,7 @@ export default function DashboardScreen() {
                                   }));
                                   loadData(false);
                                 } catch (e: any) {
-                                  Alert.alert('Erro', e?.message || 'Falha de rede.');
+                                  Alert.alert(t('common.error'), e?.message || t('appAlerts.home.networkFail'));
                                   return;
                                 }
                               } else {
@@ -6032,10 +6039,10 @@ export default function DashboardScreen() {
                                 loadData(false);
                               }
 
-                              Alert.alert('OS Aceita!', 'Excelente! Deseja iniciar a execução da atividade agora mesmo?', [
-                                { text: 'Agora Não', style: 'cancel', onPress: () => setTaskModalVisible(false) },
+                              Alert.alert(t('appAlerts.home.osAcceptedTitle'), t('appAlerts.home.osAcceptedBody'), [
+                                { text: t('appAlerts.home.osAcceptedNotNow'), style: 'cancel', onPress: () => setTaskModalVisible(false) },
                                 {
-                                  text: 'Sim, Iniciar Agora',
+                                  text: t('appAlerts.home.osAcceptedStartNow'),
                                   style: 'default',
                                   onPress: async () => {
                                     await appendUniqueStringToStoredArray(
@@ -6081,7 +6088,7 @@ export default function DashboardScreen() {
                     <TouchableOpacity
                       onPress={async () => {
                         if (!selectedTask.refId || selectedTask.refId === 'null') {
-                          Alert.alert('Erro', 'Formulário não associado a esta Atividade.');
+                          Alert.alert(t('common.error'), t('appAlerts.home.formNotLinkedActivity'));
                           return;
                         }
                         await appendUniqueStringToStoredArray(
@@ -6122,7 +6129,7 @@ export default function DashboardScreen() {
                         <TouchableOpacity
                           onPress={async () => {
                             if (!selectedTask.refId || selectedTask.refId === 'null') {
-                              Alert.alert('Erro', 'Formulário não associado a esta Atividade.');
+                              Alert.alert(t('common.error'), t('appAlerts.home.formNotLinkedActivity'));
                               return;
                             }
                             await enqueueExecutionInProgressFromDashboard(String(selectedTask.id));
@@ -6151,7 +6158,7 @@ export default function DashboardScreen() {
                         <TouchableOpacity
                           onPress={() => {
                             if (!selectedTask.refId || selectedTask.refId === 'null') {
-                              Alert.alert('Erro', 'Formulário não associado a esta Atividade.');
+                              Alert.alert(t('common.error'), t('appAlerts.home.formNotLinkedActivity'));
                               return;
                             }
                             setTaskModalVisible(false);

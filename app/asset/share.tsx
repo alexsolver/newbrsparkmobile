@@ -105,7 +105,7 @@ export default function AssetShareScreen() {
   const handleInvite = async () => {
     const allEmails = [...new Set([...emails, ...emailInput.split(/[\s,;]+/).filter(e => e.includes('@'))])];
     if (allEmails.length === 0) {
-      Alert.alert('E-mail inválido', 'Por favor, adicione pelo menos um e-mail válido.');
+      Alert.alert(t('appAlerts.assetShare.invalidEmailTitle'), t('appAlerts.assetShare.invalidEmailBody'));
       return;
     }
     setLoading(true);
@@ -136,9 +136,9 @@ export default function AssetShareScreen() {
       setEmails([]);
       setIsAdding(false);
       fetchShares();
-      Alert.alert('Sucesso', `Convite gerado e permissões configuradas para ${successCount} usuário(s)!`);
+      Alert.alert(t('common.success'), t('appAlerts.assetShare.inviteSuccess', { count: successCount }));
     } catch (err: any) {
-      Alert.alert('Erro', err?.message || 'Não foi possível compartilhar.');
+      Alert.alert(t('common.error'), err?.message || t('appAlerts.assetShare.shareError'));
     } finally {
       setLoading(false);
     }
@@ -162,9 +162,9 @@ export default function AssetShareScreen() {
       setIsAdding(false);
       setEditingShare(null);
       fetchShares();
-      Alert.alert('Sucesso', 'Permissões atualizadas!');
+      Alert.alert(t('common.success'), t('appAlerts.assetShare.permUpdated'));
     } catch (err: any) {
-      Alert.alert('Erro', err?.message || 'Não foi possível atualizar.');
+      Alert.alert(t('common.error'), err?.message || t('appAlerts.assetShare.updateError'));
     } finally {
       setLoading(false);
     }
@@ -188,14 +188,14 @@ export default function AssetShareScreen() {
   };
 
   const handleRevoke = async (sharedWith: string) => {
-    Alert.alert('Remover acesso', `Tem certeza que deseja remover o acesso de ${sharedWith}?`, [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Remover', style: 'destructive', onPress: async () => {
+    Alert.alert(t('appAlerts.assetShare.revokeTitle'), t('appAlerts.assetShare.revokeBody', { email: sharedWith }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.remove'), style: 'destructive', onPress: async () => {
         try {
           await apiFetch(`/api/shares/${id}/${sharedWith}`, { method: 'DELETE' });
           fetchShares();
         } catch (e) {
-           Alert.alert('Erro', 'Não foi possível remover.');
+           Alert.alert(t('common.error'), t('appAlerts.assetShare.removeError'));
         }
       }}
     ]);

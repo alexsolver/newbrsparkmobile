@@ -270,29 +270,29 @@ export default function ChatScreen() {
       await ChatService.updateContactStatus(id, accept ? 'ACCEPTED' : 'REJECTED');
       await loadData();
     } catch (e: any) {
-      Alert.alert('Erro', e.message);
+      Alert.alert(t('common.error'), e.message);
     }
   };
 
   const handleSendRequest = async () => {
-    if (!newEmail.includes('@')) return Alert.alert('Atenção', 'E-mail inválido');
+    if (!newEmail.includes('@')) return Alert.alert(t('common.attention'), t('appAlerts.chatTab.invalidEmail'));
     setSendingRequest(true);
     try {
       await ChatService.requestContact(newEmail);
-      Alert.alert('Sucesso', 'Solicitação enviada!');
+      Alert.alert(t('common.success'), t('appAlerts.chatTab.inviteSent'));
       setNewEmail('');
     } catch (e: any) {
-      Alert.alert('Erro', e.message || 'Falha ao enviar convite');
+      Alert.alert(t('common.error'), e.message || t('appAlerts.chatTab.inviteFail'));
     }
     setSendingRequest(false);
   };
 
   const handleCreateGroup = async () => {
     if (!isManager) {
-      return Alert.alert('Permissão', 'Somente gestores podem criar grupos.');
+      return Alert.alert(t('appAlerts.techReg.permTitle'), t('appAlerts.chatTab.managersOnly'));
     }
-    if (!groupName.trim()) return Alert.alert('Atenção', 'Digite o nome do grupo');
-    if (selectedContacts.length === 0) return Alert.alert('Atenção', 'Selecione participantes');
+    if (!groupName.trim()) return Alert.alert(t('common.attention'), t('appAlerts.chatTab.groupName'));
+    if (selectedContacts.length === 0) return Alert.alert(t('common.attention'), t('appAlerts.chatTab.selectParticipants'));
     try {
       const room = await ChatService.createRoom({ isGroup: true, name: groupName, userIds: selectedContacts });
       setModalVisible(false);
@@ -300,7 +300,7 @@ export default function ChatScreen() {
       setSelectedContacts([]);
       router.push(`/chat/${room.id}?name=${encodeURIComponent(room.name || 'Grupo')}&color=${encodeURIComponent(room.avatarColor || '#2563EB')}` as any);
     } catch (e: any) {
-      Alert.alert('Erro', e.message);
+      Alert.alert(t('common.error'), e.message);
     }
   };
 

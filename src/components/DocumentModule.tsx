@@ -122,7 +122,7 @@ export function DocumentModule({ assetId }: { assetId: string }) {
 
     const finalAlert = showCustom ? (parseInt(customAlert) || 0) : alertDays;
 
-    if (!user?.email) return Alert.alert('Erro', 'Usuário não autenticado.');
+    if (!user?.email) return Alert.alert(t('common.error'), t('appAlerts.document.notAuthenticated'));
 
     if (editingDoc) {
       const updated = {
