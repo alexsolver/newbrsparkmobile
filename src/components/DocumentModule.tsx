@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Image, Modal, Alert, ActivityIndicator , KeyboardAvoidingView, Platform, DeviceEventEmitter} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Image, Modal, Alert, ActivityIndicator , KeyboardAvoidingView, Platform, DeviceEventEmitter, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -300,41 +300,55 @@ export function DocumentModule({ assetId }: { assetId: string }) {
 
       {/* MODAL CRIAR PASTA */}
       <Modal visible={createFolderModal} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20 }}>
-             <Text style={{ fontSize: 18, fontWeight: '800', color: C.slate, marginBottom: 16 }}>Nova Pasta</Text>
-             <TextInput 
-               style={S.input}
-               placeholder="Nome da pasta"
-               value={newFolderName}
-               onChangeText={setNewFolderName}
-               autoFocus
-              returnKeyType="done"/>
-             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
-               <TouchableOpacity onPress={() => setCreateFolderModal(false)} style={{ padding: 12 }}>
-                 <Text style={{ color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
-               </TouchableOpacity>
-               <TouchableOpacity onPress={saveFolder} style={{ backgroundColor: C.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}>
-                 <Text style={{ color: '#fff', fontWeight: '800' }}>Criar</Text>
-               </TouchableOpacity>
-             </View>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 }}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+              <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20 }}>
+                <Text style={{ fontSize: 18, fontWeight: '800', color: C.slate, marginBottom: 16 }}>Nova Pasta</Text>
+                <TextInput
+                  style={S.input}
+                  placeholder="Nome da pasta"
+                  value={newFolderName}
+                  onChangeText={setNewFolderName}
+                  autoFocus
+                  returnKeyType="done"
+                  blurOnSubmit
+                  onSubmitEditing={Keyboard.dismiss}
+                />
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 20 }}>
+                  <TouchableOpacity onPress={() => setCreateFolderModal(false)} style={{ padding: 12 }}>
+                    <Text style={{ color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={saveFolder} style={{ backgroundColor: C.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10 }}>
+                    <Text style={{ color: '#fff', fontWeight: '800' }}>Criar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* MODAL PRINCIPAL - REDESENHO COMPLETO */}
       <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={S.modalOverlay}>
-          <View style={S.modalContent}>
-            <View style={S.modalHeader}>
-              <TouchableOpacity onPress={() => { resetForm(); setModalVisible(false); }}><Text style={S.cancelText}>{t('common.cancel')}</Text></TouchableOpacity>
-              <Text style={S.headerTitle}>{editingDoc ? t('docs.editFile') : t('docs.newFile')}</Text>
-              <TouchableOpacity onPress={saveDoc} disabled={loading}>
-                {loading ? <ActivityIndicator size="small" color={C.accent} /> : <Text style={S.saveText}>{editingDoc ? t('docs.update') : t('common.save')}</Text>}
-              </TouchableOpacity>
-            </View>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={S.modalOverlay}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
+              <View style={S.modalContent}>
+                <View style={S.modalHeader}>
+                  <TouchableOpacity onPress={() => { resetForm(); setModalVisible(false); }}><Text style={S.cancelText}>{t('common.cancel')}</Text></TouchableOpacity>
+                  <Text style={S.headerTitle}>{editingDoc ? t('docs.editFile') : t('docs.newFile')}</Text>
+                  <TouchableOpacity onPress={saveDoc} disabled={loading}>
+                    {loading ? <ActivityIndicator size="small" color={C.accent} /> : <Text style={S.saveText}>{editingDoc ? t('docs.update') : t('common.save')}</Text>}
+                  </TouchableOpacity>
+                </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={S.formScroll} keyboardShouldPersistTaps="handled">
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  style={S.formScroll}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                >
               
               {/* Seção de Arquivo */}
               <View style={S.formGroup}>
@@ -403,9 +417,11 @@ export function DocumentModule({ assetId }: { assetId: string }) {
               </View>
 
               <View style={{height: 100}} />
-            </ScrollView>
+                </ScrollView>
+              </View>
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* Previews Automáticos */}

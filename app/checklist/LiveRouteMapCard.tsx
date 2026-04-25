@@ -8,6 +8,7 @@ import {
   Easing,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -50,6 +51,13 @@ type TrackingChatRow = {
   at: string;
   senderLabel?: string | null;
   kind?: string | null;
+};
+
+type ReimbSearchResultRow = {
+  id: string;
+  lat: number;
+  lng: number;
+  label: string;
 };
 
 function mapServerChatMessages(raw: unknown): TrackingChatRow[] {
@@ -219,13 +227,27 @@ interface Props {
    * `taskId` deve ser omitido pelo pai para não expor chat.
    */
   reimbursementMode?: boolean;
-  /** Patrulhamento: trajeto KML/geometria da OS — mesmo mapa que serviço, com indicação no ecrã. */
+  /**
+   * Patrulhamento: igual ao modo «apenas registro» (reembolso) — sem ETA, chat, link de acompanhamento; o pai omite
+   * `taskId` e `targetLoc`. Única diferença: envia a polilinha da OS para desenhar KML/corredor no mapa, se houver.
+   */
   patrolMode?: boolean;
   /**
    * ETA efetivamente mostrado no badge (pai ou OSRM interno) — o pai grava no servidor para o link público.
    * `null` quando o mapa deixa de estar visível (limpar snapshot no servidor).
    */
   onPublicTrackingEtaChange?: (minutes: number | null) => void;
+  /**
+   * Só modo reembolso («apenas registo»): gravar destino opcional no JSON do `transit_start` (`optionalNavDestination`).
+   */
+  onCommitReimbursementOptionalDestination?: (payload: {
+    address?: string;
+    lat: number;
+    lng: number;
+    query?: string;
+  } | null) => void;
+  /** Rótulo do destino já guardado (morada), para preencher o campo de pesquisa. */
+  reimbursementOptionalDestLabel?: string | null;
 }
 
 /** Destino OSRM: target explícito ou último vértice da rota (evita lista vazia só com polígono) */
@@ -702,7 +724,22 @@ export default function LiveRouteMapCard({
   reimbursementMode = false,
   patrolMode = false,
   onPublicTrackingEtaChange,
+  onCommitReimbursementOptionalDestination,
+  reimbursementOptionalDestLabel,
 }: Props) {
+  /** Reembolso e patrulhamento: sem destino/ETA/chat operacionais da OS (acompanhamento do cliente, ETA rodoviário até a morada). */
+  const suppressOperationalDestinationUi = reimbursementMode || patrolMode;
+  /**
+   * Rota OSRM / ETA no mapa: patrulha nunca; reembolso só após destino opcional com coordenadas;
+   * deslocamento operacional como hoje.
+   */
+  const allowDestRouting =
+    !patrolMode &&
+    (!reimbursementMode ||
+      (targetLoc?.lat != null &&
+        targetLoc?.lng != null &&
+        Number.isFinite(Number(targetLoc.lat)) &&
+        Number.isFinite(Number(targetLoc.lng))));
   const insets = useSafeAreaInsets();
   const [windowDims, setWindowDims] = useState(() => Dimensions.get('window'));
   const [exoOrientation, setExoOrientation] = useState(ScreenOrientation.Orientation.UNKNOWN);
@@ -774,6 +811,16 @@ export default function LiveRouteMapCard({
   const [trackingChatError, setTrackingChatError] = useState<string | null>(null);
   const [trackingChatLocaleOpen, setTrackingChatLocaleOpen] = useState(false);
   const [trackingChatClientUnread, setTrackingChatClientUnread] = useState(false);
+  /** Reembolso: campo de morada + geocode para destino opcional. */
+  const [reimbSearchDraft, setReimbSearchDraft] = useState('');
+  const [reimbGeocodeLoading, setReimbGeocodeLoading] = useState(false);
+  const [reimbSearchResults, setReimbSearchResults] = useState<ReimbSearchResultRow[]>([]);
+  /** Alfinete do destino opcional (reembolso): arrastável no mapa; sincronizado com `targetLoc` do pai. */
+  const [reimbMapPin, setReimbMapPin] = useState<{ lat: number; lng: number } | null>(null);
+  /** Quando true, o mapa fica livre até confirmar o alfinete e voltar ao modo navegação. */
+  const [reimbPinNeedsConfirm, setReimbPinNeedsConfirm] = useState(false);
+  /** Painel de pesquisa/seleção do destino (reembolso) — aberto sob demanda. */
+  const [reimbDestPanelOpen, setReimbDestPanelOpen] = useState(false);
   const trackingChatListRef = useRef<FlatList<TrackingChatRow>>(null);
   const trackingChatMessagesRef = useRef<TrackingChatRow[]>([]);
   const clientUnreadBaselineDoneRef = useRef(false);
@@ -793,6 +840,41 @@ export default function LiveRouteMapCard({
   useEffect(() => {
     if (!trackingChatOpen) setTrackingChatLocaleOpen(false);
   }, [trackingChatOpen]);
+
+  useEffect(() => {
+    if (reimbursementOptionalDestLabel != null && String(reimbursementOptionalDestLabel).trim() !== '') {
+      setReimbSearchDraft(String(reimbursementOptionalDestLabel).trim());
+    } else {
+      setReimbSearchDraft('');
+    }
+  }, [reimbursementOptionalDestLabel]);
+
+  useEffect(() => {
+    if (!reimbursementMode || !onCommitReimbursementOptionalDestination) {
+      setReimbMapPin(null);
+      setReimbPinNeedsConfirm(false);
+      setReimbDestPanelOpen(false);
+      return;
+    }
+    const tla = targetLoc?.lat;
+    const tln = targetLoc?.lng;
+    if (
+      tla != null &&
+      tln != null &&
+      Number.isFinite(Number(tla)) &&
+      Number.isFinite(Number(tln))
+    ) {
+      const la = Number(tla);
+      const ln = Number(tln);
+      setReimbMapPin((prev) => {
+        if (prev && Math.abs(prev.lat - la) < 1e-7 && Math.abs(prev.lng - ln) < 1e-7) return prev;
+        return { lat: la, lng: ln };
+      });
+    } else {
+      setReimbMapPin(null);
+      setReimbPinNeedsConfirm(false);
+    }
+  }, [reimbursementMode, onCommitReimbursementOptionalDestination, targetLoc?.lat, targetLoc?.lng]);
 
   const prevVisibleRef = useRef(false);
   useEffect(() => {
@@ -1023,23 +1105,23 @@ export default function LiveRouteMapCard({
 
   /** Com mapa visível, mantém mensagens frescas mesmo com o modal fechado (aura de não lidas do cliente). */
   useEffect(() => {
-    if (!taskId || !visible || reimbursementMode) return;
+    if (!taskId || !visible || suppressOperationalDestinationUi) return;
     const pollMs = trackingChatOpen ? 3500 : 4000;
     void fetchTrackingChat();
     const tid = setInterval(() => void fetchTrackingChat(), pollMs);
     return () => clearInterval(tid);
-  }, [taskId, visible, reimbursementMode, trackingChatOpen, fetchTrackingChat]);
+  }, [taskId, visible, suppressOperationalDestinationUi, trackingChatOpen, fetchTrackingChat]);
 
   useEffect(() => {
-    if (!taskId || !visible || reimbursementMode) return;
+    if (!taskId || !visible || suppressOperationalDestinationUi) return;
     const tid = String(taskId).trim();
     return subscribeTrackingClientChatPing((pingTaskId) => {
       if (pingTaskId === tid) setTrackingChatClientUnread(true);
     });
-  }, [taskId, visible, reimbursementMode]);
+  }, [taskId, visible, suppressOperationalDestinationUi]);
 
   useEffect(() => {
-    if (!taskId || !visible || reimbursementMode) return;
+    if (!taskId || !visible || suppressOperationalDestinationUi) return;
     const msgs = trackingChatMessages;
     if (!clientUnreadBaselineDoneRef.current) {
       clientUnreadBaselineDoneRef.current = true;
@@ -1049,7 +1131,7 @@ export default function LiveRouteMapCard({
     if (trackingChatOpen) return;
     const maxC = maxClientMessageTimeMs(msgs);
     if (maxC > lastSeenClientMsgMsRef.current) setTrackingChatClientUnread(true);
-  }, [trackingChatMessages, taskId, visible, reimbursementMode, trackingChatOpen]);
+  }, [trackingChatMessages, taskId, visible, suppressOperationalDestinationUi, trackingChatOpen]);
 
   useEffect(() => {
     if (!visible) {
@@ -1143,7 +1225,7 @@ export default function LiveRouteMapCard({
       setDynamicRoute(null);
       return;
     }
-    if (reimbursementMode) {
+    if (!allowDestRouting) {
       setDynamicRoute(null);
       return;
     }
@@ -1206,7 +1288,7 @@ export default function LiveRouteMapCard({
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [visible, reimbursementMode, route?.length, routeDestKey, targetLoc?.lat, targetLoc?.lng, osrmRefetchNonce]);
+  }, [visible, allowDestRouting, route?.length, routeDestKey, targetLoc?.lat, targetLoc?.lng, osrmRefetchNonce]);
 
   // Encaixe quando a polilinha principal muda (ex.: chega geometria OSRM), nunca por causa de myPos.
   // Em modo navegação (seguir GPS) não fazer fit da rota inteira — rotas longas (KML) afastavam o zoom
@@ -1261,7 +1343,7 @@ export default function LiveRouteMapCard({
       setEtaHint(null);
       return;
     }
-    if (reimbursementMode) {
+    if (!allowDestRouting) {
       setClientEtaMinutes(null);
       setEtaHint(null);
       return;
@@ -1324,7 +1406,7 @@ export default function LiveRouteMapCard({
       cancelled = true;
       clearInterval(iv);
     };
-  }, [visible, reimbursementMode, parentHasFiniteEta, osrmDest?.lat, osrmDest?.lng]);
+  }, [visible, allowDestRouting, parentHasFiniteEta, osrmDest?.lat, osrmDest?.lng]);
 
   /**
    * Esconde a polilinha do template só quando o despacho tem exactamente 2 pontos e há OSRM:
@@ -1417,7 +1499,13 @@ export default function LiveRouteMapCard({
   const noDestinationForEta = !hasNumericEta && osrmDest == null;
 
   useEffect(() => {
-    if (!onPublicTrackingEtaChange || !taskId || reimbursementMode) return;
+    if (!onPublicTrackingEtaChange) return;
+    /** Patrulhamento / reembolso: não publicar ETA no link (e limpar snapshot enquanto o mapa está visível). */
+    if (suppressOperationalDestinationUi) {
+      onPublicTrackingEtaChange(null);
+      return;
+    }
+    if (!taskId) return;
     if (!visible) {
       onPublicTrackingEtaChange(null);
       return;
@@ -1426,14 +1514,11 @@ export default function LiveRouteMapCard({
     if (isPaused) return;
     if (hasNumericEta) {
       onPublicTrackingEtaChange(displayEtaMinutes as number);
-      return;
     }
-    /** Só limpar quando o mapa some; em «calculando…» manter o último snapshot no servidor. */
-    if (!visible) onPublicTrackingEtaChange(null);
   }, [
     onPublicTrackingEtaChange,
     taskId,
-    reimbursementMode,
+    suppressOperationalDestinationUi,
     visible,
     isPaused,
     hasNumericEta,
@@ -1557,7 +1642,7 @@ export default function LiveRouteMapCard({
 
   const handlePauseResume = async () => {
     if (!taskId) {
-      if (reimbursementMode) {
+      if (reimbursementMode || patrolMode) {
         if (isPaused) routeTracker.resume();
         else routeTracker.pause();
         return;
@@ -1656,6 +1741,146 @@ export default function LiveRouteMapCard({
         /* ignore */
       }
     }
+  };
+
+  const fitReimbDestInView = useCallback(
+    (lat: number, lng: number) => {
+      if (!embedNativeMap || !mapRef.current) return;
+      const pts: { latitude: number; longitude: number }[] = [
+        { latitude: lat, longitude: lng },
+      ];
+      if (myPos && Number.isFinite(myPos.lat) && Number.isFinite(myPos.lng)) {
+        pts.push({ latitude: myPos.lat, longitude: myPos.lng });
+      }
+      setTimeout(() => {
+        mapRef.current?.fitToCoordinates(pts, {
+          edgePadding: { top: 180, right: 48, bottom: 260, left: 48 },
+          animated: true,
+        });
+      }, 100);
+    },
+    [embedNativeMap, myPos?.lat, myPos?.lng],
+  );
+
+  const applyReimbursementSearchResult = useCallback(
+    (row: ReimbSearchResultRow) => {
+      if (!onCommitReimbursementOptionalDestination) return;
+      Keyboard.dismiss();
+      setFollowUser(false);
+      const q = reimbSearchDraft.trim();
+      onCommitReimbursementOptionalDestination({
+        address: row.label,
+        lat: row.lat,
+        lng: row.lng,
+        ...(q ? { query: q } : {}),
+      });
+      setReimbSearchDraft(row.label);
+      setReimbSearchResults([]);
+      setReimbMapPin({ lat: row.lat, lng: row.lng });
+      setReimbPinNeedsConfirm(true);
+      fitReimbDestInView(row.lat, row.lng);
+    },
+    [onCommitReimbursementOptionalDestination, reimbSearchDraft, fitReimbDestInView],
+  );
+
+  const runReimbursementSearch = async () => {
+    if (!onCommitReimbursementOptionalDestination) return;
+    const q = reimbSearchDraft.trim();
+    if (!q) {
+      Alert.alert(tr('common.attention'), tr('appAlerts.liveRoute.reimbDestQueryRequired'));
+      return;
+    }
+    setReimbGeocodeLoading(true);
+    setReimbSearchResults([]);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(tr('common.attention'), tr('appAlerts.liveRoute.reimbDestLocationDenied'));
+        return;
+      }
+      const results = await Location.geocodeAsync(q);
+      if (!results || results.length === 0) {
+        Alert.alert(tr('common.attention'), tr('appAlerts.liveRoute.reimbDestNoResults'));
+        return;
+      }
+      const sliced = results.slice(0, 8);
+      const withLabels: ReimbSearchResultRow[] = await Promise.all(
+        sliced.map(async (r, i) => {
+          const la = r.latitude;
+          const ln = r.longitude;
+          let label = `${la.toFixed(4)}, ${ln.toFixed(4)}`;
+          try {
+            const rev = await Location.reverseGeocodeAsync({ latitude: la, longitude: ln });
+            if (rev?.length) {
+              const p = rev[0];
+              const line = `${p.street || p.name || ''}, ${p.streetNumber || ''} - ${p.district || p.subregion || ''}, ${p.city || ''} - ${p.region || ''}`
+                .replace(/^[,\s-]+|[,\s-]+$/g, '')
+                .replace(/\s*,\s*,/g, ',')
+                .trim();
+              if (line) label = line;
+            }
+          } catch {
+            /* coordenadas como fallback */
+          }
+          return { id: `reimb-sel-${i}-${la}-${ln}`, lat: la, lng: ln, label };
+        }),
+      );
+      setReimbSearchResults(withLabels);
+    } catch {
+      Alert.alert(tr('common.error'), tr('appAlerts.liveRoute.reimbDestGeocodeFail'));
+    } finally {
+      setReimbGeocodeLoading(false);
+    }
+  };
+
+  const handleReimbDestPinDragEnd = async (e: {
+    nativeEvent: { coordinate: { latitude: number; longitude: number } };
+  }) => {
+    if (!onCommitReimbursementOptionalDestination) return;
+    const { latitude: la, longitude: ln } = e.nativeEvent.coordinate;
+    if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
+    setReimbMapPin({ lat: la, lng: ln });
+    setReimbPinNeedsConfirm(true);
+    let addressLine = '';
+    try {
+      const rev = await Location.reverseGeocodeAsync({ latitude: la, longitude: ln });
+      if (rev?.length) {
+        const p = rev[0];
+        addressLine = `${p.street || p.name || ''}, ${p.streetNumber || ''} - ${p.district || p.subregion || ''}, ${p.city || ''} - ${p.region || ''}`
+          .replace(/^[,\s-]+|[,\s-]+$/g, '')
+          .replace(/\s*,\s*,/g, ',')
+          .trim();
+      }
+    } catch {
+      /* ignore */
+    }
+    if (!addressLine) addressLine = `${la.toFixed(5)}, ${ln.toFixed(5)}`;
+    const q = reimbSearchDraft.trim();
+    onCommitReimbursementOptionalDestination({
+      address: addressLine,
+      lat: la,
+      lng: ln,
+      ...(q ? { query: q } : {}),
+    });
+    setReimbSearchDraft(addressLine);
+  };
+
+  const confirmReimbursementPinAndReturnToNavigation = () => {
+    if (!reimbMapPin) return;
+    setReimbPinNeedsConfirm(false);
+    setReimbSearchResults([]);
+    setReimbDestPanelOpen(false);
+    setFollowUser(true);
+    void Promise.resolve(handleRecenter());
+  };
+
+  const clearReimbursementOptionalDestination = () => {
+    onCommitReimbursementOptionalDestination?.(null);
+    setReimbSearchDraft('');
+    setReimbSearchResults([]);
+    setReimbMapPin(null);
+    setReimbPinNeedsConfirm(false);
+    setReimbDestPanelOpen(false);
   };
 
   const openNavOptions = () => {
@@ -2136,7 +2361,12 @@ export default function LiveRouteMapCard({
               <Text style={styles.headerTitle}>{transitHeaderLong}</Text>
               {patrolMode && hasRoute ? (
                 <Text style={{ fontSize: 11, color: '#0f766e', fontWeight: '800', marginTop: 4 }}>
-                  Patrulhamento — trajeto KML / geometria da OS
+                  Mesmo que «apenas registro» (sem ETA, chat, acompanhamento) + referência KML no mapa
+                </Text>
+              ) : null}
+              {patrolMode && !hasRoute ? (
+                <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600', marginTop: 4 }}>
+                  Apenas registro de deslocamento (sem KML no despacho)
                 </Text>
               ) : null}
               {hasRoute && !isComplete && !isPaused ? (
@@ -2150,6 +2380,112 @@ export default function LiveRouteMapCard({
             </TouchableOpacity>
           </View>
         )}
+
+        {reimbursementMode && onCommitReimbursementOptionalDestination && reimbDestPanelOpen ? (
+          <View
+            style={[
+              styles.reimbDestPanel,
+              {
+                top: insets.top + (isLandscape ? 48 : 108),
+                ...(isLandscape ? { right: 56, maxWidth: width - 72 } : {}),
+              },
+            ]}
+            pointerEvents="box-none"
+          >
+            <Text style={styles.reimbDestTitle}>{tr('appAlerts.liveRoute.reimbDestTitle')}</Text>
+            <Text style={styles.reimbDestHint}>{tr('appAlerts.liveRoute.reimbDestHint')}</Text>
+            <View style={styles.reimbDestFieldWrap}>
+              <Ionicons name="search" size={20} color="#64748b" style={styles.reimbDestFieldIcon} />
+              <TextInput
+                value={reimbSearchDraft}
+                onChangeText={(t) => {
+                  setReimbSearchDraft(t);
+                  if (reimbSearchResults.length) setReimbSearchResults([]);
+                }}
+                placeholder={tr('appAlerts.liveRoute.reimbDestPlaceholder')}
+                placeholderTextColor="#94a3b8"
+                style={styles.reimbDestFieldInput}
+                editable={!reimbGeocodeLoading}
+                returnKeyType="search"
+                autoCorrect={false}
+                autoCapitalize="sentences"
+                clearButtonMode="while-editing"
+                onSubmitEditing={() => void runReimbursementSearch()}
+              />
+              {reimbSearchDraft.length > 0 && !reimbGeocodeLoading ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setReimbSearchDraft('');
+                    setReimbSearchResults([]);
+                    Keyboard.dismiss();
+                  }}
+                  style={styles.reimbDestFieldClear}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel={tr('appAlerts.liveRoute.reimbDestClearField')}
+                >
+                  <Ionicons name="close-circle" size={22} color="#94a3b8" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <TouchableOpacity
+              style={[styles.reimbDestSearchBtn, reimbGeocodeLoading && { opacity: 0.75 }]}
+              disabled={reimbGeocodeLoading}
+              onPress={() => void runReimbursementSearch()}
+              activeOpacity={0.9}
+            >
+              {reimbGeocodeLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.reimbDestSearchBtnText}>{tr('appAlerts.liveRoute.reimbDestSearch')}</Text>
+              )}
+            </TouchableOpacity>
+            {reimbSearchResults.length > 0 ? (
+              <View style={styles.reimbSearchListWrap} accessibilityLabel={tr('appAlerts.liveRoute.reimbDestResultsA11y')}>
+                <Text style={styles.reimbSearchListTitle}>{tr('appAlerts.liveRoute.reimbDestResultsTitle')}</Text>
+                <ScrollView
+                  style={styles.reimbSearchListScroll}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                >
+                  {reimbSearchResults.map((row) => (
+                    <Pressable
+                      key={row.id}
+                      onPress={() => applyReimbursementSearchResult(row)}
+                      style={({ pressed }) => [styles.reimbSearchRow, pressed && { backgroundColor: '#f1f5f9' }]}
+                    >
+                      <Ionicons name="location-outline" size={18} color={C.accent} style={{ marginTop: 1 }} />
+                      <Text style={styles.reimbSearchRowText} numberOfLines={3}>
+                        {row.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            ) : null}
+            {reimbMapPin ? (
+              <Text style={styles.reimbDestDragHint}>{tr('appAlerts.liveRoute.reimbDestDragHint')}</Text>
+            ) : null}
+            {reimbMapPin && reimbPinNeedsConfirm ? (
+              <TouchableOpacity
+                style={styles.reimbDestOkBtn}
+                onPress={confirmReimbursementPinAndReturnToNavigation}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.reimbDestOkBtnText}>{tr('appAlerts.liveRoute.reimbDestPinOk')}</Text>
+              </TouchableOpacity>
+            ) : null}
+            {reimbMapPin ? (
+              <TouchableOpacity
+                onPress={clearReimbursementOptionalDestination}
+                style={styles.reimbDestClearRow}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+              >
+                <Text style={styles.reimbDestClearText}>{tr('appAlerts.liveRoute.reimbDestClear')}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
 
         {showTransitHints && embedNativeMap && (
           <View style={styles.hintPanel} accessibilityViewIsModal>
@@ -2387,26 +2723,45 @@ export default function LiveRouteMapCard({
                    geodesic={false}
                  />
                )}
-               <Marker
-                 coordinate={{
-                   latitude: dynamicRoute[dynamicRoute.length - 1][0],
-                   longitude: dynamicRoute[dynamicRoute.length - 1][1],
-                 }}
-                 title="Destino"
-                 description="Toque para aproximar"
-                 onPress={() =>
-                   focusOnLatLng(
-                     dynamicRoute[dynamicRoute.length - 1][0],
-                     dynamicRoute[dynamicRoute.length - 1][1],
-                     20
-                   )
-                 }
-               >
-                 <View style={{ width: 28, height: 28, backgroundColor: '#dc2626', borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
-                   <FontAwesome5 name="flag-checkered" size={12} color="#fff" />
-                 </View>
-               </Marker>
+               {!(reimbursementMode && reimbMapPin) && (
+                 <Marker
+                   coordinate={{
+                     latitude: dynamicRoute[dynamicRoute.length - 1][0],
+                     longitude: dynamicRoute[dynamicRoute.length - 1][1],
+                   }}
+                   title="Destino"
+                   description="Toque para aproximar"
+                   onPress={() =>
+                     focusOnLatLng(
+                       dynamicRoute[dynamicRoute.length - 1][0],
+                       dynamicRoute[dynamicRoute.length - 1][1],
+                       20
+                     )
+                   }
+                 >
+                   <View style={{ width: 28, height: 28, backgroundColor: '#dc2626', borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
+                     <FontAwesome5 name="flag-checkered" size={12} color="#fff" />
+                   </View>
+                 </Marker>
+               )}
              </>
+          )}
+
+          {reimbursementMode &&
+            onCommitReimbursementOptionalDestination &&
+            reimbMapPin && (
+            <Marker
+              coordinate={{ latitude: reimbMapPin.lat, longitude: reimbMapPin.lng }}
+              draggable
+              onDragEnd={(e) => void handleReimbDestPinDragEnd(e)}
+              zIndex={2010}
+              title={tr('appAlerts.liveRoute.reimbDestPinTitle')}
+              description={tr('appAlerts.liveRoute.reimbDestPinSub')}
+            >
+              <View style={styles.reimbMapPinView}>
+                <FontAwesome5 name="map-pin" size={20} color="#b91c1c" />
+              </View>
+            </Marker>
           )}
           
           {myPos && (
@@ -2445,7 +2800,35 @@ export default function LiveRouteMapCard({
           style={[styles.floatingRightGroup, isLandscape && styles.floatingRightGroupLandscape]}
           collapsable={false}
         >
-          {!reimbursementMode && (route?.length > 0 || targetLoc?.lat) && (
+          {reimbursementMode && onCommitReimbursementOptionalDestination ? (
+            <TouchableOpacity
+              style={[
+                styles.reimbDestFab,
+                reimbMapPin && styles.reimbDestFabActive,
+                reimbDestPanelOpen && styles.reimbDestFabOpen,
+              ]}
+              onPress={() => {
+                setReimbDestPanelOpen((v) => {
+                  const next = !v;
+                  if (next) setFollowUser(false);
+                  return next;
+                });
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                reimbMapPin
+                  ? tr('appAlerts.liveRoute.reimbDestFabEditA11y')
+                  : tr('appAlerts.liveRoute.reimbDestFabOpenA11y')
+              }
+            >
+              <Ionicons
+                name={reimbMapPin ? 'location' : 'search'}
+                size={22}
+                color={reimbDestPanelOpen ? '#fff' : reimbMapPin ? '#b91c1c' : '#0f172a'}
+              />
+            </TouchableOpacity>
+          ) : null}
+          {allowDestRouting && osrmDest != null && (
             <TouchableOpacity style={styles.navBtn} onPress={openNavOptions}>
                <Ionicons name="navigate" size={24} color="#fff" />
             </TouchableOpacity>
@@ -2560,8 +2943,8 @@ export default function LiveRouteMapCard({
           ) : null}
         </View>
 
-        {/* ──── Premium ETA Badge — deslocamento operacional (não reembolso) ──── */}
-        {!reimbursementMode && !isComplete && !isPaused && (
+        {/* ──── Premium ETA Badge — com destino (operacional ou reembolso com destino opcional) ──── */}
+        {allowDestRouting && !isComplete && !isPaused && (
           <EtaBadge
             etaMinutes={displayEtaMinutes ?? null}
             pct={pct}
@@ -2640,6 +3023,92 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
   },
+  reimbDestPanel: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 25,
+    backgroundColor: 'rgba(255,255,255,0.97)',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  reimbDestTitle: { fontSize: 12, fontWeight: '800', color: '#0f172a' },
+  reimbDestHint: { fontSize: 10, color: '#64748b', marginTop: 2, marginBottom: 8, lineHeight: 14 },
+  reimbDestFieldWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    paddingLeft: 10,
+    paddingRight: 4,
+    minHeight: 46,
+  },
+  reimbDestFieldIcon: { marginRight: 6 },
+  reimbDestFieldInput: {
+    flex: 1,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    paddingHorizontal: 4,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#0f172a',
+  },
+  reimbDestFieldClear: { padding: 4 },
+  reimbDestSearchBtn: {
+    marginTop: 8,
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reimbDestSearchBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  reimbSearchListWrap: { marginTop: 8, maxHeight: 200 },
+  reimbSearchListTitle: { fontSize: 10, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
+  reimbSearchListScroll: { maxHeight: 200 },
+  reimbSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e2e8f0',
+  },
+  reimbSearchRowText: { flex: 1, fontSize: 13, color: '#0f172a', lineHeight: 18, fontWeight: '600' },
+  reimbDestDragHint: { fontSize: 10, color: '#0f766e', fontWeight: '700', marginTop: 8, lineHeight: 14 },
+  reimbDestOkBtn: {
+    marginTop: 10,
+    backgroundColor: '#16a34a',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reimbDestOkBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },
+  reimbDestClearRow: { marginTop: 6, alignSelf: 'flex-start', paddingVertical: 4 },
+  reimbDestClearText: { fontSize: 12, color: '#64748b', fontWeight: '700' },
+  reimbMapPinView: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderWidth: 2,
+    borderColor: '#b91c1c',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 6,
+  },
   landscapeStatusChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2680,6 +3149,29 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'android' ? { elevation: 32 } : {}),
   },
   floatingRightGroupLandscape: { bottom: 76 },
+  reimbDestFab: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  reimbDestFabActive: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fff1f2',
+  },
+  reimbDestFabOpen: {
+    backgroundColor: '#0f172a',
+    borderColor: '#0f172a',
+    shadowColor: '#0f172a',
+  },
   navBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#3b82f6', alignItems: 'center', justifyContent: 'center', shadowColor: '#3b82f6', shadowOpacity: 0.4, shadowRadius: 6, elevation: 6 },
   recenterBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 5, elevation: 4 },
   

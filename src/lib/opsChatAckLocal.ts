@@ -32,6 +32,16 @@ function fingerprintMatches(storedFp: string, user: { id?: string; email?: strin
   return parts.length >= 2 && parts[0] === id && parts[1] === email;
 }
 
+/** Após restauro, o `cuid` do utilizador pode mudar; o e-mail continua a ser a âncora segura. */
+function fingerprintMatchesForRestore(storedFp: string, user: { id?: string; email?: string }): boolean {
+  if (fingerprintMatches(storedFp, user)) return true;
+  const em = String(user?.email ?? '').trim().toLowerCase();
+  if (!em) return false;
+  const parts = String(storedFp || '').split('|').filter(Boolean);
+  if (parts.length >= 2 && String(parts[1] || '').trim().toLowerCase() === em) return true;
+  return false;
+}
+
 type BackupPayloadV1 = {
   v: 1;
   fingerprint: string;
@@ -54,10 +64,13 @@ function normLastMessageAt(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** ms — cache vs API podem diferir 1s; relógio / JSON. Antes isto anulava o re-PUT e o badge voltava. */
+const LAST_MESSAGE_AT_TOLERANCE_MS = 8_000;
+
 function sameLastMessageAt(a: number | null, b: number | null): boolean {
   if (a == null && b == null) return true;
   if (a == null || b == null) return false;
-  return a === b;
+  return Math.abs(a - b) <= LAST_MESSAGE_AT_TOLERANCE_MS;
 }
 
 /**
@@ -133,7 +146,7 @@ export async function restoreOpsChatAcksAfterLogin(
         return;
       }
       storedFp = String((parsed as { fingerprint?: string }).fingerprint || '');
-      if (!storedFp || !fingerprintMatches(storedFp, user)) {
+      if (!storedFp || !fingerprintMatchesForRestore(storedFp, user)) {
         await AsyncStorage.removeItem(OPS_CHAT_ACK_LOGOUT_BACKUP_KEY).catch(() => {});
         return;
       }
@@ -167,7 +180,8 @@ export async function restoreOpsChatAcksAfterLogin(
         const cur = byId.get(rid);
         if (!cur) continue;
         const curTs = normLastMessageAt(cur.lastMessageAt);
-        if (sameLastMessageAt(m.lastMessageAt ?? null, curTs)) {
+        const prevTs = m.lastMessageAt ?? null;
+        if (sameLastMessageAt(prevTs, curTs)) {
           await ChatService.markAsRead(rid).catch(() => {});
         }
       }

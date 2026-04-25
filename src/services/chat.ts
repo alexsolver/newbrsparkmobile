@@ -117,8 +117,21 @@ export const ChatService = {
   },
 
   async markAsRead(roomId: string): Promise<void> {
-    const res = await apiFetch(`/api/chat/rooms/${roomId}/read`, { method: 'PUT' });
-    if (res.ok) emitChatUnreadChanged();
+    const max = 3;
+    for (let attempt = 0; attempt < max; attempt++) {
+      try {
+        const res = await apiFetch(`/api/chat/rooms/${roomId}/read`, { method: 'PUT' });
+        if (res.ok) {
+          emitChatUnreadChanged();
+          return;
+        }
+        const retriable = res.status === 401 || res.status === 429 || res.status >= 500;
+        if (!retriable || attempt === max - 1) return;
+      } catch {
+        if (attempt === max - 1) return;
+      }
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    }
   },
 
   async getRoomInfo(roomId: string): Promise<ChatRoom | null> {

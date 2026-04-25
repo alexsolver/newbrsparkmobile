@@ -14,8 +14,10 @@ import {
   NativeScrollEvent,
   Alert,
   Modal,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
+  TouchableWithoutFeedback,
   AccessibilityInfo,
   ActivityIndicator,
   Linking,
@@ -5698,8 +5700,9 @@ export default function DashboardScreen() {
         onRequestClose={() => setTaskModalVisible(false)}
       >
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex: 1}}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.modalOverlay}>
-          <TouchableOpacity style={{ flex: 1 }} onPress={() => setTaskModalVisible(false)} />
+          <TouchableOpacity style={{ flex: 1 }} onPress={() => { Keyboard.dismiss(); setTaskModalVisible(false); }} />
           <View
             style={[
               styles.sortSheet,
@@ -5722,6 +5725,7 @@ export default function DashboardScreen() {
                   style={{ flex: 1, marginTop: 4, minHeight: 0 }}
                   contentContainerStyle={{ paddingBottom: 12 }}
                   keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
                   showsVerticalScrollIndicator
                 >
                   <View style={{ alignItems: 'center', marginBottom: 12 }}>
@@ -6292,6 +6296,7 @@ export default function DashboardScreen() {
             )}
           </View>
         </View>
+        </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
 

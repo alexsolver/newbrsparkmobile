@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Modal, TextInput, Alert, Image, ActivityIndicator,
   ScrollView, Dimensions, StatusBar,
-  KeyboardAvoidingView, Platform} from 'react-native';
+  KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -444,6 +444,7 @@ export function MediaModule({ assetId }: { assetId: string }) {
 
           {/* ── Edit View (Replacing Modal to avoid iOS stacking issues) ─────── */}
           {showEdit && (
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={[StyleSheet.absoluteFill, { backgroundColor: C.background, zIndex: 100 }]}>
               <View style={[S.modalHdr, { borderBottomColor: C.border, paddingTop: insets.top + 8 }]}>
                 <TouchableOpacity onPress={() => setShowEdit(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -455,7 +456,11 @@ export function MediaModule({ assetId }: { assetId: string }) {
                 </TouchableOpacity>
               </View>
 
-              <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                contentContainerStyle={{ padding: 20 }}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              >
                 <Text style={S.secLabel}>{t('media.description').toUpperCase()}</Text>
                 <TextInput
                   style={S.descInput}
@@ -484,12 +489,14 @@ export function MediaModule({ assetId }: { assetId: string }) {
                 </TouchableOpacity>
               </ScrollView>
             </View>
+            </TouchableWithoutFeedback>
           )}
         </View>
       </Modal>
 
       {/* ── Add Modal ──────────────────────────────────────────────────────── */}
       <Modal visible={showAdd} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setShowAdd(false); reset(); }}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={[S.modalWrap, { backgroundColor: C.background }]}>
           <View style={[S.modalHdr, { borderBottomColor: C.border }]}>
             <TouchableOpacity onPress={() => { setShowAdd(false); reset(); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -499,7 +506,11 @@ export function MediaModule({ assetId }: { assetId: string }) {
             <View style={{ width: 24 }} />
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={{ padding: 20 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          >
             {!pending ? (
               <>
                 <Text style={S.secLabel}>{t('media.chooseSource')}</Text>
@@ -583,6 +594,7 @@ export function MediaModule({ assetId }: { assetId: string }) {
             )}
           </ScrollView>
         </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* Standard FAB */}

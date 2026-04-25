@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Modal, TextInput, Alert, Image, ActivityIndicator,
   ScrollView, Dimensions, StatusBar,
-  KeyboardAvoidingView, Platform} from 'react-native';
+  KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -486,6 +486,7 @@ export default function MediaScreen() {
         presentationStyle="pageSheet"
         onRequestClose={handleCloseModal}
       >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={[styles.modalContainer, { backgroundColor: C.background }]}>
           {/* Modal Header */}
           <View style={[styles.modalHeader, { borderBottomColor: C.divider }]}>
@@ -501,6 +502,7 @@ export default function MediaScreen() {
             contentContainerStyle={{ padding: 20 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           >
             {/* Source picker */}
             {!pendingMedia ? (
@@ -646,6 +648,7 @@ export default function MediaScreen() {
             )}
           </ScrollView>
         </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );

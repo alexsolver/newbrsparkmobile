@@ -903,7 +903,34 @@ export class AuthService {
         if (res.ok) {
           const serverUser = (await res.json()) as User;
           const prev = await AuthService.getUser();
-          const merged = await mergeServerUserWithLocalAvatar(prev, serverUser);
+
+          // Alguns ambientes/endpoints podem devolver `/me` sem `appContext.capabilities` em situações transitórias
+          // (ex.: cold-start / cache / rollout). Se apagarmos isso, o app perde `mobile.mode.provider` e
+          // força o utilizador para o modo cliente indevidamente.
+          const normalizedServer: User = (() => {
+            if (!prev || prev.id !== serverUser.id) return serverUser;
+            const out: User = { ...serverUser };
+
+            const prevCaps = Array.isArray(prev?.appContext?.capabilities) ? prev.appContext!.capabilities : null;
+            const serverCaps = Array.isArray(serverUser?.appContext?.capabilities)
+              ? serverUser.appContext!.capabilities
+              : null;
+
+            // Só “preserva” quando o servidor NÃO enviou capabilities; se enviou array (mesmo vazio), respeita.
+            if (!serverCaps && prevCaps) {
+              out.appContext = { ...(serverUser.appContext || {}), ...(prev.appContext || {}) };
+              out.appContext.capabilities = prevCaps;
+            }
+
+            // Mesmo princípio para `technicianProfile`: se o servidor omitir, não apagar estado local.
+            if (serverUser.technicianProfile == null && prev.technicianProfile != null) {
+              out.technicianProfile = prev.technicianProfile;
+            }
+
+            return out;
+          })();
+
+          const merged = await mergeServerUserWithLocalAvatar(prev, normalizedServer);
           await AsyncStorage.setItem(USER_KEY, JSON.stringify(merged));
           return merged;
         }

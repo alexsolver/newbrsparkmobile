@@ -14,6 +14,8 @@ import {
   Clipboard,
   LayoutAnimation,
   UIManager,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -144,8 +146,9 @@ export function ValuationDepreciationModule({ assetId }: BaseProps) {
         <Text style={S.fabText}>{t('assetExtension.addValuation')}</Text>
       </TouchableOpacity>
       <Modal visible={modal} transparent animationType="slide" onRequestClose={() => setModal(false)}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-          <TouchableOpacity style={S.modalOuter} activeOpacity={1} onPress={() => setModal(false)} />
+          <TouchableOpacity style={S.modalOuter} activeOpacity={1} onPress={() => { Keyboard.dismiss(); setModal(false); }} />
           <View style={[S.modalPanel, { marginTop: 'auto' }]}>
             <Text style={{ fontSize: 16, fontWeight: '900', color: C.slate, marginBottom: 16 }}>{t('modules.valuation')}</Text>
             <Text style={S.label}>{t('assetExtension.bookValue')}</Text>
@@ -157,6 +160,7 @@ export function ValuationDepreciationModule({ assetId }: BaseProps) {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
@@ -223,8 +227,9 @@ export function ServiceUsageHistoryModule({ assetId }: BaseProps) {
         <Text style={S.fabText}>{t('assetExtension.addServiceEvent')}</Text>
       </TouchableOpacity>
       <Modal visible={modal} transparent animationType="slide" onRequestClose={() => setModal(false)}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-          <TouchableOpacity style={S.modalOuter} activeOpacity={1} onPress={() => setModal(false)} />
+          <TouchableOpacity style={S.modalOuter} activeOpacity={1} onPress={() => { Keyboard.dismiss(); setModal(false); }} />
           <View style={[S.modalPanel, { marginTop: 'auto' }]}>
             <Text style={{ fontSize: 16, fontWeight: '900', color: C.slate, marginBottom: 16 }}>{t('modules.serviceHistory')}</Text>
             <Text style={S.label}>{t('assetExtension.description')}</Text>

@@ -14,6 +14,8 @@ import {
   ActionSheetIOS,
   Linking,
   FlatList,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -604,7 +606,13 @@ export default function RegisterOnboardingScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
+        >
           <TouchableOpacity style={styles.backRow} onPress={onBack} hitSlop={12}>
             <Ionicons name="chevron-back" size={22} color={C.accent} />
             <Text style={styles.backT}>{t('common.back')}</Text>
@@ -889,6 +897,7 @@ export default function RegisterOnboardingScreen() {
           </View>
           <Text style={styles.gdprBadge}>{t('auth.lgpdBadge')}</Text>
         </ScrollView>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

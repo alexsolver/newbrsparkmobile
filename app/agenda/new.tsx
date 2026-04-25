@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Modal, FlatList, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -102,7 +102,12 @@ export default function NewAgendaScreen() {
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        >
           
           {/* CATEGORY PICKER */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
@@ -197,6 +202,7 @@ export default function NewAgendaScreen() {
           />
 
         </ScrollView>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
 
       {/* ASSET SELECTION MODAL */}

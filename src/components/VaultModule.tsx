@@ -2,7 +2,7 @@
  * VaultModule — Cofre de Senhas do Ativo
  */
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, Modal, Clipboard, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, Modal, Clipboard, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { VaultEntry, VaultCategory, VAULT_CATEGORIES } from '../../src/services/assetVault';
 import { type ColorPalette } from '../theme/colors';
@@ -163,6 +163,7 @@ export function VaultModule({
 
       <Modal visible={vaultModal} transparent animationType="slide">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={S.modalOverlay}>
           <View style={S.modalCard}>
             <View style={S.modalHeader}>
@@ -172,7 +173,11 @@ export function VaultModule({
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            >
               <Text style={S.formLabel}>{t('vault.credentialType')}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} keyboardShouldPersistTaps="handled">
                 <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -215,6 +220,7 @@ export function VaultModule({
             </ScrollView>
           </View>
         </View>
+        </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
 

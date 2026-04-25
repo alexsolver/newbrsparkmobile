@@ -2660,6 +2660,24 @@
       "proceedAnyway": "Start anyway"
     },
     "liveRoute": {
+      "reimbDestTitle": "Optional destination (navigation)",
+      "reimbDestHint": "Search for an address to see the route and open Waze or Maps. Stored on your departure record; not shown on the client tracking link.",
+      "reimbDestPlaceholder": "e.g. street, city…",
+      "reimbDestApply": "Set",
+      "reimbDestSearch": "Search",
+      "reimbDestResultsTitle": "Results",
+      "reimbDestDragHint": "Adjust on the map: drag the red pin and drop it where you want. The address updates when you release.",
+      "reimbDestPinTitle": "Optional destination",
+      "reimbDestPinSub": "Drag to adjust",
+      "reimbDestFabOpenA11y": "Search optional destination",
+      "reimbDestFabEditA11y": "Edit optional destination",
+      "reimbDestClearField": "Clear text",
+      "reimbDestResultsA11y": "Search results list",
+      "reimbDestClear": "Remove destination",
+      "reimbDestQueryRequired": "Enter a place or address to search.",
+      "reimbDestLocationDenied": "Location permission is required to turn the search into coordinates.",
+      "reimbDestNoResults": "No coordinates found for that search. Try a different phrasing or more detail.",
+      "reimbDestGeocodeFail": "Could not look up the address. Check the network and try again.",
       "navigateTitle": "Navigate to work order",
       "navigateBody": "Choose your preferred app:",
       "chatSendFail": "Could not send.",
@@ -2668,7 +2686,8 @@
       "chatModerationTitle": "Chat moderation",
       "chatModerationDefaultBody": "The message was not sent. Please review the text.",
       "chatModerationOverrideSuffix": "If this was a false alarm, you can confirm resending.",
-      "sendAnyway": "Send anyway"
+      "sendAnyway": "Send anyway",
+      "reimbDestPinOk": "OK on the pin"
     },
     "imageAnnot": {
       "galleryOrCamera": "Allow gallery access or use the camera.",

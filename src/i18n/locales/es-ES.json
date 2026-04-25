@@ -2660,6 +2660,24 @@
       "proceedAnyway": "Iniciar de todas formas"
     },
     "liveRoute": {
+      "reimbDestTitle": "Destino opcional (navegación)",
+      "reimbDestHint": "Busque una dirección para ver la ruta y abrir Waze o Maps. Queda en el registro de salida; no se publica en el seguimiento del cliente.",
+      "reimbDestPlaceholder": "Ej.: calle, ciudad…",
+      "reimbDestApply": "Definir",
+      "reimbDestSearch": "Buscar",
+      "reimbDestResultsTitle": "Resultados",
+      "reimbDestDragHint": "Ajuste en el mapa: arrastre el pin rojo y suéltelo donde quiera. La dirección se actualiza al soltar.",
+      "reimbDestPinTitle": "Destino (opcional)",
+      "reimbDestPinSub": "Arrastre para ajustar",
+      "reimbDestFabOpenA11y": "Buscar destino opcional",
+      "reimbDestFabEditA11y": "Editar destino opcional",
+      "reimbDestClearField": "Borrar texto",
+      "reimbDestResultsA11y": "Lista de resultados de búsqueda",
+      "reimbDestClear": "Quitar destino",
+      "reimbDestQueryRequired": "Escriba un lugar o dirección para buscar.",
+      "reimbDestLocationDenied": "Se necesita permiso de ubicación para convertir la búsqueda en coordenadas.",
+      "reimbDestNoResults": "No se encontraron coordenadas. Pruebe otra redacción o más detalles.",
+      "reimbDestGeocodeFail": "No se pudo buscar la dirección. Compruebe la red e inténtelo de nuevo.",
       "navigateTitle": "Navegar a la OS",
       "navigateBody": "Elige tu aplicación preferida:",
       "chatSendFail": "No se pudo enviar.",
@@ -2668,7 +2686,8 @@
       "chatModerationTitle": "Moderación del chat",
       "chatModerationDefaultBody": "El mensaje no se envió. Revisa el texto.",
       "chatModerationOverrideSuffix": "Si fue una falsa alarma, puedes confirmar el reenvío.",
-      "sendAnyway": "Enviar igualmente"
+      "sendAnyway": "Enviar igualmente",
+      "reimbDestPinOk": "OK en el pin"
     },
     "imageAnnot": {
       "galleryOrCamera": "Autoriza la galería o usa la cámara.",

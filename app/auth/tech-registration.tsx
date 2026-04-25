@@ -20,6 +20,9 @@ import {
   Platform,
   Modal,
   Switch,
+  KeyboardAvoidingView,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import MapView, { Circle, Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -2787,36 +2790,41 @@ export default function TechRegistrationScreen() {
         setSecurityModalVisible(false);
       }}
     >
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: 'rgba(2,6,23,0.45)',
-          padding: 24,
-          justifyContent: 'center',
-        }}
-      >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View
           style={{
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: C.border,
-            backgroundColor: C.cardWhite,
-            padding: 16,
+            flex: 1,
+            backgroundColor: 'rgba(2,6,23,0.45)',
+            padding: 24,
+            justifyContent: 'center',
           }}
         >
-          <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate }}>Confirmação de segurança</Text>
-          <Text style={{ fontSize: 13, color: C.textSecondary, lineHeight: 20, marginTop: 8 }}>
-            Para concluir o envio, informe o código de 6 dígitos enviado ao seu e-mail de cadastro.
-          </Text>
-          <TextInput
-            style={[styles.input, { marginTop: 12, marginBottom: 0 }]}
-            value={submitOtpCode}
-            onChangeText={(v) => setSubmitOtpCode(v.replace(/[^0-9]/g, '').slice(0, 6))}
-            placeholder="000000"
-            keyboardType="number-pad"
-            autoCapitalize="none"
-          />
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
+            <View
+              style={{
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: C.border,
+                backgroundColor: C.cardWhite,
+                padding: 16,
+              }}
+            >
+              <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate }}>Confirmação de segurança</Text>
+              <Text style={{ fontSize: 13, color: C.textSecondary, lineHeight: 20, marginTop: 8 }}>
+                Para concluir o envio, informe o código de 6 dígitos enviado ao seu e-mail de cadastro.
+              </Text>
+              <TextInput
+                style={[styles.input, { marginTop: 12, marginBottom: 0 }]}
+                value={submitOtpCode}
+                onChangeText={(v) => setSubmitOtpCode(v.replace(/[^0-9]/g, '').slice(0, 6))}
+                placeholder="000000"
+                keyboardType="number-pad"
+                autoCapitalize="none"
+                returnKeyType="done"
+                blurOnSubmit
+                onSubmitEditing={Keyboard.dismiss}
+              />
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
             <TouchableOpacity
               onPress={() => {
                 if (saving) return;
@@ -2874,9 +2882,11 @@ export default function TechRegistrationScreen() {
                 <Text style={{ color: '#fff', fontWeight: '800' }}>Confirmar e enviar</Text>
               )}
             </TouchableOpacity>
-          </View>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
         </View>
-      </View>
+      </TouchableWithoutFeedback>
     </Modal>
     </>
   );

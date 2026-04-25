@@ -2,7 +2,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, RefreshControl,
   ActivityIndicator, Modal, ScrollView, TextInput, Alert,
-  KeyboardAvoidingView, Platform, Image, Animated,
+  KeyboardAvoidingView, Platform, Image, Animated, Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -781,8 +781,9 @@ export default function ChatScreen() {
       {/* MODAL DE NOVO CHAT / GRUPO */}
       <Modal visible={modalVisible} transparent animationType="slide">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
             
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Nova Conversa</Text>
@@ -803,7 +804,12 @@ export default function ChatScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 400 }}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            >
 
               {/* ABA CRIAR GRUPO */}
               {modalTab === 'GROUP' && canCreateChatGroup && (
@@ -872,8 +878,9 @@ export default function ChatScreen() {
               )}
 
             </ScrollView>
+            </View>
           </View>
-        </View>
+          </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </Modal>
     </View>

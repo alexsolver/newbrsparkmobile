@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -572,12 +573,18 @@ export default function WorkTimeScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalRoot}
         >
-          <Pressable style={styles.modalBackdrop} onPress={closeExceptionModal} />
+          <Pressable style={styles.modalBackdrop} onPress={() => { Keyboard.dismiss(); closeExceptionModal(); }} />
           <View style={[styles.modalSheet, { backgroundColor: C.cardWhite, borderColor: C.status.warning.border }]}>
             <View style={[styles.modalGrab, { backgroundColor: C.border }]} />
             <Text style={[styles.modalTitle, { color: C.slate }]}>{t('workTime.exceptionModalTitle')}</Text>
             <Text style={[styles.modalHint, { color: C.textSecondary }]}>{t('workTime.exceptionModalHint')}</Text>
-            <ScrollView style={styles.modalScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalScroll}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              keyboardShouldPersistTaps="handled"
+            >
               <Text style={[styles.modalSummary, { color: C.textLight }]}>{exceptionModal.summaryText}</Text>
             </ScrollView>
             <TextInput

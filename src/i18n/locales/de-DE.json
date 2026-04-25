@@ -2660,6 +2660,24 @@
       "proceedAnyway": "Trotzdem starten"
     },
     "liveRoute": {
+      "reimbDestTitle": "Optionales Ziel (Navigation)",
+      "reimbDestHint": "Adresse suchen, um Route anzuzeigen und Waze oder Maps zu öffnen. Wird in der Abfahrtserfassung gespeichert; nicht im Kunden-Tracking veröffentlicht.",
+      "reimbDestPlaceholder": "z. B. Straße, Ort…",
+      "reimbDestApply": "Übernehmen",
+      "reimbDestSearch": "Suchen",
+      "reimbDestResultsTitle": "Ergebnisse",
+      "reimbDestDragHint": "Auf der Karte anpassen: roten Pin ziehen und absetzen. Die Adresse wird beim Loslassen aktualisiert.",
+      "reimbDestPinTitle": "Optionales Ziel",
+      "reimbDestPinSub": "Zum Anpassen ziehen",
+      "reimbDestFabOpenA11y": "Optionales Ziel suchen",
+      "reimbDestFabEditA11y": "Optionales Ziel bearbeiten",
+      "reimbDestClearField": "Text löschen",
+      "reimbDestResultsA11y": "Suchergebnisliste",
+      "reimbDestClear": "Ziel entfernen",
+      "reimbDestQueryRequired": "Bitte einen Ort oder eine Adresse eingeben.",
+      "reimbDestLocationDenied": "Standortzugriff ist nötig, um die Suche in Koordinaten umzuwandeln.",
+      "reimbDestNoResults": "Keine Koordinaten zu dieser Suche. Formulierung oder Details anpassen.",
+      "reimbDestGeocodeFail": "Adresse konnte nicht gesucht werden. Netz prüfen und erneut versuchen.",
       "navigateTitle": "Zum Auftrag navigieren",
       "navigateBody": "Bevorzugte App wählen:",
       "chatSendFail": "Senden fehlgeschlagen.",
@@ -2668,7 +2686,8 @@
       "chatModerationTitle": "Chat-Moderation",
       "chatModerationDefaultBody": "Die Nachricht wurde nicht gesendet. Bitte Text prüfen.",
       "chatModerationOverrideSuffix": "Bei einem Fehlalarm können Sie das erneute Senden bestätigen.",
-      "sendAnyway": "Trotzdem senden"
+      "sendAnyway": "Trotzdem senden",
+      "reimbDestPinOk": "Pin bestätigen"
     },
     "imageAnnot": {
       "galleryOrCamera": "Galeriezugriff erlauben oder Kamera nutzen.",

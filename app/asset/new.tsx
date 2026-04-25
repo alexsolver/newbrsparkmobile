@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Switch, ActivityIndicator, Modal, FlatList , KeyboardAvoidingView, Platform} from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, Dimensions, Image, Switch, ActivityIndicator, Modal, FlatList , KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback} from 'react-native';
 import { useRouter, Stack, useLocalSearchParams } from 'expo-router';
 import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -958,6 +958,7 @@ export default function NewAssetScreen() {
 
       {/* Icon Picker Modal */}
       <Modal visible={iconPickerVisible} animationType="slide" presentationStyle="pageSheet">
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={{ flex: 1, backgroundColor: C.background }}>
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.cardWhite }}>
@@ -991,6 +992,8 @@ export default function NewAssetScreen() {
               returnKeyType="search"
               autoCapitalize="none"
               autoCorrect={false}
+              blurOnSubmit
+              onSubmitEditing={Keyboard.dismiss}
             />
           </View>
 
@@ -1016,6 +1019,7 @@ export default function NewAssetScreen() {
             numColumns={4}
             contentContainerStyle={{ padding: 16, gap: 12 }}
             columnWrapperStyle={{ gap: 12 }}
+            keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => {
               const selected = customIcon === item.icon;
               return (
@@ -1042,6 +1046,7 @@ export default function NewAssetScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       </KeyboardAvoidingView>

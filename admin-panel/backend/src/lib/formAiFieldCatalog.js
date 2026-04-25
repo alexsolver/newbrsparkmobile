@@ -123,7 +123,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowTransit',
     descPt:
-      'Início de deslocamento (prova de deslocamento: trilha/tempos). Par obrigatório com transit_end. transitPurpose: "service" = destino na OS (ETA, mapa); "reimbursement" = só registo de trilha; "patrol" = patrulhamento: mapa com geometria/KML da OS. Em OS tipo trecho (A–B), no app o técnico escolhe o vértice para navegação. Isto é distinto da cerca eletrônica (prova de entrada na área).',
+      'Início de deslocamento (prova de deslocamento: trilha/tempos). Par obrigatório com transit_end. transitPurpose: "service" = destino na OS (ETA, mapa); "reimbursement" = só registo de trilha; "patrol" = patrulhamento: mapa com geometria/KML da OS. No app, em reembolso, o JSON pode ter optionalNavDestination { address, lat, lng, query? } (destino de navegação opcional; não liga ao link do cliente). Em OS tipo trecho (A–B), o técnico escolhe o vértice para navegação. Isto é distinto da cerca eletrônica (prova de entrada na área).',
   },
   {
     type: 'transit_end',

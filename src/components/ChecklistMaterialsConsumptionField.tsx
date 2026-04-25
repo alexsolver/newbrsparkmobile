@@ -8,6 +8,10 @@ import {
   Modal,
   FlatList,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { TechnicianStockService } from '../services/technicianStockService';
@@ -206,47 +210,55 @@ export function ChecklistMaterialsConsumptionField({ value, onChange, readOnly, 
       ) : null}
 
       <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setPickerOpen(false)}>
-          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-            <Text style={styles.modalTitle}>Seu estoque técnico</Text>
-            <Text style={styles.modalHint}>
-              Cadastro separado dos bens do portfólio. Adicione itens em "Meu estoque" no menu ou em Estoque técnico.
-            </Text>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Pesquisar nome ou SKU…"
-              value={search}
-              onChangeText={setSearch}
-              placeholderTextColor="#94a3b8"
-            />
-            <FlatList
-              data={filteredPick}
-              keyExtractor={(it) => it.id}
-              style={{ maxHeight: 320 }}
-              ListEmptyComponent={
-                <Text style={styles.emptyPick}>
-                  Ainda sem produtos no estoque técnico. Use o botão + no menu ou a tela de cadastro.
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setPickerOpen(false)}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
+              <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
+                <Text style={styles.modalTitle}>Seu estoque técnico</Text>
+                <Text style={styles.modalHint}>
+                  Cadastro separado dos bens do portfólio. Adicione itens em "Meu estoque" no menu ou em Estoque técnico.
                 </Text>
-              }
-              renderItem={({ item: it }) => (
-                <TouchableOpacity style={styles.pickRow} onPress={() => addItem(it)}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.pickName} numberOfLines={1}>
-                      {it.name}
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Pesquisar nome ou SKU…"
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholderTextColor="#94a3b8"
+                  returnKeyType="done"
+                  blurOnSubmit
+                  onSubmitEditing={Keyboard.dismiss}
+                />
+                <FlatList
+                  data={filteredPick}
+                  keyExtractor={(it) => it.id}
+                  style={{ maxHeight: 320 }}
+                  keyboardShouldPersistTaps="handled"
+                  ListEmptyComponent={
+                    <Text style={styles.emptyPick}>
+                      Ainda sem produtos no estoque técnico. Use o botão + no menu ou a tela de cadastro.
                     </Text>
-                    <Text style={styles.pickSku}>
-                      {it.sku} · {it.currentStock} {it.unit}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
+                  }
+                  renderItem={({ item: it }) => (
+                    <TouchableOpacity style={styles.pickRow} onPress={() => addItem(it)}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.pickName} numberOfLines={1}>
+                          {it.name}
+                        </Text>
+                        <Text style={styles.pickSku}>
+                          {it.sku} · {it.currentStock} {it.unit}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
+                    </TouchableOpacity>
+                  )}
+                />
+                <TouchableOpacity style={styles.modalClose} onPress={() => setPickerOpen(false)}>
+                  <Text style={styles.modalCloseText}>Fechar</Text>
                 </TouchableOpacity>
-              )}
-            />
-            <TouchableOpacity style={styles.modalClose} onPress={() => setPickerOpen(false)}>
-              <Text style={styles.modalCloseText}>Fechar</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          </TouchableOpacity>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );

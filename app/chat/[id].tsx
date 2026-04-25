@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
-  TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, ScrollView, Image
+  TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, ScrollView, Image, Keyboard, TouchableWithoutFeedback
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -299,10 +299,11 @@ export default function ChatRoomScreen() {
       } catch {
         /* mantém cache e mensagens pendentes locais */
       } finally {
-        /** Se `getMessages` correu até ao fim, há ligação ao servidor — marcar lido mesmo quando
-         * `useConnectivity` ainda está `null` (evita `lastReadAt` preso e tudo «não lido» após login). */
-        if (!cancelled && !isOpsChat && roomId && initialMessagesSynced) {
-          ChatService.markAsRead(roomId).catch(() => {});
+        /** Sincronizar lido: após pull bem sucedido, ou com cache local mas fetch falhou (re-alinha servidor). */
+        if (!cancelled && !isOpsChat && roomId) {
+          if (initialMessagesSynced || initial.length > 0) {
+            ChatService.markAsRead(roomId).catch(() => {});
+          }
         }
       }
     })();
@@ -835,6 +836,7 @@ export default function ChatRoomScreen() {
 
       {/* MODAL GROUP SETTINGS */}
       <Modal visible={settingsVisible} transparent animationType="slide">
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
@@ -843,7 +845,11 @@ export default function ChatRoomScreen() {
                  <Ionicons name="close" size={26} color={C.textSecondary} />
               </TouchableOpacity>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            >
               <Text style={styles.sectionTitle}>Membros ({roomInfo?.memberCount})</Text>
               
               {!isCreator && (
@@ -910,6 +916,7 @@ export default function ChatRoomScreen() {
             </ScrollView>
           </View>
         </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
     </SafeAreaView>

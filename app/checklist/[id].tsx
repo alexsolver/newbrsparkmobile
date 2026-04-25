@@ -1281,7 +1281,7 @@ type ActiveTransitLegInfo = {
   startField: any;
   endField: any;
   reimbursement: boolean;
-  /** Patrulhamento: mapa segue KML/geometria da OS (`buildRouteCoordsFromTask`). */
+  /** Patrulhamento: como reembolso (só registro + trilha), com KML no mapa se existir no despacho. */
   patrol?: boolean;
 };
 
@@ -1373,7 +1373,10 @@ function isReimbursementTransitField(schemaData: any[] | undefined, fieldId: str
   return false;
 }
 
-/** Patrulhamento: mapa com geometria/KML da OS (`transitPurpose === 'patrol'`). */
+/**
+ * Patrulhamento: mesmo comportamento que «apenas registro de deslocamento» (reembolso) — sem ETA, sem chat, sem
+ * link de acompanhamento — exceto que o mapa exibe a geometria/KML do despacho, quando houver.
+ */
 function isPatrolTransitField(schemaData: any[] | undefined, fieldId: string): boolean {
   if (!fieldId || !Array.isArray(schemaData)) return false;
   const fd = schemaData.find((f: any) => f && f.id === fieldId);
@@ -8019,6 +8022,47 @@ export default function ChecklistEngine() {
     [template?.schemaData, responses],
   );
 
+  /**
+   * Deslocamento «apenas registo» (reembolso): destino opcional (morada + coordenadas) no JSON do transit_start
+   * (`optionalNavDestination`) — rota/ETA no aparelho e navegação externa, sem publicar no link do cliente.
+   */
+  const commitReimbursementOptionalNavDestination = useCallback(
+    (payload: { address?: string; lat: number; lng: number; query?: string } | null) => {
+      if (isReadOnly) return;
+      const startField = activeTransitLeg?.startField;
+      if (!startField?.id || startField.type !== 'transit_start') return;
+      if (!isReimbursementTransitField(template?.schemaData, startField.id)) return;
+      const scope = lastTransitScopeRef.current;
+      const raw = getScopedFieldValue(responsesRefForFacial.current, scope ?? null, startField.id);
+      let obj: Record<string, unknown> = {};
+      if (raw != null && String(raw).trim() !== '') {
+        try {
+          obj = typeof raw === 'string' ? JSON.parse(raw) : { ...(raw as object) };
+        } catch {
+          Alert.alert('Atenção', 'Não foi possível atualizar o destino opcional.');
+          return;
+        }
+      }
+      if (payload == null) {
+        delete obj.optionalNavDestination;
+      } else {
+        obj.optionalNavDestination = {
+          lat: payload.lat,
+          lng: payload.lng,
+          ...(payload.address != null && String(payload.address).trim()
+            ? { address: String(payload.address).trim() }
+            : {}),
+          ...(payload.query != null && String(payload.query).trim()
+            ? { query: String(payload.query).trim() }
+            : {}),
+        };
+      }
+      const hi = handleInputRef.current;
+      if (typeof hi === 'function') hi(startField.id, JSON.stringify(obj), scope ?? undefined);
+    },
+    [isReadOnly, activeTransitLeg, template?.schemaData],
+  );
+
   /** Sincronização leve: link de tracking + ETA do servidor quando não há deslocamento operacional ativo (sem disputar o relógio local). */
   useEffect(() => {
     if (!resolvedTaskId || isReadOnly) return;
@@ -8041,7 +8085,8 @@ export default function ChecklistEngine() {
 
         const cachedTask = cloudTasks.find((t: any) => String(t.id) === String(resolvedTaskId));
         const cachedNorm = normalizeEtaMinutes(cachedTask?.etaMinutes);
-        const inOpTransit = activeTransitLeg && !activeTransitLeg.reimbursement;
+        const inOpTransit =
+          activeTransitLeg && !activeTransitLeg.reimbursement && !activeTransitLeg.patrol;
 
         if (cachedNorm !== null && !inOpTransit) {
           setMapEtaMinutes(cachedNorm);
@@ -8083,7 +8128,8 @@ export default function ChecklistEngine() {
   useEffect(() => {
     if (!resolvedTaskId || isReadOnly) return;
 
-    const op = activeTransitLeg && !activeTransitLeg.reimbursement;
+    const op =
+      activeTransitLeg && !activeTransitLeg.reimbursement && !activeTransitLeg.patrol;
 
     if (!op || !activeTransitLeg) {
       if (prevHadOperationalTransitRef.current && resolvedTaskId) {
@@ -8825,12 +8871,13 @@ export default function ChecklistEngine() {
           const email = await AsyncStorage.getItem('@brspark_email');
           const schSel = template?.schemaData || [];
           const reimbSel = isReimbursementTransitField(schSel, pending.fieldId);
+          const patrolSel = isPatrolTransitField(schSel, pending.fieldId);
           lastTransitScopeRef.current = pending.scope ?? null;
           dataCollectionService.setState('IN_TRANSIT', {
             executionId: String(taskId || ''),
             ownerEmail: email || 'unknown',
           }).catch(() => {});
-          if (!reimbSel) {
+          if (!reimbSel && !patrolSel) {
             await generateTrackingLink();
           }
           if (
@@ -8885,32 +8932,52 @@ export default function ChecklistEngine() {
               }
             : null;
         const mergedEta =
-          reimbursementMode
+          reimbursementMode || patrolMode
             ? undefined
             : mapEtaMinutes ?? normalizeEtaMinutes(currentTask?.etaMinutes);
 
-        const targetForMap =
-          reimbursementMode
-            ? null
-            : routeDest ||
-              routeEndCoord ||
-              (() => {
-                const la = currentTask?.locationLat;
-                const ln = currentTask?.locationLng;
-                const latN = typeof la === 'number' ? la : parseFloat(String(la ?? '').replace(',', '.'));
-                const lngN = typeof ln === 'number' ? ln : parseFloat(String(ln ?? '').replace(',', '.'));
+        const targetForMap = (() => {
+          if (reimbursementMode) {
+            if (startVal != null && String(startVal).trim() !== '') {
+              try {
+                const o = typeof startVal === 'string' ? JSON.parse(startVal) : startVal;
+                const ond = o?.optionalNavDestination;
                 if (
-                  Number.isFinite(latN) &&
-                  Number.isFinite(lngN) &&
-                  latN >= -90 &&
-                  latN <= 90 &&
-                  lngN >= -180 &&
-                  lngN <= 180
+                  ond &&
+                  Number.isFinite(Number(ond.lat)) &&
+                  Number.isFinite(Number(ond.lng))
                 ) {
-                  return { lat: latN, lng: lngN };
+                  return { lat: Number(ond.lat), lng: Number(ond.lng) };
                 }
-                return null;
-              })();
+              } catch {
+                /* ignore */
+              }
+            }
+            return null;
+          }
+          if (patrolMode) return null;
+          return (
+            routeDest ||
+            routeEndCoord ||
+            (() => {
+              const la = currentTask?.locationLat;
+              const ln = currentTask?.locationLng;
+              const latN = typeof la === 'number' ? la : parseFloat(String(la ?? '').replace(',', '.'));
+              const lngN = typeof ln === 'number' ? ln : parseFloat(String(ln ?? '').replace(',', '.'));
+              if (
+                Number.isFinite(latN) &&
+                Number.isFinite(lngN) &&
+                latN >= -90 &&
+                latN <= 90 &&
+                lngN >= -180 &&
+                lngN <= 180
+              ) {
+                return { lat: latN, lng: lngN };
+              }
+              return null;
+            })()
+          );
+        })();
 
         const corridorTol =
           currentTask?.locationZoneType === 'route'
@@ -8929,7 +8996,23 @@ export default function ChecklistEngine() {
         }
 
         const keepScreenAwake = activeStartField?.transitKeepScreenAwake !== false;
-        const routeForCard = reimbursementMode ? [] : routeCoords;
+
+        let reimbursementOptionalDestLabel: string | undefined;
+        if (reimbursementMode && startVal != null && String(startVal).trim() !== '') {
+          try {
+            const o = typeof startVal === 'string' ? JSON.parse(startVal) : startVal;
+            const ad = o?.optionalNavDestination?.address;
+            if (typeof ad === 'string' && ad.trim()) reimbursementOptionalDestLabel = ad.trim();
+          } catch {
+            /* ignore */
+          }
+        }
+        /**
+         * - Serviço (default): destino da OS, sem KML.
+         * - Reembolso: só trilha GPS, sem polilinha de despacho.
+         * - Patrulhamento: igual reembolso no produto (sem ETA/chat/acompanhamento), mas com KML no mapa se existir.
+         */
+        const routeForCard = reimbursementMode ? [] : patrolMode ? routeCoords : [];
 
         return <LiveRouteMapCard 
                   route={routeForCard} 
@@ -8940,6 +9023,10 @@ export default function ChecklistEngine() {
                   reimbursementMode={reimbursementMode}
                   patrolMode={patrolMode}
                   onPublicTrackingEtaChange={commitPublicTrackingEtaFromBadge}
+                  onCommitReimbursementOptionalDestination={
+                    reimbursementMode ? commitReimbursementOptionalNavDestination : undefined
+                  }
+                  reimbursementOptionalDestLabel={reimbursementOptionalDestLabel}
                   targetLoc={
                     targetForMap
                       ? { lat: targetForMap.lat, lng: targetForMap.lng }
@@ -8947,7 +9034,7 @@ export default function ChecklistEngine() {
                   }
                   etaMinutes={typeof mergedEta === 'number' && Number.isFinite(mergedEta) ? mergedEta : undefined}
                   transitStartedAtIso={transitStartedAtIso}
-                  taskId={reimbursementMode ? undefined : resolvedTaskId || undefined}
+                  taskId={reimbursementMode || patrolMode ? undefined : resolvedTaskId || undefined}
                   endTransitLoading={activeEndField ? gpsBusyFieldId === activeEndField.id : false}
                   onEndTransit={activeEndField ? async () => {
                       const hasValue = !!findFieldValueInResponses(
@@ -11670,7 +11757,7 @@ export default function ChecklistEngine() {
                            executionId: String(taskId || ''),
                            ownerEmail: email || 'unknown',
                          }).catch(() => {});
-                         if (!reimbField) {
+                         if (!reimbField && !patrolField) {
                            await generateTrackingLink();
                          }
                          // Mapa + routeTracker: o LiveRouteMapCard inicia o tracker ao ficar visível (evita corrida com start([]))

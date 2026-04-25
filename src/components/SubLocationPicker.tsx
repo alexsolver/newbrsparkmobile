@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, ScrollView,
   TextInput, StyleSheet, Dimensions, FlatList,
-  KeyboardAvoidingView, Platform} from 'react-native';
+  KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SubLocation } from '../types/asset';
 import { type ColorPalette } from '../theme/colors';
@@ -268,6 +268,7 @@ export function SubLocationPicker({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={S.overlay}>
         <View style={S.sheet}>
 
@@ -298,7 +299,12 @@ export function SubLocationPicker({
             ))}
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          >
 
             {/* ── STEP 1: FLOOR ── */}
             {step === 1 && (
@@ -475,6 +481,7 @@ export function SubLocationPicker({
 
         </View>
       </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }

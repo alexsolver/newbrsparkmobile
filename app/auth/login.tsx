@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Alert, ImageBackground,
-  ActivityIndicator, Linking, Modal,
+  ActivityIndicator, Linking, Modal, Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -494,8 +494,10 @@ export default function LoginScreen() {
         transparent
         onRequestClose={() => !passwordResetSending && setPasswordResetVisible(false)}
       >
-        <View style={styles.sheetBackdrop}>
-          <View style={styles.sheetCard}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.sheetBackdrop}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ width: '100%' }}>
+              <View style={styles.sheetCard}>
             <Text style={styles.sheetTitle}>{t('auth.resetPasswordTitle')}</Text>
             <Text style={styles.sheetText}>{t('auth.resetPasswordDescription')}</Text>
 
@@ -531,8 +533,10 @@ export default function LoginScreen() {
                 )}
               </TouchableOpacity>
             </View>
+              </View>
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* ─── Várias organizações (mesmo e-mail) ───────────────────────────── */}

@@ -13,6 +13,8 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { useRouter, Stack, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -263,6 +265,7 @@ export default function NewTechnicianFinanceScreen() {
       style={[styles.container, { backgroundColor: C.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScreenSubheader
         title="Novo lançamento"
@@ -272,7 +275,11 @@ export default function NewTechnicianFinanceScreen() {
         rightLoading={linkableLoading}
       />
 
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      >
         <Text style={styles.lbl}>Tipo</Text>
         <View style={styles.kindRow}>
           <TouchableOpacity
@@ -430,6 +437,7 @@ export default function NewTechnicianFinanceScreen() {
           </View>
         </View>
       </Modal>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
