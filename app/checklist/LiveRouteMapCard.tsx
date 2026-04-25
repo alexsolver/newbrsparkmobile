@@ -2409,118 +2409,125 @@ export default function LiveRouteMapCard({
                 ...(Platform.OS === 'android' ? { elevation: 80 } : {}),
               },
             ]}
+            /**
+             * CRÍTICO: não capturar toque fora do painel.
+             * Assim o mapa continua clicável/arrastável mesmo com o painel aberto.
+             */
             pointerEvents="box-none"
           >
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={Keyboard.dismiss} />
             <View
               style={[
                 styles.reimbDestPanel,
                 {
-                  top: insets.top + (isLandscape ? 48 : 108),
-                  maxHeight: Math.max(
-                    240,
-                    windowDims.height -
-                      (insets.top + (isLandscape ? 48 : 108)) -
-                      Math.max(reimbKeyboardHeight, insets.bottom) -
-                      16
-                  ),
+                  bottom:
+                    (isLandscape ? 12 : 110) +
+                    Math.max(insets.bottom, 0) +
+                    (reimbKeyboardHeight > 0 ? reimbKeyboardHeight : 0),
+                  maxHeight: Math.round(windowDims.height * (isLandscape ? 0.56 : 0.34)),
                   ...(isLandscape ? { right: 56, maxWidth: width - 72 } : {}),
                 },
               ]}
               pointerEvents="auto"
             >
-            <Text style={styles.reimbDestTitle}>{tr('appAlerts.liveRoute.reimbDestTitle')}</Text>
-            <Text style={styles.reimbDestHint}>{tr('appAlerts.liveRoute.reimbDestHint')}</Text>
-            <View style={styles.reimbDestFieldWrap}>
-              <Ionicons name="search" size={20} color="#64748b" style={styles.reimbDestFieldIcon} />
-              <TextInput
-                value={reimbSearchDraft}
-                onChangeText={(t) => {
-                  setReimbSearchDraft(t);
-                  if (reimbSearchResults.length) setReimbSearchResults([]);
-                }}
-                placeholder={tr('appAlerts.liveRoute.reimbDestPlaceholder')}
-                placeholderTextColor="#94a3b8"
-                style={styles.reimbDestFieldInput}
-                editable={!reimbGeocodeLoading}
-                returnKeyType="search"
-                autoCorrect={false}
-                autoCapitalize="sentences"
-                clearButtonMode="while-editing"
-                onSubmitEditing={() => void runReimbursementSearch()}
-              />
-              {reimbSearchDraft.length > 0 && !reimbGeocodeLoading ? (
-                <TouchableOpacity
-                  onPress={() => {
-                    setReimbSearchDraft('');
-                    setReimbSearchResults([]);
-                    Keyboard.dismiss();
-                  }}
-                  style={styles.reimbDestFieldClear}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel={tr('appAlerts.liveRoute.reimbDestClearField')}
-                >
-                  <Ionicons name="close-circle" size={22} color="#94a3b8" />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-            <TouchableOpacity
-              style={[styles.reimbDestSearchBtn, reimbGeocodeLoading && { opacity: 0.75 }]}
-              disabled={reimbGeocodeLoading}
-              onPress={() => void runReimbursementSearch()}
-              activeOpacity={0.9}
-            >
-              {reimbGeocodeLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.reimbDestSearchBtnText}>{tr('appAlerts.liveRoute.reimbDestSearch')}</Text>
-              )}
-            </TouchableOpacity>
-            {reimbSearchResults.length > 0 ? (
-              <View style={styles.reimbSearchListWrap} accessibilityLabel={tr('appAlerts.liveRoute.reimbDestResultsA11y')}>
-                <Text style={styles.reimbSearchListTitle}>{tr('appAlerts.liveRoute.reimbDestResultsTitle')}</Text>
-                <ScrollView
-                  style={styles.reimbSearchListScroll}
-                  keyboardShouldPersistTaps="handled"
-                  nestedScrollEnabled
-                  showsVerticalScrollIndicator
-                >
-                  {reimbSearchResults.map((row) => (
-                    <Pressable
-                      key={row.id}
-                      onPress={() => applyReimbursementSearchResult(row)}
-                      style={({ pressed }) => [styles.reimbSearchRow, pressed && { backgroundColor: '#f1f5f9' }]}
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              >
+                <Text style={styles.reimbDestTitle}>{tr('appAlerts.liveRoute.reimbDestTitle')}</Text>
+                <Text style={styles.reimbDestHint}>{tr('appAlerts.liveRoute.reimbDestHint')}</Text>
+                <View style={styles.reimbDestFieldWrap}>
+                  <Ionicons name="search" size={20} color="#64748b" style={styles.reimbDestFieldIcon} />
+                  <TextInput
+                    value={reimbSearchDraft}
+                    onChangeText={(t) => {
+                      setReimbSearchDraft(t);
+                      if (reimbSearchResults.length) setReimbSearchResults([]);
+                    }}
+                    placeholder={tr('appAlerts.liveRoute.reimbDestPlaceholder')}
+                    placeholderTextColor="#94a3b8"
+                    style={styles.reimbDestFieldInput}
+                    editable={!reimbGeocodeLoading}
+                    returnKeyType="search"
+                    autoCorrect={false}
+                    autoCapitalize="sentences"
+                    clearButtonMode="while-editing"
+                    onSubmitEditing={() => void runReimbursementSearch()}
+                  />
+                  {reimbSearchDraft.length > 0 && !reimbGeocodeLoading ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setReimbSearchDraft('');
+                        setReimbSearchResults([]);
+                        Keyboard.dismiss();
+                      }}
+                      style={styles.reimbDestFieldClear}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      accessibilityLabel={tr('appAlerts.liveRoute.reimbDestClearField')}
                     >
-                      <Ionicons name="location-outline" size={18} color={C.accent} style={{ marginTop: 1 }} />
-                      <Text style={styles.reimbSearchRowText} numberOfLines={3}>
-                        {row.label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-            {reimbMapPin ? (
-              <Text style={styles.reimbDestDragHint}>{tr('appAlerts.liveRoute.reimbDestDragHint')}</Text>
-            ) : null}
-            {reimbMapPin && reimbPinNeedsConfirm ? (
-              <TouchableOpacity
-                style={styles.reimbDestOkBtn}
-                onPress={confirmReimbursementPinAndReturnToNavigation}
-                activeOpacity={0.9}
-              >
-                <Text style={styles.reimbDestOkBtnText}>{tr('appAlerts.liveRoute.reimbDestPinOk')}</Text>
-              </TouchableOpacity>
-            ) : null}
-            {reimbMapPin ? (
-              <TouchableOpacity
-                onPress={clearReimbursementOptionalDestination}
-                style={styles.reimbDestClearRow}
-                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-              >
-                <Text style={styles.reimbDestClearText}>{tr('appAlerts.liveRoute.reimbDestClear')}</Text>
-              </TouchableOpacity>
-            ) : null}
+                      <Ionicons name="close-circle" size={22} color="#94a3b8" />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                <TouchableOpacity
+                  style={[styles.reimbDestSearchBtn, reimbGeocodeLoading && { opacity: 0.75 }]}
+                  disabled={reimbGeocodeLoading}
+                  onPress={() => void runReimbursementSearch()}
+                  activeOpacity={0.9}
+                >
+                  {reimbGeocodeLoading ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.reimbDestSearchBtnText}>{tr('appAlerts.liveRoute.reimbDestSearch')}</Text>
+                  )}
+                </TouchableOpacity>
+                {reimbSearchResults.length > 0 ? (
+                  <View
+                    style={styles.reimbSearchListWrap}
+                    accessibilityLabel={tr('appAlerts.liveRoute.reimbDestResultsA11y')}
+                  >
+                    <Text style={styles.reimbSearchListTitle}>{tr('appAlerts.liveRoute.reimbDestResultsTitle')}</Text>
+                    <ScrollView
+                      style={styles.reimbSearchListScroll}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator
+                    >
+                      {reimbSearchResults.map((row) => (
+                        <Pressable
+                          key={row.id}
+                          onPress={() => applyReimbursementSearchResult(row)}
+                          style={({ pressed }) => [styles.reimbSearchRow, pressed && { backgroundColor: '#f1f5f9' }]}
+                        >
+                          <Ionicons name="location-outline" size={18} color={C.accent} style={{ marginTop: 1 }} />
+                          <Text style={styles.reimbSearchRowText} numberOfLines={3}>
+                            {row.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                ) : null}
+                {reimbMapPin ? <Text style={styles.reimbDestDragHint}>{tr('appAlerts.liveRoute.reimbDestDragHint')}</Text> : null}
+                {reimbMapPin && reimbPinNeedsConfirm ? (
+                  <TouchableOpacity
+                    style={styles.reimbDestOkBtn}
+                    onPress={confirmReimbursementPinAndReturnToNavigation}
+                    activeOpacity={0.9}
+                  >
+                    <Text style={styles.reimbDestOkBtnText}>{tr('appAlerts.liveRoute.reimbDestPinOk')}</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {reimbMapPin ? (
+                  <TouchableOpacity
+                    onPress={clearReimbursementOptionalDestination}
+                    style={styles.reimbDestClearRow}
+                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                  >
+                    <Text style={styles.reimbDestClearText}>{tr('appAlerts.liveRoute.reimbDestClear')}</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </ScrollView>
             </View>
           </View>
         ) : null}
@@ -3084,9 +3091,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   reimbDestSearchBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  reimbSearchListWrap: { marginTop: 8, maxHeight: 200 },
+  reimbSearchListWrap: { marginTop: 8, maxHeight: 180 },
   reimbSearchListTitle: { fontSize: 10, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
-  reimbSearchListScroll: { maxHeight: 200 },
+  reimbSearchListScroll: { maxHeight: 180 },
   reimbSearchRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

@@ -11,6 +11,9 @@ import {
   Alert,
   Platform,
   RefreshControl,
+  Keyboard,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -466,10 +469,27 @@ export default function ProviderCatalogScreen() {
       ) : null}
 
       {checkoutOpen ? (
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: C.cardWhite }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={StyleSheet.absoluteFillObject}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <TouchableOpacity
+                style={StyleSheet.absoluteFillObject}
+                activeOpacity={1}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setCheckoutOpen(false);
+                }}
+              />
+              <View style={[styles.modalCard, { backgroundColor: C.cardWhite }]}>
             <Text style={[styles.modalTitle, { color: C.primary }]}>{t('providerCatalog.checkoutTitle')}</Text>
-            <ScrollView style={{ maxHeight: 220 }}>
+            <ScrollView
+              style={{ maxHeight: 220 }}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            >
               {cart.map((line) => (
                 <View key={line.service.id} style={styles.lineRow}>
                   <View style={{ flex: 1 }}>
@@ -533,8 +553,10 @@ export default function ProviderCatalogScreen() {
                 <Text style={styles.primaryBtnTxt}>{submitting ? '…' : t('providerCatalog.confirmSchedule')}</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+              </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       ) : null}
     </View>
   );
