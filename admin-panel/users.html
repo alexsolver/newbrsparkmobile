@@ -254,11 +254,22 @@
         <div class="form-group"><label class="form-label" id="ul-new-lbl-email">E-mail *</label><input class="form-control" id="new-email" type="email" placeholder="joao@exemplo.com" /></div>
       </div>
       <div class="form-group"><label class="form-label" id="ul-new-lbl-matricula">Matrícula funcional</label><input class="form-control" id="new-employee-matricula" maxlength="80" placeholder="Opcional — única na organização" autocomplete="off" /></div>
-      <div class="grid-2">
-        <div class="form-group"><label class="form-label" id="ul-new-lbl-tenant">Conta (Tenant)</label>
+      <div class="form-group" id="new-tenant-multi-wrap" hidden>
+        <label class="form-label" id="ul-new-lbl-tenants-multi">Organizações (tenants)</label>
+        <p class="form-hint" id="ul-new-tenants-hint" style="font-size:12px;color:var(--text3);line-height:1.45;margin:0 0 10px"></p>
+        <div id="new-tenants-checkboxes" class="new-tenants-cb-box" style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:10px;background:var(--surface)"></div>
+        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+          <button type="button" class="btn btn-sm btn-outline" id="new-tenants-all"></button>
+          <button type="button" class="btn btn-sm btn-outline" id="new-tenants-none"></button>
+        </div>
+      </div>
+      <div class="grid-2" id="new-user-tenant-role-grid">
+        <div class="form-group" id="new-tenant-single-wrap">
+          <label class="form-label" id="ul-new-lbl-tenant">Conta (Tenant)</label>
           <select class="form-control" id="new-tenant"><option value="">Selecione...</option></select>
         </div>
-        <div class="form-group"><label class="form-label" id="ul-new-lbl-role">Papel</label>
+        <div class="form-group" id="new-role-wrap">
+          <label class="form-label" id="ul-new-lbl-role">Papel</label>
           <select class="form-control" id="new-role">
             <option value="USER">Usuário</option>
             <option value="PROVIDER">Prestador</option>
@@ -362,6 +373,28 @@
   const newUserBtn = document.querySelector('.data-toolbar-actions .btn.btn-primary');
   if (newUserBtn) newUserBtn.hidden = !canManageTenantUsers;
 
+  function syncNewUserTenantFieldsLayout() {
+    const multi = document.getElementById('new-tenant-multi-wrap');
+    const single = document.getElementById('new-tenant-single-wrap');
+    const roleW = document.getElementById('new-role-wrap');
+    if (multi) multi.hidden = !isPlatformAdmin;
+    if (single) single.hidden = isPlatformAdmin;
+    if (roleW) {
+      roleW.style.gridColumn = isPlatformAdmin ? '1 / -1' : '';
+    }
+  }
+  syncNewUserTenantFieldsLayout();
+  document.getElementById('new-tenants-all')?.addEventListener('click', () => {
+    document.querySelectorAll('#new-tenants-checkboxes input[type="checkbox"]').forEach((c) => {
+      c.checked = true;
+    });
+  });
+  document.getElementById('new-tenants-none')?.addEventListener('click', () => {
+    document.querySelectorAll('#new-tenants-checkboxes input[type="checkbox"]').forEach((c) => {
+      c.checked = false;
+    });
+  });
+
   (function initUsersFiltersCollapse() {
     const panel = document.getElementById('users-filters-panel');
     const btn = document.getElementById('users-filters-toggle');
@@ -381,6 +414,8 @@
 
   const NAV_CTX_KEY = 'brspark_user_edit_nav';
   const DUP_DRAFT_KEY = 'brspark_user_duplicate_draft';
+  /** Quando o rascunho «duplicar» abre antes de `/tenants` popular os checkboxes (admin plataforma). */
+  let pendingDupTenantForCb = null;
 
   const locSel = document.getElementById('users-panel-locale');
   if (locSel) {
@@ -402,6 +437,7 @@
         if (d.role) document.getElementById('new-role').value = d.role;
         const nt = document.getElementById('new-tenant');
         if (nt) nt.value = d.tenantId;
+        if (isPlatformAdmin) pendingDupTenantForCb = d.tenantId;
         const ne = document.getElementById('new-email');
         if (ne) {
           ne.value = '';
@@ -1216,6 +1252,25 @@
       const sel = document.getElementById('new-tenant');
       const ft = document.getElementById('filter-tenant');
       const rten = document.getElementById('reset-email-tenant');
+      const cbHost = document.getElementById('new-tenants-checkboxes');
+      if (cbHost && isPlatformAdmin) {
+        cbHost.innerHTML = (res?.data || [])
+          .map(
+            (t) =>
+              `<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin:0">
+            <input type="checkbox" name="new-tenant-cb" value="${escAttr(t.id)}" style="margin-top:3px" />
+            <span style="font-size:13px;line-height:1.4"><strong>${escAttr(t.name)}</strong><br /><span style="color:var(--text3)">${escAttr(t.email)}</span></span>
+          </label>`
+          )
+          .join('');
+        if (pendingDupTenantForCb) {
+          const tid = pendingDupTenantForCb;
+          pendingDupTenantForCb = null;
+          document.querySelectorAll('#new-tenants-checkboxes input[type="checkbox"]').forEach((c) => {
+            c.checked = c.value === tid;
+          });
+        }
+      }
       (res?.data || []).forEach((t) => {
         const opt = `<option value="${escAttr(t.id)}">${escAttr(t.name)} (${escAttr(t.email)})</option>`;
         if (sel) sel.innerHTML += opt;
@@ -1601,23 +1656,38 @@
 
   document.getElementById('save-user-btn').addEventListener('click', async () => {
     if (!canManageTenantUsers) return;
+    const tenantIds = isPlatformAdmin
+      ? [...document.querySelectorAll('#new-tenants-checkboxes input[type="checkbox"]:checked')].map((c) => c.value)
+      : (() => {
+          const v = document.getElementById('new-tenant')?.value || '';
+          return v ? [v] : [];
+        })();
     const body = {
-      name:     document.getElementById('new-name').value.trim(),
-      email:    document.getElementById('new-email').value.trim(),
-      tenantId: document.getElementById('new-tenant').value,
-      role:     document.getElementById('new-role').value,
+      name: document.getElementById('new-name').value.trim(),
+      email: document.getElementById('new-email').value.trim(),
+      tenantIds,
+      role: document.getElementById('new-role').value,
       password: document.getElementById('new-password').value,
       employeeMatricula: (document.getElementById('new-employee-matricula')?.value || '').trim() || undefined,
     };
-    if (!body.name || !body.email || !body.password || !body.tenantId) return alert(t('ul_createFill'));
+    if (!body.name || !body.email || !body.password || !tenantIds.length) {
+      if (isPlatformAdmin && !tenantIds.length) return alert(t('ul_createPickTenants'));
+      return alert(t('ul_createFill'));
+    }
     const pwdErrCreate = appPasswordPolicyError(body.password);
     if (pwdErrCreate) return alert(pwdErrCreate);
     const res = await CONFIG.post('/users', body);
-    if (res?.id) {
+    const createdOk = !!(res?.id || (Array.isArray(res?.created) && res.created.length));
+    if (createdOk) {
+      const n = res.count || (res.id ? 1 : 0);
+      if (n > 1) alert(t('ul_createManyOk').replace('{n}', String(n)));
       closeModal('new-user-modal');
-      ['new-name','new-email','new-password','new-employee-matricula'].forEach(id => {
+      ['new-name', 'new-email', 'new-password', 'new-employee-matricula'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.value = '';
+      });
+      document.querySelectorAll('#new-tenants-checkboxes input[type="checkbox"]').forEach((c) => {
+        c.checked = false;
       });
       loadUsers();
     } else alert(`${res?.error || t('ul_createErr')}`);

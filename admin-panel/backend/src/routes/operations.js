@@ -848,8 +848,10 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
     }
 
     const st = String(existing.status || '').toUpperCase();
-    if (!['COMPLETED', 'SYNCED'].includes(st)) {
-      return res.status(400).json({ error: 'Só é possível reabrir OS concluídas ou sincronizadas.' });
+    if (!['COMPLETED', 'SYNCED', 'REJECTED'].includes(st)) {
+      return res.status(400).json({
+        error: 'Só é possível reabrir OS concluídas, sincronizadas ou rejeitadas pelo técnico.',
+      });
     }
 
     const previousOwner = String(existing.ownerEmail || '').trim();
@@ -906,6 +908,10 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
     mergedMeta.reopenForRevisionPending = true;
     /** Mantém-se até nova submissão COMPLETED (o app mostra "revisão" durante toda a visita). */
     mergedMeta.revisionVisitActive = true;
+    if (st === 'REJECTED') {
+      delete mergedMeta.rejectionReason;
+      delete mergedMeta.rejectedAt;
+    }
 
     const stripped = stripResponsesForRevision(existing.responses, existing.template?.schemaData);
 
@@ -961,6 +967,7 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
             ownerEmail: resolvedOwner,
             osNumber: existing.osNumber || null,
             adminEmail: req.admin?.email || null,
+            previousStatus: existing.status,
           },
         },
       })

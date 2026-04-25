@@ -309,26 +309,39 @@ async function materializeApprovedApplication(prisma, applicationId) {
     include: { tenant: { select: { id: true, name: true } } },
   });
   if (!app) throw new Error('Candidatura não encontrada.');
-  if (app.status !== 'SUBMITTED') throw new Error('Só é possível aprovar candidaturas submetidas.');
-  if (!app.passwordHash) throw new Error('Senha da candidatura ausente (reabra o fluxo).');
+  if (['APPROVED', 'REJECTED'].includes(app.status)) {
+    throw new Error('Candidatura já encerrada.');
+  }
 
   const raw = app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
   const email = String(raw.email || app.invitedEmail || '')
     .trim()
     .toLowerCase();
-  const name = String(raw.name || '').trim();
-  if (!email || !name) throw new Error('Nome e e-mail são obrigatórios nas respostas.');
+  if (!email) throw new Error('E-mail é obrigatório nas respostas.');
 
   const addressJson = raw.addressJson && typeof raw.addressJson === 'object' ? raw.addressJson : {};
   const personalDocuments = Array.isArray(raw.personalDocuments) ? raw.personalDocuments : [];
   const technician = raw.technician && typeof raw.technician === 'object' ? raw.technician : {};
   const faceBefore = normalizeFacePhotos(raw.faceEnrollmentPhotos);
 
-  const existingUser = await prisma.user.findFirst({
-    where: { tenantId: app.tenantId, email },
+  let existingUser = await prisma.user.findFirst({
+    where: { tenantId: app.tenantId, email: { equals: email, mode: 'insensitive' } },
   });
+  if (!existingUser && app.candidateUserId) {
+    existingUser = await prisma.user.findFirst({
+      where: { id: app.candidateUserId, tenantId: app.tenantId },
+    });
+  }
 
+  /** Convite / rascunho: o utilizador já existe no tenant — aprovar sem exigir submissão nem snapshot de senha. */
   if (existingUser) {
+    const fromForm = String(raw.name || '').trim();
+    const fromAccount = String(existingUser.name || '').trim();
+    const name =
+      fromForm ||
+      fromAccount ||
+      (email.includes('@') ? email.split('@')[0] : email).trim() ||
+      'Prestador';
     return mergeTechRegistrationIntoExistingUser(prisma, app, existingUser, {
       raw,
       name,
@@ -338,6 +351,14 @@ async function materializeApprovedApplication(prisma, applicationId) {
       faceBefore,
     });
   }
+
+  if (app.status !== 'SUBMITTED') {
+    throw new Error('Só é possível aprovar candidaturas submetidas quando ainda não há utilizador com este e-mail no tenant.');
+  }
+  if (!app.passwordHash) throw new Error('Senha da candidatura ausente (reabra o fluxo).');
+
+  const name = String(raw.name || '').trim();
+  if (!name) throw new Error('Nome e e-mail são obrigatórios nas respostas.');
 
   const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({

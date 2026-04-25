@@ -36,6 +36,51 @@
     /* ── Version badge ──────────────────────────────────── */
     .ver-active { background:var(--green-dim,#d1fae5); color:var(--green,#059669); }
     .ver-draft  { background:var(--surface3,#f1f5f9); color:var(--text3); }
+    .doc-meta { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+    .doc-risk { font-size:10px; color:var(--text3); line-height:1.5; margin-top:8px; }
+    .dc-toggle-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; background:var(--surface2); border:1.5px solid var(--border); border-radius:8px; }
+    .dc-toggle-label strong { font-size:13px; font-weight:700; color:var(--text); display:block; }
+    .dc-toggle-label span { font-size:11px; color:var(--text3); }
+    .dc-toggle { position:relative; width:40px; height:22px; flex-shrink:0; display:inline-block; }
+    .dc-toggle input { opacity:0; width:0; height:0; }
+    .dc-slider { position:absolute; inset:0; background:#cbd5e1; border-radius:22px; transition:.25s; cursor:pointer; }
+    .dc-slider::before { content:''; position:absolute; left:3px; top:3px; width:16px; height:16px; background:#fff; border-radius:50%; transition:.25s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+    .dc-toggle input:checked + .dc-slider { background:var(--accent); }
+    .dc-toggle input:checked + .dc-slider::before { transform:translateX(18px); }
+
+    /* ── UX: ajuda + filtro por idioma ─────────────────── */
+    .cmp-help {
+      background: linear-gradient(135deg, var(--surface2) 0%, var(--surface3, var(--surface2)) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text2, var(--text));
+    }
+    .cmp-help strong { color: var(--text); }
+    .cmp-help-title { font-size: 14px; font-weight: 900; color: var(--text); margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
+    .cmp-help-title ion-icon { color: var(--accent); flex-shrink: 0; }
+    .cmp-toolbar-locale {
+      display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 20px;
+      margin-bottom: 20px; padding: 14px 16px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    .cmp-toolbar-locale .form-group { margin: 0; min-width: 220px; flex: 1; max-width: 360px; }
+    .cmp-toolbar-locale .form-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text3); margin-bottom: 6px; display: block; }
+    .cmp-locale-strip-hint { font-size: 11px; color: var(--text3); margin: 0 0 10px; line-height: 1.45; }
+    .cmp-locale-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); gap: 12px; }
+    .cmp-locale-cell {
+      border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px;
+      background: var(--surface2); min-height: 120px;
+    }
+    .cmp-locale-cell-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .cmp-locale-name { font-size: 12px; font-weight: 900; color: var(--text); }
+    .cmp-locale-empty { font-size: 12px; color: var(--text3); padding: 8px 0; }
+    .cmp-fieldset { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 16px 8px; margin-bottom: 14px; }
+    .cmp-fieldset legend { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text3); padding: 0 6px; }
+    .cmp-locale-hint { font-size: 11px; color: var(--text3); line-height: 1.45; margin: 8px 0 0; }
   </style>
 </head>
 <body>
@@ -57,10 +102,30 @@
         </p>
       </header>
 
+      <div class="cmp-help" id="cmp-help-box" role="region" aria-labelledby="cmp-help-title">
+        <h2 class="cmp-help-title" id="cmp-help-title"><ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon><span id="cmp-help-title-label">Como isto funciona</span></h2>
+        <div class="cmp-help-text" id="cmp-help-body"></div>
+      </div>
+
+      <div class="cmp-toolbar-locale">
+        <div class="form-group">
+          <label class="form-label" for="cmp-locale-filter" id="cmp-locale-filter-label">Mostrar lista para</label>
+          <select class="form-control" id="cmp-locale-filter" aria-describedby="cmp-locale-strip-hint">
+            <option value="">Todos os idiomas</option>
+            <option value="pt-BR">Português — pt-BR</option>
+            <option value="en-US">English — en-US</option>
+            <option value="es-ES">Español — es-ES</option>
+            <option value="de-DE">Deutsch — de-DE</option>
+          </select>
+        </div>
+      </div>
+
+      <p class="cmp-locale-strip-hint" id="cmp-locale-strip-hint" aria-live="polite"></p>
+
       <div class="data-toolbar">
         <div class="data-toolbar-main"></div>
         <div class="data-toolbar-actions">
-          <button type="button" class="btn btn-primary" id="cmp-btn-new" onclick="openEditor(null)">
+          <button type="button" class="btn btn-primary" id="cmp-btn-new" onclick="openEditor(null, null)">
             <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
             Nova versão
           </button>
@@ -95,146 +160,423 @@
     </div>
     <div id="editor-error" style="display:none;background:var(--red-dim);color:var(--red);border:1px solid var(--red);border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:16px"></div>
     <input type="hidden" id="editor-doc-id" />
-      <div class="grid-2" style="margin-bottom:16px">
+
+    <fieldset class="cmp-fieldset">
+      <legend id="cmp-sec-doc-legend">Documento e idioma</legend>
+      <div class="grid-2" style="margin-bottom:0">
       <div class="form-group"><label class="form-label" id="cmp-lbl-type">Tipo</label>
         <select class="form-control" id="editor-type">
           <option value="TERMS_OF_USE">Termos de Uso</option>
           <option value="PRIVACY_POLICY">Política de Privacidade</option>
           <option value="LGPD_DPA">DPA — LGPD</option>
           <option value="COOKIE_POLICY">Política de Cookies</option>
+          <option value="MOBILE_EULA">EULA / Termos do App Mobile</option>
+          <option value="LOCATION_NOTICE">Aviso de Geolocalização</option>
+          <option value="BIOMETRIC_NOTICE">Aviso de Biometria</option>
+          <option value="WORK_TIME_POLICY">Política de Jornada / Ponto</option>
+          <option value="AI_USAGE_POLICY">Política de Uso de IA</option>
+          <option value="DATA_RETENTION_POLICY">Política de Retenção de Dados</option>
+          <option value="SUBPROCESSORS_LIST">Lista de Suboperadores</option>
+          <option value="SLA_SUPPORT_POLICY">SLA e Suporte</option>
+          <option value="BILLING_REFUND_POLICY">Billing, Cancelamento e Reembolso</option>
+          <option value="PROVIDER_TERMS">Termos de Prestador</option>
+          <option value="KYC_NOTICE">Aviso de Cadastro/KYC</option>
+          <option value="ACCEPTABLE_USE_POLICY">Política de Uso Aceitável</option>
+          <option value="SECURITY_POLICY">Política de Segurança</option>
         </select>
       </div>
       <div class="form-group"><label class="form-label" id="cmp-lbl-version">Versão</label><input class="form-control" id="editor-version" placeholder="Ex: 2.0" /></div>
     </div>
-    <div class="form-group" style="margin-bottom:16px">
+    <div class="form-group" style="margin-bottom:0">
       <label class="form-label" id="cmp-lbl-locale">Idioma (locale)</label>
-      <select class="form-control" id="editor-locale">
+      <select class="form-control" id="editor-locale" aria-describedby="cmp-editor-locale-hint">
         <option value="pt-BR">Português (pt-BR)</option>
         <option value="en-US">English (en-US)</option>
         <option value="es-ES">Español (es-ES)</option>
         <option value="de-DE">Deutsch (de-DE)</option>
       </select>
+      <p class="cmp-locale-hint" id="cmp-editor-locale-hint"></p>
     </div>
+    </fieldset>
+
+    <fieldset class="cmp-fieldset">
+      <legend id="cmp-sec-audience-legend">Quem vê e onde</legend>
+    <div class="grid-2" style="margin-bottom:16px">
+      <div class="form-group"><label class="form-label" id="cmp-lbl-audience">Público-alvo</label>
+        <select class="form-control" id="editor-audience">
+          <option value="ALL">Todos</option>
+          <option value="PUBLIC">Público</option>
+          <option value="TENANT_ADMIN">Admin do tenant</option>
+          <option value="TECHNICIAN">Técnico / colaborador de campo</option>
+          <option value="PROVIDER">Prestador</option>
+          <option value="EMPLOYEE">Empregado</option>
+          <option value="CUSTOMER">Cliente final</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" id="cmp-lbl-platform">Plataforma</label>
+        <select class="form-control" id="editor-platform">
+          <option value="ALL">Todas</option>
+          <option value="WEB">Web pública</option>
+          <option value="MOBILE">App mobile</option>
+          <option value="ADMIN">Painel admin</option>
+          <option value="API">API / integrações</option>
+        </select>
+      </div>
+    </div>
+    </fieldset>
+
+    <fieldset class="cmp-fieldset">
+      <legend id="cmp-sec-legal-legend">Revisão jurídica e vigência</legend>
+    <div class="grid-2" style="margin-bottom:16px">
+      <div class="form-group"><label class="form-label" id="cmp-lbl-jurisdiction">Jurisdição</label>
+        <select class="form-control" id="editor-jurisdiction">
+          <option value="GLOBAL">Global</option>
+          <option value="BR">Brasil</option>
+          <option value="EU">União Europeia</option>
+          <option value="ES">Espanha</option>
+          <option value="DE">Alemanha</option>
+          <option value="US">Estados Unidos</option>
+          <option value="AR">Argentina</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" id="cmp-lbl-legal-basis">Base legal</label>
+        <select class="form-control" id="editor-legal-basis">
+          <option value="">Não definida</option>
+          <option value="LGPD">LGPD</option>
+          <option value="GDPR">GDPR</option>
+          <option value="CCPA">CCPA/CPRA</option>
+          <option value="CONTRACT">Execução de contrato</option>
+          <option value="CONSENT">Consentimento</option>
+          <option value="LEGITIMATE_INTEREST">Legítimo interesse</option>
+          <option value="LEGAL_OBLIGATION">Obrigação legal</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-bottom:16px">
+      <div class="form-group"><label class="form-label" id="cmp-lbl-review-status">Status jurídico</label>
+        <select class="form-control" id="editor-review-status">
+          <option value="DRAFT">Rascunho</option>
+          <option value="LEGAL_REVIEW">Em revisão jurídica</option>
+          <option value="APPROVED">Aprovado</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label" id="cmp-lbl-effective-from">Vigência a partir de</label><input class="form-control" id="editor-effective-from" type="datetime-local" /></div>
+    </div>
+    <div class="grid-2" style="margin-bottom:16px">
+      <label class="dc-toggle-row" style="margin:0">
+        <span class="dc-toggle-label"><strong id="cmp-tgl-require-title">Exige aceite</strong><span id="cmp-tgl-require-sub">Registra aceite/consentimento versionado</span></span>
+        <span class="dc-toggle"><input type="checkbox" id="editor-requires-acceptance" checked><span class="dc-slider"></span></span>
+      </label>
+      <label class="dc-toggle-row" style="margin:0">
+        <span class="dc-toggle-label"><strong id="cmp-tgl-block-title">Bloqueante</strong><span id="cmp-tgl-block-sub">Usuário precisa aceitar para continuar</span></span>
+        <span class="dc-toggle"><input type="checkbox" id="editor-blocking" checked><span class="dc-slider"></span></span>
+      </label>
+    </div>
+    <div class="form-group"><label class="form-label" id="cmp-lbl-change-summary">Resumo da alteração</label><input class="form-control" id="editor-change-summary" placeholder="Ex: inclui aviso granular de GPS em segundo plano e biometria." /></div>
+    </fieldset>
+
+    <fieldset class="cmp-fieldset">
+      <legend id="cmp-sec-content-legend">Texto legal (Markdown)</legend>
     <div class="form-group"><label class="form-label" id="cmp-lbl-doc-title">Título</label><input class="form-control" id="editor-doc-title" placeholder="Título completo do documento" /></div>
     <div class="form-group"><label class="form-label" id="cmp-lbl-content">Conteúdo (Markdown)</label><textarea class="editor" id="editor-content" placeholder="# Título&#10;&#10;Escreva o conteúdo em Markdown..."></textarea></div>
+    </fieldset>
   </div>
 </div>
 
 <script type="module">
   import { initPage } from './js/sidebar.js';
   import { CONFIG } from './js/config.js';
-  import { applyCompliancePageI18n, complianceTypeLabel, mpT, mpIntlLocale } from './js/menu-pages-i18n.js';
+  import { applyCompliancePageI18n, complianceTypeLabel, mpT, mpIntlLocale, updateComplianceLocaleStripHint } from './js/menu-pages-i18n.js';
   await initPage();
   applyCompliancePageI18n();
 
-  const typeMap = { TERMS_OF_USE:'badge-green', PRIVACY_POLICY:'badge-blue', LGPD_DPA:'badge-accent', COOKIE_POLICY:'badge-amber' };
+  const DOC_TYPES = [
+    'TERMS_OF_USE',
+    'PRIVACY_POLICY',
+    'LGPD_DPA',
+    'COOKIE_POLICY',
+    'MOBILE_EULA',
+    'LOCATION_NOTICE',
+    'BIOMETRIC_NOTICE',
+    'WORK_TIME_POLICY',
+    'AI_USAGE_POLICY',
+    'DATA_RETENTION_POLICY',
+    'SUBPROCESSORS_LIST',
+    'SLA_SUPPORT_POLICY',
+    'BILLING_REFUND_POLICY',
+    'PROVIDER_TERMS',
+    'KYC_NOTICE',
+    'ACCEPTABLE_USE_POLICY',
+    'SECURITY_POLICY',
+  ];
+  const typeMap = {
+    TERMS_OF_USE:'badge-green',
+    PRIVACY_POLICY:'badge-blue',
+    LGPD_DPA:'badge-accent',
+    COOKIE_POLICY:'badge-amber',
+    MOBILE_EULA:'badge-blue',
+    LOCATION_NOTICE:'badge-accent',
+    BIOMETRIC_NOTICE:'badge-danger',
+    WORK_TIME_POLICY:'badge-amber',
+    AI_USAGE_POLICY:'badge-accent',
+    DATA_RETENTION_POLICY:'badge-green',
+    SUBPROCESSORS_LIST:'badge-gray',
+    SLA_SUPPORT_POLICY:'badge-blue',
+    BILLING_REFUND_POLICY:'badge-green',
+    PROVIDER_TERMS:'badge-amber',
+    KYC_NOTICE:'badge-accent',
+    ACCEPTABLE_USE_POLICY:'badge-gray',
+    SECURITY_POLICY:'badge-blue',
+  };
+  const LOCALE_ORDER = ['pt-BR', 'en-US', 'es-ES', 'de-DE'];
+  const LOCALE_LABEL_KEY = {
+    'pt-BR': 'cmp_locale_long_ptBR',
+    'en-US': 'cmp_locale_long_enUS',
+    'es-ES': 'cmp_locale_long_esES',
+    'de-DE': 'cmp_locale_long_deDE',
+  };
+  let lastDocs = [];
+
+  function normLocale(d) {
+    return (typeof d === 'string' ? d : d?.locale) || 'pt-BR';
+  }
+
+  function getLocaleFilter() {
+    const el = document.getElementById('cmp-locale-filter');
+    return el && el.value ? el.value : '';
+  }
+
+  function audLabel(v) {
+    return mpT('cmp_aud_' + (v || 'ALL'));
+  }
+  function platLabel(v) {
+    return mpT('cmp_plat_' + (v || 'ALL'));
+  }
+  function jurLabel(v) {
+    return mpT('cmp_jur_' + (v || 'GLOBAL'));
+  }
+  function basisLabel(code) {
+    if (!code) return '';
+    return mpT('cmp_basis_' + code);
+  }
+
+  function statusReviewLabel(code) {
+    return mpT('cmp_status_' + String(code || 'DRAFT'));
+  }
+
+  function esc(v) {
+    return String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' }[c]));
+  }
+
+  function toLocalInputValue(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function fromLocalInputValue(value) {
+    return value ? new Date(value).toISOString() : null;
+  }
 
   // ── Group docs by type ───────────────────────────────────────────────────────
   function groupByType(docs) {
-    const order = ['TERMS_OF_USE', 'PRIVACY_POLICY', 'LGPD_DPA', 'COOKIE_POLICY'];
     const map = {};
     docs.forEach(d => { if (!map[d.type]) map[d.type] = []; map[d.type].push(d); });
-    return order.filter(t => map[t]?.length).map(t => ({ type: t, docs: map[t] }));
+    const ordered = [...DOC_TYPES, ...Object.keys(map).filter((t) => !DOC_TYPES.includes(t))];
+    return ordered.map(t => ({ type: t, docs: map[t] || [] }));
+  }
+
+  function pickVisibleDocForLocale(typeDocs, locale) {
+    const act = typeDocs.find((d) => d.isActive && normLocale(d) === locale);
+    if (act) return { kind: 'active', doc: act };
+    const drafts = typeDocs
+      .filter((d) => !d.isActive && !d.archivedAt && normLocale(d) === locale)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (drafts[0]) return { kind: 'draft', doc: drafts[0] };
+    return { kind: 'empty', doc: null };
+  }
+
+  function renderLocaleCell(type, locale, typeDocs) {
+    const { kind, doc } = pickVisibleDocForLocale(typeDocs, locale);
+    const localeTitle = mpT(LOCALE_LABEL_KEY[locale] || 'cmp_locale_long_ptBR');
+    if (kind === 'empty') {
+      return `<div class="cmp-locale-cell" data-cmp-locale="${esc(locale)}">
+        <div class="cmp-locale-cell-head">
+          <span class="cmp-locale-name">${esc(localeTitle)}</span>
+          <button type="button" class="btn btn-primary btn-sm" style="font-size:10px" onclick="openEditor('${type}','${locale}')">${esc(mpT('cmp_btn_new_locale'))}</button>
+        </div>
+        <p class="cmp-locale-empty">${esc(mpT('cmp_no_version_locale'))}</p>
+      </div>`;
+    }
+    const active = doc;
+    const stBadge = active.isActive
+      ? mpT('cmp_publicado')
+      : statusReviewLabel(active.reviewStatus) || mpT('cmp_minuta');
+    const whenLabel = active.isActive ? mpT('cmp_publicado') : mpT('cmp_criado');
+    const when = active.publishedAt
+      ? new Date(active.publishedAt).toLocaleDateString(mpIntlLocale())
+      : new Date(active.createdAt).toLocaleDateString(mpIntlLocale());
+    const acc = (active._count?.acceptances || 0) + (active._count?.consentRecords || 0);
+    const accStr = mpT('cmp_accept_registered', { n: acc });
+    const lbHtml = active.legalBasis
+      ? `<span class="badge badge-blue" style="font-size:9px">${esc(mpT('cmp_meta_basis', { v: basisLabel(active.legalBasis) }))}</span>`
+      : '';
+    return `<div class="cmp-locale-cell" data-cmp-locale="${esc(locale)}">
+        <div class="cmp-locale-cell-head">
+          <span class="cmp-locale-name">${esc(localeTitle)}</span>
+          <span class="badge ${active.isActive ? 'badge-green' : 'badge-amber'}" style="font-size:9px">${esc(stBadge)}</span>
+        </div>
+        <div class="doc-card" style="border-left:3px solid ${active.isActive ? 'var(--green)' : 'var(--amber)'};margin:0;padding:10px 0 0;background:transparent;border:none;box-shadow:none">
+          <div class="doc-card-header" style="padding:0">
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+                <span style="font-size:13px;font-weight:800;color:var(--text)">${esc(active.title)}</span>
+                <span style="font-size:9px;color:var(--text3)">v${esc(String(active.version))}</span>
+                <span class="badge" style="font-size:9px">${esc(normLocale(active))}</span>
+              </div>
+              <div style="font-size:10px;color:var(--text3)">${esc(whenLabel)}: ${esc(when)} · ${esc(accStr)}</div>
+              <div class="doc-meta">
+                <span class="badge badge-gray" style="font-size:9px">${esc(mpT('cmp_meta_audience', { v: audLabel(active.audience) }))}</span>
+                <span class="badge badge-gray" style="font-size:9px">${esc(mpT('cmp_meta_platform', { v: platLabel(active.platform) }))}</span>
+                <span class="badge badge-gray" style="font-size:9px">${esc(mpT('cmp_meta_jurisdiction', { v: jurLabel(active.jurisdiction) }))}</span>
+                ${lbHtml}
+                ${active.requiresAcceptance ? `<span class="badge badge-accent" style="font-size:9px">${esc(mpT('cmp_require_accept'))}</span>` : `<span class="badge badge-gray" style="font-size:9px">${esc(mpT('cmp_informativo'))}</span>`}
+                ${active.blocking ? `<span class="badge badge-amber" style="font-size:9px">${esc(mpT('cmp_blocking'))}</span>` : ''}
+              </div>
+              ${active.changeSummary ? `<div class="doc-risk">${esc(active.changeSummary)}</div>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="editDoc('${active.id}')">${esc(active.isActive ? mpT('cmp_btn_edit_vigente') : mpT('cmp_btn_edit_minuta'))}</button>
+              ${!active.isActive ? `<button type="button" class="btn btn-success btn-sm" style="font-size:11px" onclick="publish('${active.id}', this)">${esc(mpT('cmp_btn_pub'))}</button>` : ''}
+              <button type="button" class="btn btn-danger btn-sm" style="font-size:11px" data-doc-id="${active.id}" data-archive-mode="${active.isActive ? 'active' : 'draft'}" onclick="archiveActiveDoc(this)">${esc(active.isActive ? mpT('cmp_archive_vigente') : mpT('cmp_archive_minuta'))}</button>
+            </div>
+          </div>
+          <div class="doc-content-preview">${esc((active.content || '').slice(0, 220))}…</div>
+        </div>
+      </div>`;
   }
 
   // ── Render history timeline for a type ──────────────────────────────────────
-  function renderHistory(docs) {
-    // docs sorted newest-first by createdAt
-    const sorted = [...docs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    return sorted.map((d, i) => `
+  function renderHistory(typeDocs, filterLocale) {
+    let sorted = [...typeDocs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (filterLocale) sorted = sorted.filter((d) => normLocale(d) === filterLocale);
+    if (!sorted.length) {
+      return `<div style="font-size:12px;color:var(--text3);padding:8px">${esc(mpT('cmp_hist_empty_filtered'))}</div>`;
+    }
+    return sorted.map((d, i) => {
+      const acc = (d._count?.acceptances || 0) + (d._count?.consentRecords || 0);
+      const statusTxt = d.isActive
+        ? mpT('cmp_vigente')
+        : d.archivedAt
+          ? statusReviewLabel('ARCHIVED')
+          : statusReviewLabel(d.reviewStatus) || (i === 0 ? mpT('cmp_status_DRAFT') : mpT('cmp_hist_expired'));
+      return `
       <div class="history-row">
-        <span class="ver">v${d.version}</span>
-        <span style="font-size:10px;font-weight:700;color:var(--text3);min-width:52px">${d.locale || 'pt-BR'}</span>
-        <span class="badge ${d.isActive ? 'badge-green ver-active' : 'badge-gray ver-draft'}" style="font-size:9px">
-          ${d.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Vigente' : i === 0 && !d.isActive ? 'Rascunho' : 'Expirado'}
+        <span class="ver">v${esc(String(d.version))}</span>
+        <span style="font-size:10px;font-weight:700;color:var(--text3);min-width:52px">${esc(normLocale(d))}</span>
+        <span class="badge ${d.isActive ? 'badge-green ver-active' : d.archivedAt ? 'badge-gray' : 'badge-amber ver-draft'}" style="font-size:9px">
+          ${d.isActive ? `<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${esc(statusTxt)}` : esc(statusTxt)}
         </span>
-        <span class="hist-title">${d.title}</span>
-        <span class="hist-accepts">${d._count?.acceptances || 0} aceitações</span>
+        <span class="hist-title">${esc(d.title)}</span>
+        <span class="hist-accepts">${acc} ${esc(mpT('cmp_accept_count'))}</span>
         <span class="hist-date">${d.publishedAt ? new Date(d.publishedAt).toLocaleDateString(mpIntlLocale()) : d.isActive ? '—' : new Date(d.createdAt).toLocaleDateString(mpIntlLocale())}</span>
         <div class="hist-actions">
-          <button class="btn btn-ghost btn-sm" style="font-size:10px" onclick="editDoc('${d.id}')">Editar</button>
-          ${!d.isActive ? `<button class="btn btn-success btn-sm" style="font-size:10px" onclick="publish('${d.id}', this)">Publicar</button>` : ''}
-          ${!d.isActive ? `<button class="btn btn-danger btn-sm" style="font-size:10px" onclick="deleteDoc('${d.id}', '${d.title.replace(/'/g,"\\'")}', this)"><ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon></button>` : ''}
+          <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="editDoc('${d.id}')">${esc(mpT('cmp_btn_edit'))}</button>
+          ${!d.isActive && !d.archivedAt ? `<button type="button" class="btn btn-success btn-sm" style="font-size:10px" onclick="publish('${d.id}', this)">${esc(mpT('cmp_btn_pub'))}</button>` : ''}
+          ${!d.archivedAt ? `<button type="button" class="btn btn-danger btn-sm" style="font-size:10px" onclick="archiveDoc('${d.id}', this)">${esc(mpT('cmp_btn_archive'))}</button>` : ''}
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   // ── Render grouped sections ──────────────────────────────────────────────────
   function renderDocs(docs) {
+    const filterLocale = getLocaleFilter();
+    const localesToShow = filterLocale ? [filterLocale] : LOCALE_ORDER;
     const groups = groupByType(docs);
-    if (!groups.length) return '<div style="text-align:center;padding:40px;color:var(--text3)">Nenhum documento cadastrado.</div>';
     return groups.map(({ type, docs: typeDocs }) => {
-      const actives = typeDocs.filter(d => d.isActive);
+      const actives = typeDocs.filter((d) => d.isActive);
+      const pending = typeDocs.filter((d) => !d.isActive && !d.archivedAt && d.reviewStatus !== 'ARCHIVED').length;
       const versionsCount = typeDocs.length;
+      const verLine = versionsCount === 1 ? mpT('cmp_ver_one') : mpT('cmp_ver_n', { n: versionsCount });
+      const pendLine =
+        pending === 0 ? '' : pending === 1 ? ' · ' + mpT('cmp_pending_one') : ' · ' + mpT('cmp_pending_n', { n: pending });
+      const primaryTitles = actives
+        .slice()
+        .sort((a, b) => LOCALE_ORDER.indexOf(normLocale(a)) - LOCALE_ORDER.indexOf(normLocale(b)))
+        .map((a) => esc(a.title));
+      const titleBlock = primaryTitles.length > 0 ? primaryTitles.join(' · ') : esc(mpT('cmp_sem_ativo_tipo'));
       const localeBadges = actives.length
-        ? actives.map((a) => `<span class="badge badge-green" style="font-size:9px;margin-right:4px">${a.locale || 'pt-BR'}</span>`).join('')
+        ? actives.map((a) => `<span class="badge badge-green" style="font-size:9px;margin-right:4px">${esc(normLocale(a))}</span>`).join('')
         : '';
+      const statusHeader = actives.length
+        ? `<span style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${localeBadges}<span class="badge badge-green" style="font-size:10px"><ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${esc(mpT('cmp_vigente'))}</span></span>`
+        : `<span class="badge badge-amber" style="font-size:10px"><ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> ${esc(mpT('cmp_sem_ativo_tipo'))}</span>`;
+      const cells = localesToShow.map((loc) => renderLocaleCell(type, loc, typeDocs)).join('');
       return `
         <div class="type-section">
           <div class="type-section-header">
-            <span class="badge ${typeMap[type]}">${complianceTypeLabel(type)}</span>
-            <span class="type-section-title">${actives.length ? actives.map((a) => a.title).join(' · ') : 'Sem versão ativa'}</span>
-            <span style="font-size:11px;color:var(--text3);margin-right:4px">${versionsCount} versão${versionsCount > 1 ? 'ões' : ''}</span>
-            ${actives.length ? `<span style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">${localeBadges}<span class="badge badge-green" style="font-size:10px"><ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Vigente</span></span>` : '<span class="badge badge-amber" style="font-size:10px"><ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Sem versão ativa</span>'}
-            <button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="toggleHistory('${type}')"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Histórico</button>
-            <button class="btn btn-primary btn-sm" style="font-size:11px" onclick="openEditor('${type}')">+ Nova Versão</button>
+            <span class="badge ${typeMap[type] || 'badge-gray'}">${complianceTypeLabel(type)}</span>
+            <span class="type-section-title">${titleBlock}</span>
+            <span style="font-size:11px;color:var(--text3);margin-right:4px">${esc(verLine + pendLine)}</span>
+            ${statusHeader}
+            <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px" onclick="toggleHistory('${type}')"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> ${esc(mpT('cmp_btn_hist'))}</button>
+            <button type="button" class="btn btn-primary btn-sm" style="font-size:11px" onclick="openEditor('${type}')"><ion-icon name="add-outline" style="font-size:16px;vertical-align:-3px"></ion-icon> ${esc(mpT('cmp_btn_new_version'))}</button>
           </div>
-
-          ${actives.map((active) => `
-          <div class="doc-card" style="border-left:3px solid var(--green);margin-bottom:8px">
-            <div class="doc-card-header">
-              <div style="flex:1">
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-                  <span style="font-size:13px;font-weight:800;color:var(--text)">${active.title}</span>
-                  <span style="font-size:9px;color:var(--text3)">v${active.version}</span>
-                  <span class="badge" style="font-size:9px">${active.locale || 'pt-BR'}</span>
-                </div>
-                <div style="font-size:10px;color:var(--text3)">
-                  Publicado: ${active.publishedAt ? new Date(active.publishedAt).toLocaleDateString(mpIntlLocale()) : '—'}
-                  &nbsp;·&nbsp; ${active._count?.acceptances || 0} aceitações registradas
-                </div>
-              </div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <button class="btn btn-ghost btn-sm" onclick="editDoc('${active.id}')">Editar Vigente</button>
-                <button type="button" class="btn btn-danger btn-sm" style="font-size:11px" data-doc-id="${active.id}" onclick="deleteActiveDoc(this)">Excluir vigente</button>
-              </div>
-            </div>
-            <div class="doc-content-preview">${(active.content || '').slice(0, 220)}…</div>
-          </div>`).join('')}
-
-          <!-- Histórico de versões (colapsável) -->
+          <div class="cmp-locale-grid">${cells}</div>
           <div class="history-panel" id="hist-${type}">
             <div style="font-size:11px;font-weight:800;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
-              Histórico de Vigência — ${complianceTypeLabel(type)}
+              ${esc(mpT('cmp_hist_title'))} — ${esc(complianceTypeLabel(type))}
             </div>
             <div style="display:flex;gap:6px;font-size:10px;font-weight:700;color:var(--text3);padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:4px">
-              <span style="min-width:56px">Versão</span>
-              <span style="min-width:52px">Locale</span>
-              <span style="min-width:64px">Status</span>
-              <span style="flex:1">Título</span>
-              <span style="min-width:80px;text-align:right">Aceitações</span>
-              <span style="min-width:100px;text-align:right">Data</span>
-              <span style="min-width:100px">Ações</span>
+              <span style="min-width:56px">${esc(mpT('cmp_hist_col_ver'))}</span>
+              <span style="min-width:52px">${esc(mpT('cmp_hist_col_locale'))}</span>
+              <span style="min-width:64px">${esc(mpT('cmp_hist_col_status'))}</span>
+              <span style="flex:1">${esc(mpT('cmp_hist_col_title'))}</span>
+              <span style="min-width:80px;text-align:right">${esc(mpT('cmp_hist_col_accepts'))}</span>
+              <span style="min-width:100px;text-align:right">${esc(mpT('cmp_hist_col_date'))}</span>
+              <span style="min-width:100px">${esc(mpT('cmp_hist_col_actions'))}</span>
             </div>
-            ${renderHistory(typeDocs)}
+            ${renderHistory(typeDocs, filterLocale)}
           </div>
         </div>`;
     }).join('');
   }
 
-  // ── Load ─────────────────────────────────────────────────────────────────────
-  async function loadDocs() {
-    const docs = await CONFIG.get('/compliance');
-    if (!docs) return;
-    document.getElementById('stat-docs').textContent = docs.length;
-    document.getElementById('stat-active').textContent = docs.filter(d => d.isActive).length;
-    document.getElementById('stat-acceptances').textContent = docs.reduce((s, d) => s + (d._count?.acceptances || 0), 0);
-    const published = docs.filter(d => d.publishedAt).sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
-    document.getElementById('stat-last').textContent = published[0] ? new Date(published[0].publishedAt).toLocaleDateString(mpIntlLocale()) : '—';
-    document.getElementById('docs-list').innerHTML = renderDocs(docs);
+  function refreshDocsList() {
+    const root = document.getElementById('docs-list');
+    if (!root) return;
+    updateComplianceLocaleStripHint();
+    root.innerHTML = renderDocs(lastDocs);
   }
 
+  // ── Load ─────────────────────────────────────────────────────────────────────
+  async function loadDocs() {
+    const docs = await CONFIG.get('/compliance?includeArchived=true');
+    if (!docs) return;
+    lastDocs = docs;
+    document.getElementById('stat-docs').textContent = docs.length;
+    document.getElementById('stat-active').textContent = docs.filter((d) => d.isActive).length;
+    document.getElementById('stat-acceptances').textContent = docs.reduce(
+      (s, d) => s + (d._count?.acceptances || 0) + (d._count?.consentRecords || 0),
+      0,
+    );
+    const published = docs.filter((d) => d.publishedAt).sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    document.getElementById('stat-last').textContent = published[0]
+      ? new Date(published[0].publishedAt).toLocaleDateString(mpIntlLocale())
+      : '—';
+    refreshDocsList();
+  }
+
+  document.getElementById('cmp-locale-filter')?.addEventListener('change', () => refreshDocsList());
+
   loadDocs();
+
+  function archiveActiveLabel(btn) {
+    return btn?.dataset?.archiveMode === 'active' ? mpT('cmp_archive_vigente') : mpT('cmp_archive_minuta');
+  }
 
   // ── Toggle history panel ──────────────────────────────────────────────────────
   window.toggleHistory = (type) => {
@@ -245,33 +587,33 @@
   // ── Publish ──────────────────────────────────────────────────────────────────
   window.publish = async (id, btn) => {
     if (btn.dataset.confirming) {
-      btn.disabled = true; btn.textContent = 'Publicando…';
+      btn.disabled = true; btn.textContent = mpT('cmp_pub_working');
       await CONFIG.patch(`/compliance/${id}/publish`, {});
       loadDocs();
     } else {
-      btn.dataset.confirming = '1'; btn.textContent = 'Confirmar?';
+      btn.dataset.confirming = '1'; btn.textContent = mpT('cmp_btn_confirm');
       btn.classList.replace('btn-success', 'btn-danger');
       setTimeout(() => {
         if (btn.dataset.confirming) {
-          delete btn.dataset.confirming; btn.textContent = 'Publicar';
+          delete btn.dataset.confirming; btn.textContent = mpT('cmp_btn_pub');
           btn.classList.replace('btn-danger', 'btn-success');
         }
       }, 3000);
     }
   };
 
-  // ── Delete active (force) — duplo clique para confirmar ─────────────────────
-  window.deleteActiveDoc = async (btn) => {
+  // ── Archive active — duplo clique para confirmar ────────────────────────────
+  window.archiveActiveDoc = async (btn) => {
     const id = btn.dataset.docId;
     if (!id) return;
     if (!btn.dataset.confirming) {
       btn.dataset.confirming = '1';
-      btn.textContent = 'Confirmar exclusão';
+      btn.textContent = mpT('cmp_confirm_archive');
       btn.classList.replace('btn-danger', 'btn-warning');
       setTimeout(() => {
         if (btn.dataset.confirming) {
           delete btn.dataset.confirming;
-          btn.textContent = 'Excluir vigente';
+          btn.textContent = archiveActiveLabel(btn);
           btn.classList.replace('btn-warning', 'btn-danger');
         }
       }, 5000);
@@ -280,30 +622,30 @@
     delete btn.dataset.confirming;
     btn.disabled = true;
     btn.textContent = '…';
-    const res = await CONFIG.del(`/compliance/${encodeURIComponent(id)}?force=1`);
+    const res = await CONFIG.patch(`/compliance/${encodeURIComponent(id)}/archive`, {});
     if (res?.error) {
       alert(mpT('cmp_alert_err', { detail: res.error }));
       btn.disabled = false;
-      btn.textContent = 'Excluir vigente';
+      btn.textContent = archiveActiveLabel(btn);
       btn.classList.replace('btn-warning', 'btn-danger');
       return;
     }
     loadDocs();
   };
 
-  // ── Delete ───────────────────────────────────────────────────────────────────
-  window.deleteDoc = async (id, title, btn) => {
+  // ── Archive draft/version ────────────────────────────────────────────────────
+  window.archiveDoc = async (id, btn) => {
     if (btn.dataset.confirming) {
       btn.disabled = true; btn.textContent = '…';
-      const res = await CONFIG.del(`/compliance/${id}`);
-      if (res?.error) { alert(mpT('cmp_alert_err', { detail: res.error })); btn.disabled = false; btn.innerHTML = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon>'; delete btn.dataset.confirming; return; }
+      const res = await CONFIG.patch(`/compliance/${id}/archive`, {});
+      if (res?.error) { alert(mpT('cmp_alert_err', { detail: res.error })); btn.disabled = false; btn.textContent = mpT('cmp_btn_archive'); delete btn.dataset.confirming; return; }
       loadDocs();
     } else {
-      btn.dataset.confirming = '1'; btn.textContent = '<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon> Excluir?';
+      btn.dataset.confirming = '1'; btn.textContent = mpT('cmp_archive_query');
       btn.classList.replace('btn-danger', 'btn-warning');
       setTimeout(() => {
         if (btn.dataset.confirming) {
-          delete btn.dataset.confirming; btn.textContent = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon>';
+          delete btn.dataset.confirming; btn.textContent = mpT('cmp_btn_archive');
           btn.classList.replace('btn-warning', 'btn-danger');
         }
       }, 3000);
@@ -321,17 +663,39 @@
     document.getElementById('editor-doc-title').value  = doc.title;
     document.getElementById('editor-content').value    = doc.content;
     document.getElementById('editor-locale').value     = doc.locale || 'pt-BR';
+    document.getElementById('editor-audience').value   = doc.audience || 'ALL';
+    document.getElementById('editor-platform').value   = doc.platform || 'ALL';
+    document.getElementById('editor-jurisdiction').value = doc.jurisdiction || 'GLOBAL';
+    document.getElementById('editor-legal-basis').value = doc.legalBasis || '';
+    document.getElementById('editor-review-status').value = ['DRAFT', 'LEGAL_REVIEW', 'APPROVED'].includes(doc.reviewStatus) ? doc.reviewStatus : 'APPROVED';
+    document.getElementById('editor-effective-from').value = toLocalInputValue(doc.effectiveFrom || doc.publishedAt);
+    document.getElementById('editor-requires-acceptance').checked = doc.requiresAcceptance !== false;
+    document.getElementById('editor-blocking').checked = doc.blocking !== false;
+    document.getElementById('editor-change-summary').value = doc.changeSummary || '';
     document.getElementById('editor-type').disabled    = true;  // tipo não muda em edição
     document.getElementById('editor-overlay').classList.add('open');
   };
 
   // ── Open for new version ─────────────────────────────────────────────────────
-  window.openEditor = (presetType) => {
+  window.openEditor = (presetType, presetLocale) => {
     document.getElementById('editor-doc-id').value     = '';
     document.getElementById('cmp-editor-title').textContent = mpT('cmp_editor_new_title');
     document.getElementById('editor-type').value       = presetType || 'TERMS_OF_USE';
     document.getElementById('editor-type').disabled    = !!presetType;
-    document.getElementById('editor-locale').value     = 'pt-BR';
+    const loc =
+      presetLocale != null && String(presetLocale).trim() !== ''
+        ? String(presetLocale).trim()
+        : 'pt-BR';
+    document.getElementById('editor-locale').value     = loc;
+    document.getElementById('editor-audience').value   = 'ALL';
+    document.getElementById('editor-platform').value   = 'ALL';
+    document.getElementById('editor-jurisdiction').value = 'GLOBAL';
+    document.getElementById('editor-legal-basis').value = '';
+    document.getElementById('editor-review-status').value = 'DRAFT';
+    document.getElementById('editor-effective-from').value = '';
+    document.getElementById('editor-requires-acceptance').checked = true;
+    document.getElementById('editor-blocking').checked = true;
+    document.getElementById('editor-change-summary').value = '';
     document.getElementById('editor-version').value    = '';
     document.getElementById('editor-doc-title').value  = '';
     document.getElementById('editor-content').value    = '';
@@ -352,41 +716,65 @@
     const content = document.getElementById('editor-content').value.trim();
     const type    = document.getElementById('editor-type').value;
     const locale  = document.getElementById('editor-locale').value.trim() || 'pt-BR';
+    const audience = document.getElementById('editor-audience').value;
+    const platform = document.getElementById('editor-platform').value;
+    const jurisdiction = document.getElementById('editor-jurisdiction').value;
+    const legalBasis = document.getElementById('editor-legal-basis').value || null;
+    const reviewStatus = document.getElementById('editor-review-status').value;
+    const effectiveFrom = fromLocalInputValue(document.getElementById('editor-effective-from').value);
+    const requiresAcceptance = document.getElementById('editor-requires-acceptance').checked;
+    const blocking = document.getElementById('editor-blocking').checked;
+    const changeSummary = document.getElementById('editor-change-summary').value.trim();
     const errEl   = document.getElementById('editor-error');
     const pubBtn  = document.getElementById('cmp-btn-publish');
     const dftBtn  = document.getElementById('cmp-btn-draft');
 
     errEl.style.display = 'none';
     if (!version || !title || !content) {
-      errEl.textContent = '<ion-icon name="warning-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Preencha Versão, Título e Conteúdo antes de salvar.';
+      errEl.textContent = mpT('cmp_err_required');
       errEl.style.display = 'block'; return;
     }
 
     pubBtn.disabled = dftBtn.disabled = true;
-    pubBtn.textContent = shouldPublish ? 'Publicando…' : 'Salvando…';
+    pubBtn.textContent = shouldPublish ? mpT('cmp_pub_working') : mpT('cmp_save_working');
 
     try {
       let res;
+      const payload = {
+        version,
+        title,
+        content,
+        locale,
+        audience,
+        platform,
+        jurisdiction,
+        legalBasis,
+        reviewStatus,
+        effectiveFrom,
+        requiresAcceptance,
+        blocking,
+        changeSummary,
+      };
       if (id) {
-        res = await CONFIG.patch(`/compliance/${id}`, { version, title, content, locale });
+        res = await CONFIG.patch(`/compliance/${id}`, payload);
         if (res?.error) throw new Error(res.error);
         if (shouldPublish) {
           const pub = await CONFIG.patch(`/compliance/${id}/publish`, {});
           if (pub?.error) throw new Error(pub.error);
         }
       } else {
-        res = await CONFIG.post('/compliance', { type, version, title, content, locale, publish: shouldPublish });
+        res = await CONFIG.post('/compliance', { ...payload, type, publish: shouldPublish });
         if (res?.error) throw new Error(res.error);
       }
       closeEditor();
       loadDocs();
     } catch (err) {
-      errEl.textContent = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> ' + (err.message || 'Erro ao salvar. Tente novamente.');
+      errEl.textContent = err.message || mpT('cmp_err_save');
       errEl.style.display = 'block';
     } finally {
       pubBtn.disabled = dftBtn.disabled = false;
-      pubBtn.textContent = 'Publicar';
-      dftBtn.textContent = 'Salvar Rascunho';
+      pubBtn.textContent = mpT('cmp_btn_publish');
+      dftBtn.textContent = mpT('cmp_btn_draft');
     }
   }
 

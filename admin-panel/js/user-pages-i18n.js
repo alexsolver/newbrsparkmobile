@@ -167,6 +167,13 @@ const M = {
     ul_lblMatricula: 'Matrícula funcional',
     ul_phMatricula: 'Opcional, única na organização',
     ul_lblTenant: 'Conta (Tenant)',
+    ul_lblTenantsMulti: 'Organizações (tenants) *',
+    ul_tenantsHint:
+      'Selecione uma ou mais contas. Será criado um utilizador por organização com o mesmo e-mail, nome e senha (contas distintas por tenant).',
+    ul_tenantsAll: 'Marcar todas',
+    ul_tenantsNone: 'Limpar seleção',
+    ul_createPickTenants: 'Selecione pelo menos uma organização (tenant).',
+    ul_createManyOk: '{n} contas criadas com sucesso nas organizações selecionadas.',
     ul_tenantPick: 'Selecione…',
     ul_lblRole: 'Papel',
     ul_lblTempPwd: 'Senha temporária *',
@@ -694,6 +701,13 @@ const M = {
     ul_lblMatricula: 'Employee ID',
     ul_phMatricula: 'Optional, unique in the organization',
     ul_lblTenant: 'Account (tenant)',
+    ul_lblTenantsMulti: 'Organizations (tenants) *',
+    ul_tenantsHint:
+      'Select one or more accounts. One user record will be created per organization with the same email, name and password (separate accounts per tenant).',
+    ul_tenantsAll: 'Select all',
+    ul_tenantsNone: 'Clear selection',
+    ul_createPickTenants: 'Select at least one organization (tenant).',
+    ul_createManyOk: '{n} accounts created successfully in the selected organizations.',
     ul_tenantPick: 'Select…',
     ul_lblRole: 'Role',
     ul_lblTempPwd: 'Temporary password *',
@@ -1391,6 +1405,11 @@ export function applyUsersListPageI18n() {
   setT('ul-new-lbl-email', 'ul_lblEmail');
   setT('ul-new-lbl-matricula', 'ul_lblMatricula');
   setT('ul-new-lbl-tenant', 'ul_lblTenant');
+  setT('ul-new-lbl-tenants-multi', 'ul_lblTenantsMulti');
+  const nth = document.getElementById('ul-new-tenants-hint');
+  if (nth) nth.textContent = t('ul_tenantsHint');
+  setT('new-tenants-all', 'ul_tenantsAll');
+  setT('new-tenants-none', 'ul_tenantsNone');
   setT('ul-new-lbl-role', 'ul_lblRole');
   setT('ul-new-lbl-pwd', 'ul_lblTempPwd');
   const nn = document.getElementById('new-name');

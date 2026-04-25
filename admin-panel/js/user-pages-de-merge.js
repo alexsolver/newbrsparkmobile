@@ -61,6 +61,13 @@ export const USER_PAGES_DE_MERGE = {
   ul_tableTitle: 'Benutzerliste',
   ul_cancel: 'Abbrechen',
   ul_createUser: 'Benutzer anlegen',
+  ul_lblTenantsMulti: 'Organisationen (Mandanten) *',
+  ul_tenantsHint:
+    'Wählen Sie ein oder mehrere Konten. Pro Organisation wird ein Benutzer mit derselben E-Mail, Namen und Passwort angelegt (getrennte Konten pro Mandant).',
+  ul_tenantsAll: 'Alle auswählen',
+  ul_tenantsNone: 'Auswahl leeren',
+  ul_createPickTenants: 'Wählen Sie mindestens eine Organisation (Mandant).',
+  ul_createManyOk: '{n} Konten in den ausgewählten Organisationen erfolgreich angelegt.',
   ul_resetPwd: 'Passwort zurücksetzen',
   ue_prefLocaleDefault: '(Gerät / Mandant — Standard)',
 };

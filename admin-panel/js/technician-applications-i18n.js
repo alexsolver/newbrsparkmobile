@@ -85,6 +85,8 @@ const M = {
     tp_alert_tenant: 'Selecione o tenant.',
     tp_alert_rev_msg: 'Escreva a mensagem.',
     tp_cf_approve: 'Aprovar esta candidatura? Será criado o usuário prestador com os dados submetidos.',
+    tp_cf_approve_early:
+      'Aprovar agora, mesmo sem o candidato ter enviado o formulário? A conta já existente neste tenant será ativada como prestador com os dados que constam no registo (o que estiver vazio permanece em branco ou com valores por omissão).',
     tp_ok_approve: 'Prestador criado e ativado com sucesso.',
     tp_prompt_reject: 'Motivo da recusa (obrigatório):',
     tp_invite_email_sent: 'Um e-mail com o convite foi enviado ao candidato (Nylas).',
@@ -182,6 +184,8 @@ const M = {
     tp_alert_tenant: 'Select a tenant.',
     tp_alert_rev_msg: 'Write the message.',
     tp_cf_approve: 'Approve this application? A provider user will be created from the submitted data.',
+    tp_cf_approve_early:
+      'Approve now even if the applicant has not submitted the form? The existing account in this tenant will be activated as a provider using whatever is already on file (empty fields stay empty or use defaults).',
     tp_ok_approve: 'Provider created and activated successfully.',
     tp_prompt_reject: 'Rejection reason (required):',
     tp_invite_email_sent: 'An email with the invite was sent to the applicant (Nylas).',

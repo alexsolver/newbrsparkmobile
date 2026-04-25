@@ -282,12 +282,36 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/users
+// POST /api/users — `tenantId` (um) ou `tenantIds` (vários); cria um registo User por tenant com o mesmo e-mail e senha.
 router.post('/', async (req, res) => {
   try {
-    const { name, email, password, tenantId, role: bodyRole = 'USER', employeeMatricula: rawMatricula } = req.body;
-    const scopedTenantId = scopedTenantIdFromReq(req, tenantId);
-    if (!name || !email || !password || !scopedTenantId) return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
+    const {
+      name,
+      email,
+      password,
+      tenantId,
+      tenantIds: bodyTenantIds,
+      role: bodyRole = 'USER',
+      employeeMatricula: rawMatricula,
+    } = req.body;
+
+    const fromArray =
+      Array.isArray(bodyTenantIds) && bodyTenantIds.length
+        ? bodyTenantIds.map((x) => String(x || '').trim()).filter(Boolean)
+        : [];
+    const fromSingle = tenantId ? [String(tenantId).trim()] : [];
+    const requestedTenantIds = [...new Set([...fromArray, ...fromSingle])].filter(Boolean);
+
+    if (!name || !email || !password || !requestedTenantIds.length) {
+      return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
+    }
+
+    for (const tid of requestedTenantIds) {
+      if (!assertTenantAccess(req.authorization, tid)) {
+        return res.status(403).json({ error: 'Sem permissão para criar utilizador num dos tenants selecionados.' });
+      }
+    }
+
     const pwCreate = validateAppPasswordPolicy(password);
     if (!pwCreate.ok) return res.status(400).json({ error: pwCreate.error });
     const role = String(bodyRole).toUpperCase();
@@ -296,41 +320,120 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ error: 'Apenas a plataforma pode criar contas SaaS.' });
     }
     const employeeMatricula = normalizeEmployeeMatricula(rawMatricula);
-    if (employeeMatricula) {
-      const dup = await prisma.user.findFirst({ where: { tenantId: scopedTenantId, employeeMatricula } });
-      if (dup) return res.status(400).json({ error: 'Matrícula já em uso nesta organização.' });
+    const emailNorm = String(email).trim().toLowerCase();
+
+    const tenantIdsResolved = [
+      ...new Set(
+        requestedTenantIds.map((tid) => {
+          const scoped = scopedTenantIdFromReq(req, tid);
+          return scoped ? String(scoped) : null;
+        }),
+      ),
+    ].filter(Boolean);
+
+    if (!tenantIdsResolved.length) {
+      return res.status(400).json({ error: 'Tenant inválido na lista.' });
     }
-    const seat = await assertTechnicianSeatForNewUser(prisma, scopedTenantId, role);
-    if (!seat.ok) {
-      return res.status(403).json({ error: seat.error, code: seat.code || 'PLAN_MAX_TECHNICIANS' });
+    const tenantsFound = await prisma.tenant.findMany({
+      where: { id: { in: tenantIdsResolved } },
+      select: { id: true },
+    });
+    if (tenantsFound.length !== tenantIdsResolved.length) {
+      return res.status(400).json({ error: 'Um ou mais tenants não existem.' });
+    }
+
+    for (const scopedTenantId of tenantIdsResolved) {
+      if (employeeMatricula) {
+        const dup = await prisma.user.findFirst({ where: { tenantId: scopedTenantId, employeeMatricula } });
+        if (dup) {
+          return res.status(400).json({
+            error: 'Matrícula já em uso nesta organização.',
+            tenantId: scopedTenantId,
+          });
+        }
+      }
+      const dupEmail = await prisma.user.findFirst({
+        where: { tenantId: scopedTenantId, email: emailNorm },
+      });
+      if (dupEmail) {
+        return res.status(400).json({
+          error: 'E-mail já em uso neste tenant.',
+          tenantId: scopedTenantId,
+        });
+      }
+      const seat = await assertTechnicianSeatForNewUser(prisma, scopedTenantId, role);
+      if (!seat.ok) {
+        return res.status(403).json({
+          error: seat.error,
+          code: seat.code || 'PLAN_MAX_TECHNICIANS',
+          tenantId: scopedTenantId,
+        });
+      }
     }
 
     const hash = await bcrypt.hash(password, 10);
-    const user = await prisma.$transaction(async (tx) => {
-      const u = await tx.user.create({
-        data: { name, email, password: hash, tenantId: scopedTenantId, role, employeeMatricula },
-      });
-      if (role === 'PROVIDER') {
-        await tx.technicianProfile.create({
-          data: { userId: u.id, status: 'PENDING', score: 5 },
+    const createdRows = await prisma.$transaction(async (tx) => {
+      const out = [];
+      for (const scopedTenantId of tenantIdsResolved) {
+        const u = await tx.user.create({
+          data: {
+            name: String(name).trim(),
+            email: emailNorm,
+            password: hash,
+            tenantId: scopedTenantId,
+            role,
+            employeeMatricula,
+          },
         });
+        if (role === 'PROVIDER') {
+          await tx.technicianProfile.create({
+            data: { userId: u.id, status: 'PENDING', score: 5 },
+          });
+        }
+        out.push(u);
       }
-      return u;
+      return out;
     });
+
     const _a = auditActor(req);
-    await prisma.auditLog.create({
-      data: {
-        ..._a,
-        tenantId: scopedTenantId,
-        action: 'USER_CREATE',
-        resource: email,
-        category: 'ADMIN',
-        metadata: auditContextMetadata(req, { targetTenantId: scopedTenantId }),
-      },
-    });
-    res
-      .status(201)
-      .json({ id: user.id, name: user.name, email: user.email, role: user.role, employeeMatricula: user.employeeMatricula });
+    for (const row of createdRows) {
+      await prisma.auditLog
+        .create({
+          data: {
+            ..._a,
+            tenantId: row.tenantId,
+            action: 'USER_CREATE',
+            resource: row.email,
+            category: 'ADMIN',
+            metadata: auditContextMetadata(req, { targetTenantId: row.tenantId, targetUserId: row.id }),
+          },
+        })
+        .catch(() => {});
+    }
+
+    const first = createdRows[0];
+    if (createdRows.length === 1) {
+      res.status(201).json({
+        id: first.id,
+        name: first.name,
+        email: first.email,
+        role: first.role,
+        employeeMatricula: first.employeeMatricula,
+        tenantId: first.tenantId,
+      });
+    } else {
+      res.status(201).json({
+        count: createdRows.length,
+        created: createdRows.map((u) => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          employeeMatricula: u.employeeMatricula,
+          tenantId: u.tenantId,
+        })),
+      });
+    }
   } catch (err) {
     if (err.code === 'P2002') {
       const fields = Array.isArray(err.meta?.target) ? err.meta.target.map(String) : [];

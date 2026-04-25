@@ -804,6 +804,18 @@ model ComplianceDoc {
   content     String   @db.Text
   isActive    Boolean  @default(false)  // only one active per type
   publishedAt DateTime?
+  effectiveFrom DateTime?
+  reviewStatus ComplianceReviewStatus @default(DRAFT)
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  archivedAt   DateTime?
+  changeSummary String? @db.Text
+  audience      String  @default("ALL")       // PUBLIC | TENANT_ADMIN | TECHNICIAN | PROVIDER | EMPLOYEE | ALL
+  platform      String  @default("ALL")       // WEB | MOBILE | ADMIN | API | ALL
+  jurisdiction  String  @default("GLOBAL")    // GLOBAL | BR | EU | ES | DE | US | AR...
+  legalBasis    String?                       // LGPD | GDPR | CCPA | CONTRACT | CONSENT | LEGITIMATE_INTEREST
+  requiresAcceptance Boolean @default(true)
+  blocking      Boolean @default(true)
   createdBy   String?  // admin email
   tenantId    String?  // null = global default
   tenant      Tenant?  @relation("TenantComplianceDocs", fields: [tenantId], references: [id])
@@ -819,6 +831,27 @@ enum DocType {
   PRIVACY_POLICY
   LGPD_DPA
   COOKIE_POLICY
+  MOBILE_EULA
+  LOCATION_NOTICE
+  BIOMETRIC_NOTICE
+  WORK_TIME_POLICY
+  AI_USAGE_POLICY
+  DATA_RETENTION_POLICY
+  SUBPROCESSORS_LIST
+  SLA_SUPPORT_POLICY
+  BILLING_REFUND_POLICY
+  PROVIDER_TERMS
+  KYC_NOTICE
+  ACCEPTABLE_USE_POLICY
+  SECURITY_POLICY
+}
+
+enum ComplianceReviewStatus {
+  DRAFT
+  LEGAL_REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
 }
 
 model ComplianceAcceptance {

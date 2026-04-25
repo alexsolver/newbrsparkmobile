@@ -45,13 +45,13 @@ async function findPublishedComplianceDoc(prisma, opts) {
     let doc = null;
     if (tenantId) {
       doc = await prisma.complianceDoc.findFirst({
-        where: { type, isActive: true, tenantId, locale },
+        where: { type, isActive: true, tenantId, locale, archivedAt: null },
         orderBy: { publishedAt: 'desc' },
       });
     }
     if (!doc) {
       doc = await prisma.complianceDoc.findFirst({
-        where: { type, isActive: true, tenantId: null, locale },
+        where: { type, isActive: true, tenantId: null, locale, archivedAt: null },
         orderBy: { publishedAt: 'desc' },
       });
     }
@@ -60,7 +60,25 @@ async function findPublishedComplianceDoc(prisma, opts) {
   return null;
 }
 
-const KNOWN_TYPES = ['TERMS_OF_USE', 'PRIVACY_POLICY', 'LGPD_DPA', 'COOKIE_POLICY'];
+const KNOWN_TYPES = [
+  'TERMS_OF_USE',
+  'PRIVACY_POLICY',
+  'LGPD_DPA',
+  'COOKIE_POLICY',
+  'MOBILE_EULA',
+  'LOCATION_NOTICE',
+  'BIOMETRIC_NOTICE',
+  'WORK_TIME_POLICY',
+  'AI_USAGE_POLICY',
+  'DATA_RETENTION_POLICY',
+  'SUBPROCESSORS_LIST',
+  'SLA_SUPPORT_POLICY',
+  'BILLING_REFUND_POLICY',
+  'PROVIDER_TERMS',
+  'KYC_NOTICE',
+  'ACCEPTABLE_USE_POLICY',
+  'SECURITY_POLICY',
+];
 
 /**
  * Um documento ativo por tipo, respeitando tenantId (se houver) e fallback de locale.
@@ -85,6 +103,12 @@ async function listActiveComplianceDocsForLocale(prisma, opts) {
         publishedAt: doc.publishedAt,
         tenantId: doc.tenantId,
         locale: doc.locale,
+        audience: doc.audience,
+        platform: doc.platform,
+        jurisdiction: doc.jurisdiction,
+        legalBasis: doc.legalBasis,
+        requiresAcceptance: doc.requiresAcceptance,
+        blocking: doc.blocking,
       });
     }
   }

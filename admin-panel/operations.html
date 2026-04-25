@@ -801,6 +801,10 @@
     </div>
     <div class="modal-body" id="detail-modal-body" style="max-height:65vh;overflow-y:auto;"></div>
     <div class="modal-footer">
+      <button type="button" class="btn btn-primary btn-sm" id="detail-reopen-revision-btn" style="display:none;margin-right:auto"
+        onclick="event.preventDefault(); void window.openReopenRevisionFromDetail();">
+        <ion-icon name="refresh-circle-outline" style="vertical-align:-2px"></ion-icon> Reabrir p/ revisão
+      </button>
       <button class="btn btn-danger btn-sm" id="detail-cancel-btn" onclick="cancelTask()" style="display:none"><ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS</button>
       <button class="btn btn-ghost btn-sm" onclick="closeDetailModal()">Fechar</button>
     </div>
@@ -1997,6 +2001,14 @@ window.submitOpsChatMessage = async function () {
   }
 };
 
+window.openReopenRevisionFromDetail = function () {
+  if (!_currentTask || !_currentTask.id) {
+    alert('Não foi possível identificar a OS. Feche o detalhe e abra de novo.');
+    return;
+  }
+  void window.openReopenRevisionModal(_currentTask.id);
+};
+
 window.openReopenRevisionModal = async function (taskId) {
   const tid = taskId != null ? String(taskId).trim() : '';
   if (!tid) {
@@ -2138,6 +2150,11 @@ window.submitReopenRevision = async function () {
       /* corpo vazio ou não-JSON — sucesso mesmo assim */
     }
     window.closeReopenRevisionModal();
+    try {
+      window.closeDetailModal();
+    } catch (e) {
+      /* ignore */
+    }
     const msg =
       !same && task && body.targetOwnerEmail
         ? 'OS reaberta e atribuída. O novo técnico verá a tarefa após sincronizar o app.'
@@ -2589,12 +2606,14 @@ function buildCard(task, colClass) {
 
   const fd = (d) => opsFormatCardDateTime(d);
 
-  const reopenForRevisionBtn =
+  const stCard = String(task.status || '').toUpperCase();
+  const canReopenRevisionCard =
     !isRt &&
-    colClass === 'col-completed' &&
-    ['COMPLETED', 'SYNCED'].includes(String(task.status || '').toUpperCase())
-      ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" onclick="event.stopPropagation(); event.preventDefault(); void window.openReopenRevisionModal(this.getAttribute('data-reopen-task-id'));"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> Reabrir p/ revisão</button>`
-      : '';
+    ((colClass === 'col-completed' && ['COMPLETED', 'SYNCED'].includes(stCard)) ||
+      (colClass === 'col-cancelled' && stCard === 'REJECTED'));
+  const reopenForRevisionBtn = canReopenRevisionCard
+    ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" onclick="event.stopPropagation(); event.preventDefault(); void window.openReopenRevisionModal(this.getAttribute('data-reopen-task-id'));"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> Reabrir p/ revisão</button>`
+    : '';
 
   const locationBlock = (() => {
     const loc = formatServiceLocationPlainLine(task);
@@ -5931,6 +5950,13 @@ function applyDetailModalHeader(t) {
     REJECTED: 'badge-red',
   };
   document.getElementById('detail-modal-badge').innerHTML = `<span class="badge ${statusBadgeMap[t.status] || 'badge-red'}">${t.status || '?'}</span>`;
+  const stHdr = String(t.status || '').toUpperCase();
+  const isRoutineHdr = t.routineTaskNumber != null && String(t.routineTaskNumber).trim() !== '';
+  const reopenHdr = document.getElementById('detail-reopen-revision-btn');
+  if (reopenHdr) {
+    const showReopenHdr = !isRoutineHdr && ['COMPLETED', 'SYNCED', 'REJECTED'].includes(stHdr);
+    reopenHdr.style.display = showReopenHdr ? '' : 'none';
+  }
   const canCancel = !['COMPLETED', 'SYNCED', 'CANCELLED', 'REJECTED'].includes(t.status);
   const cancelBtn = document.getElementById('detail-cancel-btn');
   cancelBtn.style.display = canCancel ? '' : 'none';

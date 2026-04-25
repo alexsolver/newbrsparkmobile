@@ -153,6 +153,13 @@ export const USER_PAGES_ES_MERGE = {
   ul_lblMatricula: "ID de empleado",
   ul_phMatricula: "opcional — unique en el organization",
   ul_lblTenant: "Cuenta (inquilino)",
+  ul_lblTenantsMulti: "Organizaciones (inquilinos) *",
+  ul_tenantsHint:
+    "Seleccione una o más cuentas. Se creará un usuario por organización con el mismo correo, nombre y contraseña (cuentas distintas por inquilino).",
+  ul_tenantsAll: "Marcar todas",
+  ul_tenantsNone: "Borrar selección",
+  ul_createPickTenants: "Seleccione al menos una organización (inquilino).",
+  ul_createManyOk: "{n} cuentas creadas correctamente en las organizaciones seleccionadas.",
   ul_tenantPick: "Seleccione…",
   ul_lblRole: "Rol",
   ul_lblTempPwd: "Temporary password *",

@@ -314,27 +314,10 @@ async function loadDetail(id) {
     .join('');
 
   actions.innerHTML = '';
-  if (res.status === 'SUBMITTED' && canManageTechApplications) {
-    actions.innerHTML = `
-      <button type="button" class="btn btn-primary" id="act-approve">${escapeHtml(tpT('tp_act_approve'))}</button>
-      <button type="button" class="btn btn-outline" id="act-revision">${escapeHtml(tpT('tp_act_revision'))}</button>
-      <button type="button" class="btn btn-danger" id="act-reject">${escapeHtml(tpT('tp_act_reject'))}</button>`;
-    document.getElementById('act-approve').onclick = async () => {
-      if (!confirm(tpT('tp_cf_approve'))) return;
-      const out = await CONFIG.post(`/technician-registration/${encodeURIComponent(id)}/approve`, {});
-      if (out?.error) {
-        alert(out.error);
-        return;
-      }
-      alert(tpT('tp_ok_approve'));
-      showList();
-    };
-    document.getElementById('act-revision').onclick = () => {
-      revisionTargetId = id;
-      resetRevisionModalFields();
-      openModal('modal-revision');
-    };
-    document.getElementById('act-reject').onclick = async () => {
+  const wireReject = () => {
+    const rej = document.getElementById('act-reject');
+    if (!rej) return;
+    rej.onclick = async () => {
       const reason = prompt(tpT('tp_prompt_reject'));
       if (!reason || !reason.trim()) return;
       const out = await CONFIG.post(`/technician-registration/${encodeURIComponent(id)}/reject`, {
@@ -346,6 +329,40 @@ async function loadDetail(id) {
       }
       showList();
     };
+  };
+  const wireApprove = (early) => {
+    document.getElementById('act-approve').onclick = async () => {
+      if (!confirm(early ? tpT('tp_cf_approve_early') : tpT('tp_cf_approve'))) return;
+      const out = await CONFIG.post(`/technician-registration/${encodeURIComponent(id)}/approve`, {});
+      if (out?.error) {
+        alert(out.error);
+        return;
+      }
+      alert(tpT('tp_ok_approve'));
+      showList();
+    };
+  };
+  if (res.status === 'SUBMITTED' && canManageTechApplications) {
+    actions.innerHTML = `
+      <button type="button" class="btn btn-primary" id="act-approve">${escapeHtml(tpT('tp_act_approve'))}</button>
+      <button type="button" class="btn btn-outline" id="act-revision">${escapeHtml(tpT('tp_act_revision'))}</button>
+      <button type="button" class="btn btn-danger" id="act-reject">${escapeHtml(tpT('tp_act_reject'))}</button>`;
+    wireApprove(false);
+    document.getElementById('act-revision').onclick = () => {
+      revisionTargetId = id;
+      resetRevisionModalFields();
+      openModal('modal-revision');
+    };
+    wireReject();
+  } else if (['INVITED', 'DRAFT', 'NEEDS_REVISION'].includes(res.status) && canManageTechApplications) {
+    actions.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <button type="button" class="btn btn-primary" id="act-approve">${escapeHtml(tpT('tp_act_approve'))}</button>
+        <button type="button" class="btn btn-danger" id="act-reject">${escapeHtml(tpT('tp_act_reject'))}</button>
+      </div>
+      <p style="font-size:12px;color:var(--text3);margin-top:12px;max-width:52rem;line-height:1.45">${escapeHtml(tpT('tp_wait_submit'))}</p>`;
+    wireApprove(true);
+    wireReject();
   } else if (['INVITED', 'DRAFT', 'NEEDS_REVISION'].includes(res.status)) {
     actions.innerHTML = `<p style="font-size:12px;color:var(--text3)">${escapeHtml(tpT('tp_wait_submit'))}</p>`;
   } else if (res.status === 'APPROVED' && res.createdUser) {
