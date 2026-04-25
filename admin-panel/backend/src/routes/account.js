@@ -15,6 +15,7 @@ const { verifyOAuthWithLaravel } = require('../lib/laravelInternalOAuthVerify');
 const { buildEffectiveTenantBranding } = require('../lib/tenantBranding');
 const { buildAppAuthorization } = require('../lib/authorization');
 const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverage');
+const { normalizeWorkScheduleJson } = require('../lib/technicianWorkScheduleNormalize');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 const {
   startChallenge,
@@ -1060,6 +1061,24 @@ router.get('/me/sibling-workspaces', authUser, async (req, res) => {
   }
 });
 
+/** Bases de despacho (Location do tenant) — escolha no horário e regiões. */
+router.get('/me/technician-service-bases', authUser, async (req, res) => {
+  try {
+    if (req.user.panel === true) {
+      return res.json({ locations: [] });
+    }
+    const locations = await prisma.location.findMany({
+      where: { tenantId: req.user.tenantId },
+      select: { id: true, name: true, type: true, latitude: true, longitude: true, address: true },
+      orderBy: { name: 'asc' },
+    });
+    res.json({ locations });
+  } catch (err) {
+    console.error('[me/technician-service-bases]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /** Nova sessão JWT noutro utilizador (mesmo e-mail, outro tenant). */
 router.post('/me/switch-workspace', authUser, async (req, res) => {
   try {
@@ -1443,7 +1462,16 @@ router.delete('/me', authUser, async (req, res) => {
 // Autenticado — atualiza perfil do usuário logado
 router.put('/me', authUser, async (req, res) => {
   try {
-    const { name, email, avatarUrl, preferredChatLocale, addressJson, technicianCoverageGeoJson } = req.body;
+    const {
+      name,
+      email,
+      avatarUrl,
+      preferredChatLocale,
+      addressJson,
+      technicianCoverageGeoJson,
+      technicianWorkScheduleJson,
+      technicianServiceLocationIds,
+    } = req.body;
 
     if (avatarUrl !== undefined && (await isTechnicianIdentityLockedForUserId(req.user.id))) {
       return res.status(403).json(TECH_IDENTITY_LOCKED_BODY);
@@ -1478,10 +1506,49 @@ router.put('/me', authUser, async (req, res) => {
       where: { userId: req.user.id },
       select: { id: true },
     });
-    if (technicianCoverageGeoJson !== undefined && !profile) {
+    if (
+      (technicianCoverageGeoJson !== undefined ||
+        technicianWorkScheduleJson !== undefined ||
+        technicianServiceLocationIds !== undefined) &&
+      !profile
+    ) {
       return res.status(400).json({
-        error: 'Só contas com perfil técnico podem salvar área de atendimento.',
+        error: 'Só contas com perfil técnico podem guardar horários, regiões e bases de atendimento.',
       });
+    }
+
+    let normalizedWorkSchedule = undefined;
+    if (technicianWorkScheduleJson !== undefined) {
+      normalizedWorkSchedule = normalizeWorkScheduleJson(technicianWorkScheduleJson);
+      if (technicianWorkScheduleJson !== null && !normalizedWorkSchedule) {
+        return res.status(400).json({
+          error: 'Formato de horários inválido.',
+        });
+      }
+    }
+
+    let normalizedServiceLocationIds = undefined;
+    if (technicianServiceLocationIds !== undefined) {
+      if (technicianServiceLocationIds === null) {
+        normalizedServiceLocationIds = [];
+      } else if (!Array.isArray(technicianServiceLocationIds)) {
+        return res.status(400).json({ error: 'serviceLocationIds deve ser uma lista de IDs.' });
+      } else {
+        const ids = [...new Set(technicianServiceLocationIds.map((x) => String(x).trim()).filter(Boolean))];
+        if (ids.length) {
+          const found = await prisma.location.findMany({
+            where: { tenantId: req.user.tenantId, id: { in: ids } },
+            select: { id: true },
+          });
+          const ok = new Set(found.map((f) => f.id));
+          for (const id of ids) {
+            if (!ok.has(id)) {
+              return res.status(400).json({ error: `Base/local inválido para esta organização: ${id}` });
+            }
+          }
+        }
+        normalizedServiceLocationIds = ids;
+      }
     }
 
     let nextAvatarUrl = undefined;
@@ -1504,13 +1571,23 @@ router.put('/me', authUser, async (req, res) => {
           ...(addressJson !== undefined && { addressJson }),
         },
       });
-      if (profile && technicianCoverageGeoJson !== undefined) {
-        await tx.technicianProfile.update({
-          where: { userId: req.user.id },
-          data: {
-            serviceCoverageGeoJson: normalizedCoverage,
-          },
-        });
+      if (profile) {
+        const techData = {};
+        if (technicianCoverageGeoJson !== undefined) {
+          techData.serviceCoverageGeoJson = normalizedCoverage;
+        }
+        if (technicianWorkScheduleJson !== undefined) {
+          techData.workScheduleJson = normalizedWorkSchedule;
+        }
+        if (technicianServiceLocationIds !== undefined) {
+          techData.serviceLocationIds = normalizedServiceLocationIds;
+        }
+        if (Object.keys(techData).length) {
+          await tx.technicianProfile.update({
+            where: { userId: req.user.id },
+            data: techData,
+          });
+        }
       }
       return nextUser;
     });

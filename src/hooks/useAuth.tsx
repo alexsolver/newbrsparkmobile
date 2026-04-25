@@ -43,6 +43,8 @@ interface AuthContextType {
   createWorkspace: (kind: 'CLIENT' | 'PROVIDER') => Promise<void>;
   /** Mesmo e-mail, outro tenant — troca JWT (perfil). */
   switchWorkspace: (tenantId: string) => Promise<void>;
+  /** GET /api/me e actualiza o estado (após gravação directa de AuthService, etc.). */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -407,6 +409,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ApiService.sync(u.email).catch((err) => console.error('[AUTH] Sync pós-troca de organização falhou:', err));
   };
 
+  const refreshUser = useCallback(async () => {
+    const fresh = await AuthService.validateSession();
+    if (fresh) {
+      setUser(fresh);
+      runAvatarWarm(fresh);
+    }
+  }, [runAvatarWarm]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -425,6 +435,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         patchUser,
         createWorkspace,
         switchWorkspace,
+        refreshUser,
       }}
     >
       {children}

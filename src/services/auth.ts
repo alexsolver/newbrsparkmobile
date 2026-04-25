@@ -229,6 +229,10 @@ export interface User {
     score: number;
     cft?: string;
     specialty?: string;
+    /** Ver schema Prisma — turnos por dia. */
+    workScheduleJson?: Record<string, unknown> | null;
+    /** IDs de `Location` do tenant. */
+    serviceLocationIds?: string[] | null;
     serviceCoverageGeoJson?: {
       homeBase?: {
         latitude: number;
@@ -589,6 +593,27 @@ export class AuthService {
     return data.user as User;
   }
 
+  /** Bases de despacho (Location) do tenant — horários e regiões. */
+  static async getTechnicianServiceBases(): Promise<
+    Array<{ id: string; name: string; type?: string; address?: string | null; latitude?: number | null; longitude?: number | null }>
+  > {
+    const token = await getToken();
+    if (!token) return [];
+    const res = await fetch(`${API_BASE}/api/me/technician-service-bases`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = (await res.json().catch(() => ({}))) as { locations?: unknown[] };
+    if (!res.ok || !Array.isArray(data?.locations)) return [];
+    return data.locations as Array<{
+      id: string;
+      name: string;
+      type?: string;
+      address?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+    }>;
+  }
+
   /** Lista outras organizações do mesmo e-mail (para trocar no perfil). */
   static async listSiblingWorkspaces(): Promise<SiblingWorkspaceOption[]> {
     const token = await getToken();
@@ -833,6 +858,9 @@ export class AuthService {
         ? C
         : never
       : never;
+    /** PUT /api/me — merge no TechnicianProfile (prestador ACTIVE). */
+    technicianWorkScheduleJson?: Record<string, unknown> | null;
+    technicianServiceLocationIds?: string[] | null;
   }): Promise<User | null> {
     const u = await AuthService.getUser();
     if (!u) return null;
@@ -847,6 +875,12 @@ export class AuthService {
     if (partial.addressJson !== undefined) body.addressJson = partial.addressJson;
     if (partial.technicianCoverageGeoJson !== undefined) {
       body.technicianCoverageGeoJson = partial.technicianCoverageGeoJson;
+    }
+    if (partial.technicianWorkScheduleJson !== undefined) {
+      body.technicianWorkScheduleJson = partial.technicianWorkScheduleJson;
+    }
+    if (partial.technicianServiceLocationIds !== undefined) {
+      body.technicianServiceLocationIds = partial.technicianServiceLocationIds;
     }
     if (Object.keys(body).length === 0) return u;
     const res = await apiFetch('/api/me', {

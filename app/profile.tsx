@@ -95,58 +95,6 @@ export default function ProfileScreen() {
   const { dark: darkMode, colors: C, toggleDarkMode, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createProfileStyles(C), [C]);
 
-  const tenantKindChip = useMemo(() => {
-    if (!user?.tenant?.kind) return null;
-    const col = tenantKindUiColors(user.tenant.kind);
-    const tn = user.tenant as { name?: string | null };
-    const orgTitle =
-      displayTenantTitle(tn?.name, user.tenant.kind) || String(tn?.name || '').trim() || '—';
-    return (
-      <View
-        style={{
-          marginTop: 10,
-          flexDirection: 'row',
-          alignItems: 'center',
-          alignSelf: 'center',
-          maxWidth: '100%',
-          borderRadius: 10,
-          overflow: 'hidden',
-          borderWidth: 1,
-          borderColor: `${col.accent}44`,
-          backgroundColor: col.subtleBg,
-        }}
-      >
-        <View style={{ width: 3, alignSelf: 'stretch', backgroundColor: col.accent }} />
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 8,
-            paddingVertical: 8,
-            paddingHorizontal: 10,
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: col.chipBg,
-              paddingHorizontal: 7,
-              paddingVertical: 3,
-              borderRadius: 6,
-            }}
-          >
-            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.3 }}>
-              {tenantKindLabelPt(user.tenant.kind).toUpperCase()}
-            </Text>
-          </View>
-          <Text style={{ fontSize: 12, fontWeight: '800', color: col.title }} numberOfLines={2}>
-            {orgTitle}
-          </Text>
-        </View>
-      </View>
-    );
-  }, [user?.tenant?.kind, user?.tenant]);
-
   const { t, i18n } = useTranslation();
 
   /** Papel e tenant efectivos do JWT — detalhes técnicos da sessão (aba Sincronização). */
@@ -744,6 +692,10 @@ export default function ProfileScreen() {
   };
 
   const openHorariosERegioes = async () => {
+    if (isTechnicianProfileActive(user)) {
+      router.push('/profile/schedule-regions' as any);
+      return;
+    }
     const go = (tok: string) => {
       router.push({ pathname: '/auth/tech-registration', params: { token: tok } } as any);
     };
@@ -767,10 +719,6 @@ export default function ProfileScreen() {
     }
     if (user?.technicianProfile && !isTechnicianProfileActive(user)) {
       await handleBecomeTechnician();
-      return;
-    }
-    if (isTechnicianProfileActive(user)) {
-      Alert.alert(t('profile.workScheduleActiveTechTitle'), t('profile.workScheduleActiveTechBody'));
       return;
     }
     Alert.alert(t('profile.workScheduleNoTechTitle'), t('profile.workScheduleNoTechBody'));
@@ -963,6 +911,23 @@ export default function ProfileScreen() {
     };
   }, [user]);
 
+  const visibleProfileTabs = useMemo(() => {
+    const rows: [ProfileTab, string][] = [
+      ['conta', 'profile.tabConta'],
+      ['config', 'profile.tabConfiguracoes'],
+      ['trabalho', 'profile.tabTrabalho'],
+      ['sync', 'profile.tabSincronizacao'],
+    ];
+    if (userRole === 'CLIENT') return rows.filter(([id]) => id !== 'trabalho');
+    return rows;
+  }, [userRole]);
+
+  useEffect(() => {
+    if (userRole === 'CLIENT' && activeTab === 'trabalho') {
+      setActiveTab('conta');
+    }
+  }, [userRole, activeTab]);
+
   // ── Guest Mode ──────────────────────────────────────────────
   if (!user) {
     return (
@@ -1011,7 +976,6 @@ export default function ProfileScreen() {
           
           <Text style={[styles.headerName, { color: '#191C1D' }]}>{profile.name}</Text>
           <Text style={[styles.headerSub, { color: C.textSecondary }]}>{profile.email}</Text>
-          {tenantKindChip}
 
           {user.technicianProfile && !isTechnicianProfileActive(user) ? (
             <View style={[styles.listCard, { marginHorizontal: 16, marginTop: 12, maxWidth: SCREEN_W - 32, alignSelf: 'center', width: '100%', padding: 16 }]}>
@@ -1215,14 +1179,7 @@ export default function ProfileScreen() {
             alignItems: 'center',
           }}
         >
-          {(
-            [
-              ['conta', 'profile.tabConta'],
-              ['trabalho', 'profile.tabTrabalho'],
-              ['config', 'profile.tabConfiguracoes'],
-              ['sync', 'profile.tabSincronizacao'],
-            ] as const
-          ).map(([id, k]) => {
+          {visibleProfileTabs.map(([id, k]) => {
             const sel = activeTab === id;
             return (
               <TouchableOpacity
