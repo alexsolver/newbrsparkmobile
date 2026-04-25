@@ -39,10 +39,10 @@ interface AuthContextType {
   userRole: 'CLIENT' | 'TECHNICIAN';
   setUserRole: (role: 'CLIENT' | 'TECHNICIAN') => Promise<void>;
   patchUser: (partial: Partial<User>) => Promise<void>;
-  /** Cria tenant CLIENT ou PROVIDER e muda a sessão para esse espaço. */
-  createWorkspace: (kind: 'CLIENT' | 'PROVIDER') => Promise<void>;
-  /** Mesmo e-mail, outro tenant — troca JWT (perfil). */
-  switchWorkspace: (tenantId: string) => Promise<void>;
+  /** Cria tenant CLIENT ou PROVIDER e muda a sessão para esse espaço. Devolve o utilizador da nova sessão. */
+  createWorkspace: (kind: 'CLIENT' | 'PROVIDER') => Promise<User>;
+  /** Mesmo e-mail, outro tenant — troca JWT (perfil). Devolve o utilizador da nova sessão. */
+  switchWorkspace: (tenantId: string) => Promise<User>;
   /** GET /api/me e actualiza o estado (após gravação directa de AuthService, etc.). */
   refreshUser: () => Promise<void>;
 }
@@ -74,6 +74,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
     }
   }, [user, user?.technicianProfile?.status, user?.role, userRole]);
+
+  /** Em tenants CLIENT / PROVIDER o papel efectivo segue o `kind` (uma identidade por espaço). */
+  useEffect(() => {
+    if (!user) return;
+    const k = String(user.tenant?.kind || '').toUpperCase();
+    if (k === 'CLIENT' && userRole !== 'CLIENT') {
+      _setUserRole('CLIENT');
+      AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
+      dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
+    } else if (k === 'PROVIDER' && userRole !== 'TECHNICIAN') {
+      _setUserRole('TECHNICIAN');
+      AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN').catch(() => {});
+      dataCollectionService.onSessionOpen(user.email, user.tenantId, true);
+    }
+  }, [user?.tenantId, user?.tenant?.kind, user?.email, userRole]);
 
   /**
    * Mesma regra do PersonaContext: CLIENTE/TECHNICIAN → concha. Push e rotas lêem esta chave em alguns fluxos.
@@ -396,6 +411,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
     ApiService.sync(u.email).catch((err) => console.error('[AUTH] Sync pós-criação de espaço falhou:', err));
+    return u;
   };
 
   const switchWorkspace = async (tenantId: string) => {
@@ -407,6 +423,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
     ApiService.sync(u.email).catch((err) => console.error('[AUTH] Sync pós-troca de organização falhou:', err));
+    return u;
   };
 
   const refreshUser = useCallback(async () => {

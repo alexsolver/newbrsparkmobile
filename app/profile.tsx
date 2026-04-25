@@ -25,7 +25,6 @@ import {
   canUseProviderMode,
   userHasCapability,
   isB2CConsumerUser,
-  type SiblingWorkspaceOption,
 } from '../src/services/auth';
 import { writeAvatarFromBase64 } from '../src/services/avatarLocalCache';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -43,11 +42,6 @@ import { isImperial, setUnitSystem, setNumberFormat, getNumberFormat, loadNumber
 import { shareUserLocalDataJson } from '../src/utils/exportUserLocalData';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
-import {
-  displayTenantTitle,
-  tenantKindLabelPt,
-  tenantKindUiColors,
-} from '../src/lib/tenantKindUi';
 
 const REGION_KEY   = '@brspark_region';
 const LANGUAGE_KEY = '@brspark_language';
@@ -90,12 +84,20 @@ type ProfileTab = 'conta' | 'trabalho' | 'config' | 'sync';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, userRole, setUserRole, logout, deleteAccount, patchUser, switchWorkspace } = useAuth();
+  const { user, userRole, setUserRole, logout, deleteAccount, patchUser, switchWorkspace, createWorkspace } = useAuth();
   const displayAvatarUri = useResolvedAvatarUri(user);
   const { dark: darkMode, colors: C, toggleDarkMode, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createProfileStyles(C), [C]);
 
   const { t, i18n } = useTranslation();
+
+  const tenantKindUpper = String(user?.tenant?.kind || '').toUpperCase();
+  /** Em tenants CLIENT/PROVIDER o destaque do toggle segue o espaço actual (não só o papel em memória). */
+  const personaRoleForUi = useMemo(() => {
+    if (tenantKindUpper === 'CLIENT') return 'CLIENT' as const;
+    if (tenantKindUpper === 'PROVIDER') return 'TECHNICIAN' as const;
+    return userRole;
+  }, [tenantKindUpper, userRole]);
 
   /** Papel e tenant efectivos do JWT — detalhes técnicos da sessão (aba Sincronização). */
   const syncTabSessionDetails = useMemo(() => {
@@ -161,9 +163,6 @@ export default function ProfileScreen() {
   const [syncConflictCount, setSyncConflictCount] = useState(0);
   const [syncConflictsBusy, setSyncConflictsBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [siblingWorkspaces, setSiblingWorkspaces] = useState<SiblingWorkspaceOption[]>([]);
-  const [siblingWsLoading, setSiblingWsLoading] = useState(false);
-  const [switchWsBusy, setSwitchWsBusy] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [selectedRegion, setSelectedRegion]   = useState<string>('BR');
@@ -480,60 +479,6 @@ export default function ProfileScreen() {
     React.useCallback(() => {
       loadTechRegResume();
     }, [loadTechRegResume]),
-  );
-
-  const loadSiblingWorkspaces = useCallback(async () => {
-    if (!user) {
-      setSiblingWorkspaces([]);
-      return;
-    }
-    setSiblingWsLoading(true);
-    try {
-      const list = await AuthService.listSiblingWorkspaces();
-      setSiblingWorkspaces(list);
-    } catch {
-      setSiblingWorkspaces([]);
-    } finally {
-      setSiblingWsLoading(false);
-    }
-  }, [user]);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      void loadSiblingWorkspaces();
-    }, [loadSiblingWorkspaces]),
-  );
-
-  const handleSwitchWorkspacePress = useCallback(
-    (tenantId: string, label: string) => {
-      Alert.alert(
-        t('profile.switchWorkspaceConfirmTitle'),
-        t('profile.switchWorkspaceConfirmBody', { name: label }),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          {
-            text: t('profile.switchWorkspaceConfirmAction'),
-            onPress: async () => {
-              setSwitchWsBusy(true);
-              try {
-                await switchWorkspace(tenantId);
-                const fresh = await AuthService.getUser();
-                const shell = fresh && canUseProviderMode(fresh) ? 'provider' : 'client';
-                router.replace(getPersonaHomeHref(shell) as any);
-              } catch (e: unknown) {
-                Alert.alert(
-                  t('common.error'),
-                  e instanceof Error ? e.message : t('profile.switchWorkspaceError'),
-                );
-              } finally {
-                setSwitchWsBusy(false);
-              }
-            },
-          },
-        ],
-      );
-    },
-    [switchWorkspace, router, t],
   );
 
   useFocusEffect(
@@ -901,13 +846,16 @@ export default function ProfileScreen() {
 
   const { showProviderModeToggles, showBecomeProviderCta } = useMemo(() => {
     const b2c = isB2CConsumerUser(user);
+    const k = String(user?.tenant?.kind || 'COMPANY').toUpperCase();
+    const tenantIsWorkspaceSplit = k === 'CLIENT' || k === 'PROVIDER';
     return {
-      showBecomeProviderCta: b2c,
+      showBecomeProviderCta: b2c && !tenantIsWorkspaceSplit,
       showProviderModeToggles:
-        !b2c &&
-        (isFieldTaskEligibleRole(user?.role) ||
-          isTechnicianProfileActive(user) ||
-          canUseProviderMode(user)),
+        tenantIsWorkspaceSplit ||
+        (!b2c &&
+          (isFieldTaskEligibleRole(user?.role) ||
+            isTechnicianProfileActive(user) ||
+            canUseProviderMode(user))),
     };
   }, [user]);
 
@@ -918,15 +866,75 @@ export default function ProfileScreen() {
       ['trabalho', 'profile.tabTrabalho'],
       ['sync', 'profile.tabSincronizacao'],
     ];
-    if (userRole === 'CLIENT') return rows.filter(([id]) => id !== 'trabalho');
+    if (personaRoleForUi === 'CLIENT') return rows.filter(([id]) => id !== 'trabalho');
     return rows;
-  }, [userRole]);
+  }, [personaRoleForUi]);
 
   useEffect(() => {
-    if (userRole === 'CLIENT' && activeTab === 'trabalho') {
+    if (personaRoleForUi === 'CLIENT' && activeTab === 'trabalho') {
       setActiveTab('conta');
     }
-  }, [userRole, activeTab]);
+  }, [personaRoleForUi, activeTab]);
+
+  /** Cliente/Prestador = troca de tenant (CLIENT vs PROVIDER); cria o espaço em falta com o mesmo e-mail. */
+  const ensurePersonaWorkspace = useCallback(
+    async (target: 'CLIENT' | 'PROVIDER') => {
+      if (!user) return;
+      const targetKind = target === 'CLIENT' ? 'CLIENT' : 'PROVIDER';
+      const currentKind = String(user.tenant?.kind || '').toUpperCase();
+
+      try {
+        setSyncing(true);
+
+        if (currentKind === targetKind) {
+          if (target === 'PROVIDER') {
+            if (!canUseProviderMode(user)) {
+              Alert.alert(t('profile.providerUnavailableTitle'), t('profile.providerUnavailableBody'));
+              return;
+            }
+            const providerOnboardingDone = await isProviderOnboardingComplete();
+            if (!providerOnboardingDone) {
+              router.push('/auth/onboarding' as any);
+              return;
+            }
+          }
+          await setUserRole(target === 'CLIENT' ? 'CLIENT' : 'TECHNICIAN');
+          router.replace(getPersonaHomeHref(target === 'CLIENT' ? 'client' : 'provider') as any);
+          return;
+        }
+
+        const workspaces = await AuthService.listSiblingWorkspaces();
+        const match = workspaces.find((w) => String(w.kind || '').toUpperCase() === targetKind);
+
+        let sessionUser = user;
+        if (match?.id && match.id !== user.tenantId) {
+          sessionUser = await switchWorkspace(match.id);
+        } else if (!match) {
+          sessionUser = await createWorkspace(targetKind as 'CLIENT' | 'PROVIDER');
+        }
+
+        if (target === 'PROVIDER') {
+          if (!canUseProviderMode(sessionUser)) {
+            Alert.alert(t('profile.providerUnavailableTitle'), t('profile.providerUnavailableBody'));
+            return;
+          }
+          const providerOnboardingDone = await isProviderOnboardingComplete();
+          if (!providerOnboardingDone) {
+            router.push('/auth/onboarding' as any);
+            return;
+          }
+        }
+
+        router.replace(getPersonaHomeHref(target === 'CLIENT' ? 'client' : 'provider') as any);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        Alert.alert(t('common.error'), msg || t('profile.switchWorkspaceError'));
+      } finally {
+        setSyncing(false);
+      }
+    },
+    [user, switchWorkspace, createWorkspace, setUserRole, router, t],
+  );
 
   // ── Guest Mode ──────────────────────────────────────────────
   if (!user) {
@@ -1090,57 +1098,42 @@ export default function ProfileScreen() {
                 }}
               >
                 <TouchableOpacity
-                  onPress={async () => {
-                    await setUserRole('CLIENT');
-                    router.replace(getPersonaHomeHref('client') as any);
-                  }}
+                  onPress={() => ensurePersonaWorkspace('CLIENT')}
                   style={{
                     flex: 1,
                     paddingVertical: 12,
                     borderRadius: 10,
-                    backgroundColor: userRole === 'CLIENT' ? '#fff' : 'transparent',
+                    backgroundColor: personaRoleForUi === 'CLIENT' ? '#fff' : 'transparent',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    shadowColor: userRole === 'CLIENT' ? '#000' : 'transparent',
+                    shadowColor: personaRoleForUi === 'CLIENT' ? '#000' : 'transparent',
                     shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: userRole === 'CLIENT' ? 0.06 : 0,
+                    shadowOpacity: personaRoleForUi === 'CLIENT' ? 0.06 : 0,
                     shadowRadius: 2,
-                    elevation: userRole === 'CLIENT' ? 2 : 0,
+                    elevation: personaRoleForUi === 'CLIENT' ? 2 : 0,
                   }}
                 >
-                  <Text style={{ color: userRole === 'CLIENT' ? '#059669' : '#64748B', fontWeight: '800', fontSize: 14 }}>
+                  <Text style={{ color: personaRoleForUi === 'CLIENT' ? '#059669' : '#64748B', fontWeight: '800', fontSize: 14 }}>
                     {t('profile.personaClient')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={async () => {
-                    if (!canUseProviderMode(user)) {
-                      Alert.alert(t('profile.providerUnavailableTitle'), t('profile.providerUnavailableBody'));
-                      return;
-                    }
-                    const providerOnboardingDone = await isProviderOnboardingComplete();
-                    await setUserRole('TECHNICIAN');
-                    if (!providerOnboardingDone) {
-                      router.push('/auth/onboarding' as any);
-                      return;
-                    }
-                    router.replace(getPersonaHomeHref('provider') as any);
-                  }}
+                  onPress={() => ensurePersonaWorkspace('PROVIDER')}
                   style={{
                     flex: 1,
                     paddingVertical: 12,
                     borderRadius: 10,
-                    backgroundColor: userRole === 'TECHNICIAN' ? '#fff' : 'transparent',
+                    backgroundColor: personaRoleForUi === 'TECHNICIAN' ? '#fff' : 'transparent',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    shadowColor: userRole === 'TECHNICIAN' ? '#000' : 'transparent',
+                    shadowColor: personaRoleForUi === 'TECHNICIAN' ? '#000' : 'transparent',
                     shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: userRole === 'TECHNICIAN' ? 0.06 : 0,
+                    shadowOpacity: personaRoleForUi === 'TECHNICIAN' ? 0.06 : 0,
                     shadowRadius: 2,
-                    elevation: userRole === 'TECHNICIAN' ? 2 : 0,
+                    elevation: personaRoleForUi === 'TECHNICIAN' ? 2 : 0,
                   }}
                 >
-                  <Text style={{ color: userRole === 'TECHNICIAN' ? '#C2410C' : '#64748B', fontWeight: '800', fontSize: 14 }}>
+                  <Text style={{ color: personaRoleForUi === 'TECHNICIAN' ? '#C2410C' : '#64748B', fontWeight: '800', fontSize: 14 }}>
                     {t('profile.personaProvider')}
                   </Text>
                 </TouchableOpacity>
@@ -1228,7 +1221,7 @@ export default function ProfileScreen() {
           <>
             {showProviderModeToggles || user?.technicianProfile || isTechnicianProfileActive(user) || showBecomeProviderCta ? (
               <>
-                {showProviderModeToggles && userRole === 'TECHNICIAN' ? (
+                {showProviderModeToggles && personaRoleForUi === 'TECHNICIAN' ? (
                   <View style={{ marginHorizontal: 16, marginTop: 4, marginBottom: 10 }}>
                     <TouchableOpacity
                       style={{
@@ -1470,81 +1463,6 @@ export default function ProfileScreen() {
 
         {activeTab === 'conta' && (
         <>
-        {siblingWorkspaces.length > 0 ? (
-          <>
-            <View style={[styles.sectionHeaderWrap, { flexDirection: 'row', alignItems: 'center' }]}>
-              <Ionicons name="swap-horizontal" size={14} color="#64748B" style={{ marginRight: 6 }} />
-              <Text style={styles.sectionHeaderLabel}>{t('profile.siblingWorkspacesTitle').toUpperCase()}</Text>
-            </View>
-            <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
-              <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500', lineHeight: 16 }}>
-                {t('profile.siblingWorkspacesHint')}
-              </Text>
-            </View>
-            {siblingWsLoading ? (
-              <Text style={{ marginHorizontal: 20, marginBottom: 14, color: C.textSecondary, fontSize: 13 }}>
-                …
-              </Text>
-            ) : (
-              <View style={{ marginHorizontal: 16, marginBottom: 16, gap: 10 }}>
-                {siblingWorkspaces.map((w) => {
-                  const col = tenantKindUiColors(w.kind);
-                  const title = displayTenantTitle(w.name, w.kind) || w.name || w.slug || w.id;
-                  const membersSub =
-                    typeof w.memberCount === 'number'
-                      ? t('profile.siblingWorkspaceMembers', { count: w.memberCount })
-                      : '';
-                  const current = !!w.isCurrent;
-                  return (
-                    <TouchableOpacity
-                      key={w.id}
-                      disabled={current || switchWsBusy}
-                      onPress={() => handleSwitchWorkspacePress(w.id, title)}
-                      style={{
-                        flexDirection: 'row',
-                        borderRadius: 12,
-                        overflow: 'hidden',
-                        borderWidth: 1,
-                        borderColor: current ? `${col.accent}99` : `${col.accent}55`,
-                        backgroundColor: col.subtleBg,
-                        opacity: current ? 0.92 : 1,
-                      }}
-                    >
-                      <View style={{ width: 4, backgroundColor: col.accent }} />
-                      <View style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 12 }}>
-                        <Text style={{ fontSize: 15, fontWeight: '800', color: col.title }}>{title}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, flexWrap: 'wrap', gap: 8 }}>
-                          <View
-                            style={{
-                              backgroundColor: col.chipBg,
-                              paddingHorizontal: 8,
-                              paddingVertical: 3,
-                              borderRadius: 6,
-                            }}
-                          >
-                            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.4 }}>
-                              {tenantKindLabelPt(w.kind).toUpperCase()}
-                            </Text>
-                          </View>
-                          {membersSub ? (
-                            <Text style={{ fontSize: 11, color: C.textSecondary, fontWeight: '600' }}>{membersSub}</Text>
-                          ) : null}
-                          {current ? (
-                            <Text style={{ fontSize: 11, color: col.accent, fontWeight: '800' }}>
-                              {t('profile.siblingWorkspaceCurrent')}
-                            </Text>
-                          ) : null}
-                        </View>
-                      </View>
-                      {!current ? <Ionicons name="chevron-forward" size={18} color={col.accent} style={{ alignSelf: 'center', marginRight: 10 }} /> : null}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-          </>
-        ) : null}
-
         {/* ─── Segurança ─── */}
         <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
           <Ionicons name="shield-checkmark" size={14} color="#64748B" style={{marginRight: 6}} />

@@ -668,7 +668,11 @@ export class AuthService {
     });
     const data = await res.json();
     if (!res.ok) {
-      throw new Error(data.error || 'Não foi possível criar o espaço.');
+      const tid = (data as { tenantId?: string }).tenantId;
+      if (res.status === 409 && tid) {
+        return AuthService.switchWorkspace(String(tid).trim());
+      }
+      throw new Error((data as { error?: string }).error || 'Não foi possível criar o espaço.');
     }
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);

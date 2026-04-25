@@ -1023,11 +1023,11 @@ router.get('/me/sibling-workspaces', authUser, async (req, res) => {
       if (byTenant.has(u.tenantId)) continue;
       byTenant.set(u.tenantId, u);
     }
-    if (byTenant.size <= 1) {
+    /** Sempre devolver todas as organizações do e-mail (incl. sessão única) para o app resolver CLIENT vs PROVIDER. */
+    const tenantIds = [...byTenant.keys()];
+    if (tenantIds.length === 0) {
       return res.json({ workspaces: [] });
     }
-
-    const tenantIds = [...byTenant.keys()];
     const grouped = await prisma.user.groupBy({
       by: ['tenantId'],
       where: { tenantId: { in: tenantIds } },
