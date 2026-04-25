@@ -14,6 +14,9 @@ import {
   Platform,
   DeviceEventEmitter,
   type AppStateStatus,
+  KeyboardAvoidingView,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -12791,6 +12794,8 @@ export default function ChecklistEngine() {
       {/* Modals removed: Tracking modal was removed (handled by backoffice) */}
 
       <Modal visible={pauseReasonModalVisible} animationType="slide" onRequestClose={() => setPauseReasonModalVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={{ flex: 1, backgroundColor: '#EEF2F6' }}>
           <LinearGradient
             colors={[C.primary, C.branding]}
@@ -12876,6 +12881,8 @@ export default function ChecklistEngine() {
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           >
             {pausePickerStep === 'category'
               ? PAUSE_CATEGORIES.map((cat) => {
@@ -13082,6 +13089,8 @@ export default function ChecklistEngine() {
             ) : null}
           </ScrollView>
         </View>
+        </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={sessionPauseActive} transparent animationType="fade">

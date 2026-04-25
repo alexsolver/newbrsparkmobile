@@ -918,8 +918,13 @@ export class AuthService {
 
             // Só “preserva” quando o servidor NÃO enviou capabilities; se enviou array (mesmo vazio), respeita.
             if (!serverCaps && prevCaps) {
-              out.appContext = { ...(serverUser.appContext || {}), ...(prev.appContext || {}) };
-              out.appContext.capabilities = prevCaps;
+              const scope = serverUser.appContext?.scope ?? prev.appContext?.scope ?? 'default';
+              out.appContext = {
+                scope,
+                contextTenantId:
+                  serverUser.appContext?.contextTenantId ?? prev.appContext?.contextTenantId ?? null,
+                capabilities: prevCaps,
+              };
             }
 
             // Mesmo princípio para `technicianProfile`: se o servidor omitir, não apagar estado local.

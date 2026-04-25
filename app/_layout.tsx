@@ -76,8 +76,7 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inProviderCatalog = segments[0] === 'provider-services';
     const seg0 = (segments as string[])[0];
     /** `/` ou ecrã `index` — deixar `app/index` decidir intro vs login (não forçar login aqui). */
-    const atRootOrIndex =
-      !segments || segments.length === 0 || !seg0 || seg0 === 'index';
+    const atRootOrIndex = !seg0 || seg0 === 'index';
 
     /** Apresentação inicial antes de qualquer outro ecrã em `auth/` (exc. convite técnico e jornadas OTP). */
     /** `login` fica de fora: convidado que toca «Criar conta ou entrar» no perfil deve ver o ecrã de login, não voltar ao intro. */

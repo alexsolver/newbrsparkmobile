@@ -241,6 +241,7 @@ export function ServiceUsageHistoryModule({ assetId }: BaseProps) {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );

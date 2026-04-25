@@ -821,6 +821,8 @@ export default function LiveRouteMapCard({
   const [reimbPinNeedsConfirm, setReimbPinNeedsConfirm] = useState(false);
   /** Painel de pesquisa/seleção do destino (reembolso) — aberto sob demanda. */
   const [reimbDestPanelOpen, setReimbDestPanelOpen] = useState(false);
+  /** Altura do teclado para acomodar overlays absolutos no mapa. */
+  const [reimbKeyboardHeight, setReimbKeyboardHeight] = useState(0);
   const trackingChatListRef = useRef<FlatList<TrackingChatRow>>(null);
   const trackingChatMessagesRef = useRef<TrackingChatRow[]>([]);
   const clientUnreadBaselineDoneRef = useRef(false);
@@ -854,6 +856,7 @@ export default function LiveRouteMapCard({
       setReimbMapPin(null);
       setReimbPinNeedsConfirm(false);
       setReimbDestPanelOpen(false);
+      setReimbKeyboardHeight(0);
       return;
     }
     const tla = targetLoc?.lat;
@@ -875,6 +878,22 @@ export default function LiveRouteMapCard({
       setReimbPinNeedsConfirm(false);
     }
   }, [reimbursementMode, onCommitReimbursementOptionalDestination, targetLoc?.lat, targetLoc?.lng]);
+
+  useEffect(() => {
+    if (!reimbDestPanelOpen) {
+      setReimbKeyboardHeight(0);
+      return;
+    }
+    const onShow = Keyboard.addListener('keyboardDidShow', (e) => {
+      const h = e?.endCoordinates?.height;
+      setReimbKeyboardHeight(typeof h === 'number' && Number.isFinite(h) ? h : 0);
+    });
+    const onHide = Keyboard.addListener('keyboardDidHide', () => setReimbKeyboardHeight(0));
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, [reimbDestPanelOpen]);
 
   const prevVisibleRef = useRef(false);
   useEffect(() => {
@@ -1419,7 +1438,7 @@ export default function LiveRouteMapCard({
   /** Sem verde ao longo da OSRM: só a polilinha azul tracejada inteira (KML/trecho mantêm split verde). */
   const dynamicRouteSplit = null;
 
-  const templateRouteSplit = useMemo(() => {
+  const templateRouteSplit = useMemo<{ covered: number[][]; remaining: number[][] } | null>(() => {
     if (zoneType === 'segment' || zoneType === 'polygon') return null;
     if (dynamicRoute && dynamicRoute.length >= 2) return null;
     if (!route || route.length < 2 || routePaintArcM <= 0) return null;
@@ -1427,7 +1446,7 @@ export default function LiveRouteMapCard({
     return splitPolylineByArcM(route, routePaintArcM);
   }, [zoneType, dynamicRoute, route, routePaintArcM, suppressTemplatePolyline]);
 
-  const segmentRouteSplit = useMemo(() => {
+  const segmentRouteSplit = useMemo<{ covered: number[][]; remaining: number[][] } | null>(() => {
     if (zoneType !== 'segment') return null;
     if (dynamicRoute && dynamicRoute.length >= 2) return null;
     if (!route || route.length < 2 || routePaintArcM <= 0) return null;
@@ -2384,14 +2403,32 @@ export default function LiveRouteMapCard({
         {reimbursementMode && onCommitReimbursementOptionalDestination && reimbDestPanelOpen ? (
           <View
             style={[
-              styles.reimbDestPanel,
+              StyleSheet.absoluteFillObject,
               {
-                top: insets.top + (isLandscape ? 48 : 108),
-                ...(isLandscape ? { right: 56, maxWidth: width - 72 } : {}),
+                zIndex: 1900,
+                ...(Platform.OS === 'android' ? { elevation: 80 } : {}),
               },
             ]}
             pointerEvents="box-none"
           >
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={Keyboard.dismiss} />
+            <View
+              style={[
+                styles.reimbDestPanel,
+                {
+                  top: insets.top + (isLandscape ? 48 : 108),
+                  maxHeight: Math.max(
+                    240,
+                    windowDims.height -
+                      (insets.top + (isLandscape ? 48 : 108)) -
+                      Math.max(reimbKeyboardHeight, insets.bottom) -
+                      16
+                  ),
+                  ...(isLandscape ? { right: 56, maxWidth: width - 72 } : {}),
+                },
+              ]}
+              pointerEvents="auto"
+            >
             <Text style={styles.reimbDestTitle}>{tr('appAlerts.liveRoute.reimbDestTitle')}</Text>
             <Text style={styles.reimbDestHint}>{tr('appAlerts.liveRoute.reimbDestHint')}</Text>
             <View style={styles.reimbDestFieldWrap}>
@@ -2484,6 +2521,7 @@ export default function LiveRouteMapCard({
                 <Text style={styles.reimbDestClearText}>{tr('appAlerts.liveRoute.reimbDestClear')}</Text>
               </TouchableOpacity>
             ) : null}
+            </View>
           </View>
         ) : null}
 
@@ -2691,38 +2729,14 @@ export default function LiveRouteMapCard({
           {/* Percurso dinâmico (reta imediata + geometria OSRM quando disponível); trecho já percorrido a verde */}
           {dynamicRoute && dynamicRoute.length >= 2 && (
              <>
-               {dynamicRouteSplit ? (
-                 <>
-                   {dynamicRouteSplit.covered.length >= 2 && (
-                     <Polyline
-                       coordinates={dynamicRouteSplit.covered.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-                       strokeColor="#16a34a"
-                       strokeWidth={3}
-                       zIndex={1001}
-                       geodesic={false}
-                     />
-                   )}
-                   {dynamicRouteSplit.remaining.length >= 2 && (
-                     <Polyline
-                       coordinates={dynamicRouteSplit.remaining.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-                       strokeColor="#2563eb"
-                       strokeWidth={2}
-                       lineDashPattern={Platform.OS === 'android' ? undefined : [8, 6]}
-                       zIndex={1000}
-                       geodesic={false}
-                     />
-                   )}
-                 </>
-               ) : (
-                 <Polyline
-                   coordinates={dynamicRoute.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-                   strokeColor="#2563eb"
-                   strokeWidth={2}
-                   lineDashPattern={Platform.OS === 'android' ? undefined : [8, 6]}
-                   zIndex={1000}
-                   geodesic={false}
-                 />
-               )}
+               <Polyline
+                 coordinates={dynamicRoute.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+                 strokeColor="#2563eb"
+                 strokeWidth={2}
+                 lineDashPattern={Platform.OS === 'android' ? undefined : [8, 6]}
+                 zIndex={1000}
+                 geodesic={false}
+               />
                {!(reimbursementMode && reimbMapPin) && (
                  <Marker
                    coordinate={{

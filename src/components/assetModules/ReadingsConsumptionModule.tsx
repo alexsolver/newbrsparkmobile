@@ -8,9 +8,11 @@ import {
   Modal,
   TextInput,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   SectionList,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -485,9 +487,14 @@ export function ReadingsConsumptionModule({ assetId }: BaseProps) {
       </TouchableOpacity>
 
       <Modal visible={modal} transparent animationType="slide" onRequestClose={() => setModal(false)}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-          <TouchableOpacity style={S.modalOuter} activeOpacity={1} onPress={() => setModal(false)} />
-          <ScrollView style={[S.modalPanel, { marginTop: 'auto' }]} keyboardShouldPersistTaps="handled">
+          <TouchableOpacity style={S.modalOuter} activeOpacity={1} onPress={() => { Keyboard.dismiss(); setModal(false); }} />
+          <ScrollView
+            style={[S.modalPanel, { marginTop: 'auto' }]}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          >
             <Text style={{ fontSize: 16, fontWeight: '900', color: C.slate, marginBottom: 16 }}>
               {editing ? t('common.edit') : t('assetExtension.addReading')}
             </Text>
@@ -589,6 +596,7 @@ export function ReadingsConsumptionModule({ assetId }: BaseProps) {
             </TouchableOpacity>
           </ScrollView>
         </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
