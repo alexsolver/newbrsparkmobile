@@ -38,6 +38,7 @@
     "searching": "SEARCHING...",
     "alsoAt": "ALSO AT",
     "fillRequired": "Please fill in the required fields.",
+    "timeFormat24Hint": "Use 24-hour format (HH:mm), e.g. 08:00 and 18:00.",
     "year": "year",
     "month": "month",
     "relTime": {
@@ -1277,7 +1278,8 @@
       "save": "Save",
       "saveSuccess": "Changes saved.",
       "errorSave": "Could not save. Please try again.",
-      "errorNotTech": "Only providers with an approved profile can edit here."
+      "errorNotTech": "Only providers with an approved profile can edit here.",
+      "invalidTime": "Fix «{{day}}» — «{{part}}» must use 24-hour format (e.g. 08:00 and 18:00)."
     },
     "workTabConsumerHint": "Enable or complete provider registration in the «Mode» tab to manage partnerships and the hours form."
   },
@@ -2902,6 +2904,7 @@
       "cepNotFound": "ZIP code not found. Check the numbers.",
       "cepLookupError": "Could not look up the ZIP code. Check your connection and try again.",
       "validationName": "Enter your name.",
+      "validationScheduleTime": "Check times on the days you marked as available — use 24-hour format (e.g. 08:00 and 18:00).",
       "providerActiveTitle": "Active provider",
       "providerActiveBody": "You cannot resubmit the application. Your account is already enabled.",
       "codeMismatchTitle": "Invalid code",

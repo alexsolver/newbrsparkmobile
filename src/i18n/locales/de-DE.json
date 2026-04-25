@@ -38,6 +38,7 @@
     "searching": "SUCHE...",
     "alsoAt": "AUCH BEI",
     "fillRequired": "Bitte füllen Sie die erforderlichen Felder aus.",
+    "timeFormat24Hint": "24-Stunden-Format (HH:mm), z. B. 08:00 und 18:00.",
     "year": "Jahr",
     "month": "Monat",
     "relTime": {
@@ -1277,7 +1278,8 @@
       "save": "Speichern",
       "saveSuccess": "Änderungen gespeichert.",
       "errorSave": "Speichern fehlgeschlagen. Bitte erneut versuchen.",
-      "errorNotTech": "Hier dürfen nur Anbieter mit freigegebenem Profil bearbeiten."
+      "errorNotTech": "Hier dürfen nur Anbieter mit freigegebenem Profil bearbeiten.",
+      "invalidTime": "Bitte prüfen Sie «{{day}}» — «{{part}}» muss 24-h-Format nutzen (z. B. 08:00 und 18:00)."
     },
     "workTabConsumerHint": "Aktivieren oder vervollständigen Sie die Anbieterregistrierung im Tab «Modus», um Partnerschaften und das Zeitenformular zu verwalten."
   },
@@ -2902,6 +2904,7 @@
       "cepNotFound": "PLZ nicht gefunden. Ziffern prüfen.",
       "cepLookupError": "PLZ-Abfrage fehlgeschlagen. Verbindung prüfen und erneut versuchen.",
       "validationName": "Namen eingeben.",
+      "validationScheduleTime": "Prüfen Sie die Zeiten an den Tagen, die als «verfügbar» markiert sind — 24-h-Format (z. B. 08:00 und 18:00).",
       "providerActiveTitle": "Aktiver Anbieter",
       "providerActiveBody": "Bewerbung kann nicht erneut gesendet werden. Ihr Konto ist bereits aktiv.",
       "codeMismatchTitle": "Ungültiger Code",

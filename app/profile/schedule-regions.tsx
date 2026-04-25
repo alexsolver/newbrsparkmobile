@@ -25,40 +25,16 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
 import { AuthService, isTechnicianProfileActive, type User } from '../../src/services/auth';
+import {
+  TECH_SCHEDULE_DAY_ORDER,
+  type TechScheduleDayKey,
+  defaultSchedule,
+  parseScheduleFromProfileJson,
+  findFirstInvalidEnabledTime,
+  isValidHhMm,
+} from '../../src/lib/technicianScheduleForm';
 
-const DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
-type DayKey = (typeof DAY_ORDER)[number];
-
-function rid() {
-  return `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function defaultSchedule() {
-  const o: Record<string, { id: string; enabled: boolean; start: string; end: string; locationIds: string[] }[]> = {};
-  for (const k of DAY_ORDER) {
-    o[k] = [{ id: rid(), enabled: false, start: '08:00', end: '18:00', locationIds: [] }];
-  }
-  return o;
-}
-
-function parseScheduleFromProfile(raw: unknown) {
-  const merged = defaultSchedule();
-  if (!raw || typeof raw !== 'object') return merged;
-  const w = raw as Record<string, unknown>;
-  for (const k of DAY_ORDER) {
-    const day = w[k];
-    if (Array.isArray(day) && day.length) {
-      merged[k] = day.map((slot: any) => ({
-        id: String(slot?.id || rid()),
-        enabled: !!slot?.enabled,
-        start: String(slot?.start || '08:00'),
-        end: String(slot?.end || '18:00'),
-        locationIds: Array.isArray(slot?.locationIds) ? slot.locationIds.map(String) : [],
-      }));
-    }
-  }
-  return merged;
-}
+type DayKey = TechScheduleDayKey;
 
 type BaseRow = { id: string; name: string; type?: string; address?: string | null };
 
@@ -86,6 +62,9 @@ export default function ScheduleRegionsScreen() {
     latitudeDelta: number;
     longitudeDelta: number;
   } | null>(null);
+  /** Erros de horário só após blur no campo ou após tentativa de guardar com horário inválido. */
+  const [timeTouchByDay, setTimeTouchByDay] = useState<Record<string, { s?: boolean; e?: boolean }>>({});
+  const [showAllTimeErrors, setShowAllTimeErrors] = useState(false);
 
   const dayLabelFixed = (k: DayKey) => {
     const key = `day${k[0].toUpperCase()}${k.slice(1)}` as
@@ -103,7 +82,7 @@ export default function ScheduleRegionsScreen() {
     (u: User) => {
       const tech = u.technicianProfile;
       if (!tech) return;
-      setSchedule(parseScheduleFromProfile(tech.workScheduleJson));
+      setSchedule(parseScheduleFromProfileJson(tech.workScheduleJson));
       setServiceLocIds(
         Array.isArray(tech.serviceLocationIds) ? tech.serviceLocationIds.map(String) : []
       );
@@ -124,6 +103,8 @@ export default function ScheduleRegionsScreen() {
       );
       const n = gc && typeof gc === 'object' ? (gc as { notes?: string | null }).notes : null;
       setServiceCoverageNotes(n ? String(n) : '');
+      setTimeTouchByDay({});
+      setShowAllTimeErrors(false);
     },
     []
   );
@@ -156,6 +137,12 @@ export default function ScheduleRegionsScreen() {
   useEffect(() => {
     hydratedRef.current = false;
   }, [user?.id]);
+
+  useEffect(() => {
+    if (showAllTimeErrors && !findFirstInvalidEnabledTime(schedule)) {
+      setShowAllTimeErrors(false);
+    }
+  }, [schedule, showAllTimeErrors]);
 
   const loadBases = useCallback(async () => {
     const rows = await AuthService.getTechnicianServiceBases();
@@ -236,6 +223,22 @@ export default function ScheduleRegionsScreen() {
 
   const onSave = async () => {
     if (!user || !isTechnicianProfileActive(user)) return;
+    const inv = findFirstInvalidEnabledTime(schedule);
+    if (inv) {
+      setShowAllTimeErrors(true);
+      const k = `day${inv.day[0].toUpperCase() + inv.day.slice(1)}` as
+        | 'dayMon'
+        | 'dayTue'
+        | 'dayWed'
+        | 'dayThu'
+        | 'dayFri'
+        | 'daySat'
+        | 'daySun';
+      const dayL = t(`profile.scheduleRegions.${k}`);
+      const partL = inv.part === 'start' ? t('profile.scheduleRegions.startLabel') : t('profile.scheduleRegions.endLabel');
+      Alert.alert(t('common.error'), t('profile.scheduleRegions.invalidTime', { day: dayL, part: partL }));
+      return;
+    }
     setSaving(true);
     try {
       const merged = await AuthService.patchMe({
@@ -248,6 +251,8 @@ export default function ScheduleRegionsScreen() {
         hydratedRef.current = true;
       }
       await refreshUser();
+      setShowAllTimeErrors(false);
+      setTimeTouchByDay({});
       Alert.alert(t('common.success'), t('profile.scheduleRegions.saveSuccess'));
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || t('profile.scheduleRegions.errorSave'));
@@ -365,8 +370,16 @@ export default function ScheduleRegionsScreen() {
         <View style={styles.section}>
           <Text style={styles.secTitle}>{t('profile.scheduleRegions.sectionSchedule')}</Text>
           <Text style={styles.hint}>{t('profile.scheduleRegions.sectionScheduleHint')}</Text>
-          {DAY_ORDER.map((key) => {
+          {TECH_SCHEDULE_DAY_ORDER.map((key) => {
             const slot = schedule[key]?.[0] || { enabled: false, start: '08:00', end: '18:00' };
+            const startTrim = String(slot.start || '').trim();
+            const endTrim = String(slot.end || '').trim();
+            const touch = timeTouchByDay[key] || {};
+            const startErr =
+              slot.enabled && !isValidHhMm(startTrim) && (touch.s || showAllTimeErrors);
+            const endErr =
+              slot.enabled && !isValidHhMm(endTrim) && (touch.e || showAllTimeErrors);
+            const timeHint = startErr || endErr ? t('common.timeFormat24Hint') : null;
             return (
               <View key={key} style={styles.dayCard}>
                 <View style={styles.dayRow}>
@@ -387,9 +400,9 @@ export default function ScheduleRegionsScreen() {
                 </View>
                 <View style={[styles.row2, { opacity: slot.enabled ? 1 : 0.45 }]}>
                   <View style={styles.flex1}>
-                    <Text style={styles.label}>{t('profile.scheduleRegions.startLabel')}</Text>
+                    <Text style={[styles.label, startErr && { color: '#B91C1C' }]}>{t('profile.scheduleRegions.startLabel')}</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[styles.input, startErr && { borderColor: '#DC2626', borderWidth: 2 }]}
                       value={slot.start}
                       editable={slot.enabled}
                       onChangeText={(txt) => {
@@ -397,13 +410,19 @@ export default function ScheduleRegionsScreen() {
                         n[key] = [{ ...slot, start: txt }];
                         setSchedule(n);
                       }}
+                      onBlur={() =>
+                        setTimeTouchByDay((p) => ({
+                          ...p,
+                          [key]: { ...p[key], s: true },
+                        }))
+                      }
                       placeholder={t('profile.scheduleRegions.timePlaceholder')}
                     />
                   </View>
                   <View style={styles.flex1}>
-                    <Text style={styles.label}>{t('profile.scheduleRegions.endLabel')}</Text>
+                    <Text style={[styles.label, endErr && { color: '#B91C1C' }]}>{t('profile.scheduleRegions.endLabel')}</Text>
                     <TextInput
-                      style={styles.input}
+                      style={[styles.input, endErr && { borderColor: '#DC2626', borderWidth: 2 }]}
                       value={slot.end}
                       editable={slot.enabled}
                       onChangeText={(txt) => {
@@ -411,10 +430,19 @@ export default function ScheduleRegionsScreen() {
                         n[key] = [{ ...slot, end: txt }];
                         setSchedule(n);
                       }}
+                      onBlur={() =>
+                        setTimeTouchByDay((p) => ({
+                          ...p,
+                          [key]: { ...p[key], e: true },
+                        }))
+                      }
                       placeholder="18:00"
                     />
                   </View>
                 </View>
+                {timeHint ? (
+                  <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 6, lineHeight: 16, fontWeight: '600' }}>{timeHint}</Text>
+                ) : null}
               </View>
             );
           })}

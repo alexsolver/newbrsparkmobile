@@ -38,6 +38,7 @@
     "searching": "BUSCANDO...",
     "alsoAt": "TAMBÉM EM",
     "fillRequired": "Preencha os campos obrigatórios.",
+    "timeFormat24Hint": "Use formato 24 h (HH:mm), por exemplo 08:00 e 18:00.",
     "year": "ano",
     "month": "mês",
     "relTime": {
@@ -1277,7 +1278,8 @@
       "save": "Guardar",
       "saveSuccess": "Alterações guardadas.",
       "errorSave": "Não foi possível guardar. Tente de novo.",
-      "errorNotTech": "Apenas prestadores com perfil aprovado podem editar aqui."
+      "errorNotTech": "Apenas prestadores com perfil aprovado podem editar aqui.",
+      "invalidTime": "Ajuste «{{day}}» — o campo «{{part}}» deve usar formato 24 h (ex.: 08:00 e 18:00)."
     },
     "workTabConsumerHint": "Ative ou complete o cadastro de prestador na aba «Modo» para gerir parcerias e o formulário de horários."
   },
@@ -2902,6 +2904,7 @@
       "cepNotFound": "CEP não encontrado. Confira os números.",
       "cepLookupError": "Não foi possível consultar o CEP. Verifique a conexão e tente de novo.",
       "validationName": "Informe o nome.",
+      "validationScheduleTime": "Verifique os horários nos dias em que marcou «disponível» — use formato 24 h (ex.: 08:00 e 18:00).",
       "providerActiveTitle": "Prestador ativo",
       "providerActiveBody": "Não é possível reenviar a candidatura. A sua conta já está habilitada.",
       "codeMismatchTitle": "Código inválido",

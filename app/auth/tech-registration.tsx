@@ -33,6 +33,13 @@ import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { API_BASE, getToken, apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
+import {
+  rid,
+  defaultSchedule,
+  parseScheduleFromProfileJson,
+  findFirstInvalidEnabledTime,
+  isValidHhMm,
+} from '../../src/lib/technicianScheduleForm';
 import { useAuth } from '../../src/hooks/useAuth';
 import i18n from '../../src/i18n';
 
@@ -214,10 +221,6 @@ const DAYS: { key: string; label: string }[] = [
   { key: 'sun', label: 'Domingo' },
 ];
 
-function rid() {
-  return `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-}
-
 type DocRow = {
   id: string;
   docType: string;
@@ -286,14 +289,6 @@ type PrimaryProfileCapture = {
   photoId?: string;
 } | null;
 
-function defaultSchedule() {
-  const o: Record<string, { id: string; enabled: boolean; start: string; end: string; locationIds: string[] }[]> = {};
-  for (const { key } of DAYS) {
-    o[key] = [{ id: rid(), enabled: false, start: '08:00', end: '18:00', locationIds: [] }];
-  }
-  return o;
-}
-
 function parseDocs(raw: unknown): DocRow[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((d: any) => ({
@@ -354,6 +349,8 @@ export default function TechRegistrationScreen() {
   const [personalDocs, setPersonalDocs] = useState<DocRow[]>([]);
   const [proDocs, setProDocs] = useState<DocRow[]>([]);
   const [schedule, setSchedule] = useState(defaultSchedule);
+  const [timeTouchByDay, setTimeTouchByDay] = useState<Record<string, { s?: boolean; e?: boolean }>>({});
+  const [showAllTimeErrors, setShowAllTimeErrors] = useState(false);
   const [serviceLocIds, setServiceLocIds] = useState<string[]>([]);
   const [serviceCoverageRadiusKm, setServiceCoverageRadiusKm] = useState('50');
   const [serviceCoverageNotes, setServiceCoverageNotes] = useState('');
@@ -480,22 +477,9 @@ export default function TechRegistrationScreen() {
       setBirthDate(String((r as { birthDate?: string }).birthDate || '').slice(0, 10));
       const idc = (r as { techRegIdDocument?: TechRegIdDocumentPayload }).techRegIdDocument;
       setTechRegIdDocument(idc && typeof idc === 'object' ? idc : null);
-      if (tech.workScheduleJson && typeof tech.workScheduleJson === 'object') {
-        const merged = defaultSchedule();
-        for (const k of Object.keys(merged)) {
-          const day = (tech.workScheduleJson as any)[k];
-          if (Array.isArray(day) && day.length) {
-            merged[k] = day.map((slot: any) => ({
-              id: slot.id || rid(),
-              enabled: !!slot.enabled,
-              start: slot.start || '08:00',
-              end: slot.end || '18:00',
-              locationIds: Array.isArray(slot.locationIds) ? slot.locationIds : [],
-            }));
-          }
-        }
-        setSchedule(merged);
-      } else setSchedule(defaultSchedule());
+      setSchedule(parseScheduleFromProfileJson(tech.workScheduleJson));
+      setTimeTouchByDay({});
+      setShowAllTimeErrors(false);
       setServiceLocIds(Array.isArray(tech.serviceLocationIds) ? [...tech.serviceLocationIds] : []);
       const serviceCoverage = tech.serviceCoverageGeoJson && typeof tech.serviceCoverageGeoJson === 'object'
         ? (tech.serviceCoverageGeoJson as ServiceCoverageGeo)
@@ -583,6 +567,12 @@ export default function TechRegistrationScreen() {
       load();
     }, [load])
   );
+
+  useEffect(() => {
+    if (showAllTimeErrors && !findFirstInvalidEnabledTime(schedule)) {
+      setShowAllTimeErrors(false);
+    }
+  }, [schedule, showAllTimeErrors]);
 
   const coverageRadiusMeters = useMemo(() => {
     const km = Number(serviceCoverageRadiusKm);
@@ -1530,6 +1520,14 @@ export default function TechRegistrationScreen() {
       Alert.alert(i18n.t('appAlerts.techReg.validationTitle'), i18n.t('appAlerts.techReg.validationName'));
       return;
     }
+    if (findFirstInvalidEnabledTime(schedule)) {
+      setShowAllTimeErrors(true);
+      Alert.alert(
+        i18n.t('appAlerts.techReg.validationTitle'),
+        i18n.t('appAlerts.techReg.validationScheduleTime')
+      );
+      return;
+    }
     if (enrollmentPhotosForUi.length < MIN_FACE_ENROLLMENT_PHOTOS) {
       Alert.alert(
         i18n.t('appAlerts.techReg.biometricPhotosTitle'),
@@ -1601,6 +1599,8 @@ export default function TechRegistrationScreen() {
         }
         return;
       }
+      setShowAllTimeErrors(false);
+      setTimeTouchByDay({});
       Alert.alert(i18n.t('appAlerts.techReg.sentTitle'), i18n.t('appAlerts.techReg.sentBody'), [
         {
           text: i18n.t('common.ok'),
@@ -2605,6 +2605,14 @@ export default function TechRegistrationScreen() {
         </Text>
         {DAYS.map(({ key, label }) => {
           const slot = schedule[key]?.[0] || { enabled: false, start: '08:00', end: '18:00' };
+          const startTrim = String(slot.start || '').trim();
+          const endTrim = String(slot.end || '').trim();
+          const touch = timeTouchByDay[key] || {};
+          const startErr =
+            slot.enabled && !isValidHhMm(startTrim) && (touch.s || showAllTimeErrors);
+          const endErr =
+            slot.enabled && !isValidHhMm(endTrim) && (touch.e || showAllTimeErrors);
+          const timeHint = startErr || endErr ? i18n.t('common.timeFormat24Hint') : null;
           return (
             <View key={key} style={styles.dayCard}>
               <View style={styles.dayRowTop}>
@@ -2628,9 +2636,9 @@ export default function TechRegistrationScreen() {
               </View>
               <View style={[styles.row2, { opacity: slot.enabled ? 1 : 0.45 }]}>
                 <View style={styles.flex1}>
-                  <Text style={styles.label}>Início</Text>
+                  <Text style={[styles.label, startErr && { color: '#B91C1C' }]}>Início</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, startErr && { borderColor: '#DC2626', borderWidth: 2 }]}
                     value={slot.start}
                     editable={!readOnly && slot.enabled}
                     onChangeText={(t) => {
@@ -2639,13 +2647,19 @@ export default function TechRegistrationScreen() {
                       setSchedule(n);
                       saveDraftSoon();
                     }}
+                    onBlur={() =>
+                      setTimeTouchByDay((p) => ({
+                        ...p,
+                        [key]: { ...p[key], s: true },
+                      }))
+                    }
                     placeholder="08:00"
                   />
                 </View>
                 <View style={styles.flex1}>
-                  <Text style={styles.label}>Fim</Text>
+                  <Text style={[styles.label, endErr && { color: '#B91C1C' }]}>Fim</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, endErr && { borderColor: '#DC2626', borderWidth: 2 }]}
                     value={slot.end}
                     editable={!readOnly && slot.enabled}
                     onChangeText={(t) => {
@@ -2654,10 +2668,19 @@ export default function TechRegistrationScreen() {
                       setSchedule(n);
                       saveDraftSoon();
                     }}
+                    onBlur={() =>
+                      setTimeTouchByDay((p) => ({
+                        ...p,
+                        [key]: { ...p[key], e: true },
+                      }))
+                    }
                     placeholder="18:00"
                   />
                 </View>
               </View>
+              {timeHint ? (
+                <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 6, lineHeight: 16, fontWeight: '600' }}>{timeHint}</Text>
+              ) : null}
             </View>
           );
         })}

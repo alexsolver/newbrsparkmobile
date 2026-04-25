@@ -38,6 +38,7 @@
     "searching": "BUSCANDO...",
     "alsoAt": "TAMBIÉN EN",
     "fillRequired": "Complete los campos obligatorios.",
+    "timeFormat24Hint": "Use formato 24 h (HH:mm), por ejemplo 08:00 y 18:00.",
     "year": "año",
     "month": "mes",
     "relTime": {
@@ -1277,7 +1278,8 @@
       "save": "Guardar",
       "saveSuccess": "Cambios guardados.",
       "errorSave": "No se pudo guardar. Inténtelo de nuevo.",
-      "errorNotTech": "Solo los proveedores con perfil aprobado pueden editar aquí."
+      "errorNotTech": "Solo los proveedores con perfil aprobado pueden editar aquí.",
+      "invalidTime": "Revise «{{day}}» — el campo «{{part}}» debe usar formato 24 h (p. ej. 08:00 y 18:00)."
     },
     "workTabConsumerHint": "Active o complete el registro de proveedor en la pestaña «Modo» para gestionar alianzas y el formulario de horarios."
   },
@@ -2902,6 +2904,7 @@
       "cepNotFound": "Código postal no encontrado. Revisa los números.",
       "cepLookupError": "No se pudo consultar el código postal. Revisa la conexión.",
       "validationName": "Indica el nombre.",
+      "validationScheduleTime": "Revise las horas en los días que marcó como disponibles — use formato 24 h (p. ej. 08:00 y 18:00).",
       "providerActiveTitle": "Proveedor activo",
       "providerActiveBody": "No puedes reenviar la candidatura. Tu cuenta ya está habilitada.",
       "codeMismatchTitle": "Código no válido",
