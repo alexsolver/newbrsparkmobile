@@ -1202,7 +1202,18 @@
     "providerUnavailableBody": "Ihr Techniker-Konto ist noch nicht freigeschaltet. Sie können nicht zu diesem Modus wechseln.",
     "languageInterfaceHint": "Wählen Sie die Sprache der App-Oberfläche.",
     "regionSectionTitle": "Land / Region",
-    "regionHint": "Wirkt auf Datenschutz, Währung und Anbieter in der Nähe."
+    "regionHint": "Wirkt auf Datenschutz, Währung und Anbieter in der Nähe.",
+    "cloudAccountTitle": "Cloud-Konto",
+    "serverRoles": {
+      "USER": "Endkunde (USER)",
+      "PROVIDER": "Techniker/Anbieter (PROVIDER)",
+      "MANAGER": "Manager (MANAGER)",
+      "TENANT_ADMIN": "Organisations-Admin (TENANT_ADMIN)",
+      "SAAS_ADMIN": "Plattform-Admin (SAAS_ADMIN)"
+    },
+    "osSyncHintUser": "Mit dieser Rolle listet der Server keine Serviceaufträge für Sie. Wenn Sie im Außendienst arbeiten, klären Sie mit dem Unternehmen oder melden Sie sich in der richtigen Organisation an.",
+    "osSyncHintEligible": "Synchronisierte Aufträge gelten nur für diese Organisation. Fehlen welche, abmelden und die richtige Organisation wählen (dieselbe E-Mail kann mehrfach vorkommen).",
+    "sessionTenantId": "Organisations-ID: {{id}}"
   },
   "chat": {
     "title": "Chatten",

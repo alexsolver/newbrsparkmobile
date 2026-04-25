@@ -30,6 +30,34 @@ function impersonationBannerHtml() {
   }
 }
 
+/** Remove sufixos legados « — Cliente / Prestador / Empresa» quando coincidem com `kind`. */
+function stripTenantDisplaySuffix(name, kind) {
+  let s = String(name || '').trim();
+  const k = String(kind || 'COMPANY').toUpperCase();
+  const re =
+    k === 'CLIENT'
+      ? /[\s\u2014\u2013–-]+Cliente\s*$/i
+      : k === 'PROVIDER'
+        ? /[\s\u2014\u2013–-]+Prestador\s*$/i
+        : /[\s\u2014\u2013–-]+Empresa\s*$/i;
+  s = s.replace(re, '').trim();
+  return s || String(name || '').trim();
+}
+
+function tenantKindSlugForChip(kind) {
+  const k = String(kind || 'COMPANY').toUpperCase();
+  if (k === 'CLIENT') return 'client';
+  if (k === 'PROVIDER') return 'provider';
+  return 'company';
+}
+
+function tenantKindBadgeLabelPt(kind) {
+  const k = String(kind || 'COMPANY').toUpperCase();
+  if (k === 'CLIENT') return 'Cliente';
+  if (k === 'PROVIDER') return 'Prestador';
+  return 'Empresa';
+}
+
 const SIDEBAR_COLLAPSED_KEY = 'brspark_admin_sidebar_collapsed';
 
 /**
@@ -357,7 +385,16 @@ export function renderSidebar(alertCount = 3) {
     const raw = sessionStorage.getItem('brspark_panel_tenant');
     if (raw && panelMode === 'tenant') {
       const t = JSON.parse(raw);
-      tenantLine = `<div class="sidebar-tenant-chip">${t.name || ''} <span style="opacity:0.75">· ${t.slug || ''}</span></div>`;
+      const kind = t.kind || 'COMPANY';
+      const slug = String(t.slug || '').replace(/</g, '&lt;');
+      const display = String(stripTenantDisplaySuffix(t.name, kind) || t.name || '').replace(/</g, '&lt;');
+      const badge = String(tenantKindBadgeLabelPt(kind)).replace(/</g, '&lt;');
+      const kslug = tenantKindSlugForChip(kind);
+      tenantLine = `<div class="sidebar-tenant-chip sidebar-tenant-chip--${kslug}" title="${slug}">
+        <span class="sidebar-tenant-chip__badge">${badge}</span>
+        <span class="sidebar-tenant-chip__name">${display}</span>
+        <span class="sidebar-tenant-chip__slug">· ${slug}</span>
+      </div>`;
     }
   } catch {
     /* ignore */

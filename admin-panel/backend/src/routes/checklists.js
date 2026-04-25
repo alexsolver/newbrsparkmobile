@@ -35,6 +35,7 @@ const {
 } = require('../lib/fieldTaskExecutionAccess');
 const { preserveDispatchClientContactMetadata } = require('../lib/technicianClientChatGate');
 const { notifyBroadcastLosers } = require('../lib/fieldTaskBroadcastNotify');
+const { resolveFieldTaskContextTenantIdForDispatch, FIELD_TASK_CONTEXT_TENANT_KEY } = require('../lib/fieldTaskExecutionTenantScope');
 const {
     TRANSIT_ETA_DISPLAY_SNAPSHOT_AT,
     TRANSIT_ETA_DISPLAY_REMAINING_MIN,
@@ -1563,6 +1564,18 @@ router.post('/dispatch', async (req, res) => {
             });
         }
 
+        const fieldTaskContextTenantId = await resolveFieldTaskContextTenantIdForDispatch(prisma, {
+            loadedTemplate,
+            resolvedList,
+            scopedTenantId,
+        });
+        if (!fieldTaskContextTenantId) {
+            return res.status(400).json({
+                error:
+                    'Não foi possível determinar a organização desta OS (formulário sem tenant associado e prestador ambíguo). Associe o modelo a uma organização no Form Builder ou use um técnico sem ambiguidade de conta.',
+            });
+        }
+
         const isBroadcast = resolvedList.length >= 2;
 
         let broadcastClaimExpiresAt = null;
@@ -1607,13 +1620,16 @@ router.post('/dispatch', async (req, res) => {
             });
         }
 
-        if (scopedTenantId) {
-            const ftQ = await consumeQuota(prisma, scopedTenantId, 'FIELD_TASK', 1);
-            if (!ftQ.ok) {
-                return res.status(403).json({
-                    error: ftQ.error,
-                    code: ftQ.code || 'PLAN_QUOTA_EXCEEDED',
-                });
+        {
+            const quotaTid = scopedTenantId || fieldTaskContextTenantId;
+            if (quotaTid) {
+                const ftQ = await consumeQuota(prisma, quotaTid, 'FIELD_TASK', 1);
+                if (!ftQ.ok) {
+                    return res.status(403).json({
+                        error: ftQ.error,
+                        code: ftQ.code || 'PLAN_QUOTA_EXCEEDED',
+                    });
+                }
             }
         }
         const tplSettings =
@@ -1660,6 +1676,11 @@ router.post('/dispatch', async (req, res) => {
 
         const osNumber = await allocateNextFtOsNumber(prisma);
         const broadcastList = normalizeBroadcastCandidateEmails(resolvedList);
+        const baseDispatchMeta = preserveDispatchClientContactMetadata(
+            {},
+            { ...(typeof payload.metadata === 'object' && payload.metadata && !Array.isArray(payload.metadata) ? payload.metadata : {}) }
+        );
+
         const execution = await prisma.checklistExecution.create({
             data: {
                 osNumber,
@@ -1682,7 +1703,8 @@ router.post('/dispatch', async (req, res) => {
                 locationZoneType: payload.locationZoneType || null,
                 locationPolygon: payload.locationPolygon || null,
                 metadata: {
-                    ...(payload.metadata || {}),
+                    ...baseDispatchMeta,
+                    [FIELD_TASK_CONTEXT_TENANT_KEY]: fieldTaskContextTenantId,
                     refId: payload.refId, // keep original for mobile to load schema
                     title: osTitle,
                     ...(formTemplateTitle ? { templateTitle: formTemplateTitle } : {}),
@@ -1736,7 +1758,7 @@ router.post('/dispatch', async (req, res) => {
                 await sendFieldTaskActivityPushToAssignee(prisma, {
                     ownerEmail: String(emailRaw || '').trim(),
                     templateTenantId: loadedTemplate?.tenantId ?? null,
-                    assigneeTenantId: null,
+                    assigneeTenantId: fieldTaskContextTenantId,
                     executionId: execution.id,
                     pushTitle,
                     pushBody,

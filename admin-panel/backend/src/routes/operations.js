@@ -24,6 +24,7 @@ const {
   findChecklistExecutionForAppUser,
   canAppUserAccessFieldTaskExecution,
 } = require('../lib/fieldTaskExecutionAccess');
+const { FIELD_TASK_CONTEXT_TENANT_KEY } = require('../lib/fieldTaskExecutionTenantScope');
 
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
@@ -37,7 +38,12 @@ const OPS_GPS_STALE_SEC = Math.min(
 function panelOperationsTenantPrismaFilter(req) {
   const tid = resolveScopedTenantId(req.authorization);
   if (!tid) return null;
-  return { template: { tenantId: tid } };
+  return {
+    OR: [
+      { template: { tenantId: tid } },
+      { metadata: { path: [FIELD_TASK_CONTEXT_TENANT_KEY], equals: tid } },
+    ],
+  };
 }
 
 function mergeExecutionWhere(baseWhere, req) {

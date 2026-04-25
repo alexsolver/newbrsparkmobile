@@ -1,5 +1,7 @@
 'use strict';
 
+const { FIELD_TASK_CONTEXT_TENANT_KEY } = require('./fieldTaskExecutionTenantScope');
+
 /** @param {string|null|undefined} a @param {string|null|undefined} b */
 function sameOwnerEmail(a, b) {
   if (!a || !b) return false;
@@ -67,29 +69,28 @@ async function findChecklistExecutionForAppUser(prismaClient, executionId, email
   const opt = select && typeof select === 'object' ? { select } : {};
   const ownerClause = { id, ownerEmail: { equals: em, mode: 'insensitive' } };
 
+  /** Escopo de tenant: modelo da org, metadado de despacho, ou ativo (não usado aqui — só abre por id). */
+  const tenantScopeFilter = (t) => ({
+    OR: [
+      { template: { tenantId: t } },
+      { metadata: { path: [FIELD_TASK_CONTEXT_TENANT_KEY], equals: t } },
+    ],
+  });
+
   if (tid) {
     const strict = await prismaClient.checklistExecution.findFirst({
-      where: { ...ownerClause, template: { tenantId: tid } },
+      where: { ...ownerClause, ...tenantScopeFilter(tid) },
       ...opt,
     });
     if (strict) return strict;
   }
-
-  const globalOrNoTpl = await prismaClient.checklistExecution.findFirst({
-    where: {
-      ...ownerClause,
-      OR: [{ template: { tenantId: null } }, { templateId: null }],
-    },
-    ...opt,
-  });
-  if (globalOrNoTpl) return globalOrNoTpl;
 
   const broad = await prismaClient.checklistExecution.findFirst({
     where: {
       id,
       assignmentMode: 'BROADCAST',
       claimStatus: 'OPEN',
-      ...(tid ? { OR: [{ template: { tenantId: tid } }, { templateId: null }] } : {}),
+      ...(tid ? tenantScopeFilter(tid) : {}),
     },
     ...opt,
   });

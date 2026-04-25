@@ -14,6 +14,7 @@ const {
   assertUserCanMutateAsset,
   assertProviderTenantAllowsCreate,
 } = require('../lib/tenantAssetSyncPolicy');
+const { prismaWhereExecutionBelongsToTenant } = require('../lib/fieldTaskExecutionTenantScope');
 
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
@@ -548,11 +549,27 @@ router.get('/tasks', async (req, res) => {
     if (!ownerEmail) return res.status(400).json({ error: 'owner_email obrigatório.' });
 
     const tenantId = String(req.user?.tenantId || '').trim();
+    if (!tenantId) {
+      console.warn('[sync/tasks] JWT sem tenantId — retorno vazio (isolamento multi-tenant).');
+      return res.json([]);
+    }
+
     const canReceiveOs = await canReceiveFieldTasksForEmail(prisma, ownerEmail, tenantId);
     if (!canReceiveOs) {
       console.log(`[sync/tasks] ${ownerEmail} — usuário inelegível para FT/OS neste tenant (ex.: cliente); retorno vazio.`);
       return res.json([]);
     }
+
+    /**
+     * `ChecklistExecution` não tem coluna tenantId. Sem este filtro, `ownerEmail` sozinho devolvia
+     * execuções homónimas noutros tenants e `BROADCAST+OPEN` carregava ofertas de todo o sistema.
+     */
+    const tenantAssetRows = await prisma.asset.findMany({
+      where: { tenantId },
+      select: { id: true },
+    });
+    const tenantAssetIds = tenantAssetRows.map((r) => r.id);
+    const executionBelongsToJwtTenant = prismaWhereExecutionBelongsToTenant(tenantId, tenantAssetIds);
 
     const ownerWhere = { equals: ownerEmail, mode: 'insensitive' };
 
@@ -566,20 +583,30 @@ router.get('/tasks', async (req, res) => {
 
     const activeOsMine = await prisma.checklistExecution.findMany({
       where: {
-        ownerEmail: ownerWhere,
-        routineTaskNumber: null,
-        status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
+        AND: [
+          {
+            ownerEmail: ownerWhere,
+            routineTaskNumber: null,
+            status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
+          },
+          executionBelongsToJwtTenant,
+        ],
       },
       include: { template: true, ...revInclude },
     });
 
     const activeOsBroadcastOpen = await prisma.checklistExecution.findMany({
       where: {
-        assignmentMode: 'BROADCAST',
-        claimStatus: 'OPEN',
-        routineTaskNumber: null,
-        ownerEmail: null,
-        status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
+        AND: [
+          {
+            assignmentMode: 'BROADCAST',
+            claimStatus: 'OPEN',
+            routineTaskNumber: null,
+            ownerEmail: null,
+            status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
+          },
+          executionBelongsToJwtTenant,
+        ],
       },
       include: { template: true, ...revInclude },
     });
@@ -599,9 +626,14 @@ router.get('/tasks', async (req, res) => {
 
     const activeRt = await prisma.checklistExecution.findMany({
       where: {
-        ownerEmail: ownerWhere,
-        routineTaskNumber: { not: null },
-        status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
+        AND: [
+          {
+            ownerEmail: ownerWhere,
+            routineTaskNumber: { not: null },
+            status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
+          },
+          executionBelongsToJwtTenant,
+        ],
       },
       orderBy: [{ createdAt: 'asc' }],
       include: { template: true, ...revInclude },
@@ -609,9 +641,14 @@ router.get('/tasks', async (req, res) => {
 
     const doneOs = await prisma.checklistExecution.findMany({
       where: {
-        ownerEmail: ownerWhere,
-        routineTaskNumber: null,
-        status: { in: ['COMPLETED', 'SYNCED'] },
+        AND: [
+          {
+            ownerEmail: ownerWhere,
+            routineTaskNumber: null,
+            status: { in: ['COMPLETED', 'SYNCED'] },
+          },
+          executionBelongsToJwtTenant,
+        ],
       },
       orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
       take: 400,
@@ -620,9 +657,14 @@ router.get('/tasks', async (req, res) => {
 
     const doneRt = await prisma.checklistExecution.findMany({
       where: {
-        ownerEmail: ownerWhere,
-        routineTaskNumber: { not: null },
-        status: { in: ['COMPLETED', 'SYNCED'] },
+        AND: [
+          {
+            ownerEmail: ownerWhere,
+            routineTaskNumber: { not: null },
+            status: { in: ['COMPLETED', 'SYNCED'] },
+          },
+          executionBelongsToJwtTenant,
+        ],
       },
       orderBy: [{ completedAt: 'desc' }, { createdAt: 'desc' }],
       take: 200,
@@ -631,9 +673,14 @@ router.get('/tasks', async (req, res) => {
 
     const cancelledRt = await prisma.checklistExecution.findMany({
       where: {
-        ownerEmail: ownerWhere,
-        routineTaskNumber: { not: null },
-        status: { in: ['CANCELLED', 'CANCELED'] },
+        AND: [
+          {
+            ownerEmail: ownerWhere,
+            routineTaskNumber: { not: null },
+            status: { in: ['CANCELLED', 'CANCELED'] },
+          },
+          executionBelongsToJwtTenant,
+        ],
       },
       orderBy: [{ createdAt: 'desc' }],
       take: 200,

@@ -88,6 +88,10 @@ input, select, textarea { font-family: inherit; }
   min-width: 0;
 }
 .sidebar-tenant-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
   font-size: 10px;
   font-weight: 600;
   color: var(--text2);
@@ -95,9 +99,60 @@ input, select, textarea { font-family: inherit; }
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+}
+.sidebar-tenant-chip__badge {
+  flex-shrink: 0;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #fff;
+}
+.sidebar-tenant-chip__name {
+  font-weight: 700;
+  color: inherit;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-tenant-chip__slug {
+  opacity: 0.72;
+  font-weight: 600;
+  font-family: ui-monospace, Menlo, monospace;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Verde = cliente · Amarelo = prestador · Vermelho = empresa */
+.sidebar-tenant-chip--client {
+  border-color: #059669;
+  background: #ecfdf5;
+  color: #065f46;
+}
+.sidebar-tenant-chip--client .sidebar-tenant-chip__badge {
+  background: #059669;
+}
+.sidebar-tenant-chip--provider {
+  border-color: #ca8a04;
+  background: #fffbeb;
+  color: #92400e;
+}
+.sidebar-tenant-chip--provider .sidebar-tenant-chip__badge {
+  background: #d97706;
+}
+.sidebar-tenant-chip--company {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.sidebar-tenant-chip--company .sidebar-tenant-chip__badge {
+  background: #dc2626;
 }
 .sidebar-brand {
   display: flex;

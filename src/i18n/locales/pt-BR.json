@@ -1202,7 +1202,18 @@
     "providerUnavailableBody": "Sua conta de prestador ainda não foi habilitada. Não é possível alternar para este modo.",
     "languageInterfaceHint": "Escolha o idioma da interface do app.",
     "regionSectionTitle": "País / região",
-    "regionHint": "Afeta LGPD/GDPR, moeda e prestadores próximos a você."
+    "regionHint": "Afeta LGPD/GDPR, moeda e prestadores próximos a você.",
+    "cloudAccountTitle": "Conta na nuvem",
+    "serverRoles": {
+      "USER": "Cliente final (USER)",
+      "PROVIDER": "Prestador (PROVIDER)",
+      "MANAGER": "Gestor (MANAGER)",
+      "TENANT_ADMIN": "Administrador da organização (TENANT_ADMIN)",
+      "SAAS_ADMIN": "Administrador da plataforma (SAAS_ADMIN)"
+    },
+    "osSyncHintUser": "Com este papel, o servidor não lista ordens de serviço para si. Se trabalha em campo, confirme com a empresa ou inicie sessão na organização em que é prestador.",
+    "osSyncHintEligible": "As OS sincronizadas vinculam-se só a esta organização. Se faltam OS de outra empresa, saia e entre na organização correta (o mesmo e-mail pode existir em mais do que uma).",
+    "sessionTenantId": "ID da organização: {{id}}"
   },
   "chat": {
     "title": "Chat",

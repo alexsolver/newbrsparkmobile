@@ -969,7 +969,8 @@ router.post('/me/workspaces', authUser, async (req, res) => {
       if (!clash) break;
     }
     const tenantEmail = syntheticTenantEmailForWorkspace(emailNorm, slugPrefix);
-    const tenantName = kind === 'PROVIDER' ? `${baseName} — Prestador` : `${baseName} — Cliente`;
+    /** Título da organização; discriminação por `Tenant.kind` (CLIENT | PROVIDER). */
+    const tenantName = baseName;
 
     const seatRole = kind === 'PROVIDER' ? 'PROVIDER' : 'USER';
 

@@ -42,6 +42,11 @@ import { isImperial, setUnitSystem, setNumberFormat, getNumberFormat, loadNumber
 import { shareUserLocalDataJson } from '../src/utils/exportUserLocalData';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
+import {
+  displayTenantTitle,
+  tenantKindLabelPt,
+  tenantKindUiColors,
+} from '../src/lib/tenantKindUi';
 
 const REGION_KEY   = '@brspark_region';
 const LANGUAGE_KEY = '@brspark_language';
@@ -82,10 +87,63 @@ const BRSPARK_COMPANY_SIGNUP_URL =
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, userRole, setUserRole, logout, deleteAccount, patchUser, createWorkspace } = useAuth();
+  const { user, userRole, setUserRole, logout, deleteAccount, patchUser } = useAuth();
   const displayAvatarUri = useResolvedAvatarUri(user);
   const { dark: darkMode, colors: C, toggleDarkMode, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createProfileStyles(C), [C]);
+
+  const tenantKindChip = useMemo(() => {
+    if (!user?.tenant?.kind) return null;
+    const col = tenantKindUiColors(user.tenant.kind);
+    const tn = user.tenant as { name?: string | null };
+    const orgTitle =
+      displayTenantTitle(tn?.name, user.tenant.kind) || String(tn?.name || '').trim() || '—';
+    return (
+      <View
+        style={{
+          marginTop: 10,
+          flexDirection: 'row',
+          alignItems: 'center',
+          alignSelf: 'center',
+          maxWidth: '100%',
+          borderRadius: 10,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: `${col.accent}44`,
+          backgroundColor: col.subtleBg,
+        }}
+      >
+        <View style={{ width: 3, alignSelf: 'stretch', backgroundColor: col.accent }} />
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 8,
+            paddingVertical: 8,
+            paddingHorizontal: 10,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: col.chipBg,
+              paddingHorizontal: 7,
+              paddingVertical: 3,
+              borderRadius: 6,
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.3 }}>
+              {tenantKindLabelPt(user.tenant.kind).toUpperCase()}
+            </Text>
+          </View>
+          <Text style={{ fontSize: 12, fontWeight: '800', color: col.title }} numberOfLines={2}>
+            {orgTitle}
+          </Text>
+        </View>
+      </View>
+    );
+  }, [user?.tenant?.kind, user?.tenant]);
+
   const { t, i18n } = useTranslation();
   const [queueCount, setQueueCount] = useState(0);
   const [syncConflictCount, setSyncConflictCount] = useState(0);
@@ -104,8 +162,6 @@ export default function ProfileScreen() {
   const [newPwd,         setNewPwd]           = useState('');
   const [changingPwd,    setChangingPwd]      = useState(false);
   const [showAvatarModal,setShowAvatarModal]  = useState(false);
-  const [workspaceBusy, setWorkspaceBusy] = useState(false);
-
   // ─── 2FA State ──────────────────────────────────────────────────────────────
   const [twoFaEnabled,   setTwoFaEnabled]     = useState(false);
   const [twoFaLoading,   setTwoFaLoading]     = useState(false);
@@ -125,6 +181,66 @@ export default function ProfileScreen() {
   } | null>(null);
 
   const canManageDirectoryHero = userHasCapability(user, 'mobile.admin.quickActions');
+
+  /** Papel e tenant efectivos do JWT — alinha com o que o servidor usa para OS e sync. */
+  const cloudSessionCard = useMemo(() => {
+    if (!user) return null;
+    const r =
+      String(user.role || 'USER')
+        .toUpperCase()
+        .replace(/[^A-Z0-9_]/g, '') || 'USER';
+    const roleLabel = t(`profile.serverRoles.${r}`, { defaultValue: r });
+    const tenantIdStr = String(user.tenantId || '').trim();
+    const osHintConsumer = !isFieldTaskEligibleRole(user.role);
+
+    return (
+      <View
+        style={{
+          marginTop: 12,
+          marginHorizontal: 16,
+          paddingHorizontal: 14,
+          paddingVertical: 12,
+          borderRadius: 12,
+          backgroundColor: C.surfaceLow,
+          borderWidth: 1,
+          borderColor: C.border,
+          maxWidth: SCREEN_W - 32,
+          alignSelf: 'center',
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 10,
+            fontWeight: '800',
+            color: C.textSecondary,
+            letterSpacing: 0.4,
+            textTransform: 'uppercase',
+            marginBottom: 6,
+          }}
+        >
+          {t('profile.cloudAccountTitle')}
+        </Text>
+        <Text style={{ fontSize: 13, fontWeight: '700', color: C.slate }}>{roleLabel}</Text>
+        <Text style={{ fontSize: 12, color: C.textSecondary, marginTop: 8, lineHeight: 18 }}>
+          {osHintConsumer ? t('profile.osSyncHintUser') : t('profile.osSyncHintEligible')}
+        </Text>
+        {tenantIdStr ? (
+          <Text
+            selectable
+            style={{
+              fontSize: 10,
+              fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              color: C.textLight,
+              marginTop: 10,
+              lineHeight: 15,
+            }}
+          >
+            {t('profile.sessionTenantId', { id: tenantIdStr })}
+          </Text>
+        ) : null}
+      </View>
+    );
+  }, [user, t, C.surfaceLow, C.border, C.textSecondary, C.slate, C.textLight]);
 
   const [dirHeroLoading, setDirHeroLoading] = useState(false);
   const [dirHeroSaving, setDirHeroSaving] = useState(false);
@@ -774,104 +890,8 @@ export default function ProfileScreen() {
           
           <Text style={[styles.headerName, { color: '#191C1D' }]}>{profile.name}</Text>
           <Text style={[styles.headerSub, { color: C.textSecondary }]}>{profile.email}</Text>
-          {user?.tenant?.kind ? (
-            <Text style={{ fontSize: 12, color: C.textLight, fontWeight: '700', marginTop: 4 }}>
-              {String(user.tenant.kind).toUpperCase() === 'CLIENT'
-                ? 'Organização: cliente (pessoal)'
-                : String(user.tenant.kind).toUpperCase() === 'PROVIDER'
-                  ? 'Organização: prestador'
-                  : 'Organização: empresa'}
-            </Text>
-          ) : null}
-
-          <View
-            style={{
-              marginTop: 14,
-              padding: 14,
-              borderRadius: 14,
-              backgroundColor: '#F1F5F9',
-              borderWidth: 1,
-              borderColor: '#E2E8F0',
-            }}
-          >
-            <Text style={{ fontSize: 13, fontWeight: '800', color: '#0f172a', marginBottom: 6 }}>
-              Espaços adicionais
-            </Text>
-            <Text style={{ fontSize: 12, color: '#64748b', lineHeight: 18, marginBottom: 10 }}>
-              Crie uma organização extra com o mesmo e-mail: cliente (bens seus) ou prestador (só vê partilhas).
-            </Text>
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#0f766e',
-                paddingVertical: 10,
-                borderRadius: 10,
-                alignItems: 'center',
-                marginBottom: 8,
-                opacity: workspaceBusy ? 0.6 : 1,
-              }}
-              disabled={workspaceBusy}
-              onPress={() => {
-                Alert.alert(
-                  'Espaço cliente',
-                  'Cria uma tenant «cliente»: os ativos que criar ficam visíveis só para si (e partilhas recebidas).',
-                  [
-                    { text: 'Cancelar', style: 'cancel' },
-                    {
-                      text: 'Criar',
-                      onPress: async () => {
-                        setWorkspaceBusy(true);
-                        try {
-                          await createWorkspace('CLIENT');
-                          Alert.alert('Pronto', 'Sessão alterada para o novo espaço cliente.');
-                        } catch (e: any) {
-                          Alert.alert('Erro', e?.message || 'Falha ao criar.');
-                        } finally {
-                          setWorkspaceBusy(false);
-                        }
-                      },
-                    },
-                  ],
-                );
-              }}
-            >
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>+ Espaço cliente (pessoal)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#1e293b',
-                paddingVertical: 10,
-                borderRadius: 10,
-                alignItems: 'center',
-                opacity: workspaceBusy ? 0.6 : 1,
-              }}
-              disabled={workspaceBusy}
-              onPress={() => {
-                Alert.alert(
-                  'Espaço prestador',
-                  'Cria uma tenant «prestador»: só vê ativos que outras organizações lhe partilharem (escrita conforme a partilha).',
-                  [
-                    { text: 'Cancelar', style: 'cancel' },
-                    {
-                      text: 'Criar',
-                      onPress: async () => {
-                        setWorkspaceBusy(true);
-                        try {
-                          await createWorkspace('PROVIDER');
-                          Alert.alert('Pronto', 'Sessão alterada para o novo espaço prestador.');
-                        } catch (e: any) {
-                          Alert.alert('Erro', e?.message || 'Falha ao criar.');
-                        } finally {
-                          setWorkspaceBusy(false);
-                        }
-                      },
-                    },
-                  ],
-                );
-              }}
-            >
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>+ Espaço prestador</Text>
-            </TouchableOpacity>
-          </View>
+          {tenantKindChip}
+          {cloudSessionCard}
 
           <TouchableOpacity 
             style={[styles.editInfoBtn, { backgroundColor: C.surfaceLow }]} 

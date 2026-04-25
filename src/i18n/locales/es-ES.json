@@ -1202,7 +1202,18 @@
     "providerUnavailableBody": "Tu cuenta de proveedor aún no está habilitada. No puedes cambiar a este modo.",
     "languageInterfaceHint": "Elige el idioma de la interfaz de la app.",
     "regionSectionTitle": "País / región",
-    "regionHint": "Afecta normas de privacidad, moneda y proveedores cercanos."
+    "regionHint": "Afecta normas de privacidad, moneda y proveedores cercanos.",
+    "cloudAccountTitle": "Cuenta en la nube",
+    "serverRoles": {
+      "USER": "Cliente final (USER)",
+      "PROVIDER": "Proveedor de campo (PROVIDER)",
+      "MANAGER": "Gestor (MANAGER)",
+      "TENANT_ADMIN": "Administrador de la organización (TENANT_ADMIN)",
+      "SAAS_ADMIN": "Administrador de la plataforma (SAAS_ADMIN)"
+    },
+    "osSyncHintUser": "Con este rol, el servidor no lista órdenes de servicio para usted. Si trabaja en campo, confirme con su empresa o inicie sesión en la organización donde es proveedor.",
+    "osSyncHintEligible": "Las OS sincronizadas pertenecen solo a esta organización. Si faltan, cierre sesión y elija la organización correcta (el mismo correo puede existir en más de una).",
+    "sessionTenantId": "ID de organización: {{id}}"
   },
   "chat": {
     "title": "Chat",

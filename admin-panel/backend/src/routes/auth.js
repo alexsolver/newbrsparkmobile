@@ -155,7 +155,7 @@ async function postTenantLogin(req, res) {
       token,
       mode: 'tenant',
       user: { id: user.id, email: user.email, name: user.name, role: user.role },
-      tenant: { id: tenant.id, slug: tenant.slug, name: tenant.name },
+      tenant: { id: tenant.id, slug: tenant.slug, name: tenant.name, kind: tenant.kind || 'COMPANY' },
       ...session,
     });
   } catch (err) {
@@ -257,7 +257,12 @@ router.post('/impersonate-panel', adminAuthThenPanel, async (req, res) => {
       token,
       mode: 'tenant',
       user: { id: target.id, email: target.email, name: target.name, role: target.role },
-      tenant: { id: target.tenant.id, slug: target.tenant.slug, name: target.tenant.name },
+      tenant: {
+        id: target.tenant.id,
+        slug: target.tenant.slug,
+        name: target.tenant.name,
+        kind: target.tenant.kind || 'COMPANY',
+      },
       ...session,
     });
   } catch (err) {
@@ -271,6 +276,12 @@ router.get('/me', require('../middleware/auth').adminAuth, async (req, res) => {
   try {
     if (req.admin.panelUser) {
       const session = buildPanelSessionBootstrap(req.admin);
+      const tid = session.context?.tenantId || null;
+      let tenantKind = 'COMPANY';
+      if (tid) {
+        const trow = await prisma.tenant.findUnique({ where: { id: String(tid) }, select: { kind: true } });
+        if (trow?.kind) tenantKind = String(trow.kind);
+      }
       return res.json({
         mode: 'tenant',
         user: {
@@ -280,9 +291,10 @@ router.get('/me', require('../middleware/auth').adminAuth, async (req, res) => {
           role: session.authz.roleKey,
         },
         tenant: {
-          id: session.context?.tenantId || null,
+          id: tid,
           slug: session.context?.tenantSlug || null,
           name: session.context?.tenantName || null,
+          kind: tenantKind,
         },
         ...session,
       });

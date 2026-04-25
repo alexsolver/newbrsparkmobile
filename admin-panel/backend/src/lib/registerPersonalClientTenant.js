@@ -53,7 +53,8 @@ async function createPersonalClientTenantAndUser(prisma, opts) {
       if (!clash) break;
     }
     const tenantEmail = syntheticTenantOwnerEmailForClientSpace(emailNorm);
-    const tenantName = `${name} — Cliente`;
+    /** Nome legível; o tipo fica em `Tenant.kind` (CLIENT) — não duplicar «— Cliente» no título. */
+    const tenantName = name;
 
     const tenant = await tx.tenant.create({
       data: {

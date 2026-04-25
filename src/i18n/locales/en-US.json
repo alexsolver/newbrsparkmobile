@@ -1202,7 +1202,18 @@
     "providerUnavailableBody": "Your provider account is not enabled yet. You cannot switch to this mode.",
     "languageInterfaceHint": "Choose the app interface language.",
     "regionSectionTitle": "Country / region",
-    "regionHint": "Affects privacy rules, currency and nearby providers."
+    "regionHint": "Affects privacy rules, currency and nearby providers.",
+    "cloudAccountTitle": "Cloud account",
+    "serverRoles": {
+      "USER": "End customer (USER)",
+      "PROVIDER": "Field provider (PROVIDER)",
+      "MANAGER": "Manager (MANAGER)",
+      "TENANT_ADMIN": "Organization admin (TENANT_ADMIN)",
+      "SAAS_ADMIN": "Platform admin (SAAS_ADMIN)"
+    },
+    "osSyncHintUser": "With this role, the server does not list work orders for you. If you work in the field, confirm with your company or sign in to the organization where you are a provider.",
+    "osSyncHintEligible": "Synced work orders are tied to this organization only. If some are missing, sign out and pick the correct org (the same email can exist in more than one).",
+    "sessionTenantId": "Organization ID: {{id}}"
   },
   "chat": {
     "title": "Chat",

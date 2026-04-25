@@ -25,13 +25,11 @@ import { complianceDocFallbackUrl } from '../../src/constants/legalPublicUrls';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
 import { LoginOAuthNativeSection, type NativeOAuthPending } from '../../src/components/auth/LoginOAuthNativeSection';
-
-function tenantKindLabelPt(kind?: string | null) {
-  const k = String(kind || 'COMPANY').toUpperCase();
-  if (k === 'CLIENT') return 'Cliente (pessoal)';
-  if (k === 'PROVIDER') return 'Prestador';
-  return 'Empresa';
-}
+import {
+  displayTenantTitle,
+  tenantKindLabelPt,
+  tenantKindUiColors,
+} from '../../src/lib/tenantKindUi';
 
 function createLoginStyles(C: ColorPalette) {
   return StyleSheet.create({
@@ -548,29 +546,68 @@ export default function LoginScreen() {
               Este e-mail está em mais de uma organização. Selecione com qual deseja entrar agora.
             </Text>
             <ScrollView keyboardShouldPersistTaps="handled">
-              {(tenantPick || []).map((t) => (
-                <TouchableOpacity
-                  key={t.id}
-                  style={{
-                    paddingVertical: 14,
-                    paddingHorizontal: 14,
-                    borderRadius: 12,
-                    backgroundColor: C.background,
-                    marginBottom: 10,
-                    borderWidth: 1,
-                    borderColor: C.border,
-                  }}
-                  onPress={() => completeLoginWithChosenTenant(t.id)}
-                  disabled={loading}
-                >
-                  <Text style={{ fontSize: 15, fontWeight: '800', color: C.primary }}>
-                    {t.name || t.id}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: C.textSecondary, marginTop: 4, fontWeight: '600' }}>
-                    {tenantKindLabelPt(t.kind)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {(tenantPick || []).map((t) => {
+                const col = tenantKindUiColors(t.kind);
+                const title = displayTenantTitle(t.name, t.kind) || t.name || t.slug || t.id;
+                return (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={{
+                      flexDirection: 'row',
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      marginBottom: 10,
+                      borderWidth: 1,
+                      borderColor: `${col.accent}55`,
+                      backgroundColor: col.subtleBg,
+                    }}
+                    onPress={() => completeLoginWithChosenTenant(t.id)}
+                    disabled={loading}
+                  >
+                    <View style={{ width: 4, backgroundColor: col.accent }} />
+                    <View style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 12 }}>
+                      <Text style={{ fontSize: 15, fontWeight: '800', color: col.title }}>{title}</Text>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          marginTop: 6,
+                          flexWrap: 'wrap',
+                          gap: 8,
+                        }}
+                      >
+                        <View
+                          style={{
+                            backgroundColor: col.chipBg,
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: 6,
+                          }}
+                        >
+                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.4 }}>
+                            {tenantKindLabelPt(t.kind).toUpperCase()}
+                          </Text>
+                        </View>
+                        {t.slug ? (
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              color: C.textLight,
+                              fontWeight: '600',
+                              fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                              flex: 1,
+                              minWidth: 0,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {t.slug}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
             <TouchableOpacity
               style={{ alignItems: 'center', paddingTop: 12 }}

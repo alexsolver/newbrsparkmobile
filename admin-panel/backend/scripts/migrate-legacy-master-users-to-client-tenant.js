@@ -105,7 +105,7 @@ async function migrateOneUser(prisma, legacyTenantId, user, dryRun) {
   const newTenantId = await prisma.$transaction(async (tx) => {
     const tenant = await tx.tenant.create({
       data: {
-        name: `${String(user.name || '').trim() || emailNorm.split('@')[0]} — Cliente`,
+        name: String(user.name || '').trim() || emailNorm.split('@')[0] || 'Cliente',
         slug,
         email: syntheticTenantOwnerEmailForClientSpace(emailNorm),
         ownerName: String(user.name || '').trim() || emailNorm.split('@')[0],
