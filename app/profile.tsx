@@ -1058,6 +1058,37 @@ export default function ProfileScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {userRole === 'TECHNICIAN' ? (
+              <View style={{ marginHorizontal: 16, marginTop: 10, marginBottom: 6 }}>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#FFF7ED',
+                    borderRadius: 14,
+                    padding: 14,
+                    borderWidth: 1,
+                    borderColor: '#FDBA74',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                  onPress={() => router.push('/profile/affiliations' as any)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FB923C', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="business" size={18} color="#fff" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '900', color: '#9A3412' }}>Organizações e parcerias</Text>
+                      <Text style={{ fontSize: 11, color: '#C2410C', marginTop: 2 }}>
+                        Vínculo dedicado e parcerias com empresas
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#C2410C" />
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </>
         ) : showBecomeProviderCta ? (
           <View style={{ marginTop: 12, marginBottom: 12, marginHorizontal: 16 }}>

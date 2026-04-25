@@ -154,6 +154,10 @@
               <ion-icon name="mail-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
               <span id="ul-open-reset-email-txt">Reset por e-mail</span>
             </button>
+            <button type="button" class="btn btn-outline" id="ul-open-affiliation-invite-btn" title="">
+              <ion-icon name="briefcase-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
+              <span id="ul-open-affiliation-invite-txt">Convidar parceria</span>
+            </button>
             <a class="btn btn-outline" href="technician-applications.html" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
               <ion-icon name="person-add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
               <span id="ul-tech-signup-txt">Cadastro prestador</span>
@@ -304,6 +308,54 @@
 </div>
 
 <!-- Reset password by email -->
+<div class="modal-overlay" id="affiliation-invite-modal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <span class="modal-title" id="affiliation-invite-title">Convidar prestador (parceria)</span>
+      <button class="modal-close" type="button" data-ul-aff-invite-close><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+    </div>
+    <div class="modal-body">
+      <div
+        role="note"
+        style="font-size:12px;line-height:1.55;color:var(--text2);padding:12px 14px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);margin-bottom:16px"
+      >
+        Envie um convite de <strong>parceria</strong> (multi-empresa) ou <strong>vínculo dedicado</strong> (full time) para um prestador.
+        <br/>
+        <span style="color:var(--text3)">Requer provider-first ativo no tenant e prestador já com cadastro global.</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="aff-invite-email">E-mail do prestador *</label>
+        <input type="email" class="form-control" id="aff-invite-email" placeholder="tecnico@exemplo.com" autocomplete="email" />
+      </div>
+      <div class="form-group" id="wrap-aff-invite-tenant" style="display:none">
+        <label class="form-label" for="aff-invite-tenant">Tenant (empresa) *</label>
+        <select class="form-control" id="aff-invite-tenant"></select>
+        <p style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.4">
+          Necessário no modo global. Em modo tenant, usamos automaticamente a organização atual.
+        </p>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="aff-invite-type">Tipo de vínculo *</label>
+        <select class="form-control" id="aff-invite-type">
+          <option value="PARTNER">Parceria (multi-empresa)</option>
+          <option value="DEDICATED">Vínculo dedicado (full time)</option>
+        </select>
+        <p style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.4">
+          Se ativado como <strong>dedicado</strong>, outras parcerias ativas do prestador podem ser desativadas automaticamente.
+        </p>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="aff-invite-note">Mensagem (opcional)</label>
+        <textarea class="form-control" id="aff-invite-note" rows="3" placeholder="Ex.: Vínculo full time na operação de SP."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" data-ul-aff-invite-close>Cancelar</button>
+      <button type="button" class="btn btn-primary" id="aff-invite-submit">Criar convite</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="reset-email-modal">
   <div class="modal" style="max-width:440px">
     <div class="modal-header">
@@ -372,6 +424,83 @@
   if (tenantFilterField) tenantFilterField.hidden = !isPlatformAdmin;
   const newUserBtn = document.querySelector('.data-toolbar-actions .btn.btn-primary');
   if (newUserBtn) newUserBtn.hidden = !canManageTenantUsers;
+
+  function panelTenantId() {
+    try {
+      if (sessionStorage.getItem('brspark_panel_mode') === 'tenant') {
+        const t = JSON.parse(sessionStorage.getItem('brspark_panel_tenant') || '{}');
+        return t.id || null;
+      }
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
+  async function loadTenantsForAffInvite() {
+    const wrap = document.getElementById('wrap-aff-invite-tenant');
+    const sel = document.getElementById('aff-invite-tenant');
+    if (!wrap || !sel) return;
+    if (panelTenantId()) {
+      wrap.style.display = 'none';
+      return;
+    }
+    wrap.style.display = '';
+    const res = await CONFIG.get('/tenants?limit=200');
+    const list = res?.data || res || [];
+    const rows = Array.isArray(list) ? list : [];
+    sel.innerHTML = rows
+      .map((t) => `<option value="${escAttr(t.id)}">${escAttr(t.name || t.slug || t.id)}</option>`)
+      .join('');
+  }
+
+  const affInviteBtn = document.getElementById('ul-open-affiliation-invite-btn');
+  if (affInviteBtn) {
+    affInviteBtn.hidden = !canManageTenantUsers;
+    affInviteBtn.addEventListener('click', async () => {
+      document.getElementById('aff-invite-email').value = '';
+      document.getElementById('aff-invite-note').value = '';
+      document.getElementById('aff-invite-type').value = 'PARTNER';
+      await loadTenantsForAffInvite();
+      openModal('affiliation-invite-modal');
+    });
+  }
+
+  document.querySelectorAll('[data-ul-aff-invite-close]').forEach((b) => {
+    b.addEventListener('click', () => closeModal('affiliation-invite-modal'));
+  });
+
+  document.getElementById('aff-invite-submit')?.addEventListener('click', async () => {
+    if (!canManageTenantUsers) return;
+    const email = String(document.getElementById('aff-invite-email')?.value || '').trim();
+    if (!email) {
+      alert('Informe o e-mail do prestador.');
+      return;
+    }
+    const relationshipType = String(document.getElementById('aff-invite-type')?.value || 'PARTNER')
+      .trim()
+      .toUpperCase();
+    const note = String(document.getElementById('aff-invite-note')?.value || '').trim();
+    const tid = panelTenantId();
+    const tenantId = tid || String(document.getElementById('aff-invite-tenant')?.value || '').trim();
+    if (!tenantId) {
+      alert('Selecione o tenant (empresa).');
+      return;
+    }
+    const out = await CONFIG.post('/providers/affiliations/invite', {
+      email,
+      tenantId,
+      relationshipType,
+      note: note || undefined,
+    });
+    if (out?.error) {
+      alert(out.error);
+      return;
+    }
+    closeModal('affiliation-invite-modal');
+    const acceptUrl = out.acceptUrl || '';
+    alert(`Convite criado.\\n\\nTipo: ${relationshipType}\\nE-mail: ${email}\\n\\nLink para o prestador:\\n${acceptUrl}`);
+  });
 
   function syncNewUserTenantFieldsLayout() {
     const multi = document.getElementById('new-tenant-multi-wrap');

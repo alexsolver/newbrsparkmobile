@@ -18,6 +18,14 @@ RAW_URL="${RAW_URL:-postgresql://alex@localhost:5432/brspark_admin}"
 # Remove parâmetros de query (ex: ?schema=public é do Prisma, não do pg_dump)
 DB_URL="${RAW_URL%%\?*}"
 
+if ! command -v pg_dump >/dev/null 2>&1; then
+  echo "⚠️  pg_dump não está no PATH — backup ignorado."
+  echo "   Instale o cliente PostgreSQL (ex.: brew install libpq && brew link --force libpq) ou use o pacote postgresql-client."
+  echo "   A migração pode continuar com SKIP_BACKUP=1 ou após instalar pg_dump."
+  exit 0
+fi
+
+set -o pipefail
 echo "📦 Backup: $FILENAME"
 pg_dump "$DB_URL" | gzip > "$FILENAME"
 

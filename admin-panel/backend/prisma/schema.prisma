@@ -300,12 +300,14 @@ model ProviderTenantAffiliation {
   providerIdentityId     String
   providerIdentity       ProviderIdentity @relation(fields: [providerIdentityId], references: [id], onDelete: Cascade)
   status                 String   @default("INVITED") // INVITED, REQUESTED, ACTIVE, INACTIVE, SUSPENDED, REJECTED
+  relationshipType       String   @default("PARTNER") // PARTNER, DEDICATED
   invitationToken        String?  @unique
   invitedByUserId        String?
   requestedAt            DateTime?
   invitedAt              DateTime?
   activatedAt            DateTime?
   suspendedAt            DateTime?
+  endedAt                DateTime?
   note                   String?
   tenantScheduleJson     Json?
   tenantServiceLocationIds Json?

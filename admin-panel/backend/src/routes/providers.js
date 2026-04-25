@@ -16,9 +16,11 @@ const adminRouter = express.Router();
 const GLOBAL_INVITE_PURPOSE = 'PROVIDER_GLOBAL_ONBOARDING_INVITE';
 const GLOBAL_INVITE_TTL = Number(process.env.PROVIDER_GLOBAL_INVITE_TTL_SECONDS || 14 * 24 * 3600);
 const AFFILIATION_ACCEPT_BASE_URL =
-  String(process.env.PROVIDER_AFFILIATION_ACCEPT_URL_BASE || 'brspark://provider-affiliation/accept').trim();
+  String(process.env.PROVIDER_AFFILIATION_ACCEPT_URL_BASE || 'brsparkmobile://provider-affiliation/accept').trim();
 const ONBOARDING_INVITE_BASE_URL =
-  String(process.env.PROVIDER_GLOBAL_ONBOARDING_URL_BASE || 'brspark://provider-onboarding').trim();
+  String(process.env.PROVIDER_GLOBAL_ONBOARDING_URL_BASE || 'brsparkmobile://provider-onboarding').trim();
+
+const AFFILIATION_RELATIONSHIP_TYPES = new Set(['PARTNER', 'DEDICATED']);
 
 function normalizeEmail(raw) {
   return String(raw || '')
@@ -155,11 +157,13 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
       affiliations: providerIdentity.affiliations.map((row) => ({
         id: row.id,
         status: row.status,
+        relationshipType: row.relationshipType || 'PARTNER',
         note: row.note,
         tenant: row.tenant,
         invitedAt: row.invitedAt,
         requestedAt: row.requestedAt,
         activatedAt: row.activatedAt,
+        endedAt: row.endedAt,
       })),
     });
   } catch (err) {
@@ -314,8 +318,46 @@ publicRouter.post('/affiliations/:token/accept', authUser, async (req, res) => {
       affiliation: {
         id: updated.id,
         status: updated.status,
+        relationshipType: updated.relationshipType || 'PARTNER',
         tenant: row.tenant,
         requestedAt: updated.requestedAt,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/providers/affiliations/:token
+// Pré-visualização do convite (antes do aceite).
+publicRouter.get('/affiliations/:token', authUser, async (req, res) => {
+  try {
+    const token = String(req.params.token || '').trim();
+    if (!token) return res.status(400).json({ error: 'Token inválido.' });
+    const row = await prisma.providerTenantAffiliation.findFirst({
+      where: { invitationToken: token },
+      include: {
+        providerIdentity: { include: { user: { select: { id: true, email: true } } } },
+        tenant: { select: { id: true, name: true, slug: true } },
+      },
+    });
+    if (!row) return res.status(404).json({ error: 'Convite não encontrado.' });
+    if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
+    if (String(row.providerIdentity.userId) !== String(req.user.id)) {
+      return res.status(403).json({
+        error: 'Este convite não pertence à conta autenticada.',
+        code: 'AFFILIATION_EMAIL_MISMATCH',
+      });
+    }
+    return res.json({
+      ok: true,
+      affiliation: {
+        id: row.id,
+        status: row.status,
+        relationshipType: row.relationshipType || 'PARTNER',
+        note: row.note,
+        tenant: row.tenant,
+        invitedAt: row.invitedAt,
       },
     });
   } catch (err) {
@@ -415,6 +457,17 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
     }
     const provider = providers[0];
 
+    const relationshipTypeRaw = String(req.body?.relationshipType || 'PARTNER').trim().toUpperCase();
+    const relationshipType = AFFILIATION_RELATIONSHIP_TYPES.has(relationshipTypeRaw)
+      ? relationshipTypeRaw
+      : null;
+    if (!relationshipType) {
+      return res.status(400).json({
+        error: 'relationshipType inválido. Use PARTNER ou DEDICATED.',
+        code: 'RELATIONSHIP_TYPE_INVALID',
+      });
+    }
+
     const invitationToken = crypto.randomBytes(24).toString('hex');
     const now = new Date();
     const note = String(req.body?.note || '').trim();
@@ -430,6 +483,7 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
         tenantId: String(tenantId),
         providerIdentityId: provider.id,
         status: 'INVITED',
+        relationshipType,
         invitationToken,
         invitedAt: now,
         note: note || null,
@@ -437,6 +491,7 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
       },
       update: {
         status: 'INVITED',
+        relationshipType,
         invitationToken,
         invitedAt: now,
         note: note || null,
@@ -471,6 +526,7 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
       invitationToken,
       acceptUrl,
       status: row.status,
+      relationshipType: row.relationshipType || relationshipType,
       invitedAt: row.invitedAt,
     });
   } catch (err) {
@@ -498,13 +554,34 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
       });
     }
     const note = String(req.body?.note || '').trim();
-    const updated = await prisma.providerTenantAffiliation.update({
-      where: { id: row.id },
-      data: {
-        status: 'ACTIVE',
-        activatedAt: new Date(),
-        note: note || row.note || null,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const now = new Date();
+
+      // Se este vínculo for DEDICATED, desativar automaticamente outras afiliações ativas do prestador.
+      if (String(row.relationshipType || 'PARTNER').toUpperCase() === 'DEDICATED') {
+        await tx.providerTenantAffiliation.updateMany({
+          where: {
+            providerIdentityId: row.providerIdentityId,
+            status: 'ACTIVE',
+            id: { not: row.id },
+          },
+          data: {
+            status: 'INACTIVE',
+            endedAt: now,
+            note: 'Desativado automaticamente: prestador ativado como dedicado em outra empresa.',
+          },
+        });
+      }
+
+      return tx.providerTenantAffiliation.update({
+        where: { id: row.id },
+        data: {
+          status: 'ACTIVE',
+          activatedAt: now,
+          endedAt: null,
+          note: note || row.note || null,
+        },
+      });
     });
 
     await prisma.auditLog
@@ -528,7 +605,40 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
       affiliation: {
         id: updated.id,
         status: updated.status,
+        relationshipType: updated.relationshipType || 'PARTNER',
         activatedAt: updated.activatedAt,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/providers/affiliations/:id/end
+// Encerrar vínculo (ex.: dedicação terminou). Mantém histórico.
+adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const row = await prisma.providerTenantAffiliation.findUnique({ where: { id } });
+    if (!row) return res.status(404).json({ error: 'Parceria não encontrada.' });
+    if (!canAccessTenant(req, row.tenantId)) return res.status(403).json({ error: 'Sem permissão para este tenant.' });
+    if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
+    const note = String(req.body?.note || '').trim();
+    const updated = await prisma.providerTenantAffiliation.update({
+      where: { id: row.id },
+      data: {
+        status: 'INACTIVE',
+        endedAt: new Date(),
+        note: note || row.note || null,
+      },
+    });
+    return res.json({
+      ok: true,
+      affiliation: {
+        id: updated.id,
+        status: updated.status,
+        relationshipType: updated.relationshipType || 'PARTNER',
+        endedAt: updated.endedAt,
       },
     });
   } catch (err) {

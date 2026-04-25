@@ -17,7 +17,14 @@ bash "$SCRIPT_DIR/backup.sh" "pre-migrate"
 #    `migrate deploy` é o modo seguro de produção — nunca faz reset.
 echo ""
 echo "🔄 Aplicando migrações pendentes..."
-npx prisma migrate deploy
+# Usar o Prisma do próprio projeto (node_modules) para não apanhar o Prisma 7+ do cache global do npx.
+PRISMA_BIN="$(dirname "$0")/../node_modules/.bin/prisma"
+if [ -x "$PRISMA_BIN" ]; then
+  "$PRISMA_BIN" migrate deploy
+else
+  # Fallback: fixa major 5 (package.json) — evita P1012 do CLI 7 quando url está no schema.
+  npx --yes prisma@5.10.0 migrate deploy
+fi
 
 echo ""
 echo "✅ Migração concluída com segurança."

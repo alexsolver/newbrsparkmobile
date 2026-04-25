@@ -207,6 +207,7 @@ async function mirrorApprovedLegacyRegistrationToProviderNetwork(prisma, { tenan
         tenantId: String(tenantId),
         providerIdentityId: providerIdentity.id,
         status: 'ACTIVE',
+        relationshipType: 'PARTNER',
         invitedAt: now,
         requestedAt: now,
         activatedAt: now,
@@ -214,6 +215,7 @@ async function mirrorApprovedLegacyRegistrationToProviderNetwork(prisma, { tenan
       },
       update: {
         status: 'ACTIVE',
+        relationshipType: 'PARTNER',
         activatedAt: now,
         note: 'Atualizado automaticamente pela aprovação no fluxo legado.',
       },
