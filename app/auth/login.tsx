@@ -26,6 +26,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
 import { LoginOAuthNativeSection, type NativeOAuthPending } from '../../src/components/auth/LoginOAuthNativeSection';
 
+function tenantKindLabelPt(kind?: string | null) {
+  const k = String(kind || 'COMPANY').toUpperCase();
+  if (k === 'CLIENT') return 'Cliente (pessoal)';
+  if (k === 'PROVIDER') return 'Prestador';
+  return 'Empresa';
+}
+
 function createLoginStyles(C: ColorPalette) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.cardWhite },
@@ -558,6 +565,9 @@ export default function LoginScreen() {
                 >
                   <Text style={{ fontSize: 15, fontWeight: '800', color: C.primary }}>
                     {t.name || t.id}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: C.textSecondary, marginTop: 4, fontWeight: '600' }}>
+                    {tenantKindLabelPt(t.kind)}
                   </Text>
                 </TouchableOpacity>
               ))}

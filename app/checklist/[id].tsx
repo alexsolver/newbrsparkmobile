@@ -6553,7 +6553,21 @@ export default function ChecklistEngine() {
             if (status !== 'granted')
               return Alert.alert(t('common.attention'), t('checklistForm.permissionNativeCameraDenied'));
 
-            const res = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true });
+            const fieldForCapture = template?.schemaData?.find((f: any) => f.id === fieldId);
+            const facialIdentify =
+              type === 'facial_recognition' &&
+              String(fieldForCapture?.facialAuthMode || '').toLowerCase() === 'identify';
+            const cameraOpts: ImagePicker.ImagePickerOptions = {
+              quality: 0.5,
+              base64: true,
+              cameraType:
+                type === 'facial_recognition'
+                  ? facialIdentify
+                    ? ImagePicker.CameraType.back
+                    : ImagePicker.CameraType.front
+                  : ImagePicker.CameraType.back,
+            };
+            const res = await ImagePicker.launchCameraAsync(cameraOpts);
             if (!res.canceled && res.assets && res.assets.length > 0) {
               const imgAsset = res.assets[0];
 

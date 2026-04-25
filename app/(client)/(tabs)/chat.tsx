@@ -79,7 +79,9 @@ export default function ChatScreen() {
   const router = useRouter();
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
-  const isManager = String(user?.role || '').toUpperCase() === 'MANAGER';
+  const roleUpper = String(user?.role || '').toUpperCase();
+  const canCreateChatGroup = ['MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN'].includes(roleUpper);
+  const isBrSparkSaasUser = roleUpper === 'SAAS_ADMIN';
   const { isOnline } = useConnectivity(8000);
   const { colors: C } = useTheme();
   const { activePersona } = usePersona();
@@ -274,7 +276,7 @@ export default function ChatScreen() {
   };
 
   const handleCreateGroup = async () => {
-    if (!isManager) {
+    if (!canCreateChatGroup) {
       return Alert.alert(t('appAlerts.techReg.permTitle'), t('appAlerts.chatTab.managersOnly'));
     }
     if (!groupName.trim()) return Alert.alert(t('common.attention'), t('appAlerts.chatTab.groupName'));
@@ -540,7 +542,7 @@ export default function ChatScreen() {
         <TouchableOpacity
           style={styles.headerAction}
           onPress={() => {
-            setModalTab(isManager ? 'GROUP' : 'ADD');
+            setModalTab(canCreateChatGroup ? 'GROUP' : 'ADD');
             setModalVisible(true);
           }}
         >
@@ -791,7 +793,7 @@ export default function ChatScreen() {
 
             {/* TAB SELECTOR */}
             <View style={styles.tabRow}>
-              {isManager ? (
+              {canCreateChatGroup ? (
                 <TouchableOpacity style={[styles.tab, modalTab === 'GROUP' && styles.tabActive]} onPress={() => setModalTab('GROUP')}>
                   <Text style={[styles.tabText, modalTab === 'GROUP' && styles.tabTextActive]}>Criar Grupo</Text>
                 </TouchableOpacity>
@@ -804,7 +806,7 @@ export default function ChatScreen() {
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 400 }} keyboardShouldPersistTaps="handled">
 
               {/* ABA CRIAR GRUPO */}
-              {modalTab === 'GROUP' && isManager && (
+              {modalTab === 'GROUP' && canCreateChatGroup && (
                 <View style={{ paddingTop: 10 }}>
                   <Text style={styles.inputLabel}>Nome do Grupo</Text>
                   <TextInput
@@ -857,7 +859,11 @@ export default function ChatScreen() {
                     value={newEmail}
                     onChangeText={setNewEmail}
                     returnKeyType="done" />
-                  <Text style={styles.helperText}>Uma solicitação será enviada para o aplicativo deste usuário. Assim que aprovado, você poderá incluí-lo ao criar um grupo.</Text>
+                  <Text style={styles.helperText}>
+                    {isBrSparkSaasUser
+                      ? 'Conta BrSpark (equipe): pode convidar qualquer e-mail de utilizador activo na plataforma. O pedido aparece no app do destinatário; após aceitar, o chat fica disponível.'
+                      : 'Uma solicitação será enviada para o aplicativo deste usuário na mesma organização. Assim que aprovado, vocês podem conversar; gestores também podem incluí-lo ao criar um grupo.'}
+                  </Text>
                   
                   <TouchableOpacity style={[styles.primaryBtn, sendingRequest && { opacity: 0.5 }]} disabled={sendingRequest} onPress={handleSendRequest}>
                     {sendingRequest ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Enviar Convite</Text>}

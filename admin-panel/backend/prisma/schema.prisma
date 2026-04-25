@@ -73,6 +73,8 @@ model Tenant {
   sectorCode   String?                       // telecom | utilities | saude | predial | outro
   /// Extensões por tenant (ex.: trackChatModeration). Fusão com env no backend.
   features     Json     @default("{}")
+  /// COMPANY = inventário partilhado na organização; CLIENT = espaço pessoal; PROVIDER = modo prestador (só partilhas + bens próprios criados aqui).
+  kind         TenantKind @default(COMPANY)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -378,6 +380,13 @@ enum TenantStatus {
   CANCELLED
 }
 
+/// Modelo de isolamento de dados no app: empresa (partilhado na org), cliente (bens pessoais por criador), prestador (carteira + partilhas recebidas).
+enum TenantKind {
+  COMPANY
+  CLIENT
+  PROVIDER
+}
+
 // ─────────────────────────────────────────────────────────
 // ASSINATURAS
 // ─────────────────────────────────────────────────────────
@@ -506,6 +515,8 @@ model User {
   disputesResolved                EvaluationDispute[] @relation("DisputeResolvedBySupervisor")
   workTimePunches                   WorkTimePunch[]
   routineTaskAssignments            RoutineTaskAssignment[]
+  /// Ativos criados por este utilizador (rastreio para tenants CLIENT / regras de sync).
+  assetsCreated                     Asset[]                  @relation("AssetCreatedBy")
 
   workTimeTrackingEnabled Boolean   @default(false)
   workTimeEnrolledAt      DateTime?
@@ -595,11 +606,16 @@ model Asset {
   location    Location? @relation(fields: [locationId], references: [id])
   metadata    Json?    // custom fields (details, photos, etc.)
   deletedAt   DateTime? // soft delete para sync mobile
+  /// Quem criou o ativo no app (política de visibilidade em tenants CLIENT / PROVIDER).
+  createdByUserId String? @map("created_by_user_id")
+  createdByUser   User?   @relation("AssetCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   children    Asset[]  @relation("AssetHierarchy")
   parent      Asset?   @relation("AssetHierarchy", fields: [parentId], references: [id])
   stockItems  StockItem[]
+
+  @@index([tenantId, createdByUserId])
 }
 
 enum AssetType {

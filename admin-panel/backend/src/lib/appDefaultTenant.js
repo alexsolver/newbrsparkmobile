@@ -4,7 +4,8 @@ const prisma = require('../db');
 
 /**
  * Tenant master BrSpark (seed: nome «BrSpark», slug `brspark`).
- * Todo o registo via app móvel (`POST /api/register`, OAuth sem conta, OTP registo) usa esta tenant por omissão.
+ * Usada por fluxos administrativos / legado; o registo público no app cria uma tenant `CLIENT` pessoal
+ * (`registerPersonalClientTenant.js`), não esta tenant por omissão.
  *
  * Opcional: `APP_DEFAULT_TENANT_ID` ou `APP_DEFAULT_TENANT_SLUG` substituem (staging / testes).
  */

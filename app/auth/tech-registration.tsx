@@ -1033,6 +1033,7 @@ export default function TechRegistrationScreen() {
       mediaTypes: ['images'],
       quality: 0.85,
       base64: true,
+      cameraType: ImagePicker.CameraType.front,
     });
     if (result.canceled) return;
     const asset = result.assets[0];
@@ -1172,6 +1173,7 @@ export default function TechRegistrationScreen() {
       mediaTypes: ['images'],
       quality: 0.88,
       base64: true,
+      cameraType: ImagePicker.CameraType.front,
     });
     if (result.canceled) return;
     const asset = result.assets[0];

@@ -102,7 +102,11 @@ export async function collectPunchInputs(
   if (!cam.granted) {
     collectionNotes.push('Câmera: permissão negada.');
   } else {
-    const shot = await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true });
+    const shot = await ImagePicker.launchCameraAsync({
+      quality: 0.5,
+      base64: true,
+      cameraType: ImagePicker.CameraType.front,
+    });
     if (shot.canceled || !shot.assets[0]?.base64) {
       collectionNotes.push('Rosto: captura cancelada ou sem imagem.');
     } else {

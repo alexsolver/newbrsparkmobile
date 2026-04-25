@@ -1,4 +1,5 @@
 'use strict';
+const crypto = require('crypto');
 const router  = require('express').Router();
 const prisma  = require('../db');
 const authUser = require('../middleware/authUser');
@@ -7,6 +8,12 @@ const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRev
 const techStockMovementsSearchHandler = require('../lib/techStockMovementsSearchHandler');
 const { canReceiveFieldTasksForEmail } = require('../lib/technicianEligibility');
 const { broadcastCandidateArray, normalizeEmail: normalizeSyncEmail } = require('../lib/fieldTaskExecutionAccess');
+const {
+  getTenantKind,
+  buildAssetVisibilityWhere,
+  assertUserCanMutateAsset,
+  assertProviderTenantAllowsCreate,
+} = require('../lib/tenantAssetSyncPolicy');
 
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
@@ -35,33 +42,32 @@ router.post('/push_token', async (req, res) => {
 });
 
 // ─── GET /api/sync/assets ─────────────────────────────────────────────────────
-// Retorna todos os bens do tenant do usuário logado (para o app sincronizar)
+// Lista de bens conforme o tipo de tenant (COMPANY / CLIENT / PROVIDER) + partilhas aceites.
 router.get('/assets', async (req, res) => {
   try {
-    const { tenantId, email } = req.user;
-    
-    // Buscar quais ativos foram compartilhados com este e-mail e ainda estão na validade
-    const shares = await prisma.assetShare.findMany({
-      where: { 
-        sharedWithEmail: email.toLowerCase(), 
-        status: 'ACCEPTED',
-        OR: [
-          { expiresAt: null },
-          { expiresAt: { gt: new Date() } }
-        ]
-      },
-      select: { assetId: true, permission: true }
-    });
-    const sharedAssetIds = shares.map(s => s.assetId);
+    const { tenantId, email, id: userId } = req.user;
 
-    // Buscar os bens (os do próprio tenant + os compartilhados explicitamente)
-    let assets = await prisma.asset.findMany({
-      where: { 
-        OR: [
-          { tenantId, deletedAt: null },
-          { id: { in: sharedAssetIds }, deletedAt: null }
-        ]
+    const shares = await prisma.assetShare.findMany({
+      where: {
+        sharedWithEmail: email.toLowerCase(),
+        status: 'ACCEPTED',
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
+      select: { assetId: true, permission: true },
+    });
+    const sharedAssetIds = shares.map((s) => s.assetId);
+
+    const tenantKind = await getTenantKind(prisma, tenantId);
+    const visibilityWhere = buildAssetVisibilityWhere({
+      tenantKind,
+      tenantId,
+      userId,
+      userEmail: email,
+      sharedAssetIds,
+    });
+
+    let assets = await prisma.asset.findMany({
+      where: visibilityWhere,
       include: {
         location: true,
         stockItems: true,
@@ -72,8 +78,8 @@ router.get('/assets', async (req, res) => {
     });
 
     // Injetar _isShared no details e formatar a saída final
-    assets = assets.map(asset => {
-      if (sharedAssetIds.includes(asset.id) && asset.tenantId !== tenantId) {
+    assets = assets.map((asset) => {
+      if (sharedAssetIds.includes(asset.id)) {
         let detailsObj = {};
         if (asset.metadata && typeof asset.metadata === 'object') {
           detailsObj = { ...asset.metadata };
@@ -118,8 +124,9 @@ router.get('/assets', async (req, res) => {
 // Recebe ações offline do app e persiste no banco
 router.post('/push', async (req, res) => {
   try {
-    const { tenantId, id: userId } = req.user;
+    const { tenantId, id: userId, email } = req.user;
     const { queue = [] } = req.body;
+    const tenantKind = await getTenantKind(prisma, tenantId);
 
     let processed = 0;
     const processedIds = [];
@@ -139,21 +146,35 @@ router.post('/push', async (req, res) => {
             if (safeType === 'VEHICLE') safeType = 'MOBILITY';
             if (safeType === 'TERRESTRIAL') safeType = 'MOBILITY';
 
+            const existing = await prisma.asset.findUnique({ where: { id: p.id } });
+            if (existing) {
+              await assertUserCanMutateAsset(prisma, {
+                tenantId,
+                userId,
+                userEmail: email,
+                tenantKind,
+                asset: existing,
+              });
+            } else {
+              assertProviderTenantAllowsCreate(tenantKind);
+            }
+
             await prisma.asset.upsert({
               where: { id: p.id },
               create: {
                 id: p.id,
                 tenantId,
-                title:    p.title,
-                type:     safeType,
-                status:   p.status || 'OPERATIONAL',
+                title: p.title,
+                type: safeType,
+                status: p.status || 'OPERATIONAL',
                 imageUrl: p.imageUrl || null,
                 parentId: p.parentId || null,
                 metadata: p.details || {},
+                createdByUserId: userId,
               },
               update: {
-                title:    p.title,
-                status:   p.status || 'OPERATIONAL',
+                title: p.title,
+                status: p.status || 'OPERATIONAL',
                 imageUrl: p.imageUrl || null,
                 parentId: p.parentId || null,
                 metadata: p.details || {},
@@ -163,8 +184,18 @@ router.post('/push', async (req, res) => {
             break;
           }
           case 'DELETE_ASSET': {
+            const row = await prisma.asset.findUnique({ where: { id: p.id } });
+            if (row) {
+              await assertUserCanMutateAsset(prisma, {
+                tenantId,
+                userId,
+                userEmail: email,
+                tenantKind,
+                asset: row,
+              });
+            }
             await prisma.asset.updateMany({
-              where: { id: p.id, tenantId },
+              where: { id: p.id },
               data: { deletedAt: new Date() },
             });
             handled = true;
@@ -218,23 +249,38 @@ router.post('/push', async (req, res) => {
 // Salva/atualiza um único bem diretamente (operações online)
 router.post('/asset', async (req, res) => {
   try {
-    const { tenantId } = req.user;
+    const { tenantId, id: userId, email } = req.user;
     const p = req.body;
+    const tenantKind = await getTenantKind(prisma, tenantId);
+    const pid = p.id && String(p.id).trim() ? String(p.id).trim() : crypto.randomUUID();
+    const existing = await prisma.asset.findUnique({ where: { id: pid } });
+    if (existing) {
+      await assertUserCanMutateAsset(prisma, {
+        tenantId,
+        userId,
+        userEmail: email,
+        tenantKind,
+        asset: existing,
+      });
+    } else {
+      assertProviderTenantAllowsCreate(tenantKind);
+    }
 
     const asset = await prisma.asset.upsert({
-      where: { id: p.id || '__new__' },
+      where: { id: pid },
       create: {
         tenantId,
-        title:    p.title,
-        type:     p.type || 'OTHER',
-        status:   p.status || 'OPERACIONAL',
+        title: p.title,
+        type: p.type || 'OTHER',
+        status: p.status || 'OPERACIONAL',
         imageUrl: p.imageUrl || null,
         parentId: p.parentId || null,
         metadata: p.details || {},
+        createdByUserId: userId,
       },
       update: {
-        title:    p.title,
-        status:   p.status,
+        title: p.title,
+        status: p.status,
         imageUrl: p.imageUrl || null,
         parentId: p.parentId || null,
         metadata: p.details || {},

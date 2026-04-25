@@ -5,6 +5,7 @@ const TESTS = [
   ['test:capability-gating-regression', 'Gating por capabilities'],
   ['test:multitenancy-scope', 'Matriz de escopos'],
   ['test:tenant-branding', 'Branding por tenant'],
+  ['test:register-personal-client-helper', 'E-mail sintético tenant CLIENT (registo)'],
 ];
 
 function runScript(name, label) {

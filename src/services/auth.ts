@@ -196,6 +196,8 @@ export interface User {
   tenant?: {
     id: string;
     name: string;
+    /** COMPANY | CLIENT | PROVIDER — modelo de visibilidade de ativos e sync. */
+    kind?: string | null;
     /** Nome de exibição da organização (painel); pode diferir de `name` (razão social / interno). */
     ownerName?: string | null;
     status: string;
@@ -295,7 +297,13 @@ export class TwoFactorRequired extends Error {
   }
 }
 
-export type LoginTenantOption = { id: string; name?: string | null; slug?: string | null };
+export type LoginTenantOption = {
+  id: string;
+  name?: string | null;
+  slug?: string | null;
+  /** COMPANY | CLIENT | PROVIDER — vem da API de login. */
+  kind?: string | null;
+};
 
 export class MultipleAccountsError extends Error {
   tenants: LoginTenantOption[];
@@ -564,6 +572,33 @@ export class AuthService {
       throw new Error(data.error || 'Erro ao fazer login social.');
     }
 
+    await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
+    await AsyncStorage.setItem(TOKEN_KEY, data.token);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await AuthService.restorePostLoginLocalState(data.user as User);
+    return data.user as User;
+  }
+
+  /**
+   * Cria uma nova organização (tenant) CLIENT ou PROVIDER com o mesmo e-mail e senha,
+   * e altera a sessão para o novo utilizador (POST /api/me/workspaces).
+   */
+  static async createWorkspace(kind: 'CLIENT' | 'PROVIDER'): Promise<User> {
+    const token = await getToken();
+    if (!token) throw new Error('Sessão inválida. Faça login novamente.');
+    const deviceId = await getDeviceId();
+    const res = await fetch(`${API_BASE}/api/me/workspaces`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ kind, deviceId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Não foi possível criar o espaço.');
+    }
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));

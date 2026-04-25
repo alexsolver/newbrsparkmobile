@@ -82,7 +82,7 @@ const BRSPARK_COMPANY_SIGNUP_URL =
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, userRole, setUserRole, logout, deleteAccount, patchUser } = useAuth();
+  const { user, userRole, setUserRole, logout, deleteAccount, patchUser, createWorkspace } = useAuth();
   const displayAvatarUri = useResolvedAvatarUri(user);
   const { dark: darkMode, colors: C, toggleDarkMode, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createProfileStyles(C), [C]);
@@ -104,6 +104,7 @@ export default function ProfileScreen() {
   const [newPwd,         setNewPwd]           = useState('');
   const [changingPwd,    setChangingPwd]      = useState(false);
   const [showAvatarModal,setShowAvatarModal]  = useState(false);
+  const [workspaceBusy, setWorkspaceBusy] = useState(false);
 
   // ─── 2FA State ──────────────────────────────────────────────────────────────
   const [twoFaEnabled,   setTwoFaEnabled]     = useState(false);
@@ -119,6 +120,8 @@ export default function ProfileScreen() {
     open: boolean;
     inviteToken?: string;
     submittedAwaitingReview?: boolean;
+    status?: string;
+    revisionNote?: string | null;
   } | null>(null);
 
   const canManageDirectoryHero = userHasCapability(user, 'mobile.admin.quickActions');
@@ -312,6 +315,8 @@ export default function ProfileScreen() {
           open: true,
           inviteToken: data.inviteToken,
           submittedAwaitingReview: false,
+          status: data.status != null ? String(data.status) : undefined,
+          revisionNote: data.revisionNote != null ? String(data.revisionNote) : null,
         });
       } else {
         setTechRegResume({
@@ -769,7 +774,105 @@ export default function ProfileScreen() {
           
           <Text style={[styles.headerName, { color: '#191C1D' }]}>{profile.name}</Text>
           <Text style={[styles.headerSub, { color: C.textSecondary }]}>{profile.email}</Text>
-          
+          {user?.tenant?.kind ? (
+            <Text style={{ fontSize: 12, color: C.textLight, fontWeight: '700', marginTop: 4 }}>
+              {String(user.tenant.kind).toUpperCase() === 'CLIENT'
+                ? 'Organização: cliente (pessoal)'
+                : String(user.tenant.kind).toUpperCase() === 'PROVIDER'
+                  ? 'Organização: prestador'
+                  : 'Organização: empresa'}
+            </Text>
+          ) : null}
+
+          <View
+            style={{
+              marginTop: 14,
+              padding: 14,
+              borderRadius: 14,
+              backgroundColor: '#F1F5F9',
+              borderWidth: 1,
+              borderColor: '#E2E8F0',
+            }}
+          >
+            <Text style={{ fontSize: 13, fontWeight: '800', color: '#0f172a', marginBottom: 6 }}>
+              Espaços adicionais
+            </Text>
+            <Text style={{ fontSize: 12, color: '#64748b', lineHeight: 18, marginBottom: 10 }}>
+              Crie uma organização extra com o mesmo e-mail: cliente (bens seus) ou prestador (só vê partilhas).
+            </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#0f766e',
+                paddingVertical: 10,
+                borderRadius: 10,
+                alignItems: 'center',
+                marginBottom: 8,
+                opacity: workspaceBusy ? 0.6 : 1,
+              }}
+              disabled={workspaceBusy}
+              onPress={() => {
+                Alert.alert(
+                  'Espaço cliente',
+                  'Cria uma tenant «cliente»: os ativos que criar ficam visíveis só para si (e partilhas recebidas).',
+                  [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                      text: 'Criar',
+                      onPress: async () => {
+                        setWorkspaceBusy(true);
+                        try {
+                          await createWorkspace('CLIENT');
+                          Alert.alert('Pronto', 'Sessão alterada para o novo espaço cliente.');
+                        } catch (e: any) {
+                          Alert.alert('Erro', e?.message || 'Falha ao criar.');
+                        } finally {
+                          setWorkspaceBusy(false);
+                        }
+                      },
+                    },
+                  ],
+                );
+              }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>+ Espaço cliente (pessoal)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#1e293b',
+                paddingVertical: 10,
+                borderRadius: 10,
+                alignItems: 'center',
+                opacity: workspaceBusy ? 0.6 : 1,
+              }}
+              disabled={workspaceBusy}
+              onPress={() => {
+                Alert.alert(
+                  'Espaço prestador',
+                  'Cria uma tenant «prestador»: só vê ativos que outras organizações lhe partilharem (escrita conforme a partilha).',
+                  [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                      text: 'Criar',
+                      onPress: async () => {
+                        setWorkspaceBusy(true);
+                        try {
+                          await createWorkspace('PROVIDER');
+                          Alert.alert('Pronto', 'Sessão alterada para o novo espaço prestador.');
+                        } catch (e: any) {
+                          Alert.alert('Erro', e?.message || 'Falha ao criar.');
+                        } finally {
+                          setWorkspaceBusy(false);
+                        }
+                      },
+                    },
+                  ],
+                );
+              }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>+ Espaço prestador</Text>
+            </TouchableOpacity>
+          </View>
+
           <TouchableOpacity 
             style={[styles.editInfoBtn, { backgroundColor: C.surfaceLow }]} 
             onPress={() => setIsEditing(!isEditing)}
@@ -812,11 +915,34 @@ export default function ProfileScreen() {
               {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING'
                 ? techRegResume?.submittedAwaitingReview
                   ? 'Sua documentação já foi enviada e está em análise. Até ser aprovada, você não receberá ordens de serviço e o modo prestador permanece indisponível.'
-                  : techRegResume?.open
-                    ? 'Complete o cadastro de prestador (dados, documentos, horários e fotos). Depois do envio, a equipe analisa e aprova. Até lá, o modo prestador permanece indisponível.'
-                    : 'Falta preencher o cadastro completo de prestador. Toque no botão abaixo para abrir o formulário. Depois do envio, a equipe analisa e aprova.'
+                  : techRegResume?.open &&
+                      String(techRegResume.status || '').toUpperCase() === 'NEEDS_REVISION'
+                    ? 'A equipe pediu ajustes no seu cadastro. Corrija os dados no formulário (nome, telefone, endereço, documentos, etc.) e reenvie. Use o botão verde abaixo — é o mesmo ecrã onde preencheu o cadastro; lá aparece também a mensagem completa da revisão.'
+                    : techRegResume?.open
+                      ? 'Complete o cadastro de prestador (dados, documentos, horários e fotos). Depois do envio, a equipe analisa e aprova. Até lá, o modo prestador permanece indisponível.'
+                      : 'Falta preencher o cadastro completo de prestador. Toque no botão abaixo para abrir o formulário. Depois do envio, a equipe analisa e aprova.'
                 : 'Sua conta de prestador não está ativa. Você não receberá novas ordens de serviço até a equipe reativar o acesso.'}
             </Text>
+            {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING' &&
+            techRegResume?.open &&
+            String(techRegResume.status || '').toUpperCase() === 'NEEDS_REVISION' &&
+            techRegResume.revisionNote ? (
+              <View
+                style={{
+                  marginTop: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  backgroundColor: '#fff7ed',
+                  borderWidth: 1,
+                  borderColor: '#fdba74',
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#9a3412', marginBottom: 6 }}>
+                  Mensagem da equipe (ajustes pedidos)
+                </Text>
+                <Text style={{ fontSize: 13, color: '#431407', lineHeight: 20 }}>{techRegResume.revisionNote}</Text>
+              </View>
+            ) : null}
             {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING' &&
             !techRegResume?.submittedAwaitingReview ? (
               techRegResume?.open && techRegResume.inviteToken ? (
@@ -836,7 +962,9 @@ export default function ProfileScreen() {
                   }
                 >
                   <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
-                    Continuar cadastro de prestador
+                    {String(techRegResume.status || '').toUpperCase() === 'NEEDS_REVISION'
+                      ? 'Corrigir dados e reenviar cadastro'
+                      : 'Continuar cadastro de prestador'}
                   </Text>
                 </TouchableOpacity>
               ) : (

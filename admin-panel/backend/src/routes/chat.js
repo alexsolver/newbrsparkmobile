@@ -15,10 +15,49 @@ const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 
 router.use(authUser);
 
-const CONTACTABLE_ROLES = new Set(['USER', 'PROVIDER']);
+/** Papéis de utilizador do app que podem participar em convites de chat 1:1 (mesma tenant ou fluxo BrSpark). */
+const CHAT_PEER_ROLES = new Set(['USER', 'PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN']);
 
 function normEmail(v) {
   return String(v || '').trim().toLowerCase();
+}
+
+function isBrSparkSaasAppUser(user) {
+  return normRole(user?.role) === 'SAAS_ADMIN';
+}
+
+function isChatPeerRole(role) {
+  return CHAT_PEER_ROLES.has(normRole(role));
+}
+
+/**
+ * Utilizador activo por e-mail (qualquer tenant) — para aceitar pedidos e enriquecer pendentes.
+ */
+async function findActiveUserByEmailForChat(emailRaw) {
+  const e = normEmail(emailRaw);
+  if (!e) return null;
+  const u = await prisma.user.findFirst({
+    where: { email: { equals: e, mode: 'insensitive' }, isActive: true },
+    select: { id: true, email: true, name: true, avatarUrl: true, role: true, tenantId: true },
+  });
+  if (!u) return null;
+  return { ...u, email: normEmail(u.email), avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl) };
+}
+
+/**
+ * Utilizador activo na mesma tenant (convites normais gestor ↔ técnico, etc.).
+ */
+async function findActiveUserInTenantForChat(tenantId, emailRaw) {
+  const tid = String(tenantId || '').trim();
+  if (!tid) return null;
+  const e = normEmail(emailRaw);
+  if (!e) return null;
+  const u = await prisma.user.findFirst({
+    where: { tenantId: tid, email: { equals: e, mode: 'insensitive' }, isActive: true },
+    select: { id: true, email: true, name: true, avatarUrl: true, role: true, tenantId: true },
+  });
+  if (!u) return null;
+  return { ...u, email: normEmail(u.email), avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl) };
 }
 
 /**
@@ -41,15 +80,6 @@ async function resolveRoomMemberForViewer(roomId, viewerEmailNorm) {
 
 function normRole(v) {
   return String(v || '').trim().toUpperCase();
-}
-
-async function getTenantScopedUserByEmail(email) {
-  const u = await prisma.user.findFirst({
-    where: { email: normEmail(email), isActive: true },
-    select: { id: true, email: true, name: true, avatarUrl: true, role: true, tenantId: true },
-  });
-  if (!u) return null;
-  return { ...u, avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl) };
 }
 
 async function validateTenantScopedParticipants(requester, participantEmails) {
@@ -207,16 +237,19 @@ router.post('/contacts/request', async (req, res) => {
       return res.status(403).json({ error: 'Usuário inválido para chat.' });
     }
 
-    const userExists = await getTenantScopedUserByEmail(targetEmail);
+    const brSparkSaas = isBrSparkSaasAppUser(me);
+    const userExists = brSparkSaas
+      ? await findActiveUserByEmailForChat(targetEmail)
+      : await findActiveUserInTenantForChat(me.tenantId, targetEmail);
 
     if (!userExists) {
       return res.status(404).json({ error: 'Usuário não encontrado na plataforma Brspark' });
     }
-    if (String(userExists.tenantId || '') !== String(me.tenantId || '')) {
+    if (!brSparkSaas && String(userExists.tenantId || '') !== String(me.tenantId || '')) {
       return res.status(403).json({ error: 'Só é permitido adicionar usuários do mesmo tenant.' });
     }
-    if (!CONTACTABLE_ROLES.has(normRole(userExists.role))) {
-      return res.status(403).json({ error: 'Só é permitido adicionar técnicos e usuários do tenant.' });
+    if (!isChatPeerRole(userExists.role)) {
+      return res.status(403).json({ error: 'Este utilizador não está disponível para chat.' });
     }
 
     // Upsert contato (se foi rejeitado antes, pode tentar de novo e volta pra PENDING)
@@ -269,28 +302,28 @@ router.get('/contacts/pending', async (req, res) => {
   try {
     const { email: rawEmail } = req.user;
     const email = normEmail(rawEmail);
-    const tenantId = String(req.user?.tenantId || '').trim();
     const pending = await prisma.chatContact.findMany({
       where: { addresseeId: email, status: 'PENDING' },
       orderBy: { createdAt: 'desc' }
     });
 
-    // Pega os dados dos solicitantes
+    // Dados dos solicitantes (qualquer tenant — ex.: convite de SAAS_ADMIN BrSpark)
     const emails = pending.map(p => p.requesterId);
     const users = await prisma.user.findMany({
-      where: { email: { in: emails }, ...(tenantId ? { tenantId } : {}) },
-      select: { email: true, name: true, avatarUrl: true }
+      where: { email: { in: emails }, isActive: true },
+      select: { email: true, name: true, avatarUrl: true, role: true, tenantId: true },
     });
     const usersSan = users.map((u) => ({
       ...u,
+      email: normEmail(u.email),
       avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl),
     }));
-    const allowed = new Set(usersSan.map((u) => normEmail(u.email)));
+    const byEmail = new Map(usersSan.map((u) => [normEmail(u.email), u]));
 
-    const results = pending.map(p => {
-      const u = usersSan.find(x => x.email === p.requesterId);
-      return { ...p, user: u };
-    }).filter((p) => allowed.has(normEmail(p.requesterId)));
+    const results = pending.map((p) => {
+      const u = byEmail.get(normEmail(p.requesterId));
+      return { ...p, user: u || null };
+    }).filter((p) => !!p.user);
 
     res.json(results);
   } catch (err) {
@@ -319,9 +352,14 @@ router.put('/contacts/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Solicitação não encontrada' });
     }
 
-    const me = await getTenantScopedUserByEmail(email);
-    const requester = await getTenantScopedUserByEmail(contact.requesterId);
-    if (!me || !requester || String(me.tenantId || '') !== String(requester.tenantId || '')) {
+    const me = await findActiveUserByEmailForChat(email);
+    const requester = await findActiveUserByEmailForChat(contact.requesterId);
+    if (!me || !requester) {
+      return res.status(403).json({ error: 'Solicitação inválida.' });
+    }
+    const sameTenant = String(me.tenantId || '') === String(requester.tenantId || '');
+    const brSparkBridge = isBrSparkSaasAppUser(me) || isBrSparkSaasAppUser(requester);
+    if (!sameTenant && !brSparkBridge) {
       return res.status(403).json({ error: 'Solicitação inválida para este tenant.' });
     }
 
@@ -378,7 +416,7 @@ router.get('/contacts', async (req, res) => {
         tenantId,
         isActive: true,
         email: { not: email },
-        deletedAt: null,
+        role: { in: [...CHAT_PEER_ROLES] },
       },
       select: { email: true, name: true, avatarUrl: true, role: true },
       orderBy: [{ name: 'asc' }, { email: 'asc' }],

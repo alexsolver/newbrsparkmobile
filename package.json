@@ -19,6 +19,7 @@
     "test:capability-gating-regression": "node scripts/test-capability-gating-regression.mjs",
     "test:tenant-branding": "node scripts/test-tenant-branding-regression.mjs",
     "test:provider-task-filter-regression": "npx --yes tsx scripts/test-provider-task-filter-regression.ts",
+    "test:register-personal-client-helper": "node scripts/test-register-personal-client-helper.mjs",
     "test:multitenancy-regression-suite": "node scripts/test-multitenancy-regression-suite.mjs",
     "i18n:check": "node scripts/i18n-validate.mjs",
     "i18n:sync-es": "node scripts/i18n-sync-es.mjs",

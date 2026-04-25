@@ -20,6 +20,7 @@
     "openapi": "node ../scripts/build-openapi.js",
     "vision:test-external": "node scripts/test-vision-checklist-api.js",
     "embeddings:checklist-templates": "node scripts/backfillChecklistTemplateEmbeddings.js",
+    "migrate:legacy-users-to-client": "node scripts/migrate-legacy-master-users-to-client-tenant.js",
     "directory:clear-legacy": "node scripts/clear-service-providers.js",
     "db:reset": "echo '🚫 db:reset foi desabilitado para proteger dados. Use db:migrate para migrações seguras.'"
   },

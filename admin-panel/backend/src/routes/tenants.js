@@ -107,6 +107,7 @@ router.get('/:id/branding', async (req, res) => {
         name: tenant.name,
         slug: tenant.slug,
         status: tenant.status,
+        kind: tenant.kind || 'COMPANY',
         planName: tenant.subscription?.plan?.name || null,
         isGlobalAppTenant,
       },
@@ -125,11 +126,15 @@ router.post('/', async (req, res) => {
     if (!isPlatformAdmin(req.authorization)) {
       return res.status(403).json({ error: 'Apenas a plataforma pode criar tenants.' });
     }
-    const { name, email, defaultLang = 'pt-BR', planId, localeId } = req.body;
+    const { name, email, defaultLang = 'pt-BR', planId, localeId, kind: bodyKind } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' });
     const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const kindRaw = String(bodyKind || 'COMPANY').trim().toUpperCase();
+    const kind = ['COMPANY', 'CLIENT', 'PROVIDER'].includes(kindRaw) ? kindRaw : 'COMPANY';
 
-    const tenant = await prisma.tenant.create({ data: { name, slug, email, defaultLang, localeId, status: 'TRIAL' } });
+    const tenant = await prisma.tenant.create({
+      data: { name, slug, email, defaultLang, localeId, status: 'TRIAL', kind },
+    });
 
     if (planId) {
       const plan = await prisma.plan.findUnique({ where: { id: planId } });
@@ -164,10 +169,15 @@ router.patch('/:id/status', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     if (!requireTenantRouteAccess(req, req.params.id, res)) return;
-    const { name, email, phone, taxId, defaultLang, localeId } = req.body;
-    const tenant = await prisma.tenant.update({ 
-      where: { id: req.params.id }, 
-      data: { name, email, phone, taxId, defaultLang, localeId } 
+    const { name, email, phone, taxId, defaultLang, localeId, kind: bodyKind } = req.body;
+    const kindRaw = bodyKind != null ? String(bodyKind).trim().toUpperCase() : null;
+    const kind =
+      kindRaw && ['COMPANY', 'CLIENT', 'PROVIDER'].includes(kindRaw) ? kindRaw : undefined;
+    const data = { name, email, phone, taxId, defaultLang, localeId };
+    if (isPlatformAdmin(req.authorization) && kind) data.kind = kind;
+    const tenant = await prisma.tenant.update({
+      where: { id: req.params.id },
+      data,
     });
     await auditFromReq(req, 'TENANT_UPDATE', tenant.name, tenant.id);
     res.json(tenant);

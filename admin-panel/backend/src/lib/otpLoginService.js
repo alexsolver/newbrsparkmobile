@@ -10,10 +10,8 @@ const OTP_REG_SETUP_PURPOSE = 'OTP_REG_SETUP_V1';
 const OTP_REG_SETUP_TTL = process.env.OTP_REG_SETUP_TTL || '20m';
 
 const { validateAppPasswordPolicy } = require('./appPasswordPolicy');
-const {
-  assertEmailFreeAcrossAllTenants,
-  assertNoActiveSameEmailOutsideDefaultTenant,
-} = require('./appRegistrationEmailGuard');
+const { assertEmailFreeAcrossAllTenants } = require('./appRegistrationEmailGuard');
+const { createPersonalClientTenantAndUser } = require('./registerPersonalClientTenant');
 
 const CHALLENGE_TTL_MS = Number(process.env.OTP_TTL_MINUTES || 10) * 60 * 1000;
 const RATE_MAX_START = Math.max(1, Math.min(20, Number(process.env.OTP_RATE_MAX_START || 3)));
@@ -62,52 +60,58 @@ async function tombstoneUserRowFully(prisma, userId) {
   ]);
 }
 
+/** Tenants onde o registo app pode «limpar» e-mails/telefones inactivos: espaços CLIENT e tenant master legada. */
+function registerCleanupTenantWhere() {
+  const slugSet = new Set(['brspark', 'brspark-app']);
+  const envSlug = String(process.env.APP_DEFAULT_TENANT_SLUG || '').trim().toLowerCase();
+  if (envSlug) slugSet.add(envSlug);
+  const slugOr = [...slugSet].map((slug) => ({ slug: { equals: slug, mode: 'insensitive' } }));
+  return { OR: [{ kind: 'CLIENT' }, ...slugOr] };
+}
+
 /**
- * Após OTP de registo válido no e-mail: libertar o par (email, tenant) para novo utilizador.
- * O código no inbox comprova posse do endereço — equivalente a «apagar conta» antes de novo registo.
+ * Inactivos com o mesmo e-mail em qualquer tenant (liberta o par @@unique antes do OTP).
+ * Reclaim pós-OTP continua limitado a CLIENT + tenant master legada.
  */
-async function reclaimEmailForRegisterAfterOtpVerified(prisma, { tenantId, emailNorm }) {
-  if (!tenantId || !emailNorm) return;
+async function releaseDeadAccountSlotsForRegisterGlobal(prisma, { emailNorm, phoneE164 }) {
+  const e = String(emailNorm || '').trim().toLowerCase();
+  if (!e) return;
+
+  const byEmailRows = await prisma.user.findMany({
+    where: { email: { equals: e, mode: 'insensitive' }, isActive: false },
+    select: { id: true },
+  });
+  for (const r of byEmailRows) {
+    await tombstoneUserRowFully(prisma, r.id);
+  }
+
+  if (phoneE164) {
+    const byPhoneRows = await prisma.user.findMany({
+      where: { phone: phoneE164, isActive: false },
+      select: { id: true },
+    });
+    for (const r of byPhoneRows) {
+      await prisma.user.update({ where: { id: r.id }, data: { phone: null } });
+    }
+  }
+}
+
+/**
+ * Após OTP de registo válido: remove utilizadores com este e-mail em tenants CLIENT ou na tenant master legada
+ * (prova de posse do e-mail).
+ */
+async function reclaimEmailForRegisterAfterOtpVerifiedGlobal(prisma, emailNorm) {
+  const e = String(emailNorm || '').trim().toLowerCase();
+  if (!e) return;
   const rows = await prisma.user.findMany({
     where: {
-      tenantId,
-      email: { equals: emailNorm, mode: 'insensitive' },
+      email: { equals: e, mode: 'insensitive' },
+      tenant: registerCleanupTenantWhere(),
     },
     select: { id: true },
   });
   for (const r of rows) {
     await tombstoneUserRowFully(prisma, r.id);
-  }
-}
-
-/**
- * Liberta `@@unique([email, tenantId])` (só inativos) e telefone inativo **antes** de enviar OTP —
- * evita bloqueio quando a exclusão não tombstonou o e-mail. Contas ativas com o mesmo e-mail
- * só são libertadas em `reclaimEmailForRegisterAfterOtpVerified` (após código correcto).
- */
-async function releaseDeadAccountSlotsForRegister(prisma, { tenantId, emailNorm, phoneE164 }) {
-  if (!tenantId || !emailNorm) return;
-
-  const byEmail = await prisma.user.findFirst({
-    where: {
-      tenantId,
-      email: { equals: emailNorm, mode: 'insensitive' },
-    },
-  });
-  if (byEmail && !byEmail.isActive) {
-    await tombstoneUserRowFully(prisma, byEmail.id);
-  }
-
-  if (phoneE164) {
-    const byPhone = await prisma.user.findFirst({
-      where: { tenantId, phone: phoneE164 },
-    });
-    if (byPhone && !byPhone.isActive) {
-      await prisma.user.update({
-        where: { id: byPhone.id },
-        data: { phone: null },
-      });
-    }
   }
 }
 
@@ -251,9 +255,9 @@ function escapeOtpHtml(t) {
 
 /**
  * @param {import('@prisma/client').PrismaClient} prisma
- * @param {{ identifier: string, channelPref?: string, purpose?: string, nameIfRegister?: string, registerPhone?: string, resolveAppDefaultTenantId?: () => Promise<string|null> }} opts
+ * @param {{ identifier: string, channelPref?: string, purpose?: string, nameIfRegister?: string, registerPhone?: string }} opts
  */
-async function startChallenge(prisma, { identifier, channelPref, purpose, nameIfRegister, registerPhone, resolveAppDefaultTenantId }) {
+async function startChallenge(prisma, { identifier, channelPref, purpose, nameIfRegister, registerPhone }) {
   const purposeN = String(purpose || 'login');
   const nameTrim = nameIfRegister != null && String(nameIfRegister).trim() ? String(nameIfRegister).trim() : undefined;
 
@@ -278,36 +282,30 @@ async function startChallenge(prisma, { identifier, channelPref, purpose, nameIf
     }
     metadataJson.phoneIfRegister = phoneParsed.e164;
 
-    if (typeof resolveAppDefaultTenantId === 'function') {
-      const tid = await resolveAppDefaultTenantId();
-      if (tid) {
-        const emailNorm = parsed.key;
-        await releaseDeadAccountSlotsForRegister(prisma, {
-          tenantId: tid,
-          emailNorm,
-          phoneE164: phoneParsed.e164,
-        });
-        const emailElsewhere = await assertNoActiveSameEmailOutsideDefaultTenant(prisma, emailNorm, tid);
-        if (emailElsewhere) {
-          return {
-            ok: false,
-            code: 'EMAIL_IN_USE',
-            error: emailElsewhere,
-            status: 409,
-          };
-        }
-        const existingPhone = await prisma.user.findFirst({
-          where: { tenantId: tid, phone: phoneParsed.e164, isActive: true },
-        });
-        if (existingPhone) {
-          return {
-            ok: false,
-            code: 'PHONE_IN_USE',
-            error: 'Este telefone já está associado a uma conta.',
-            status: 409,
-          };
-        }
-      }
+    const emailNorm = parsed.key;
+    await releaseDeadAccountSlotsForRegisterGlobal(prisma, {
+      emailNorm,
+      phoneE164: phoneParsed.e164,
+    });
+    const emailTakenStart = await assertEmailFreeAcrossAllTenants(prisma, emailNorm);
+    if (emailTakenStart) {
+      return {
+        ok: false,
+        code: 'EMAIL_IN_USE',
+        error: emailTakenStart,
+        status: 409,
+      };
+    }
+    const existingPhone = await prisma.user.findFirst({
+      where: { phone: phoneParsed.e164, isActive: true },
+    });
+    if (existingPhone) {
+      return {
+        ok: false,
+        code: 'PHONE_IN_USE',
+        error: 'Este telefone já está associado a uma conta.',
+        status: 409,
+      };
     }
   } else if (parsed.type === 'invalid') {
     return { ok: false, error: 'Informe um e-mail válido ou telefone (DD + número).', status: 400 };
@@ -373,13 +371,11 @@ async function startChallenge(prisma, { identifier, channelPref, purpose, nameIf
 
 /**
  * @param {import('@prisma/client').PrismaClient} prisma
- * @param {any} assertTechnicianSeatForNewUser
- * @param {any} resolveAppDefaultTenantId
- * @param {any} issueAppJwtAfterLogin
+ * @param {{ issueAppJwtAfterLogin: (user: any, deviceId: any, auditResource: string) => Promise<any> }} deps
  */
 async function verifyChallenge(
   prisma,
-  { assertTechnicianSeatForNewUser, resolveAppDefaultTenantId, issueAppJwtAfterLogin },
+  { issueAppJwtAfterLogin },
   { challengeId, code, deviceId, registerName }
 ) {
   const ch = await prisma.otpLoginChallenge.findUnique({ where: { id: String(challengeId) } });
@@ -405,22 +401,21 @@ async function verifyChallenge(
   const isEmail = ch.target.includes('@');
   const displayEmail = isEmail ? ch.target : `u${ch.target.replace(/\D/g, '')}@p.brspark.app`;
   const phoneVal = isEmail ? null : ch.target;
+  const purposeStr = String(ch.purpose || 'login').toLowerCase();
 
-  const defaultTenantId = await resolveAppDefaultTenantId();
-  if (!defaultTenantId) {
-    return {
-      ok: false,
-      error: 'Configuração do servidor: tenant master BrSpark (slug brspark) não encontrada.',
-      status: 503,
-    };
-  }
-
-  let user = await prisma.user.findUnique({
-    where: { email_tenantId: { email: displayEmail, tenantId: defaultTenantId } },
+  const allByEmail = await prisma.user.findMany({
+    where: { email: displayEmail },
     include: { tenant: true, technicianProfile: true },
+    orderBy: { createdAt: 'asc' },
   });
-  if (!user) {
-    if (ch.purpose === 'login') {
+  const tenantUsable = (t) => t && t.status !== 'SUSPENDED' && t.status !== 'CANCELLED';
+  const activeUsers = allByEmail.filter((u) => u.isActive && u.tenant && tenantUsable(u.tenant));
+
+  /** @type {any} */
+  let user;
+
+  if (purposeStr === 'login') {
+    if (!activeUsers.length) {
       return {
         ok: false,
         code: 'USER_NOT_FOUND',
@@ -428,17 +423,43 @@ async function verifyChallenge(
         status: 404,
       };
     }
-    if (ch.purpose === 'register' && !nameFromMeta) {
+    if (activeUsers.length > 1) {
+      return {
+        ok: false,
+        code: 'MULTIPLE_ACCOUNTS',
+        error:
+          'Este e-mail está em mais de uma organização. Inicie sessão com palavra-passe e escolha a organização, ou utilize outro e-mail.',
+        tenants: activeUsers.map((u) => ({
+          id: u.tenantId,
+          name: u.tenant?.name || u.tenantId,
+          kind: u.tenant?.kind || 'COMPANY',
+        })),
+        status: 409,
+      };
+    }
+    user = activeUsers[0];
+    if (phoneVal) {
+      await prisma.user
+        .update({ where: { id: user.id }, data: { phone: phoneVal, phoneVerifiedAt: new Date() } })
+        .catch(() => {});
+    }
+  } else if (purposeStr === 'register') {
+    if (activeUsers.length) {
+      const emailDupOtp = await assertEmailFreeAcrossAllTenants(prisma, displayEmail);
+      return {
+        ok: false,
+        code: 'EMAIL_IN_USE',
+        error: emailDupOtp || 'Este e-mail já está associado a uma conta.',
+        status: 409,
+      };
+    }
+    if (!nameFromMeta) {
       return {
         ok: false,
         code: 'NAME_REQUIRED',
         error: 'Indique o nome completo no passo de registo.',
         status: 400,
       };
-    }
-    const seat = await assertTechnicianSeatForNewUser(prisma, defaultTenantId, 'USER');
-    if (!seat.ok) {
-      return { ok: false, error: seat.error, code: seat.code, status: 403 };
     }
     const emailDupOtp = await assertEmailFreeAcrossAllTenants(prisma, displayEmail);
     if (emailDupOtp) {
@@ -447,45 +468,31 @@ async function verifyChallenge(
     const name =
       (nameFromMeta && String(nameFromMeta).trim()) || (isEmail ? displayEmail.split('@')[0] : 'Prestador');
     const passHash = await bcrypt.hash(require('crypto').randomBytes(32).toString('hex'), 10);
-    const tenant = await prisma.tenant.findUnique({ where: { id: defaultTenantId } });
-    if (!tenant || tenant.status === 'SUSPENDED' || tenant.status === 'CANCELLED') {
-      return { ok: false, error: 'Não é possível criar conta agora.', status: 403 };
+    try {
+      const { user: created } = await createPersonalClientTenantAndUser(prisma, {
+        name: String(name).trim(),
+        emailNorm: displayEmail,
+        passwordHash: passHash,
+        phone: phoneVal,
+        phoneVerifiedAt: phoneVal ? new Date() : null,
+        auditAction: 'USER_REGISTER_OTP',
+        auditResource: displayEmail,
+      });
+      user = created;
+    } catch (e) {
+      const code = e && e.code;
+      if (code === 'PLAN_MAX_TECHNICIANS') {
+        return { ok: false, error: e.message || 'Limite do plano.', code, status: 403 };
+      }
+      throw e;
     }
-    user = await prisma.$transaction(async (tx) => {
-      const u = await tx.user.create({
-        data: {
-          name: String(name).trim(),
-          email: displayEmail,
-          password: passHash,
-          tenantId: defaultTenantId,
-          phone: phoneVal,
-          role: 'USER',
-          phoneVerifiedAt: phoneVal ? new Date() : null,
-        },
-        include: { tenant: { include: { subscription: { include: { plan: true } } } }, technicianProfile: true },
-      });
-      await tx.auditLog.create({
-        data: {
-          tenantId: defaultTenantId,
-          userId: u.id,
-          action: 'USER_REGISTER_OTP',
-          resource: displayEmail,
-          category: 'AUTH',
-        },
-      });
-      return u;
-    });
     deliverBrsparkLaravelEvent({
       type: EVENT_TYPES.USER_CREATED,
       idempotencyKey: `user-${user.id}-created`,
       payload: { userId: user.id, tenantId: user.tenantId, email: user.email, phone: user.phone, source: 'otp' },
     }).catch((e) => console.warn('[otp] sync webhook', e));
   } else {
-    if (phoneVal) {
-      await prisma.user
-        .update({ where: { id: user.id }, data: { phone: phoneVal, phoneVerifiedAt: new Date() } })
-        .catch(() => {});
-    }
+    return { ok: false, error: 'Fluxo OTP inválido.', status: 400 };
   }
 
   await prisma.otpLoginChallenge.update({
@@ -521,7 +528,7 @@ async function verifyChallenge(
  * Registo em 2 fases: valida OTP de registo **sem** criar utilizador nem emitir JWT de sessão.
  * Devolve `setupToken` para `completeRegisterFromSetupToken` (definição de senha).
  */
-async function verifyRegisterOtpPhase1(prisma, { resolveAppDefaultTenantId }, { challengeId, code, registerName }) {
+async function verifyRegisterOtpPhase1(prisma, { challengeId, code, registerName }) {
   const ch = await prisma.otpLoginChallenge.findUnique({ where: { id: String(challengeId) } });
   if (!ch || ch.consumedAt) {
     return { ok: false, error: 'Código inválido ou expirado.', status: 400 };
@@ -568,37 +575,20 @@ async function verifyRegisterOtpPhase1(prisma, { resolveAppDefaultTenantId }, { 
     };
   }
 
-  const defaultTenantId = await resolveAppDefaultTenantId();
-  if (!defaultTenantId) {
-    return {
-      ok: false,
-      error: 'Configuração do servidor: tenant master BrSpark (slug brspark) não encontrada.',
-      status: 503,
-    };
-  }
-
-  await releaseDeadAccountSlotsForRegister(prisma, {
-    tenantId: defaultTenantId,
+  await releaseDeadAccountSlotsForRegisterGlobal(prisma, {
     emailNorm: displayEmail,
     phoneE164,
   });
 
-  await reclaimEmailForRegisterAfterOtpVerified(prisma, {
-    tenantId: defaultTenantId,
-    emailNorm: displayEmail,
-  });
+  await reclaimEmailForRegisterAfterOtpVerifiedGlobal(prisma, displayEmail);
 
-  const emailTakenPhase1 = await assertNoActiveSameEmailOutsideDefaultTenant(
-    prisma,
-    displayEmail,
-    defaultTenantId,
-  );
+  const emailTakenPhase1 = await assertEmailFreeAcrossAllTenants(prisma, displayEmail);
   if (emailTakenPhase1) {
     return { ok: false, code: 'EMAIL_IN_USE', error: emailTakenPhase1, status: 409 };
   }
 
   const existingPhone = await prisma.user.findFirst({
-    where: { tenantId: defaultTenantId, phone: phoneE164, isActive: true },
+    where: { phone: phoneE164, isActive: true },
   });
   if (existingPhone) {
     return {
@@ -640,7 +630,7 @@ async function verifyRegisterOtpPhase1(prisma, { resolveAppDefaultTenantId }, { 
  */
 async function completeRegisterFromSetupToken(
   prisma,
-  { assertTechnicianSeatForNewUser, resolveAppDefaultTenantId, issueAppJwtAfterLogin },
+  { issueAppJwtAfterLogin },
   { setupToken, password, consent, deviceId },
 ) {
   if (!consent) {
@@ -674,78 +664,46 @@ async function completeRegisterFromSetupToken(
     return { ok: false, error: 'Token de registo inválido ou incompleto (telefone). Solicite um novo código.', status: 400 };
   }
 
-  const defaultTenantId = await resolveAppDefaultTenantId();
-  if (!defaultTenantId) {
-    return {
-      ok: false,
-      error: 'Registo indisponível: não foi encontrada a tenant master BrSpark.',
-      status: 503,
-    };
-  }
-
-  const tenant = await prisma.tenant.findUnique({ where: { id: defaultTenantId } });
-  if (!tenant || tenant.status === 'SUSPENDED' || tenant.status === 'CANCELLED') {
-    return { ok: false, error: 'Novos registros estão temporariamente indisponíveis.', status: 403 };
-  }
-
-  await releaseDeadAccountSlotsForRegister(prisma, {
-    tenantId: defaultTenantId,
+  await releaseDeadAccountSlotsForRegisterGlobal(prisma, {
     emailNorm: displayEmail,
     phoneE164: phoneVal,
   });
 
-  await reclaimEmailForRegisterAfterOtpVerified(prisma, {
-    tenantId: defaultTenantId,
-    emailNorm: displayEmail,
-  });
+  await reclaimEmailForRegisterAfterOtpVerifiedGlobal(prisma, displayEmail);
 
-  const emailTakenComplete = await assertNoActiveSameEmailOutsideDefaultTenant(
-    prisma,
-    displayEmail,
-    defaultTenantId,
-  );
+  const emailTakenComplete = await assertEmailFreeAcrossAllTenants(prisma, displayEmail);
   if (emailTakenComplete) {
     return { ok: false, code: 'EMAIL_IN_USE', error: emailTakenComplete, status: 409 };
   }
 
   const existingByPhone = await prisma.user.findFirst({
-    where: { tenantId: defaultTenantId, phone: phoneVal, isActive: true },
+    where: { phone: phoneVal, isActive: true },
   });
   if (existingByPhone) {
     return { ok: false, error: 'Este telefone já está cadastrado.', status: 409 };
   }
 
-  const seat = await assertTechnicianSeatForNewUser(prisma, defaultTenantId, 'USER');
-  if (!seat.ok) {
-    return { ok: false, error: seat.error, code: seat.code, status: 403 };
-  }
-
   const passHash = await bcrypt.hash(rawPass, 10);
 
-  const user = await prisma.$transaction(async (tx) => {
-    const u = await tx.user.create({
-      data: {
-        name,
-        email: displayEmail,
-        password: passHash,
-        tenantId: defaultTenantId,
-        phone: phoneVal,
-        role: 'USER',
-        phoneVerifiedAt: phoneVal ? new Date() : null,
-      },
-      include: { tenant: { include: { subscription: { include: { plan: true } } } }, technicianProfile: true },
+  let user;
+  try {
+    const out = await createPersonalClientTenantAndUser(prisma, {
+      name,
+      emailNorm: displayEmail,
+      passwordHash: passHash,
+      phone: phoneVal,
+      phoneVerifiedAt: phoneVal ? new Date() : null,
+      auditAction: 'USER_REGISTER_OTP_PASSWORD',
+      auditResource: displayEmail,
     });
-    await tx.auditLog.create({
-      data: {
-        tenantId: defaultTenantId,
-        userId: u.id,
-        action: 'USER_REGISTER_OTP_PASSWORD',
-        resource: displayEmail,
-        category: 'AUTH',
-      },
-    });
-    return u;
-  });
+    user = out.user;
+  } catch (e) {
+    const code = e && e.code;
+    if (code === 'PLAN_MAX_TECHNICIANS') {
+      return { ok: false, error: e.message || 'Limite do plano.', code, status: 403 };
+    }
+    throw e;
+  }
 
   deliverBrsparkLaravelEvent({
     type: EVENT_TYPES.USER_CREATED,

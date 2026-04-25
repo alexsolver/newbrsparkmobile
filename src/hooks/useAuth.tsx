@@ -39,6 +39,8 @@ interface AuthContextType {
   userRole: 'CLIENT' | 'TECHNICIAN';
   setUserRole: (role: 'CLIENT' | 'TECHNICIAN') => Promise<void>;
   patchUser: (partial: Partial<User>) => Promise<void>;
+  /** Cria tenant CLIENT ou PROVIDER e muda a sessão para esse espaço. */
+  createWorkspace: (kind: 'CLIENT' | 'PROVIDER') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -381,6 +383,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const createWorkspace = async (kind: 'CLIENT' | 'PROVIDER') => {
+    const u = await AuthService.createWorkspace(kind);
+    setUser(u);
+    runAvatarWarm(u);
+    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
+    _setUserRole(defaultRole);
+    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
+    ApiService.sync(u.email).catch((err) => console.error('[AUTH] Sync pós-criação de espaço falhou:', err));
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -397,6 +410,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         userRole,
         setUserRole,
         patchUser,
+        createWorkspace,
       }}
     >
       {children}
