@@ -533,6 +533,8 @@ model User {
   phoneVerifiedAt    DateTime? @map("phone_verified_at")
   /// URL do contrato/termo assinado (ZapSign etc.)
   platformContractUrl String? @map("platform_contract_url")
+  /// Verificação em duas etapas (OTP por e-mail no login e na gestão no app).
+  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
 
   @@unique([email, tenantId])
   @@unique([tenantId, employeeMatricula])

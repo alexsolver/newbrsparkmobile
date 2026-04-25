@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Alert, ImageBackground,
@@ -18,19 +18,11 @@ import {
   API_BASE,
   AuthService,
   TwoFactorRequired,
-  MultipleAccountsError,
-  type LoginTenantOption,
 } from '../../src/services/auth';
 import { complianceDocFallbackUrl } from '../../src/constants/legalPublicUrls';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
 import { LoginOAuthNativeSection, type NativeOAuthPending } from '../../src/components/auth/LoginOAuthNativeSection';
-import {
-  displayTenantTitle,
-  tenantKindLabelPt,
-  tenantKindUiColors,
-} from '../../src/lib/tenantKindUi';
-
 function createLoginStyles(C: ColorPalette) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.cardWhite },
@@ -303,9 +295,6 @@ export default function LoginScreen() {
   const [otp, setOtp] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
 
-  const [tenantPick, setTenantPick] = useState<LoginTenantOption[] | null>(null);
-  const oauthPendingRef = useRef<NativeOAuthPending | null>(null);
-
   const goToTechRegistrationAfterAuth = () => {
     if (!techRegToken) return;
     router.replace({
@@ -363,18 +352,11 @@ export default function LoginScreen() {
   };
 
   const runNativeOAuthLogin = async (pending: NativeOAuthPending) => {
-    oauthPendingRef.current = pending;
     setLoading(true);
     try {
       await loginWithOAuth(pending);
-      oauthPendingRef.current = null;
       goToTechRegistrationAfterAuth();
     } catch (e: unknown) {
-      if (e instanceof MultipleAccountsError && e.tenants?.length) {
-        setTenantPick(e.tenants);
-        return;
-      }
-      oauthPendingRef.current = null;
       Alert.alert(
         t('auth.errorLogin'),
         e instanceof Error ? e.message : t('auth.errorConnection'),
@@ -388,8 +370,6 @@ export default function LoginScreen() {
     if (!email || !password) {
       return Alert.alert('', t('auth.alertFillFields'));
     }
-    oauthPendingRef.current = null;
-
     setLoading(true);
     try {
       await login(email, password);
@@ -402,52 +382,10 @@ export default function LoginScreen() {
         setTwoFaVisible(true);
         return;
       }
-      if (e instanceof MultipleAccountsError && e.tenants?.length) {
-        setTenantPick(e.tenants);
-        return;
-      }
       Alert.alert(
         t('auth.errorLogin'),
         e?.message || t('auth.errorConnection')
       );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const completeLoginWithChosenTenant = async (tenantId: string) => {
-    setTenantPick(null);
-    const oauth = oauthPendingRef.current;
-    if (oauth) {
-      setLoading(true);
-      try {
-        await loginWithOAuth({ ...oauth, tenantId });
-        oauthPendingRef.current = null;
-        goToTechRegistrationAfterAuth();
-      } catch (e: unknown) {
-        oauthPendingRef.current = null;
-        Alert.alert(
-          t('auth.errorLogin'),
-          e instanceof Error ? e.message : t('auth.errorConnection'),
-        );
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-    if (!email || !password) return;
-    setLoading(true);
-    try {
-      await login(email, password, tenantId);
-      goToTechRegistrationAfterAuth();
-    } catch (e: any) {
-      if (e instanceof TwoFactorRequired) {
-        setTwoFaChallenge(e.challengeToken);
-        setOtp('');
-        setTwoFaVisible(true);
-        return;
-      }
-      Alert.alert(t('auth.errorLogin'), e?.message || t('auth.errorConnection'));
     } finally {
       setLoading(false);
     }
@@ -537,94 +475,6 @@ export default function LoginScreen() {
             </KeyboardAvoidingView>
           </View>
         </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* ─── Várias organizações (mesmo e-mail) ───────────────────────────── */}
-      <Modal visible={!!tenantPick?.length} animationType="fade" transparent>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', padding: 24 }}>
-          <View style={{ backgroundColor: C.cardWhite, borderRadius: 20, padding: 22, maxHeight: '70%' }}>
-            <Text style={{ fontSize: 17, fontWeight: '900', color: C.primary, marginBottom: 8 }}>
-              Escolha a organização
-            </Text>
-            <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 16, lineHeight: 20 }}>
-              Este e-mail está em mais de uma organização. Selecione com qual deseja entrar agora.
-            </Text>
-            <ScrollView keyboardShouldPersistTaps="handled">
-              {(tenantPick || []).map((t) => {
-                const col = tenantKindUiColors(t.kind);
-                const title = displayTenantTitle(t.name, t.kind) || t.name || t.slug || t.id;
-                return (
-                  <TouchableOpacity
-                    key={t.id}
-                    style={{
-                      flexDirection: 'row',
-                      borderRadius: 12,
-                      overflow: 'hidden',
-                      marginBottom: 10,
-                      borderWidth: 1,
-                      borderColor: `${col.accent}55`,
-                      backgroundColor: col.subtleBg,
-                    }}
-                    onPress={() => completeLoginWithChosenTenant(t.id)}
-                    disabled={loading}
-                  >
-                    <View style={{ width: 4, backgroundColor: col.accent }} />
-                    <View style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 12 }}>
-                      <Text style={{ fontSize: 15, fontWeight: '800', color: col.title }}>{title}</Text>
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          marginTop: 6,
-                          flexWrap: 'wrap',
-                          gap: 8,
-                        }}
-                      >
-                        <View
-                          style={{
-                            backgroundColor: col.chipBg,
-                            paddingHorizontal: 8,
-                            paddingVertical: 3,
-                            borderRadius: 6,
-                          }}
-                        >
-                          <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.4 }}>
-                            {tenantKindLabelPt(t.kind).toUpperCase()}
-                          </Text>
-                        </View>
-                        {t.slug ? (
-                          <Text
-                            style={{
-                              fontSize: 11,
-                              color: C.textLight,
-                              fontWeight: '600',
-                              fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-                              flex: 1,
-                              minWidth: 0,
-                            }}
-                            numberOfLines={1}
-                          >
-                            {t.slug}
-                          </Text>
-                        ) : null}
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity
-              style={{ alignItems: 'center', paddingTop: 12 }}
-              onPress={() => {
-                setTenantPick(null);
-                oauthPendingRef.current = null;
-              }}
-              disabled={loading}
-            >
-              <Text style={{ fontSize: 14, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       </Modal>
 
       {/* ─── 2FA OTP Modal ─────────────────────────────────────────────────── */}

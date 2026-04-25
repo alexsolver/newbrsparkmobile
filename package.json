@@ -26,8 +26,8 @@
     "eas:build:android": "eas build --profile production --platform android",
     "eas:build:ios": "eas build --profile production --platform ios",
     "eas:build:all": "eas build --profile production --platform all",
-    "eas:update:production": "eas update --channel production",
-    "eas:update:preview": "eas update --channel preview"
+    "eas:update:production": "eas update --channel production --auto",
+    "eas:update:preview": "eas update --channel preview --auto"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

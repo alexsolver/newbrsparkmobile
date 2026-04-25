@@ -41,6 +41,8 @@ interface AuthContextType {
   patchUser: (partial: Partial<User>) => Promise<void>;
   /** Cria tenant CLIENT ou PROVIDER e muda a sessão para esse espaço. */
   createWorkspace: (kind: 'CLIENT' | 'PROVIDER') => Promise<void>;
+  /** Mesmo e-mail, outro tenant — troca JWT (perfil). */
+  switchWorkspace: (tenantId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -394,6 +396,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ApiService.sync(u.email).catch((err) => console.error('[AUTH] Sync pós-criação de espaço falhou:', err));
   };
 
+  const switchWorkspace = async (tenantId: string) => {
+    const u = await AuthService.switchWorkspace(tenantId);
+    setUser(u);
+    runAvatarWarm(u);
+    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
+    _setUserRole(defaultRole);
+    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
+    ApiService.sync(u.email).catch((err) => console.error('[AUTH] Sync pós-troca de organização falhou:', err));
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -411,6 +424,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUserRole,
         patchUser,
         createWorkspace,
+        switchWorkspace,
       }}
     >
       {children}

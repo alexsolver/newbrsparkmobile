@@ -21,6 +21,7 @@ const {
   verifyChallenge,
   verifyRegisterOtpPhase1,
   completeRegisterFromSetupToken,
+  startEmailPurposeChallenge,
 } = require('../lib/otpLoginService');
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
 const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
@@ -34,6 +35,7 @@ const {
   ensureHttpsUrlForPublicInternet,
   isPrivateOrLocalHost,
 } = require('../lib/publicHttpsUrl');
+const { selectUserForMultiAccountLogin } = require('../lib/multiAccountLoginPick');
 
 function buildSafeTenantForApp(tenant) {
   if (!tenant) return null;
@@ -348,16 +350,10 @@ router.post('/login', async (req, res) => {
         return res.status(400).json({ error: 'Organização inválida para este e-mail.' });
       }
     } else {
-      return res.status(409).json({
-        code: 'MULTIPLE_ACCOUNTS',
-        error:
-          'Este e-mail está em mais de uma organização. Indique qual deseja acessar (tenantId) ou escolha na tela.',
-        tenants: candidates.map((u) => ({
-          id: u.tenantId,
-          name: u.tenant?.name || u.tenantId,
-          kind: u.tenant?.kind || 'COMPANY',
-        })),
-      });
+      user = await selectUserForMultiAccountLogin(prisma, candidates);
+      if (!user) {
+        return res.status(500).json({ error: 'Não foi possível escolher a organização para este e-mail.' });
+      }
     }
 
     if (!user.tenant) return res.status(401).json({ error: 'Credenciais inválidas.' });
@@ -372,6 +368,23 @@ router.post('/login', async (req, res) => {
     if (!valid) return res.status(401).json({ error: 'Credenciais inválidas.' });
 
     const { deviceId } = req.body;
+
+    const u2fa = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { twoFactorEnabled: true },
+    });
+    if (u2fa?.twoFactorEnabled) {
+      const ch = await startEmailPurposeChallenge(prisma, {
+        emailNorm: user.email,
+        purpose: 'two_factor_login',
+        metadataJson: { userId: user.id, deviceId: deviceId != null ? deviceId : null },
+      });
+      if (!ch.ok) {
+        return res.status(ch.status || 503).json({ error: ch.error || 'Não foi possível enviar o código por e-mail.' });
+      }
+      return res.json({ requiresTwoFactor: true, challengeToken: ch.challengeId });
+    }
+
     const out = await issueAppJwtAfterLogin(user, deviceId, emailNorm);
     res.json(out);
   } catch (err) {
@@ -493,16 +506,10 @@ router.post('/login/oauth', async (req, res) => {
         return res.status(400).json({ error: 'Organização inválida para este e-mail.' });
       }
     } else {
-      return res.status(409).json({
-        code: 'MULTIPLE_ACCOUNTS',
-        error:
-          'Este e-mail está em mais de uma organização. Indique qual deseja acessar (tenantId) ou escolha na tela.',
-        tenants: candidates.map((u) => ({
-          id: u.tenantId,
-          name: u.tenant?.name || u.tenantId,
-          kind: u.tenant?.kind || 'COMPANY',
-        })),
-      });
+      user = await selectUserForMultiAccountLogin(prisma, candidates);
+      if (!user) {
+        return res.status(500).json({ error: 'Não foi possível escolher a organização para este e-mail.' });
+      }
     }
 
     if (!user.tenant) return res.status(401).json({ error: 'Conta inválida.' });
@@ -516,6 +523,23 @@ router.post('/login/oauth', async (req, res) => {
     }
 
     const { deviceId } = req.body;
+
+    const u2faOauth = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { twoFactorEnabled: true },
+    });
+    if (u2faOauth?.twoFactorEnabled) {
+      const ch = await startEmailPurposeChallenge(prisma, {
+        emailNorm: user.email,
+        purpose: 'two_factor_login',
+        metadataJson: { userId: user.id, deviceId: deviceId != null ? deviceId : null },
+      });
+      if (!ch.ok) {
+        return res.status(ch.status || 503).json({ error: ch.error || 'Não foi possível enviar o código por e-mail.' });
+      }
+      return res.json({ requiresTwoFactor: true, challengeToken: ch.challengeId });
+    }
+
     const out = await issueAppJwtAfterLogin(user, deviceId, emailNorm);
     res.json(out);
   } catch (err) {
@@ -762,6 +786,68 @@ router.post('/password-reset/confirm', async (req, res) => {
   }
 });
 
+// ─── POST /api/2fa/verify — concluir login após OTP (público) ─────────────────
+router.post('/2fa/verify', async (req, res) => {
+  try {
+    const challengeToken = String(req.body?.challengeToken || '').trim();
+    const otp = String(req.body?.otp || '').trim();
+    if (!challengeToken || !otp) {
+      return res.status(400).json({ error: 'challengeToken e otp são obrigatórios.' });
+    }
+    const ch = await prisma.otpLoginChallenge.findUnique({ where: { id: challengeToken } });
+    if (!ch || ch.consumedAt || String(ch.purpose) !== 'two_factor_login') {
+      return res.status(400).json({ error: 'Código inválido ou expirado.' });
+    }
+    if (new Date(ch.expiresAt).getTime() < Date.now()) {
+      return res.status(400).json({ error: 'Código expirado. Inicie sessão novamente.' });
+    }
+    if (ch.attempts >= ch.maxAttempts) {
+      return res.status(400).json({ error: 'Muitas tentativas. Inicie sessão novamente.' });
+    }
+    const good = await bcrypt.compare(String(otp).trim(), ch.codeHash);
+    if (!good) {
+      await prisma.otpLoginChallenge.update({ where: { id: ch.id }, data: { attempts: { increment: 1 } } });
+      return res.status(400).json({ error: 'Código incorreto.' });
+    }
+    const meta = (ch.metadataJson && typeof ch.metadataJson === 'object' ? ch.metadataJson : {}) || {};
+    const userId = String(meta.userId || '').trim();
+    if (!userId) {
+      return res.status(400).json({ error: 'Desafio inválido.' });
+    }
+    const deviceId = meta.deviceId != null ? meta.deviceId : null;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { tenant: true, technicianProfile: true },
+    });
+    if (!user || !user.isActive || !user.tenant) {
+      return res.status(403).json({ error: 'Conta indisponível.' });
+    }
+    if (!user.twoFactorEnabled) {
+      return res.status(400).json({ error: 'Verificação em duas etapas não está ativa para esta conta.' });
+    }
+    const emailNorm = String(user.email || '')
+      .trim()
+      .toLowerCase();
+    if (String(ch.target || '').trim().toLowerCase() !== emailNorm) {
+      return res.status(400).json({ error: 'Desafio inválido.' });
+    }
+    await prisma.otpLoginChallenge.update({
+      where: { id: ch.id },
+      data: { consumedAt: new Date(), userId: user.id },
+    });
+    const full = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { tenant: { include: { subscription: { include: { plan: true } } } }, technicianProfile: true },
+    });
+    if (!full) return res.status(500).json({ error: 'Falha ao carregar utilizador.' });
+    const out = await issueAppJwtAfterLogin(full, deviceId, emailNorm);
+    res.json(out);
+  } catch (err) {
+    console.error('[2fa/verify]', err);
+    res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
+});
+
 // ─── GET /api/me ─────────────────────────────────────────────────────────────
 // Autenticado — retorna perfil do usuário logado (para o app)
 const authUser = require('../middleware/authUser');
@@ -911,6 +997,262 @@ router.get('/me', authUser, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
     res.json(await buildSafeAppUserPayloadAsync(user));
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/** Outras organizações com o mesmo e-mail — troca no perfil do app. */
+router.get('/me/sibling-workspaces', authUser, async (req, res) => {
+  try {
+    if (req.user.panel === true) {
+      return res.json({ workspaces: [] });
+    }
+    const emailNorm = String(req.user.email || '')
+      .trim()
+      .toLowerCase();
+    if (!emailNorm) return res.json({ workspaces: [] });
+
+    const meId = String(req.user.id || '').trim();
+    const rows = await prisma.user.findMany({
+      where: { email: emailNorm, isActive: true },
+      include: { tenant: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const usable = rows.filter((u) => u.tenant && u.tenant.status !== 'SUSPENDED' && u.tenant.status !== 'CANCELLED');
+    const byTenant = new Map();
+    for (const u of usable) {
+      if (byTenant.has(u.tenantId)) continue;
+      byTenant.set(u.tenantId, u);
+    }
+    if (byTenant.size <= 1) {
+      return res.json({ workspaces: [] });
+    }
+
+    const tenantIds = [...byTenant.keys()];
+    const grouped = await prisma.user.groupBy({
+      by: ['tenantId'],
+      where: { tenantId: { in: tenantIds } },
+      _count: { id: true },
+    });
+    const countMap = {};
+    for (const g of grouped) {
+      countMap[g.tenantId] = g._count.id;
+    }
+
+    const workspaces = tenantIds.map((tid) => {
+      const u = byTenant.get(tid);
+      return {
+        id: tid,
+        name: u.tenant?.name || tid,
+        slug: u.tenant?.slug || null,
+        kind: u.tenant?.kind || 'COMPANY',
+        memberCount: countMap[tid] || 0,
+        isCurrent: u.id === meId,
+      };
+    });
+    workspaces.sort((a, b) => {
+      if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
+      if ((b.memberCount || 0) !== (a.memberCount || 0)) return (b.memberCount || 0) - (a.memberCount || 0);
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+    res.json({ workspaces });
+  } catch (err) {
+    console.error('[me/sibling-workspaces]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/** Nova sessão JWT noutro utilizador (mesmo e-mail, outro tenant). */
+router.post('/me/switch-workspace', authUser, async (req, res) => {
+  try {
+    if (req.user.panel === true) {
+      return res.status(400).json({ error: 'Operação indisponível para esta sessão.' });
+    }
+    const tenantId = String(req.body?.tenantId || '').trim();
+    if (!tenantId) return res.status(400).json({ error: 'tenantId é obrigatório.' });
+
+    const emailNorm = String(req.user.email || '')
+      .trim()
+      .toLowerCase();
+    if (!emailNorm) return res.status(400).json({ error: 'Sessão sem e-mail.' });
+
+    const target = await prisma.user.findFirst({
+      where: { email: emailNorm, tenantId, isActive: true },
+      include: { tenant: { include: { subscription: { include: { plan: true } } } }, technicianProfile: true },
+    });
+    if (!target || !target.tenant) {
+      return res.status(400).json({ error: 'Organização não encontrada para este e-mail.' });
+    }
+    if (target.tenant.status === 'SUSPENDED' || target.tenant.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'Organização indisponível.' });
+    }
+    if (String(target.id) === String(req.user.id)) {
+      return res.status(400).json({ error: 'Já está nesta organização.' });
+    }
+
+    const { deviceId } = req.body;
+    const out = await issueAppJwtAfterLogin(target, deviceId, emailNorm);
+    res.json(out);
+  } catch (err) {
+    console.error('[me/switch-workspace]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Verificação em duas etapas (app) ────────────────────────────────────────
+router.get('/2fa/status', authUser, async (req, res) => {
+  try {
+    const u = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { twoFactorEnabled: true },
+    });
+    res.json({ enabled: !!u?.twoFactorEnabled });
+  } catch (err) {
+    console.error('[2fa/status]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/2fa/enable', authUser, async (req, res) => {
+  try {
+    const me = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { twoFactorEnabled: true, email: true },
+    });
+    if (!me) return res.status(404).json({ error: 'Utilizador não encontrado.' });
+    if (me.twoFactorEnabled) {
+      return res.status(400).json({ error: 'A verificação em duas etapas já está ativa.' });
+    }
+    const em = String(me.email || '')
+      .trim()
+      .toLowerCase();
+    const ch = await startEmailPurposeChallenge(prisma, {
+      emailNorm: em,
+      purpose: 'two_factor_enable',
+      metadataJson: { userId: req.user.id },
+    });
+    if (!ch.ok) return res.status(ch.status || 503).json({ error: ch.error });
+    res.json({ challengeToken: ch.challengeId });
+  } catch (err) {
+    console.error('[2fa/enable]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/2fa/enable/confirm', authUser, async (req, res) => {
+  try {
+    const challengeToken = String(req.body?.challengeToken || '').trim();
+    const otp = String(req.body?.otp || '').trim();
+    if (!challengeToken || !otp) return res.status(400).json({ error: 'Dados incompletos.' });
+    const ch = await prisma.otpLoginChallenge.findUnique({ where: { id: challengeToken } });
+    if (!ch || ch.consumedAt || String(ch.purpose) !== 'two_factor_enable') {
+      return res.status(400).json({ error: 'Código inválido ou expirado.' });
+    }
+    if (new Date(ch.expiresAt).getTime() < Date.now()) {
+      return res.status(400).json({ error: 'Código expirado.' });
+    }
+    if (ch.attempts >= ch.maxAttempts) {
+      return res.status(400).json({ error: 'Muitas tentativas. Solicite um novo código.' });
+    }
+    const meta = (ch.metadataJson && typeof ch.metadataJson === 'object' ? ch.metadataJson : {}) || {};
+    if (String(meta.userId) !== String(req.user.id)) {
+      return res.status(400).json({ error: 'Desafio inválido.' });
+    }
+    const emailNorm = String(req.user.email || '')
+      .trim()
+      .toLowerCase();
+    if (String(ch.target || '').trim().toLowerCase() !== emailNorm) {
+      return res.status(400).json({ error: 'Desafio inválido.' });
+    }
+    const good = await bcrypt.compare(String(otp).trim(), ch.codeHash);
+    if (!good) {
+      await prisma.otpLoginChallenge.update({ where: { id: ch.id }, data: { attempts: { increment: 1 } } });
+      return res.status(400).json({ error: 'Código incorreto.' });
+    }
+    await prisma.$transaction([
+      prisma.otpLoginChallenge.update({
+        where: { id: ch.id },
+        data: { consumedAt: new Date(), userId: req.user.id },
+      }),
+      prisma.user.update({ where: { id: req.user.id }, data: { twoFactorEnabled: true } }),
+    ]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[2fa/enable/confirm]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/2fa/disable/request', authUser, async (req, res) => {
+  try {
+    const me = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { twoFactorEnabled: true, email: true },
+    });
+    if (!me?.twoFactorEnabled) {
+      return res.status(400).json({ error: 'A verificação em duas etapas não está ativa.' });
+    }
+    const em = String(me.email || '')
+      .trim()
+      .toLowerCase();
+    const ch = await startEmailPurposeChallenge(prisma, {
+      emailNorm: em,
+      purpose: 'two_factor_disable',
+      metadataJson: { userId: req.user.id },
+    });
+    if (!ch.ok) return res.status(ch.status || 503).json({ error: ch.error });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[2fa/disable/request]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/2fa/disable', authUser, async (req, res) => {
+  try {
+    const otp = String(req.body?.otp || '').trim();
+    if (!otp || otp.length < 6) return res.status(400).json({ error: 'Indique o código de 6 dígitos.' });
+    const me = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, email: true, twoFactorEnabled: true },
+    });
+    if (!me?.twoFactorEnabled) {
+      return res.status(400).json({ error: 'A verificação em duas etapas não está ativa.' });
+    }
+    const emailNorm = String(me.email || '')
+      .trim()
+      .toLowerCase();
+    const rows = await prisma.otpLoginChallenge.findMany({
+      where: {
+        purpose: 'two_factor_disable',
+        target: emailNorm,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+    for (const ch of rows) {
+      const meta = (ch.metadataJson && typeof ch.metadataJson === 'object' ? ch.metadataJson : {}) || {};
+      if (String(meta.userId) !== String(me.id)) continue;
+      if (ch.attempts >= ch.maxAttempts) continue;
+      const good = await bcrypt.compare(String(otp).trim(), ch.codeHash);
+      if (!good) {
+        await prisma.otpLoginChallenge.update({ where: { id: ch.id }, data: { attempts: { increment: 1 } } });
+        return res.status(400).json({ error: 'Código incorreto.' });
+      }
+      await prisma.$transaction([
+        prisma.otpLoginChallenge.update({
+          where: { id: ch.id },
+          data: { consumedAt: new Date(), userId: me.id },
+        }),
+        prisma.user.update({ where: { id: me.id }, data: { twoFactorEnabled: false } }),
+      ]);
+      return res.json({ ok: true });
+    }
+    return res.status(400).json({ error: 'Código inválido ou expirado. Solicite um novo código (desligue e volte a ativar o fluxo).' });
+  } catch (err) {
+    console.error('[2fa/disable]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /** E-mail único por tenant: alias derivado do e-mail do utilizador (RFC plus-addressing). */

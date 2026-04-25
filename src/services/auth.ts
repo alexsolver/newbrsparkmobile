@@ -305,6 +305,12 @@ export type LoginTenantOption = {
   kind?: string | null;
 };
 
+/** Resposta de `GET /api/me/sibling-workspaces` (troca de organização no perfil). */
+export type SiblingWorkspaceOption = LoginTenantOption & {
+  memberCount?: number;
+  isCurrent?: boolean;
+};
+
 export class MultipleAccountsError extends Error {
   tenants: LoginTenantOption[];
   constructor(tenants: LoginTenantOption[]) {
@@ -572,6 +578,46 @@ export class AuthService {
       throw new Error(data.error || 'Erro ao fazer login social.');
     }
 
+    if (data.requiresTwoFactor && data.challengeToken) {
+      throw new TwoFactorRequired(String(data.challengeToken));
+    }
+
+    await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
+    await AsyncStorage.setItem(TOKEN_KEY, data.token);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await AuthService.restorePostLoginLocalState(data.user as User);
+    return data.user as User;
+  }
+
+  /** Lista outras organizações do mesmo e-mail (para trocar no perfil). */
+  static async listSiblingWorkspaces(): Promise<SiblingWorkspaceOption[]> {
+    const token = await getToken();
+    if (!token) return [];
+    const res = await fetch(`${API_BASE}/api/me/sibling-workspaces`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = (await res.json()) as { workspaces?: SiblingWorkspaceOption[] };
+    if (!res.ok || !Array.isArray(data?.workspaces)) return [];
+    return data.workspaces;
+  }
+
+  /** Troca JWT para o utilizador do mesmo e-mail noutro tenant (POST /api/me/switch-workspace). */
+  static async switchWorkspace(tenantId: string): Promise<User> {
+    const token = await getToken();
+    if (!token) throw new Error('Sessão inválida. Faça login novamente.');
+    const deviceId = await getDeviceId();
+    const res = await fetch(`${API_BASE}/api/me/switch-workspace`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ tenantId: String(tenantId || '').trim(), deviceId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error((data as { error?: string }).error || 'Não foi possível mudar de organização.');
+    }
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await AsyncStorage.setItem(TOKEN_KEY, data.token);
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
@@ -1064,7 +1110,14 @@ export class AuthService {
     if (!res.ok) throw new Error(data.error || 'Código inválido.');
   }
 
-  /** Desativa 2FA (requer OTP válido) */
+  /** Envia OTP por e-mail antes de desativar o 2FA (chame antes do modal). */
+  static async requestDisableTwoFactor(): Promise<void> {
+    const res = await apiFetch('/api/2fa/disable/request', { method: 'POST', body: JSON.stringify({}) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Falha ao enviar o código por e-mail.');
+  }
+
+  /** Desativa 2FA (requer OTP do e-mail enviado por `requestDisableTwoFactor`) */
   static async disableTwoFactor(otp: string): Promise<void> {
     const res = await apiFetch('/api/2fa/disable', {
       method: 'POST',

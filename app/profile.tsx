@@ -25,6 +25,7 @@ import {
   canUseProviderMode,
   userHasCapability,
   isB2CConsumerUser,
+  type SiblingWorkspaceOption,
 } from '../src/services/auth';
 import { writeAvatarFromBase64 } from '../src/services/avatarLocalCache';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -85,9 +86,11 @@ const BRSPARK_COMPANY_SIGNUP_URL =
   (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BRSPARK_COMPANY_SIGNUP_URL) ||
   'https://www.brspark.com/empresa';
 
+type ProfileTab = 'conta' | 'trabalho' | 'config' | 'sync';
+
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, userRole, setUserRole, logout, deleteAccount, patchUser } = useAuth();
+  const { user, userRole, setUserRole, logout, deleteAccount, patchUser, switchWorkspace } = useAuth();
   const displayAvatarUri = useResolvedAvatarUri(user);
   const { dark: darkMode, colors: C, toggleDarkMode, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createProfileStyles(C), [C]);
@@ -145,45 +148,9 @@ export default function ProfileScreen() {
   }, [user?.tenant?.kind, user?.tenant]);
 
   const { t, i18n } = useTranslation();
-  const [queueCount, setQueueCount] = useState(0);
-  const [syncConflictCount, setSyncConflictCount] = useState(0);
-  const [syncConflictsBusy, setSyncConflictsBusy] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [selectedRegion, setSelectedRegion]   = useState<string>('BR');
-  const [selectedLang,   setSelectedLang]     = useState<string>('pt-BR');
-  const [langDropdownOpen, setLangDropdownOpen] = useState(false);
-  const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
-  const [useImperial,    setUseImperial]      = useState<boolean>(false);
-  const [numberFmt,      setNumberFmtState]   = useState<NumberFormatPrefs>({ decimals: 2, style: 'dot-comma' });
-  const [showPwdModal,   setShowPwdModal]     = useState(false);
-  const [oldPwd,         setOldPwd]           = useState('');
-  const [newPwd,         setNewPwd]           = useState('');
-  const [changingPwd,    setChangingPwd]      = useState(false);
-  const [showAvatarModal,setShowAvatarModal]  = useState(false);
-  // ─── 2FA State ──────────────────────────────────────────────────────────────
-  const [twoFaEnabled,   setTwoFaEnabled]     = useState(false);
-  const [twoFaLoading,   setTwoFaLoading]     = useState(false);
-  const [show2FaModal,   setShow2FaModal]     = useState(false);
-  const [tfaChallenge,   setTfaChallenge]     = useState<string | null>(null);
-  const [tfaOtp,         setTfaOtp]           = useState('');
-  const [tfaDisableOtp,  setTfaDisableOtp]    = useState('');
-  const [tfa2Action,     setTfa2Action]       = useState<'enable' | 'disable'>('enable');
 
-  /** Estado da candidatura: em aberto (token), já enviada, ou ainda sem registo (fluxo antigo). */
-  const [techRegResume, setTechRegResume] = useState<{
-    open: boolean;
-    inviteToken?: string;
-    submittedAwaitingReview?: boolean;
-    status?: string;
-    revisionNote?: string | null;
-  } | null>(null);
-
-  const canManageDirectoryHero = userHasCapability(user, 'mobile.admin.quickActions');
-
-  /** Papel e tenant efectivos do JWT — alinha com o que o servidor usa para OS e sync. */
-  const cloudSessionCard = useMemo(() => {
+  /** Papel e tenant efectivos do JWT — detalhes técnicos da sessão (aba Sincronização). */
+  const syncTabSessionDetails = useMemo(() => {
     if (!user) return null;
     const r =
       String(user.role || 'USER')
@@ -196,8 +163,8 @@ export default function ProfileScreen() {
     return (
       <View
         style={{
-          marginTop: 12,
           marginHorizontal: 16,
+          marginBottom: 14,
           paddingHorizontal: 14,
           paddingVertical: 12,
           borderRadius: 12,
@@ -241,6 +208,48 @@ export default function ProfileScreen() {
       </View>
     );
   }, [user, t, C.surfaceLow, C.border, C.textSecondary, C.slate, C.textLight]);
+
+  const [queueCount, setQueueCount] = useState(0);
+  const [syncConflictCount, setSyncConflictCount] = useState(0);
+  const [syncConflictsBusy, setSyncConflictsBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [siblingWorkspaces, setSiblingWorkspaces] = useState<SiblingWorkspaceOption[]>([]);
+  const [siblingWsLoading, setSiblingWsLoading] = useState(false);
+  const [switchWsBusy, setSwitchWsBusy] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [selectedRegion, setSelectedRegion]   = useState<string>('BR');
+  const [selectedLang,   setSelectedLang]     = useState<string>('pt-BR');
+  const [langDropdownOpen, setLangDropdownOpen] = useState(false);
+  const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
+  const [privacyDropdownOpen, setPrivacyDropdownOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('conta');
+  const [useImperial,    setUseImperial]      = useState<boolean>(false);
+  const [numberFmt,      setNumberFmtState]   = useState<NumberFormatPrefs>({ decimals: 2, style: 'dot-comma' });
+  const [showPwdModal,   setShowPwdModal]     = useState(false);
+  const [oldPwd,         setOldPwd]           = useState('');
+  const [newPwd,         setNewPwd]           = useState('');
+  const [changingPwd,    setChangingPwd]      = useState(false);
+  const [showAvatarModal,setShowAvatarModal]  = useState(false);
+  // ─── 2FA State ──────────────────────────────────────────────────────────────
+  const [twoFaEnabled,   setTwoFaEnabled]     = useState(false);
+  const [twoFaLoading,   setTwoFaLoading]     = useState(false);
+  const [show2FaModal,   setShow2FaModal]     = useState(false);
+  const [tfaChallenge,   setTfaChallenge]     = useState<string | null>(null);
+  const [tfaOtp,         setTfaOtp]           = useState('');
+  const [tfaDisableOtp,  setTfaDisableOtp]    = useState('');
+  const [tfa2Action,     setTfa2Action]       = useState<'enable' | 'disable'>('enable');
+
+  /** Estado da candidatura: em aberto (token), já enviada, ou ainda sem registo (fluxo antigo). */
+  const [techRegResume, setTechRegResume] = useState<{
+    open: boolean;
+    inviteToken?: string;
+    submittedAwaitingReview?: boolean;
+    status?: string;
+    revisionNote?: string | null;
+  } | null>(null);
+
+  const canManageDirectoryHero = userHasCapability(user, 'mobile.admin.quickActions');
 
   const [dirHeroLoading, setDirHeroLoading] = useState(false);
   const [dirHeroSaving, setDirHeroSaving] = useState(false);
@@ -525,6 +534,60 @@ export default function ProfileScreen() {
     }, [loadTechRegResume]),
   );
 
+  const loadSiblingWorkspaces = useCallback(async () => {
+    if (!user) {
+      setSiblingWorkspaces([]);
+      return;
+    }
+    setSiblingWsLoading(true);
+    try {
+      const list = await AuthService.listSiblingWorkspaces();
+      setSiblingWorkspaces(list);
+    } catch {
+      setSiblingWorkspaces([]);
+    } finally {
+      setSiblingWsLoading(false);
+    }
+  }, [user]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadSiblingWorkspaces();
+    }, [loadSiblingWorkspaces]),
+  );
+
+  const handleSwitchWorkspacePress = useCallback(
+    (tenantId: string, label: string) => {
+      Alert.alert(
+        t('profile.switchWorkspaceConfirmTitle'),
+        t('profile.switchWorkspaceConfirmBody', { name: label }),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          {
+            text: t('profile.switchWorkspaceConfirmAction'),
+            onPress: async () => {
+              setSwitchWsBusy(true);
+              try {
+                await switchWorkspace(tenantId);
+                const fresh = await AuthService.getUser();
+                const shell = fresh && canUseProviderMode(fresh) ? 'provider' : 'client';
+                router.replace(getPersonaHomeHref(shell) as any);
+              } catch (e: unknown) {
+                Alert.alert(
+                  t('common.error'),
+                  e instanceof Error ? e.message : t('profile.switchWorkspaceError'),
+                );
+              } finally {
+                setSwitchWsBusy(false);
+              }
+            },
+          },
+        ],
+      );
+    },
+    [switchWorkspace, router, t],
+  );
+
   useFocusEffect(
     React.useCallback(() => {
       if (canManageDirectoryHero && user) {
@@ -607,6 +670,24 @@ export default function ProfileScreen() {
     );
   };
 
+  const handleExportLocalData = useCallback(() => {
+    Alert.alert(t('profile.exportData'), t('profile.exportDataConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('profile.exportBtn'),
+        onPress: async () => {
+          try {
+            await shareUserLocalDataJson({ dialogTitle: t('profile.exportShareTitle') });
+            Alert.alert(t('profile.exportSuccess'), t('profile.exportSuccessMsg'));
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            Alert.alert(t('common.exportError'), `${t('profile.exportFailedMsg')}\n\n${msg}`);
+          }
+        },
+      },
+    ]);
+  }, [t]);
+
   const handleBecomeTechnician = async () => {
     try {
       setSyncing(true);
@@ -662,6 +743,39 @@ export default function ProfileScreen() {
     }
   };
 
+  const openHorariosERegioes = async () => {
+    const go = (tok: string) => {
+      router.push({ pathname: '/auth/tech-registration', params: { token: tok } } as any);
+    };
+    const resumeTok = techRegResume?.open ? techRegResume.inviteToken : undefined;
+    if (resumeTok) {
+      go(resumeTok);
+      return;
+    }
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_BASE}/api/me/technician-registration`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.open && data.inviteToken) {
+        go(String(data.inviteToken));
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    if (user?.technicianProfile && !isTechnicianProfileActive(user)) {
+      await handleBecomeTechnician();
+      return;
+    }
+    if (isTechnicianProfileActive(user)) {
+      Alert.alert(t('profile.workScheduleActiveTechTitle'), t('profile.workScheduleActiveTechBody'));
+      return;
+    }
+    Alert.alert(t('profile.workScheduleNoTechTitle'), t('profile.workScheduleNoTechBody'));
+  };
+
   const handleChangePassword = async () => {
     if (!oldPwd || !newPwd) return Alert.alert(t('common.attention'), t('profile.fillAllFields'));
     const pc = passwordChecks(newPwd);
@@ -693,10 +807,17 @@ export default function ProfileScreen() {
 
   const handle2FaToggle = async () => {
     if (twoFaEnabled) {
-      // Desativar: pede OTP ativo
-      setTfa2Action('disable');
-      setTfaDisableOtp('');
-      setShow2FaModal(true);
+      setTwoFaLoading(true);
+      try {
+        await AuthService.requestDisableTwoFactor();
+        setTfa2Action('disable');
+        setTfaDisableOtp('');
+        setShow2FaModal(true);
+      } catch (e: any) {
+        Alert.alert(t('common.error'), e.message || t('profile.activationRequestError'));
+      } finally {
+        setTwoFaLoading(false);
+      }
     } else {
       // Ativar: solicita envio de OTP por e-mail
       setTwoFaLoading(true);
@@ -719,11 +840,11 @@ export default function ProfileScreen() {
     try {
       if (tfa2Action === 'enable' && tfaChallenge) {
         await AuthService.confirmEnableTwoFactor(tfaChallenge, tfaOtp);
-        setTwoFaEnabled(true);
+        setTwoFaEnabled(await AuthService.getTwoFactorStatus());
         Alert.alert(t('profile.twoFaEnabledTitle'), t('profile.twoFaEnabledBody'));
       } else if (tfa2Action === 'disable') {
         await AuthService.disableTwoFactor(tfaDisableOtp);
-        setTwoFaEnabled(false);
+        setTwoFaEnabled(await AuthService.getTwoFactorStatus());
         Alert.alert(t('profile.twoFaDisabledTitle'), t('profile.twoFaDisabledBody'));
       }
       setShow2FaModal(false);
@@ -891,18 +1012,239 @@ export default function ProfileScreen() {
           <Text style={[styles.headerName, { color: '#191C1D' }]}>{profile.name}</Text>
           <Text style={[styles.headerSub, { color: C.textSecondary }]}>{profile.email}</Text>
           {tenantKindChip}
-          {cloudSessionCard}
 
-          <TouchableOpacity 
-            style={[styles.editInfoBtn, { backgroundColor: C.surfaceLow }]} 
-            onPress={() => setIsEditing(!isEditing)}
+          {user.technicianProfile && !isTechnicianProfileActive(user) ? (
+            <View style={[styles.listCard, { marginHorizontal: 16, marginTop: 12, maxWidth: SCREEN_W - 32, alignSelf: 'center', width: '100%', padding: 16 }]}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a', marginBottom: 6 }}>
+                Prestador, aguardando habilitação
+              </Text>
+              <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20 }}>
+                {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING'
+                  ? techRegResume?.submittedAwaitingReview
+                    ? 'Sua documentação já foi enviada e está em análise. Até ser aprovada, você não receberá ordens de serviço e o modo prestador permanece indisponível.'
+                    : techRegResume?.open &&
+                        String(techRegResume.status || '').toUpperCase() === 'NEEDS_REVISION'
+                      ? 'A equipe pediu ajustes no seu cadastro. Corrija os dados no formulário (nome, telefone, endereço, documentos, etc.) e reenvie. Use o botão verde abaixo — é o mesmo ecrã onde preencheu o cadastro; lá aparece também a mensagem completa da revisão.'
+                      : techRegResume?.open
+                        ? 'Complete o cadastro de prestador (dados, documentos, horários e fotos). Depois do envio, a equipe analisa e aprova. Até lá, o modo prestador permanece indisponível.'
+                        : 'Falta preencher o cadastro completo de prestador. Toque no botão abaixo para abrir o formulário. Depois do envio, a equipe analisa e aprova.'
+                  : 'Sua conta de prestador não está ativa. Você não receberá novas ordens de serviço até a equipe reativar o acesso.'}
+              </Text>
+              {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING' &&
+              techRegResume?.open &&
+              String(techRegResume.status || '').toUpperCase() === 'NEEDS_REVISION' &&
+              techRegResume.revisionNote ? (
+                <View
+                  style={{
+                    marginTop: 10,
+                    padding: 12,
+                    borderRadius: 10,
+                    backgroundColor: '#fff7ed',
+                    borderWidth: 1,
+                    borderColor: '#fdba74',
+                  }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#9a3412', marginBottom: 6 }}>
+                    Mensagem da equipe (ajustes pedidos)
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#431407', lineHeight: 20 }}>{techRegResume.revisionNote}</Text>
+                </View>
+              ) : null}
+              {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING' &&
+              !techRegResume?.submittedAwaitingReview ? (
+                techRegResume?.open && techRegResume.inviteToken ? (
+                  <TouchableOpacity
+                    style={{
+                      marginTop: 12,
+                      backgroundColor: '#0F766E',
+                      paddingVertical: 12,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                    }}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/auth/tech-registration',
+                        params: { token: techRegResume.inviteToken },
+                      } as any)
+                    }
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                      {String(techRegResume.status || '').toUpperCase() === 'NEEDS_REVISION'
+                        ? 'Corrigir dados e reenviar cadastro'
+                        : 'Continuar cadastro de prestador'}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={{
+                      marginTop: 12,
+                      backgroundColor: '#D97706',
+                      paddingVertical: 12,
+                      borderRadius: 12,
+                      alignItems: 'center',
+                    }}
+                    onPress={handleBecomeTechnician}
+                    disabled={syncing}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                      {syncing ? 'A abrir…' : 'Abrir formulário de cadastro'}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              ) : null}
+            </View>
+          ) : null}
+
+          {showProviderModeToggles ? (
+            <View style={{ marginTop: 12, marginHorizontal: 16, maxWidth: SCREEN_W - 32, alignSelf: 'center', width: '100%' }}>
+              <Text
+                style={{
+                  fontSize: 10,
+                  fontWeight: '800',
+                  color: C.textSecondary,
+                  letterSpacing: 0.4,
+                  textTransform: 'uppercase',
+                  marginBottom: 8,
+                  textAlign: 'center',
+                }}
+              >
+                {t('profile.usageModeTitle')}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500', textAlign: 'center', marginBottom: 10, lineHeight: 16 }}>
+                {isTechnicianProfileActive(user)
+                  ? t('profile.usageModeHintTechnician')
+                  : t('profile.usageModeHintInternal')}
+              </Text>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  backgroundColor: '#E2E8F0',
+                  borderRadius: 14,
+                  padding: 4,
+                  borderWidth: 1,
+                  borderColor: C.border,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={async () => {
+                    await setUserRole('CLIENT');
+                    router.replace(getPersonaHomeHref('client') as any);
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 10,
+                    backgroundColor: userRole === 'CLIENT' ? '#fff' : 'transparent',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    shadowColor: userRole === 'CLIENT' ? '#000' : 'transparent',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: userRole === 'CLIENT' ? 0.06 : 0,
+                    shadowRadius: 2,
+                    elevation: userRole === 'CLIENT' ? 2 : 0,
+                  }}
+                >
+                  <Text style={{ color: userRole === 'CLIENT' ? '#059669' : '#64748B', fontWeight: '800', fontSize: 14 }}>
+                    {t('profile.personaClient')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={async () => {
+                    if (!canUseProviderMode(user)) {
+                      Alert.alert(t('profile.providerUnavailableTitle'), t('profile.providerUnavailableBody'));
+                      return;
+                    }
+                    const providerOnboardingDone = await isProviderOnboardingComplete();
+                    await setUserRole('TECHNICIAN');
+                    if (!providerOnboardingDone) {
+                      router.push('/auth/onboarding' as any);
+                      return;
+                    }
+                    router.replace(getPersonaHomeHref('provider') as any);
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    borderRadius: 10,
+                    backgroundColor: userRole === 'TECHNICIAN' ? '#fff' : 'transparent',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    shadowColor: userRole === 'TECHNICIAN' ? '#000' : 'transparent',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: userRole === 'TECHNICIAN' ? 0.06 : 0,
+                    shadowRadius: 2,
+                    elevation: userRole === 'TECHNICIAN' ? 2 : 0,
+                  }}
+                >
+                  <Text style={{ color: userRole === 'TECHNICIAN' ? '#C2410C' : '#64748B', fontWeight: '800', fontSize: 14 }}>
+                    {t('profile.personaProvider')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : showBecomeProviderCta ? (
+            <View style={{ marginTop: 12, marginBottom: 0, marginHorizontal: 16, maxWidth: SCREEN_W - 32, alignSelf: 'center', width: '100%' }}>
+              <TouchableOpacity onPress={handleBecomeTechnician} style={{ backgroundColor: '#D97706', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Quero ser um Prestador</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          <TouchableOpacity
+            style={[styles.editInfoBtn, { backgroundColor: C.surfaceLow }]}
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setActiveTab('conta');
+              setIsEditing((v) => !v);
+            }}
           >
-            <Ionicons name={isEditing ? "close" : "create-outline"} size={14} color={C.slate} style={{ marginRight: 6 }} />
-            <Text style={styles.editInfoBtnText}>{isEditing ? "Fechar Edição" : t('profile.editBtn') || "Editar Perfil"}</Text>
+            <Ionicons name={isEditing ? 'close' : 'create-outline'} size={14} color={C.slate} style={{ marginRight: 6 }} />
+            <Text style={styles.editInfoBtnText}>{isEditing ? t('profile.closeEditBtn') : t('profile.editBtn')}</Text>
           </TouchableOpacity>
         </View>
 
-        {isEditing && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          style={{ flexGrow: 0, marginBottom: 4 }}
+          contentContainerStyle={{
+            paddingHorizontal: 6,
+            paddingVertical: 4,
+            gap: 8,
+            alignItems: 'center',
+          }}
+        >
+          {(
+            [
+              ['conta', 'profile.tabConta'],
+              ['trabalho', 'profile.tabTrabalho'],
+              ['config', 'profile.tabConfiguracoes'],
+              ['sync', 'profile.tabSincronizacao'],
+            ] as const
+          ).map(([id, k]) => {
+            const sel = activeTab === id;
+            return (
+              <TouchableOpacity
+                key={id}
+                onPress={() => {
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setActiveTab(id);
+                }}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  backgroundColor: sel ? C.accent : '#E2E8F0',
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '800', color: sel ? '#fff' : '#475569' }}>{t(k)}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {activeTab === 'conta' && isEditing && (
           <View style={[styles.editFormCard, { backgroundColor: '#fff' }]}>
             <Text style={styles.formTitle}>Editar Dados</Text>
             <TextInput 
@@ -925,179 +1267,95 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* ─── Profile Mode Selector ─── */}
-        {user.technicianProfile && !isTechnicianProfileActive(user) ? (
-          <View style={[styles.listCard, { marginHorizontal: 16, marginTop: 12, marginBottom: 12, padding: 16 }]}>
-            <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a', marginBottom: 6 }}>
-              Prestador, aguardando habilitação
-            </Text>
-            <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20 }}>
-              {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING'
-                ? techRegResume?.submittedAwaitingReview
-                  ? 'Sua documentação já foi enviada e está em análise. Até ser aprovada, você não receberá ordens de serviço e o modo prestador permanece indisponível.'
-                  : techRegResume?.open &&
-                      String(techRegResume.status || '').toUpperCase() === 'NEEDS_REVISION'
-                    ? 'A equipe pediu ajustes no seu cadastro. Corrija os dados no formulário (nome, telefone, endereço, documentos, etc.) e reenvie. Use o botão verde abaixo — é o mesmo ecrã onde preencheu o cadastro; lá aparece também a mensagem completa da revisão.'
-                    : techRegResume?.open
-                      ? 'Complete o cadastro de prestador (dados, documentos, horários e fotos). Depois do envio, a equipe analisa e aprova. Até lá, o modo prestador permanece indisponível.'
-                      : 'Falta preencher o cadastro completo de prestador. Toque no botão abaixo para abrir o formulário. Depois do envio, a equipe analisa e aprova.'
-                : 'Sua conta de prestador não está ativa. Você não receberá novas ordens de serviço até a equipe reativar o acesso.'}
-            </Text>
-            {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING' &&
-            techRegResume?.open &&
-            String(techRegResume.status || '').toUpperCase() === 'NEEDS_REVISION' &&
-            techRegResume.revisionNote ? (
-              <View
-                style={{
-                  marginTop: 10,
-                  padding: 12,
-                  borderRadius: 10,
-                  backgroundColor: '#fff7ed',
-                  borderWidth: 1,
-                  borderColor: '#fdba74',
-                }}
-              >
-                <Text style={{ fontSize: 12, fontWeight: '800', color: '#9a3412', marginBottom: 6 }}>
-                  Mensagem da equipe (ajustes pedidos)
-                </Text>
-                <Text style={{ fontSize: 13, color: '#431407', lineHeight: 20 }}>{techRegResume.revisionNote}</Text>
-              </View>
-            ) : null}
-            {String(user.technicianProfile.status || '').toUpperCase() === 'PENDING' &&
-            !techRegResume?.submittedAwaitingReview ? (
-              techRegResume?.open && techRegResume.inviteToken ? (
-                <TouchableOpacity
-                  style={{
-                    marginTop: 12,
-                    backgroundColor: '#0F766E',
-                    paddingVertical: 12,
-                    borderRadius: 12,
-                    alignItems: 'center',
-                  }}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/auth/tech-registration',
-                      params: { token: techRegResume.inviteToken },
-                    } as any)
-                  }
-                >
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
-                    {String(techRegResume.status || '').toUpperCase() === 'NEEDS_REVISION'
-                      ? 'Corrigir dados e reenviar cadastro'
-                      : 'Continuar cadastro de prestador'}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={{
-                    marginTop: 12,
-                    backgroundColor: '#D97706',
-                    paddingVertical: 12,
-                    borderRadius: 12,
-                    alignItems: 'center',
-                  }}
-                  onPress={handleBecomeTechnician}
-                  disabled={syncing}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
-                    {syncing ? 'A abrir…' : 'Abrir formulário de cadastro'}
-                  </Text>
-                </TouchableOpacity>
-              )
-            ) : null}
-          </View>
-        ) : null}
-
-        {showProviderModeToggles ? (
+        {activeTab === 'trabalho' && (
           <>
-            <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
-              <Ionicons name="build" size={14} color="#64748B" style={{marginRight: 6}} />
-              <Text style={styles.sectionHeaderLabel}>{t('profile.usageModeTitle').toUpperCase()}</Text>
-            </View>
-            <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
-              <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500' }}>
-                {isTechnicianProfileActive(user)
-                  ? t('profile.usageModeHintTechnician')
-                  : t('profile.usageModeHintInternal')}
-              </Text>
-            </View>
-            <View style={[styles.listCard, { paddingVertical: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <TouchableOpacity
-                  onPress={async () => {
-                    await setUserRole('CLIENT');
-                    router.replace(getPersonaHomeHref('client') as any);
-                  }}
-                  style={{
-                    backgroundColor: userRole === 'CLIENT' ? '#10B981' : '#F1F5F9',
-                    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20
-                  }}
-                >
-                  <Text style={{ color: userRole === 'CLIENT' ? '#fff' : '#64748B', fontWeight: '800' }}>{t('profile.personaClient')}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={async () => {
-                    if (!canUseProviderMode(user)) {
-                      Alert.alert(t('profile.providerUnavailableTitle'), t('profile.providerUnavailableBody'));
-                      return;
-                    }
-                    const providerOnboardingDone = await isProviderOnboardingComplete();
-                    await setUserRole('TECHNICIAN');
-                    if (!providerOnboardingDone) {
-                      router.push('/auth/onboarding' as any);
-                      return;
-                    }
-                    router.replace(getPersonaHomeHref('provider') as any);
-                  }}
-                  style={{
-                    backgroundColor: userRole === 'TECHNICIAN' ? '#D97706' : '#F1F5F9',
-                    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20
-                  }}
-                >
-                  <Text style={{ color: userRole === 'TECHNICIAN' ? '#fff' : '#64748B', fontWeight: '800' }}>{t('profile.personaProvider')}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {userRole === 'TECHNICIAN' ? (
-              <View style={{ marginHorizontal: 16, marginTop: 10, marginBottom: 6 }}>
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: '#FFF7ED',
-                    borderRadius: 14,
-                    padding: 14,
-                    borderWidth: 1,
-                    borderColor: '#FDBA74',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                  }}
-                  onPress={() => router.push('/profile/affiliations' as any)}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FB923C', alignItems: 'center', justifyContent: 'center' }}>
-                      <Ionicons name="business" size={18} color="#fff" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontWeight: '900', color: '#9A3412' }}>Organizações e parcerias</Text>
-                      <Text style={{ fontSize: 11, color: '#C2410C', marginTop: 2 }}>
-                        Vínculo dedicado e parcerias com empresas
-                      </Text>
-                    </View>
+            {showProviderModeToggles || user?.technicianProfile || isTechnicianProfileActive(user) || showBecomeProviderCta ? (
+              <>
+                {showProviderModeToggles && userRole === 'TECHNICIAN' ? (
+                  <View style={{ marginHorizontal: 16, marginTop: 4, marginBottom: 10 }}>
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: '#FFF7ED',
+                        borderRadius: 14,
+                        padding: 14,
+                        borderWidth: 1,
+                        borderColor: '#FDBA74',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                      onPress={() => router.push('/profile/affiliations' as any)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                        <View
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 18,
+                            backgroundColor: '#FB923C',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Ionicons name="business" size={18} color="#fff" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 14, fontWeight: '900', color: '#9A3412' }}>
+                            {t('profile.affiliationsCardTitle')}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: '#C2410C', marginTop: 2 }}>{t('profile.affiliationsCardSub')}</Text>
+                        </View>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color="#C2410C" />
+                    </TouchableOpacity>
                   </View>
-                  <Ionicons name="chevron-forward" size={16} color="#C2410C" />
-                </TouchableOpacity>
-              </View>
-            ) : null}
+                ) : null}
+                <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: '#F0F9FF',
+                      borderRadius: 14,
+                      padding: 14,
+                      borderWidth: 1,
+                      borderColor: '#BFDBFE',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                    onPress={openHorariosERegioes}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <View
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 18,
+                          backgroundColor: '#0284C7',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Ionicons name="calendar-outline" size={18} color="#fff" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '900', color: '#0369A1' }}>{t('profile.workScheduleCardTitle')}</Text>
+                        <Text style={{ fontSize: 11, color: '#0C4A6E', marginTop: 2 }}>{t('profile.workScheduleCardSub')}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="#0369A1" />
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <Text style={{ marginHorizontal: 20, marginTop: 8, fontSize: 13, color: C.textSecondary, lineHeight: 20 }}>
+                {t('profile.workTabConsumerHint')}
+              </Text>
+            )}
           </>
-        ) : showBecomeProviderCta ? (
-          <View style={{ marginTop: 12, marginBottom: 12, marginHorizontal: 16 }}>
-            <TouchableOpacity onPress={handleBecomeTechnician} style={{ backgroundColor: '#D97706', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Quero ser um Prestador</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
+        )}
 
+        {activeTab === 'config' && (
+        <>
         <View style={[styles.sectionHeaderWrap, { flexDirection: 'row', alignItems: 'center', marginTop: 4 }]}>
           <Ionicons name="business-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
           <Text style={styles.sectionHeaderLabel}>{(t('profile.companySignupTitle') || 'Empresa').toUpperCase()}</Text>
@@ -1250,11 +1508,90 @@ export default function ProfileScreen() {
             <Switch value={pushEnabled} onValueChange={togglePush} trackColor={{ false: '#E2E8F0', true: '#FBCFE8' }} thumbColor={pushEnabled ? '#DB2777' : '#fff'} />
           </View>
         </View>
+        </>
+        )}
+
+        {activeTab === 'conta' && (
+        <>
+        {siblingWorkspaces.length > 0 ? (
+          <>
+            <View style={[styles.sectionHeaderWrap, { flexDirection: 'row', alignItems: 'center' }]}>
+              <Ionicons name="swap-horizontal" size={14} color="#64748B" style={{ marginRight: 6 }} />
+              <Text style={styles.sectionHeaderLabel}>{t('profile.siblingWorkspacesTitle').toUpperCase()}</Text>
+            </View>
+            <View style={{ paddingHorizontal: 4, marginBottom: 8, marginTop: -6 }}>
+              <Text style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500', lineHeight: 16 }}>
+                {t('profile.siblingWorkspacesHint')}
+              </Text>
+            </View>
+            {siblingWsLoading ? (
+              <Text style={{ marginHorizontal: 20, marginBottom: 14, color: C.textSecondary, fontSize: 13 }}>
+                …
+              </Text>
+            ) : (
+              <View style={{ marginHorizontal: 16, marginBottom: 16, gap: 10 }}>
+                {siblingWorkspaces.map((w) => {
+                  const col = tenantKindUiColors(w.kind);
+                  const title = displayTenantTitle(w.name, w.kind) || w.name || w.slug || w.id;
+                  const membersSub =
+                    typeof w.memberCount === 'number'
+                      ? t('profile.siblingWorkspaceMembers', { count: w.memberCount })
+                      : '';
+                  const current = !!w.isCurrent;
+                  return (
+                    <TouchableOpacity
+                      key={w.id}
+                      disabled={current || switchWsBusy}
+                      onPress={() => handleSwitchWorkspacePress(w.id, title)}
+                      style={{
+                        flexDirection: 'row',
+                        borderRadius: 12,
+                        overflow: 'hidden',
+                        borderWidth: 1,
+                        borderColor: current ? `${col.accent}99` : `${col.accent}55`,
+                        backgroundColor: col.subtleBg,
+                        opacity: current ? 0.92 : 1,
+                      }}
+                    >
+                      <View style={{ width: 4, backgroundColor: col.accent }} />
+                      <View style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 12 }}>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: col.title }}>{title}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, flexWrap: 'wrap', gap: 8 }}>
+                          <View
+                            style={{
+                              backgroundColor: col.chipBg,
+                              paddingHorizontal: 8,
+                              paddingVertical: 3,
+                              borderRadius: 6,
+                            }}
+                          >
+                            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900', letterSpacing: 0.4 }}>
+                              {tenantKindLabelPt(w.kind).toUpperCase()}
+                            </Text>
+                          </View>
+                          {membersSub ? (
+                            <Text style={{ fontSize: 11, color: C.textSecondary, fontWeight: '600' }}>{membersSub}</Text>
+                          ) : null}
+                          {current ? (
+                            <Text style={{ fontSize: 11, color: col.accent, fontWeight: '800' }}>
+                              {t('profile.siblingWorkspaceCurrent')}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                      {!current ? <Ionicons name="chevron-forward" size={18} color={col.accent} style={{ alignSelf: 'center', marginRight: 10 }} /> : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        ) : null}
 
         {/* ─── Segurança ─── */}
         <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
           <Ionicons name="shield-checkmark" size={14} color="#64748B" style={{marginRight: 6}} />
-          <Text style={styles.sectionHeaderLabel}>SEGURANÇA</Text>
+          <Text style={styles.sectionHeaderLabel}>{t('profile.securitySectionTitle').toUpperCase()}</Text>
         </View>
         <View style={styles.listCard}>
           <TouchableOpacity style={styles.listItem} onPress={() => setShowPwdModal(true)}>
@@ -1286,50 +1623,107 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Modal de confirmação 2FA */}
-        {show2FaModal && (
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', zIndex: 999 }}>
-            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 44 }}>
-              <Text style={{ fontSize: 16, fontWeight: '900', color: C.primary, marginBottom: 6 }}>
-                {tfa2Action === 'enable' ? 'Confirmar ativação do 2FA' : 'Desativar 2FA'}
-              </Text>
-              <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 16 }}>
-                {tfa2Action === 'enable'
-                  ? 'Digite o código de 6 dígitos enviado para o seu e-mail.'
-                  : 'Para desativar, gere um novo código primeiro (vá em "Ativar" e depois cancele) ou use um código válido.'}
-              </Text>
-              <TextInput
-                style={[
-                  { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: C.accent, paddingVertical: 16, paddingHorizontal: 16 },
-                  { fontSize: 28, letterSpacing: 10, textAlign: 'center', fontWeight: '900', color: C.primary }
-                ]}
-                value={tfa2Action === 'enable' ? tfaOtp : tfaDisableOtp}
-                onChangeText={v => tfa2Action === 'enable' ? setTfaOtp(v.replace(/[^0-9]/g,'').slice(0,6)) : setTfaDisableOtp(v.replace(/[^0-9]/g,'').slice(0,6))}
-                keyboardType="number-pad"
-                maxLength={6}
-                placeholder="------"
-                placeholderTextColor="#CBD5E1"
-                autoFocus
-              />
-              <TouchableOpacity
-                style={[{ backgroundColor: C.accent, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginBottom: 8, marginTop: 12 }, { opacity: twoFaLoading ? 0.6 : 1 }]}
-                onPress={handle2FaConfirm}
-                disabled={twoFaLoading}
-              >
-                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
-                  {twoFaLoading ? 'Verificando...' : tfa2Action === 'enable' ? 'Ativar 2FA' : 'Desativar 2FA'}
-                </Text>
+        {/* ─── Danger Zone ─── */}
+        <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
+          <Ionicons name="warning" size={14} color="#64748B" style={{marginRight: 6}} />
+          <Text style={styles.sectionHeaderLabel}>{t('profile.dangerZoneTitle').toUpperCase()}</Text>
+        </View>
+        <View style={styles.listCard}>
+          <TouchableOpacity 
+            style={styles.listItem} 
+            onPress={() => {
+              Alert.alert(t('profile.logoutTitle'), t('profile.logoutConfirm'), [
+                { text: t('common.cancel'), style: 'cancel' },
+                { text: t('auth.logout'), style: 'destructive', onPress: async () => { await logout(); router.replace('/auth/login' as any); } },
+              ]);
+            }}
+          >
+            <View style={[styles.listIconBox, { backgroundColor: '#FFF7ED' }]}>
+              <Ionicons name="log-out" size={18} color="#C2410C" />
+            </View>
+            <Text style={[styles.listItemText, { color: '#C2410C' }]}>{t('profile.logoutBtn')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={[styles.sectionHeaderWrap, { flexDirection: 'row', alignItems: 'center' }]}>
+          <Ionicons name="finger-print-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+          <Text style={styles.sectionHeaderLabel}>{t('profile.privacySectionTitle').toUpperCase()}</Text>
+        </View>
+        <View
+          style={[
+            styles.listCard,
+            { paddingVertical: 0, paddingHorizontal: 0, flexDirection: 'column', alignItems: 'stretch' },
+          ]}
+        >
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 }}
+            activeOpacity={0.7}
+            onPress={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setPrivacyDropdownOpen((v) => !v);
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <View style={[styles.listIconBox, { backgroundColor: '#F1F5F9' }]}>
+                <Ionicons name="lock-closed-outline" size={18} color="#475569" />
+              </View>
+              <Text style={styles.listItemText}>{t('profile.privacySectionTitle')}</Text>
+            </View>
+            <Ionicons name={privacyDropdownOpen ? 'chevron-up' : 'chevron-down'} size={20} color="#94A3B8" />
+          </TouchableOpacity>
+
+          {privacyDropdownOpen ? (
+            <View style={{ borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingHorizontal: 16 }}>
+              <TouchableOpacity style={styles.listItem} onPress={handleExportLocalData}>
+                <View style={[styles.listIconBox, { backgroundColor: '#F5F3FF' }]}>
+                  <Ionicons name="download-outline" size={18} color="#6D28D9" />
+                </View>
+                <Text style={styles.listItemText}>{t('profile.exportDataBtn')}</Text>
+                <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
               </TouchableOpacity>
-              <TouchableOpacity style={{ alignItems: 'center', paddingTop: 12 }} onPress={() => setShow2FaModal(false)}>
-                <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
+
+              <View style={styles.listSeparator} />
+
+              <TouchableOpacity
+                style={styles.listItem}
+                onPress={() => {
+                  Alert.alert(t('profile.deleteAccountTitle'), t('profile.deleteAccountMsg'), [
+                    { text: t('common.cancel'), style: 'cancel' },
+                    {
+                      text: t('profile.deleteForever'),
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await deleteAccount();
+                          router.replace('/auth/login' as any);
+                        } catch (e: unknown) {
+                          Alert.alert(
+                            t('common.error'),
+                            e instanceof Error ? e.message : t('auth.errorConnection'),
+                          );
+                        }
+                      },
+                    },
+                  ]);
+                }}
+              >
+                <View style={[styles.listIconBox, { backgroundColor: '#FEF2F2' }]}>
+                  <Ionicons name="trash" size={18} color="#B91C1C" />
+                </View>
+                <Text style={[styles.listItemText, { color: '#B91C1C' }]}>{t('profile.deleteAccountBtn')}</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          ) : null}
+        </View>
+        </>
         )}
 
+        {activeTab === 'sync' && (
+        <>
+        {syncTabSessionDetails}
         {/* ─── Cloud & Data ─── */}
-        <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
-          <Ionicons name="cloud" size={14} color="#64748B" style={{marginRight: 6}} />
+        <View style={[styles.sectionHeaderWrap, { flexDirection: 'row', alignItems: 'center' }]}>
+          <Ionicons name="cloud" size={14} color="#64748B" style={{ marginRight: 6 }} />
           <Text style={styles.sectionHeaderLabel}>{(t('profile.backendMonitor') || 'Monitor do Backend').toUpperCase()}</Text>
         </View>
         <View style={styles.listCard}>
@@ -1348,10 +1742,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <View style={styles.listSeparator} />
-          <TouchableOpacity
-            style={styles.listItem}
-            onPress={() => router.push('/profile/sync-cockpit' as any)}
-          >
+          <TouchableOpacity style={styles.listItem} onPress={() => router.push('/profile/sync-cockpit' as any)}>
             <View style={[styles.listIconBox, { backgroundColor: '#EFF6FF' }]}>
               <Ionicons name="analytics-outline" size={18} color="#1D4ED8" />
             </View>
@@ -1374,10 +1765,7 @@ export default function ProfileScreen() {
                   ? `Existem ${syncConflictCount} item(ns) em quarentena por conflito de revisão.`
                   : 'Nenhum conflito no momento. Você pode abrir os detalhes para monitorar.'}
               </Text>
-              <TouchableOpacity
-                onPress={() => router.push('/profile/sync-conflicts' as any)}
-                style={{ marginTop: 6, alignSelf: 'flex-start' }}
-              >
+              <TouchableOpacity onPress={() => router.push('/profile/sync-conflicts' as any)} style={{ marginTop: 6, alignSelf: 'flex-start' }}>
                 <Text style={{ color: '#B45309', fontSize: 12, fontWeight: '800' }}>Ver detalhes</Text>
               </TouchableOpacity>
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
@@ -1417,44 +1805,19 @@ export default function ProfileScreen() {
 
           <View style={styles.listSeparator} />
 
-          <TouchableOpacity 
-            style={styles.listItem} 
-            onPress={() => {
-              Alert.alert(t('profile.exportData'), t('profile.exportDataConfirm'), [
-                { text: t('common.cancel'), style: 'cancel' },
-                {
-                  text: t('profile.exportBtn'),
-                  onPress: async () => {
-                    try {
-                      await shareUserLocalDataJson({ dialogTitle: t('profile.exportShareTitle') });
-                      Alert.alert(t('profile.exportSuccess'), t('profile.exportSuccessMsg'));
-                    } catch (e: unknown) {
-                      const msg = e instanceof Error ? e.message : String(e);
-                      Alert.alert(t('common.exportError'), `${t('profile.exportFailedMsg')}\n\n${msg}`);
-                    }
-                  },
-                },
-              ]);
-            }}
-          >
-            <View style={[styles.listIconBox, { backgroundColor: '#F5F3FF' }]}>
-              <Ionicons name="download" size={18} color="#6D28D9" />
-            </View>
-            <Text style={styles.listItemText}>{t('profile.exportDataBtn')}</Text>
-            <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
-          </TouchableOpacity>
-
-          <View style={styles.listSeparator} />
-
-          <TouchableOpacity 
-            style={styles.listItem} 
+          <TouchableOpacity
+            style={styles.listItem}
             onPress={() => {
               Alert.alert(t('profile.resetLocalDataTitle'), t('profile.resetLocalDataMessage'), [
                 { text: t('common.cancel'), style: 'cancel' },
-                { text: t('common.confirm'), style: 'destructive', onPress: async () => {
-                   clearLocalDatabase();
-                   await handleSync();
-                }}
+                {
+                  text: t('common.confirm'),
+                  style: 'destructive',
+                  onPress: async () => {
+                    clearLocalDatabase();
+                    await handleSync();
+                  },
+                },
               ]);
             }}
           >
@@ -1465,62 +1828,64 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
           </TouchableOpacity>
         </View>
-
-        {/* ─── Danger Zone ─── */}
-        <View style={[styles.sectionHeaderWrap, {flexDirection: 'row', alignItems: 'center'}]}>
-          <Ionicons name="warning" size={14} color="#64748B" style={{marginRight: 6}} />
-          <Text style={styles.sectionHeaderLabel}>CONTA</Text>
-        </View>
-        <View style={styles.listCard}>
-          <TouchableOpacity 
-            style={styles.listItem} 
-            onPress={() => {
-              Alert.alert(t('profile.logoutTitle'), t('profile.logoutConfirm'), [
-                { text: t('common.cancel'), style: 'cancel' },
-                { text: t('auth.logout'), style: 'destructive', onPress: async () => { await logout(); router.replace('/auth/login' as any); } },
-              ]);
-            }}
-          >
-            <View style={[styles.listIconBox, { backgroundColor: '#FFF7ED' }]}>
-              <Ionicons name="log-out" size={18} color="#C2410C" />
-            </View>
-            <Text style={[styles.listItemText, { color: '#C2410C' }]}>{t('profile.logoutBtn')}</Text>
-          </TouchableOpacity>
-
-          <View style={styles.listSeparator} />
-
-          <TouchableOpacity 
-            style={styles.listItem} 
-            onPress={() => {
-              Alert.alert(t('profile.deleteAccountTitle'), t('profile.deleteAccountMsg'), [
-                { text: t('common.cancel'), style: 'cancel' },
-                {
-                  text: t('profile.deleteForever'),
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      await deleteAccount();
-                      router.replace('/auth/login' as any);
-                    } catch (e: unknown) {
-                      Alert.alert(
-                        t('common.error'),
-                        e instanceof Error ? e.message : t('auth.errorConnection'),
-                      );
-                    }
-                  },
-                },
-              ]);
-            }}
-          >
-            <View style={[styles.listIconBox, { backgroundColor: '#FEF2F2' }]}>
-              <Ionicons name="trash" size={18} color="#B91C1C" />
-            </View>
-            <Text style={[styles.listItemText, { color: '#B91C1C' }]}>{t('profile.deleteAccountBtn')}</Text>
-          </TouchableOpacity>
-        </View>
+        </>
+        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Modal 2FA — fora do ScrollView para persistir ao mudar de aba */}
+      {show2FaModal && (
+        <View
+          style={[
+            StyleSheet.absoluteFillObject,
+            { backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', zIndex: 1001 },
+          ]}
+        >
+          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 44 }}>
+            <Text style={{ fontSize: 16, fontWeight: '900', color: C.primary, marginBottom: 6 }}>
+              {tfa2Action === 'enable' ? 'Confirmar ativação do 2FA' : 'Desativar 2FA'}
+            </Text>
+            <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 16 }}>
+              {tfa2Action === 'enable'
+                ? t('profile.twoFaModalEnableHint')
+                : t('profile.twoFaModalDisableHint')}
+            </Text>
+            <TextInput
+              style={[
+                { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: C.accent, paddingVertical: 16, paddingHorizontal: 16 },
+                { fontSize: 28, letterSpacing: 10, textAlign: 'center', fontWeight: '900', color: C.primary },
+              ]}
+              value={tfa2Action === 'enable' ? tfaOtp : tfaDisableOtp}
+              onChangeText={(v) =>
+                tfa2Action === 'enable'
+                  ? setTfaOtp(v.replace(/[^0-9]/g, '').slice(0, 6))
+                  : setTfaDisableOtp(v.replace(/[^0-9]/g, '').slice(0, 6))
+              }
+              keyboardType="number-pad"
+              maxLength={6}
+              placeholder="------"
+              placeholderTextColor="#CBD5E1"
+              autoFocus
+            />
+            <TouchableOpacity
+              style={[
+                { backgroundColor: C.accent, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginBottom: 8, marginTop: 12 },
+                { opacity: twoFaLoading ? 0.6 : 1 },
+              ]}
+              onPress={handle2FaConfirm}
+              disabled={twoFaLoading}
+            >
+              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
+                {twoFaLoading ? 'Verificando...' : tfa2Action === 'enable' ? 'Ativar 2FA' : 'Desativar 2FA'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ alignItems: 'center', paddingTop: 12 }} onPress={() => setShow2FaModal(false)}>
+              <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* ─── Change Password Modal ─── */}
       {showPwdModal && (

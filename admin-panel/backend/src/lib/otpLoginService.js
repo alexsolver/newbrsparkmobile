@@ -12,6 +12,7 @@ const OTP_REG_SETUP_TTL = process.env.OTP_REG_SETUP_TTL || '20m';
 const { validateAppPasswordPolicy } = require('./appPasswordPolicy');
 const { assertEmailFreeAcrossAllTenants } = require('./appRegistrationEmailGuard');
 const { createPersonalClientTenantAndUser } = require('./registerPersonalClientTenant');
+const { selectUserForMultiAccountLogin } = require('./multiAccountLoginPick');
 
 const CHALLENGE_TTL_MS = Number(process.env.OTP_TTL_MINUTES || 10) * 60 * 1000;
 const RATE_MAX_START = Math.max(1, Math.min(20, Number(process.env.OTP_RATE_MAX_START || 3)));
@@ -424,20 +425,18 @@ async function verifyChallenge(
       };
     }
     if (activeUsers.length > 1) {
-      return {
-        ok: false,
-        code: 'MULTIPLE_ACCOUNTS',
-        error:
-          'Este e-mail está em mais de uma organização. Inicie sessão com palavra-passe e escolha a organização, ou utilize outro e-mail.',
-        tenants: activeUsers.map((u) => ({
-          id: u.tenantId,
-          name: u.tenant?.name || u.tenantId,
-          kind: u.tenant?.kind || 'COMPANY',
-        })),
-        status: 409,
-      };
+      user = await selectUserForMultiAccountLogin(prisma, activeUsers);
+      if (!user) {
+        return {
+          ok: false,
+          code: 'MULTIPLE_ACCOUNTS',
+          error: 'Não foi possível escolher a organização para este e-mail.',
+          status: 500,
+        };
+      }
+    } else {
+      user = activeUsers[0];
     }
-    user = activeUsers[0];
     if (phoneVal) {
       await prisma.user
         .update({ where: { id: user.id }, data: { phone: phoneVal, phoneVerifiedAt: new Date() } })
@@ -723,10 +722,77 @@ async function completeRegisterFromSetupToken(
   return { ok: true, status: 200, ...out };
 }
 
+const TWO_FA_EMAIL_SUBJECTS = {
+  two_factor_login: 'BrSpark: código para concluir o login',
+  two_factor_enable: 'BrSpark: código para ativar verificação em duas etapas',
+  two_factor_disable: 'BrSpark: código para desativar verificação em duas etapas',
+};
+
+/**
+ * OTP por e-mail com propósito arbitrário (2FA login / ativar / desativar).
+ * `metadataJson` deve incluir `userId` quando o fluxo é autenticado ou pós-password.
+ */
+async function startEmailPurposeChallenge(prisma, { emailNorm, purpose, metadataJson }) {
+  const key = String(emailNorm || '')
+    .trim()
+    .toLowerCase();
+  if (!key || !key.includes('@')) {
+    return { ok: false, error: 'E-mail inválido.', status: 400 };
+  }
+  const purposeStr = String(purpose || '').trim();
+  if (!['two_factor_login', 'two_factor_enable', 'two_factor_disable'].includes(purposeStr)) {
+    return { ok: false, error: 'Propósito inválido.', status: 400 };
+  }
+  const limit = await rateLimitCheck(prisma, key, purposeStr);
+  if (!limit.ok) {
+    return { ok: false, error: limit.error, status: 429 };
+  }
+  const code = make6Digit();
+  const id = randomUuid();
+  const codeHash = await bcrypt.hash(code, 8);
+  const exp = new Date(Date.now() + CHALLENGE_TTL_MS);
+  await prisma.otpLoginChallenge.create({
+    data: {
+      id,
+      channel: 'EMAIL',
+      target: key,
+      codeHash,
+      purpose: purposeStr,
+      maxAttempts: 5,
+      expiresAt: exp,
+      metadataJson: metadataJson && typeof metadataJson === 'object' ? metadataJson : {},
+    },
+  });
+  const { sendOtpTransactionalEmail } = require('./transactionalEmailSend');
+  const subject = TWO_FA_EMAIL_SUBJECTS[purposeStr] || 'BrSpark: seu código de verificação';
+  const { send, provider } = await sendOtpTransactionalEmail({
+    to: key,
+    subject,
+    text: i18nBrCodeMsgPlain(code),
+    html: i18nBrCodeMsgHtml(code),
+  });
+  if (!(send && send.ok)) {
+    await prisma.otpLoginChallenge.delete({ where: { id } }).catch(() => {});
+    const reason =
+      (send && send.skipped && send.reason) ||
+      (send && send.error) ||
+      (provider === 'none'
+        ? 'Nenhum envio de e-mail configurado para OTP (Microsoft Graph, ou Nylas: API Key + Grant ID, ou MailerSend).'
+        : 'Falha ao enviar o código por e-mail.');
+    return { ok: false, error: String(reason), status: 503 };
+  }
+  return {
+    ok: true,
+    challengeId: id,
+    expiresInSec: Math.floor(CHALLENGE_TTL_MS / 1000),
+  };
+}
+
 module.exports = {
   startChallenge,
   verifyChallenge,
   verifyRegisterOtpPhase1,
   completeRegisterFromSetupToken,
   parseIdentifier,
+  startEmailPurposeChallenge,
 };
