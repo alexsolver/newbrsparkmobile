@@ -18,12 +18,12 @@ import {
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ColorPalette } from '../../src/theme/colors';
 import { fetchPublicProviderDetail } from '../../src/services/directoryCatalog';
 import { apiFetch } from '../../src/services/auth';
+import { totalDurationMinutesForCart } from '../../src/services/appointmentAvailability';
 import { resolveDirectoryMediaUri } from '../../src/utils/directoryMediaUrl';
 
 type CatalogService = {
@@ -76,12 +76,11 @@ export default function ProviderCatalogScreen() {
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [when, setWhen] = useState(() => {
-    const d = new Date();
-    d.setHours(d.getHours() + 2, 0, 0, 0);
-    return d;
-  });
-  const [showPicker, setShowPicker] = useState(false);
+  /** Horários retornados pelo CMS (capacity); utilizador escolhe um start_time ISO. */
+  const [availableSlots, setAvailableSlots] = useState<{ start_time: string; end_time: string }[]>([]);
+  const [selectedSlotIso, setSelectedSlotIso] = useState<string | null>(null);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   /** IDs de serviços com a descrição expandida no card */
@@ -178,6 +177,79 @@ export default function ProviderCatalogScreen() {
 
   const cartItemCount = useMemo(() => cart.reduce((a, l) => a + l.qty, 0), [cart]);
 
+  const cartSlotKey = useMemo(
+    () => cart.map((l) => `${l.service.id}:${l.qty}`).join('|'),
+    [cart]
+  );
+
+  useEffect(() => {
+    if (!checkoutOpen || !tenantId || typeof tenantId !== 'string' || cart.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoadingSlots(true);
+      setSlotsError(null);
+      setSelectedSlotIso(null);
+      try {
+        const { minutes, serviceId } = totalDurationMinutesForCart(cart);
+        const start = new Date();
+        const end = new Date();
+        end.setDate(end.getDate() + 14);
+        const qs = new URLSearchParams({
+          start_date: start.toISOString().slice(0, 10),
+          end_date: end.toISOString().slice(0, 10),
+          duration_minutes: String(minutes),
+        });
+        if (serviceId) qs.set('service_id', serviceId);
+        const res = await apiFetch(`/api/cms/availability/slots?${qs.toString()}`, {
+          headers: { 'X-Tenant': tenantId },
+        });
+        if (!res.ok) {
+          const raw = await res.text();
+          throw new Error(raw || `HTTP ${res.status}`);
+        }
+        const json = (await res.json()) as { items?: { start_time: string; end_time: string }[] };
+        if (cancelled) return;
+        setAvailableSlots(Array.isArray(json.items) ? json.items : []);
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setSlotsError(e instanceof Error ? e.message : String(e));
+          setAvailableSlots([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingSlots(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [checkoutOpen, tenantId, cartSlotKey, cart.length]);
+
+  const formatSlotLabel = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleString(locale, {
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return iso;
+    }
+  };
+
+  const canConfirmSchedule = useMemo(
+    () =>
+      !submitting &&
+      !loadingSlots &&
+      !slotsError &&
+      Boolean(selectedSlotIso) &&
+      availableSlots.length > 0,
+    [submitting, loadingSlots, slotsError, selectedSlotIso, availableSlots.length]
+  );
+
   const qtyInCart = useCallback(
     (serviceId: string) => cart.find((l) => l.service.id === serviceId)?.qty ?? 0,
     [cart]
@@ -217,39 +289,69 @@ export default function ProviderCatalogScreen() {
   };
 
   const submitOrder = async () => {
-    if (!professionalId) {
-      Alert.alert('', t('providerCatalog.missingProfessional'));
+    if (!tenantId || typeof tenantId !== 'string') return;
+    if (cart.length === 0) return;
+    if (!selectedSlotIso) {
+      Alert.alert('', t('providerCatalog.selectSlot'));
       return;
     }
-    if (cart.length === 0) return;
-    if (when.getTime() < Date.now()) {
+    if (Date.parse(selectedSlotIso) < Date.now() - 60_000) {
       Alert.alert('', t('providerCatalog.pastTime'));
       return;
     }
     setSubmitting(true);
     try {
-      const body = {
-        professional_id: professionalId,
-        start_time: when.toISOString(),
-        notes: notes.trim() || null,
-        lines: cart.map((l) => ({ service_id: l.service.id, quantity: l.qty })),
-      };
-      const res = await apiFetch('/api/bookings/batch', {
+      const { minutes, serviceId } = totalDurationMinutesForCart(cart);
+      const linesText = cart
+        .map((l) => `• ${l.service.name} ×${l.qty} (${l.service.id})`)
+        .join('\n');
+      const descParts = [
+        professionalId ? `Ref. profissional: ${professionalId}` : null,
+        linesText,
+        notes.trim() || null,
+      ].filter(Boolean);
+
+      const holdRes = await apiFetch('/api/cms/availability/hold', {
         method: 'POST',
-        body: JSON.stringify(body),
+        headers: { 'X-Tenant': tenantId },
+        body: JSON.stringify({
+          start_time: selectedSlotIso,
+          service_id: serviceId ?? null,
+          duration_minutes: minutes,
+        }),
       });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        const msg = j.message || j.errors || `HTTP ${res.status}`;
-        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      if (!holdRes.ok) {
+        const j = await holdRes.json().catch(() => ({}));
+        const msg = (j as { error?: string; message?: string }).error || (j as { message?: string }).message || `HTTP ${holdRes.status}`;
+        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(j));
       }
-      Alert.alert(t('common.ok'), t('providerCatalog.orderSuccess'), [
+      const holdJson = (await holdRes.json()) as { hold_id?: string };
+      if (!holdJson.hold_id) {
+        throw new Error('Resposta de hold inválida.');
+      }
+
+      const confRes = await apiFetch('/api/cms/availability/confirm', {
+        method: 'POST',
+        headers: { 'X-Tenant': tenantId },
+        body: JSON.stringify({
+          hold_id: holdJson.hold_id,
+          client_description: descParts.join('\n\n') || null,
+        }),
+      });
+      if (!confRes.ok) {
+        const j = await confRes.json().catch(() => ({}));
+        const msg = (j as { error?: string; message?: string }).error || (j as { message?: string }).message || `HTTP ${confRes.status}`;
+        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(j));
+      }
+
+      Alert.alert(t('common.ok'), t('providerCatalog.orderSuccessBooked'), [
         { text: 'OK', onPress: () => router.back() },
       ]);
       setCart([]);
       setCheckoutOpen(false);
-    } catch (e: any) {
-      Alert.alert(t('common.error'), String(e?.message || e));
+      setSelectedSlotIso(null);
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
     } finally {
       setSubmitting(false);
     }
@@ -515,21 +617,44 @@ export default function ProviderCatalogScreen() {
             <Text style={[styles.totalLbl, { color: C.textSecondary }]}>{t('providerCatalog.total')}</Text>
             <Text style={[styles.totalBig, { color: C.primary }]}>{formatMoney(cartTotal, locale)}</Text>
 
-            <Text style={[styles.fieldLbl, { color: C.textSecondary }]}>{t('providerCatalog.when')}</Text>
-            <TouchableOpacity style={[styles.dateBtn, { borderColor: C.border }]} onPress={() => setShowPicker(true)}>
-              <Text style={{ color: C.primary, fontWeight: '700' }}>{when.toLocaleString(locale)}</Text>
-            </TouchableOpacity>
-            {showPicker ? (
-              <DateTimePicker
-                value={when}
-                mode="datetime"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(_, d) => {
-                  if (Platform.OS === 'android') setShowPicker(false);
-                  if (d) setWhen(d);
-                }}
-              />
-            ) : null}
+            <Text style={[styles.fieldLbl, { color: C.textSecondary }]}>{t('providerCatalog.pickSlot')}</Text>
+            {loadingSlots ? (
+              <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={C.accent} />
+                <Text style={[styles.muted, { marginTop: 6 }]}>{t('providerCatalog.slotsLoading')}</Text>
+              </View>
+            ) : slotsError ? (
+              <Text style={{ color: C.destructive, fontSize: 13 }}>{t('providerCatalog.slotsError')}</Text>
+            ) : availableSlots.length === 0 ? (
+              <Text style={{ color: C.textSecondary, fontSize: 14 }}>{t('providerCatalog.slotsEmpty')}</Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+              >
+                {availableSlots.map((s) => {
+                  const active = selectedSlotIso === s.start_time;
+                  return (
+                    <TouchableOpacity
+                      key={s.start_time}
+                      onPress={() => setSelectedSlotIso(s.start_time)}
+                      style={[
+                        styles.slotChip,
+                        {
+                          borderColor: active ? C.accent : C.border,
+                          backgroundColor: active ? `${C.accent}18` : C.cardWhite,
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: C.primary, fontWeight: '700', fontSize: 13 }} numberOfLines={2}>
+                        {formatSlotLabel(s.start_time)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
 
             <Text style={[styles.fieldLbl, { color: C.textSecondary }]}>{t('providerCatalog.notes')}</Text>
             <TextInput
@@ -546,11 +671,17 @@ export default function ProviderCatalogScreen() {
                 <Text style={{ color: C.primary, fontWeight: '700' }}>{t('providerCatalog.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.primaryBtn, { flex: 1, opacity: submitting ? 0.6 : 1 }]}
-                disabled={submitting}
+                style={[
+                  styles.primaryBtn,
+                  { flex: 1, opacity: canConfirmSchedule && !submitting ? 1 : 0.45 },
+                ]}
+                disabled={!canConfirmSchedule}
                 onPress={() => void submitOrder()}
+                accessibilityState={{ disabled: !canConfirmSchedule }}
               >
-                <Text style={styles.primaryBtnTxt}>{submitting ? '…' : t('providerCatalog.confirmSchedule')}</Text>
+                <Text style={styles.primaryBtnTxt}>
+                  {submitting ? '…' : t('providerCatalog.confirmSchedule')}
+                </Text>
               </TouchableOpacity>
             </View>
               </View>
@@ -718,6 +849,13 @@ function createStyles(C: ColorPalette) {
       borderRadius: 12,
       padding: 12,
       marginBottom: 12,
+    },
+    slotChip: {
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      maxWidth: 200,
     },
     notesIn: {
       borderWidth: 1,

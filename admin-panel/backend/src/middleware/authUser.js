@@ -48,8 +48,10 @@ module.exports = async function authUser(req, res, next) {
       return next();
     }
 
-    // payload.tenantId distingue do admin legado (que não tem tenantId)
-    if (!payload.tenantId) return res.status(403).json({ error: 'Token de admin não pode acessar rotas de usuário.' });
+    // Admin legado: sem tenantId. Utilizador do app (incl. cliente B2C) tem sempre `id` e `sessionId` no token.
+    if (!payload.tenantId && !payload.id) {
+      return res.status(403).json({ error: 'Token de admin não pode acessar rotas de usuário.' });
+    }
 
     if (!payload.sessionId) {
       return res.status(401).json({
