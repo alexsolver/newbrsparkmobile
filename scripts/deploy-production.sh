@@ -86,6 +86,7 @@ REMOTE
 # Garante public/index.html e assets do React (BrsparkWeb/frontend) antes do rsync — sem isto o Laravel serve resources/views/welcome.
 build_brspark_web_frontend() {
   local FRONTEND_LOCAL
+  local BUILD_DIR
   FRONTEND_LOCAL="$(cd "$WEB_LOCAL/../frontend" 2>/dev/null && pwd)" || FRONTEND_LOCAL=""
   if [[ "${SKIP_FRONTEND_BUILD}" == "1" ]]; then
     echo "[deploy] SKIP_FRONTEND_BUILD=1 — build do frontend ignorado"
@@ -96,16 +97,21 @@ build_brspark_web_frontend() {
     return 0
   fi
   echo "[deploy] npm ci + npm run build (BrsparkWeb frontend)…"
-  (cd "$FRONTEND_LOCAL" && npm ci && npm run build)
+  # Build em diretório temporário para evitar interferência de sync (Dropbox) no node_modules.
+  # Também garante devDependencies (tsc/vite/@types) durante o build.
+  BUILD_DIR="$(mktemp -d "/tmp/brsparkweb-frontend-build.XXXXXX")"
+  rsync -a --delete --exclude 'node_modules' --exclude 'dist' --exclude '.git' "$FRONTEND_LOCAL/" "$BUILD_DIR/"
+  (cd "$BUILD_DIR" && NPM_CONFIG_PRODUCTION=false NODE_ENV=development npm ci --production=false && npm run build)
   echo "[deploy] Copiar frontend/dist → ${WEB_LOCAL}/public/ (SPA)…"
   mkdir -p "$WEB_LOCAL/public/assets"
-  rsync -a --delete "$FRONTEND_LOCAL/dist/assets/" "$WEB_LOCAL/public/assets/"
-  if [[ -d "$FRONTEND_LOCAL/dist/locales" ]]; then
+  rsync -a --delete "$BUILD_DIR/dist/assets/" "$WEB_LOCAL/public/assets/"
+  if [[ -d "$BUILD_DIR/dist/locales" ]]; then
     mkdir -p "$WEB_LOCAL/public/locales"
-    rsync -a --delete "$FRONTEND_LOCAL/dist/locales/" "$WEB_LOCAL/public/locales/"
+    rsync -a --delete "$BUILD_DIR/dist/locales/" "$WEB_LOCAL/public/locales/"
   fi
-  rsync -a "$FRONTEND_LOCAL/dist/" "$WEB_LOCAL/public/" \
+  rsync -a "$BUILD_DIR/dist/" "$WEB_LOCAL/public/" \
     --exclude assets --exclude locales --exclude '.DS_Store'
+  rm -rf "$BUILD_DIR"
 }
 
 deploy_web() {
