@@ -8,7 +8,8 @@
 #   ./scripts/deploy-production.sh all          # api + web
 #   SKIP_LARAVEL_MIGRATE=1 ... web   # não corre php artisan migrate --force
 #   SKIP_PRISMA_MIGRATE=1 ... api    # emergência: não corre Prisma migrate
-#   SKIP_FRONTEND_BUILD=1 ... web   # não corre npm run build (só PHP/backend public)
+#   SKIP_FRONTEND_BUILD=1 ./scripts/deploy-production.sh web   # na mesma linha — sem vite build
+#   Não fazer: export SKIP_FRONTEND_BUILD=1  (fica ativo noutros deploys; preferir `env -u`)
 #
 set -euo pipefail
 
@@ -18,6 +19,10 @@ SKIP_PRISMA_MIGRATE="${SKIP_PRISMA_MIGRATE:-0}"
 RUN_LARAVEL_MIGRATE="${RUN_LARAVEL_MIGRATE:-1}"
 # BrsparkWeb: por omissão faz vite build e copia dist → backend/public (index.html + assets)
 SKIP_FRONTEND_BUILD="${SKIP_FRONTEND_BUILD:-0}"
+if [[ "${SKIP_FRONTEND_BUILD}" == "1" ]]; then
+  echo "[deploy] SKIP_FRONTEND_BUILD=1 ativo: o build Vite (BrsparkWeb/frontend) será ignorado." >&2
+  echo "[deploy] Se foi involuntário: cancela, \`unset SKIP_FRONTEND_BUILD\` ou \`env -u SKIP_FRONTEND_BUILD $0 web\` (ou all)." >&2
+fi
 
 TARGET="${1:-all}"
 SSH_KEY="${BRSPARK_SSH_KEY:-$HOME/Downloads/alex.pem}"
