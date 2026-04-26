@@ -6,7 +6,13 @@
  * e cabeçalhos X-Node-User-Id + X-Tenant.
  */
 const express = require('express');
+const multer = require('multer');
 const authUser = require('../middleware/authUser');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
 
 const router = express.Router();
 router.use(authUser);
@@ -34,6 +40,21 @@ function forwardHeaders(req) {
   return {
     Accept: 'application/json',
     'Content-Type': 'application/json',
+    Authorization: `Bearer ${internalToken()}`,
+    'X-Node-User-Id': String(req.user.id),
+    'X-Node-User-Email': String(req.user.email || '').trim(),
+    'X-Tenant': xTenant,
+  };
+}
+
+/** Sem Content-Type: multipart define boundary. */
+function forwardHeadersMultipart(req) {
+  const xTenant = requireTenant(req);
+  if (!xTenant) {
+    return null;
+  }
+  return {
+    Accept: 'application/json',
     Authorization: `Bearer ${internalToken()}`,
     'X-Node-User-Id': String(req.user.id),
     'X-Node-User-Email': String(req.user.email || '').trim(),
@@ -104,6 +125,37 @@ router.post('/availability/confirm', (req, res) => {
 
 router.post('/availability/cancel', (req, res) => {
   void postJson('/availability/cancel', req, res);
+});
+
+router.post('/availability/upload-booking-media', upload.single('file'), async (req, res) => {
+  const file = req.file;
+  if (!file || !file.buffer) {
+    return res.status(400).json({ error: 'Envie um ficheiro no campo "file".' });
+  }
+  const base = cmsBase();
+  const token = internalToken();
+  if (!base || !token) {
+    return res.status(503).json({
+      error: 'Diretório CMS não configurado (CMS_DIRECTORY_BASE_URL / CMS_INTERNAL_API_TOKEN).',
+    });
+  }
+  const headers = forwardHeadersMultipart(req);
+  if (!headers) {
+    return res
+      .status(400)
+      .json({ error: 'Cabeçalho X-Tenant (ou query tenant_id) é obrigatório.' });
+  }
+  const url = `${base}/api/internal/app/availability/upload-booking-media`;
+  const form = new FormData();
+  const blob = new Blob([file.buffer], { type: file.mimetype || 'application/octet-stream' });
+  form.append('file', blob, file.originalname || 'upload.jpg');
+  try {
+    const r = await fetch(url, { method: 'POST', headers, body: form });
+    const text = await r.text();
+    res.status(r.status).type('application/json').send(text);
+  } catch (e) {
+    res.status(502).json({ error: 'Falha ao contactar o CMS.', message: e.message || String(e) });
+  }
 });
 
 module.exports = router;

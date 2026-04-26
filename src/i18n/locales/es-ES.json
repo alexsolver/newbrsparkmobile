@@ -1700,6 +1700,7 @@
     "slotsEmpty": "No hay huecos en este periodo. La empresa aún no ha configurado la agenda; pruebe otro día o contacte al prestador.",
     "selectSlot": "Seleccione un horario de la lista.",
     "orderSuccessBooked": "Reserva confirmada. Podrá seguir el servicio en sus pedidos cuando esté disponible.",
+    "appointmentRefLine": "Referencia: {{ref}}. Guárdela para soporte o seguimiento.",
     "notes": "Observaciones",
     "notesPh": "Opcional: detalles de acceso, ubicación, etc.",
     "cancel": "Cancelar",
@@ -1711,7 +1712,15 @@
     "descriptionExpandA11y": "Mostrar descripción del servicio",
     "descriptionCollapseA11y": "Ocultar descripción del servicio",
     "featuredShort": "Destacado",
-    "companyLogoA11y": "Logotipo de la empresa"
+    "companyLogoA11y": "Logotipo de la empresa",
+    "bookingGpsHint": "Esta empresa exige el GPS al confirmar: pediremos permiso al finalizar.",
+    "bookingPhotos": "Fotos del pedido",
+    "bookingPhotosHint": "Adjunte fotos; se enviarán con su reserva.",
+    "addPhotos": "Añadir fotos",
+    "removePhoto": "Quitar foto",
+    "photoPermDenied": "Necesitamos acceso a la galería para adjuntar imágenes.",
+    "photoRequired": "Añada al menos una imagen para continuar.",
+    "gpsDeniedShort": "Active la ubicación para completar la reserva (exigido por la empresa)."
   },
   "orders": {
     "title": "Pedidos",

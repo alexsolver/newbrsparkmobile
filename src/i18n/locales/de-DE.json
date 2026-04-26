@@ -1700,6 +1700,7 @@
     "slotsEmpty": "In diesem Zeitraum gibt es keine freien Termine. Der Betrieb hat die Agenda ggf. noch nicht eingerichtet — probieren Sie einen anderen Tag oder kontaktieren Sie den Anbieter.",
     "selectSlot": "Wählen Sie eine Uhrzeit aus der Liste.",
     "orderSuccessBooked": "Buchung bestätigt. Sie können die Anfrage bei Bedarf in Ihren Bestellungen verfolgen.",
+    "appointmentRefLine": "Referenz: {{ref}}. Bitte für Support und Rückfragen notieren.",
     "notes": "Notizen",
     "notesPh": "Optional: Zugangsdaten, Standort usw.",
     "cancel": "Stornieren",
@@ -1711,7 +1712,15 @@
     "descriptionExpandA11y": "Leistungsbeschreibung anzeigen",
     "descriptionCollapseA11y": "Dienstbeschreibung ausblenden",
     "featuredShort": "Hervorgehoben",
-    "companyLogoA11y": "Firmenlogo"
+    "companyLogoA11y": "Firmenlogo",
+    "bookingGpsHint": "Dieser Betrieb verlangt GPS bei der Bestätigung – wir fragen die Erlaubnis beim Abschluss.",
+    "bookingPhotos": "Fotos zur Anfrage",
+    "bookingPhotosHint": "Fotos anhängen; sie werden mit Ihrer Buchung gesendet.",
+    "addPhotos": "Fotos hinzufügen",
+    "removePhoto": "Foto entfernen",
+    "photoPermDenied": "Wir benötigen Galerie-Zugriff, um Bilder anzuhängen.",
+    "photoRequired": "Fügen Sie mindestens ein Bild hinzu, um fortzufahren.",
+    "gpsDeniedShort": "Aktivieren Sie den Standort, um die Buchung abzuschließen (vom Betrieb vorgeschrieben)."
   },
   "orders": {
     "title": "Bestellungen",

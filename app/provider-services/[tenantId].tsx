@@ -19,6 +19,8 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ColorPalette } from '../../src/theme/colors';
 import { fetchPublicProviderDetail } from '../../src/services/directoryCatalog';
@@ -61,6 +63,35 @@ function formatMoney(n: number, locale: string): string {
   }
 }
 
+/** Prioridade: `error` (Laravel) → `message` → primeiro de `errors` (validação) → corpo em texto. */
+function cmsErrorMessageFromBody(data: unknown, status: number, rawBody: string): string {
+  if (data && typeof data === 'object') {
+    const o = data as Record<string, unknown>;
+    if (typeof o.error === 'string' && o.error.trim() !== '') {
+      return o.error.trim();
+    }
+    if (typeof o.message === 'string' && o.message.trim() !== '') {
+      return o.message.trim();
+    }
+    const bag = o.errors;
+    if (bag && typeof bag === 'object') {
+      for (const v of Object.values(bag as Record<string, unknown>)) {
+        if (Array.isArray(v) && v.length > 0 && typeof v[0] === 'string' && v[0].trim() !== '') {
+          return v[0].trim();
+        }
+        if (typeof v === 'string' && v.trim() !== '') {
+          return v.trim();
+        }
+      }
+    }
+  }
+  const t = rawBody.trim();
+  if (t.length > 0 && t.length < 800) {
+    return t;
+  }
+  return `HTTP ${status}`;
+}
+
 export default function ProviderCatalogScreen() {
   const { tenantId } = useLocalSearchParams<{ tenantId: string }>();
   const router = useRouter();
@@ -81,6 +112,9 @@ export default function ProviderCatalogScreen() {
   const [selectedSlotIso, setSelectedSlotIso] = useState<string | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
+  const [bookingRequirePhotos, setBookingRequirePhotos] = useState(false);
+  const [bookingRequireGps, setBookingRequireGps] = useState(false);
+  const [pendingPhotoUris, setPendingPhotoUris] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   /** IDs de serviços com a descrição expandida no card */
@@ -209,13 +243,21 @@ export default function ProviderCatalogScreen() {
           const raw = await res.text();
           throw new Error(raw || `HTTP ${res.status}`);
         }
-        const json = (await res.json()) as { items?: { start_time: string; end_time: string }[] };
+        const json = (await res.json()) as {
+          items?: { start_time: string; end_time: string }[];
+          booking_require_photos?: boolean;
+          booking_require_gps?: boolean;
+        };
         if (cancelled) return;
         setAvailableSlots(Array.isArray(json.items) ? json.items : []);
+        setBookingRequirePhotos(!!json.booking_require_photos);
+        setBookingRequireGps(!!json.booking_require_gps);
       } catch (e: unknown) {
         if (!cancelled) {
           setSlotsError(e instanceof Error ? e.message : String(e));
           setAvailableSlots([]);
+          setBookingRequirePhotos(false);
+          setBookingRequireGps(false);
         }
       } finally {
         if (!cancelled) setLoadingSlots(false);
@@ -246,8 +288,17 @@ export default function ProviderCatalogScreen() {
       !loadingSlots &&
       !slotsError &&
       Boolean(selectedSlotIso) &&
-      availableSlots.length > 0,
-    [submitting, loadingSlots, slotsError, selectedSlotIso, availableSlots.length]
+      availableSlots.length > 0 &&
+      (!bookingRequirePhotos || pendingPhotoUris.length > 0),
+    [
+      submitting,
+      loadingSlots,
+      slotsError,
+      selectedSlotIso,
+      availableSlots.length,
+      bookingRequirePhotos,
+      pendingPhotoUris.length,
+    ]
   );
 
   const qtyInCart = useCallback(
@@ -288,6 +339,50 @@ export default function ProviderCatalogScreen() {
     });
   };
 
+  const uploadBookingMediaToUrl = useCallback(
+    async (localUri: string) => {
+      if (!tenantId) throw new Error('tenant');
+      const form = new FormData();
+      form.append('file', { uri: localUri, name: 'booking.jpg', type: 'image/jpeg' } as any);
+      const res = await apiFetch('/api/cms/availability/upload-booking-media', {
+        method: 'POST',
+        body: form,
+        headers: { 'X-Tenant': tenantId },
+      });
+      if (!res.ok) {
+        const raw = await res.text();
+        let parsed: unknown;
+        try {
+          parsed = raw ? JSON.parse(raw) : {};
+        } catch {
+          parsed = null;
+        }
+        throw new Error(cmsErrorMessageFromBody(parsed, res.status, raw));
+      }
+      const j = (await res.json()) as { url?: string };
+      if (!j.url) throw new Error('Upload inválido.');
+      return j.url;
+    },
+    [tenantId]
+  );
+
+  const addBookingPhotos = useCallback(async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert(t('common.error'), t('providerCatalog.photoPermDenied'));
+      return;
+    }
+    const r = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultiple: true,
+      quality: 0.75,
+    });
+    if (r.canceled) return;
+    const uris = (r.assets ?? []).map((a) => a.uri).filter(Boolean) as string[];
+    if (uris.length === 0) return;
+    setPendingPhotoUris((prev) => [...prev, ...uris]);
+  }, [t]);
+
   const submitOrder = async () => {
     if (!tenantId || typeof tenantId !== 'string') return;
     if (cart.length === 0) return;
@@ -301,6 +396,30 @@ export default function ProviderCatalogScreen() {
     }
     setSubmitting(true);
     try {
+      let lat: number | undefined;
+      let lng: number | undefined;
+      if (bookingRequireGps) {
+        const gperm = await Location.requestForegroundPermissionsAsync();
+        if (gperm.status !== 'granted') {
+          Alert.alert(t('common.error'), t('providerCatalog.gpsDeniedShort'));
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      }
+
+      const mediaItems: { url: string }[] = [];
+      if (pendingPhotoUris.length > 0) {
+        for (const uri of pendingPhotoUris) {
+          const url = await uploadBookingMediaToUrl(uri);
+          mediaItems.push({ url });
+        }
+      } else if (bookingRequirePhotos) {
+        Alert.alert(t('common.error'), t('providerCatalog.photoRequired'));
+        return;
+      }
+
       const { minutes, serviceId } = totalDurationMinutesForCart(cart);
       const linesText = cart
         .map((l) => `• ${l.service.name} ×${l.qty} (${l.service.id})`)
@@ -320,12 +439,17 @@ export default function ProviderCatalogScreen() {
           duration_minutes: minutes,
         }),
       });
-      if (!holdRes.ok) {
-        const j = await holdRes.json().catch(() => ({}));
-        const msg = (j as { error?: string; message?: string }).error || (j as { message?: string }).message || `HTTP ${holdRes.status}`;
-        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(j));
+      const holdText = await holdRes.text();
+      let holdParsed: unknown = {};
+      try {
+        if (holdText) holdParsed = JSON.parse(holdText);
+      } catch {
+        holdParsed = null;
       }
-      const holdJson = (await holdRes.json()) as { hold_id?: string };
+      if (!holdRes.ok) {
+        throw new Error(cmsErrorMessageFromBody(holdParsed, holdRes.status, holdText));
+      }
+      const holdJson = holdParsed as { hold_id?: string };
       if (!holdJson.hold_id) {
         throw new Error('Resposta de hold inválida.');
       }
@@ -336,15 +460,34 @@ export default function ProviderCatalogScreen() {
         body: JSON.stringify({
           hold_id: holdJson.hold_id,
           client_description: descParts.join('\n\n') || null,
+          media: mediaItems.length ? mediaItems : undefined,
+          lat,
+          lng,
         }),
       });
+      const confText = await confRes.text();
+      let confParsed: unknown = {};
+      try {
+        if (confText) confParsed = JSON.parse(confText);
+      } catch {
+        confParsed = null;
+      }
       if (!confRes.ok) {
-        const j = await confRes.json().catch(() => ({}));
-        const msg = (j as { error?: string; message?: string }).error || (j as { message?: string }).message || `HTTP ${confRes.status}`;
-        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(j));
+        throw new Error(cmsErrorMessageFromBody(confParsed, confRes.status, confText));
       }
 
-      Alert.alert(t('common.ok'), t('providerCatalog.orderSuccessBooked'), [
+      const confJson = (confParsed && typeof confParsed === 'object' ? confParsed : {}) as {
+        data?: { reference_code?: string };
+      };
+      const refCode =
+        typeof confJson.data?.reference_code === 'string' && confJson.data.reference_code.trim() !== ''
+          ? confJson.data.reference_code.trim()
+          : null;
+      const successMsg = refCode
+        ? `${t('providerCatalog.orderSuccessBooked')}\n\n${t('providerCatalog.appointmentRefLine', { ref: refCode })}`
+        : t('providerCatalog.orderSuccessBooked');
+
+      Alert.alert(t('common.ok'), successMsg, [
         { text: 'OK', onPress: () => router.back() },
       ]);
       setCart([]);
@@ -553,7 +696,13 @@ export default function ProviderCatalogScreen() {
 
       {cart.length > 0 ? (
         <View style={[styles.cartBar, { paddingBottom: insets.bottom + 8, borderTopColor: C.border, backgroundColor: C.cardWhite }]}>
-          <TouchableOpacity style={styles.cartSummary} onPress={() => setCheckoutOpen(true)}>
+          <TouchableOpacity
+            style={styles.cartSummary}
+            onPress={() => {
+              setPendingPhotoUris([]);
+              setCheckoutOpen(true);
+            }}
+          >
             <View>
               <View style={styles.cartCountRow}>
                 <Text style={[styles.cartCountNumber, { color: C.accent }]}>{cartItemCount}</Text>
@@ -588,7 +737,7 @@ export default function ProviderCatalogScreen() {
               <View style={[styles.modalCard, { backgroundColor: C.cardWhite }]}>
             <Text style={[styles.modalTitle, { color: C.primary }]}>{t('providerCatalog.checkoutTitle')}</Text>
             <ScrollView
-              style={{ maxHeight: 220 }}
+              style={{ maxHeight: 160 }}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             >
@@ -665,6 +814,50 @@ export default function ProviderCatalogScreen() {
               placeholderTextColor={C.textLight}
               multiline
             />
+
+            {(bookingRequirePhotos || bookingRequireGps) && (
+              <View style={{ marginTop: 8, marginBottom: 4 }}>
+                {bookingRequireGps ? (
+                  <Text style={[styles.muted, { fontSize: 12, marginBottom: bookingRequirePhotos ? 8 : 0 }]}>
+                    {t('providerCatalog.bookingGpsHint')}
+                  </Text>
+                ) : null}
+                {bookingRequirePhotos ? (
+                  <>
+                    <Text style={[styles.fieldLbl, { color: C.textSecondary }]}>{t('providerCatalog.bookingPhotos')}</Text>
+                    <Text style={[styles.muted, { fontSize: 12, marginBottom: 8 }]}>
+                      {t('providerCatalog.bookingPhotosHint')}
+                    </Text>
+                    {pendingPhotoUris.length > 0 ? (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+                      >
+                        {pendingPhotoUris.map((uri, idx) => (
+                          <View key={`${uri}-${idx}`} style={styles.photoThumbWrap}>
+                            <Image source={{ uri }} style={styles.photoThumb} />
+                            <TouchableOpacity
+                              style={styles.photoRemove}
+                              onPress={() => setPendingPhotoUris((p) => p.filter((_, i) => i !== idx))}
+                              accessibilityLabel={t('providerCatalog.removePhoto')}
+                            >
+                              <Ionicons name="close-circle" size={22} color="#b91c1c" />
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </ScrollView>
+                    ) : null}
+                    <TouchableOpacity
+                      style={[styles.secondaryBtn, { marginTop: 6, alignSelf: 'flex-start' }]}
+                      onPress={() => void addBookingPhotos()}
+                    >
+                      <Text style={{ color: C.primary, fontWeight: '700' }}>{t('providerCatalog.addPhotos')}</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+              </View>
+            )}
 
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
               <TouchableOpacity style={[styles.secondaryBtn, { borderColor: C.border }]} onPress={() => setCheckoutOpen(false)}>
@@ -879,5 +1072,14 @@ function createStyles(C: ColorPalette) {
       borderWidth: 1,
       alignItems: 'center',
     },
+    photoThumbWrap: {
+      width: 72,
+      height: 72,
+      borderRadius: 10,
+      overflow: 'hidden',
+      position: 'relative',
+    },
+    photoThumb: { width: '100%', height: '100%' },
+    photoRemove: { position: 'absolute', top: 2, right: 2 },
   });
 }

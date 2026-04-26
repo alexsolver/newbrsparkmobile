@@ -1700,6 +1700,7 @@
     "slotsEmpty": "No slots in this range. The business may not have set up their schedule yet—try another day or contact them.",
     "selectSlot": "Select a time slot from the list.",
     "orderSuccessBooked": "Booking confirmed. You can follow up in your orders when available.",
+    "appointmentRefLine": "Reference: {{ref}}. Keep it for support and follow-up.",
     "notes": "Notes",
     "notesPh": "Optional: access details, location, etc.",
     "cancel": "Cancel",
@@ -1711,7 +1712,15 @@
     "descriptionExpandA11y": "Show service description",
     "descriptionCollapseA11y": "Hide service description",
     "featuredShort": "Featured",
-    "companyLogoA11y": "Company logo"
+    "companyLogoA11y": "Company logo",
+    "bookingGpsHint": "This business requires GPS at confirmation — we will ask for permission when you complete.",
+    "bookingPhotos": "Photos",
+    "bookingPhotosHint": "Attach photos; they are sent with your booking.",
+    "addPhotos": "Add photos",
+    "removePhoto": "Remove photo",
+    "photoPermDenied": "We need access to your photo library to attach images.",
+    "photoRequired": "Add at least one image to continue.",
+    "gpsDeniedShort": "Enable location to complete this booking (required by the business)."
   },
   "orders": {
     "title": "Orders",
