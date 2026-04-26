@@ -1735,7 +1735,22 @@
     "noOrders": "No orders found",
     "noOrdersSub": "Request a service from the Home tab!",
     "createAccountHint": "Create an account to request services and track your orders.",
-    "createOrLogin": "Create Account or Sign In"
+    "createOrLogin": "Create Account or Sign In",
+    "cmsFromDirectory": "Bookings (service catalog)",
+    "cmsEmpty": "No catalog bookings yet.",
+    "cmsServiceTbd": "Service TBD",
+    "cmsRefLine": "Ref. {{ref}}",
+    "cmsCancel": "Cancel booking",
+    "cmsCancelTitle": "Cancel booking",
+    "cmsCancelMessage": "The booking will be removed from the provider’s schedule. Continue?",
+    "cmsCancelConfirm": "Cancel",
+    "cmsCancelDone": "Booking cancelled.",
+    "osAndFieldTasks": "Work orders & field tasks",
+    "cmsReschedule": "Reschedule",
+    "cmsRescheduleTitle": "New time",
+    "cmsRescheduleNoSlots": "No free slots in this period. Try another day or contact the business.",
+    "cmsRescheduleSave": "Confirm new time",
+    "cmsRescheduleDone": "Your booking time was updated."
   },
   "assetDetail": {
     "mock": {

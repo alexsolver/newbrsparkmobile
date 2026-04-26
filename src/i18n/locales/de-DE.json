@@ -1735,7 +1735,22 @@
     "noOrders": "Keine Bestellungen gefunden",
     "noOrdersSub": "Fordern Sie einen Service über die Registerkarte „Startseite“ an!",
     "createAccountHint": "Erstellen Sie ein Konto, um Dienste anzufordern und Ihre Bestellungen zu verfolgen.",
-    "createOrLogin": "Konto erstellen oder anmelden"
+    "createOrLogin": "Konto erstellen oder anmelden",
+    "cmsFromDirectory": "Buchungen (Dienstkatalog)",
+    "cmsEmpty": "Noch keine Buchungen aus dem Dienstkatalog.",
+    "cmsServiceTbd": "Leistung offen",
+    "cmsRefLine": "Ref. {{ref}}",
+    "cmsCancel": "Buchung stornieren",
+    "cmsCancelTitle": "Buchung stornieren",
+    "cmsCancelMessage": "Die Buchung fliegt aus dem Kalender des Anbieters. Fortfahren?",
+    "cmsCancelConfirm": "Stornieren",
+    "cmsCancelDone": "Buchung storniert.",
+    "osAndFieldTasks": "Arbeitsaufträge & Außendienste",
+    "cmsReschedule": "Umplanen",
+    "cmsRescheduleTitle": "Neue Uhrzeit",
+    "cmsRescheduleNoSlots": "Keine freien Slots. Versuchen Sie einen anderen Tag oder kontaktieren Sie die Firma.",
+    "cmsRescheduleSave": "Neue Zeit bestätigen",
+    "cmsRescheduleDone": "Buchung wurde auf die neue Zeit geändert."
   },
   "assetDetail": {
     "mock": {

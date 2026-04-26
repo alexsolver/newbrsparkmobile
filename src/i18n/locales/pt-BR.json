@@ -1735,7 +1735,22 @@
     "noOrders": "Nenhum pedido encontrado",
     "noOrdersSub": "Solicite um serviço na aba Início!",
     "createAccountHint": "Crie uma conta para solicitar serviços e acompanhar seus pedidos.",
-    "createOrLogin": "Criar Conta ou Entrar"
+    "createOrLogin": "Criar Conta ou Entrar",
+    "cmsFromDirectory": "Reservas (catálogo de empresas)",
+    "cmsEmpty": "Ainda sem reservas feitas pelo catálogo de serviços.",
+    "cmsServiceTbd": "Serviço a definir",
+    "cmsRefLine": "Ref. {{ref}}",
+    "cmsCancel": "Cancelar reserva",
+    "cmsCancelTitle": "Cancelar reserva",
+    "cmsCancelMessage": "A reserva deixará de constar na agenda do prestador. Deseja continuar?",
+    "cmsCancelConfirm": "Cancelar",
+    "cmsCancelDone": "Reserva cancelada.",
+    "osAndFieldTasks": "O.S. e tarefas (campo)",
+    "cmsReschedule": "Reagendar",
+    "cmsRescheduleTitle": "Novo horário",
+    "cmsRescheduleNoSlots": "Sem janelas livres neste período. Tente noutro dia ou contacte a empresa.",
+    "cmsRescheduleSave": "Confirmar novo horário",
+    "cmsRescheduleDone": "Horário actualizado com sucesso."
   },
   "assetDetail": {
     "mock": {
