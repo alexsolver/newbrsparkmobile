@@ -239,6 +239,9 @@ const M = {
     ul_editUser: 'Editar usuário',
     ul_resetPwdBtn: 'Resetar senha',
     ul_deactivate: 'Desativar conta',
+    ul_deleteUser: 'Eliminar utilizador (esta organização)',
+    ul_deleteUserConfirm:
+      'Eliminar permanentemente «{name}» nesta organização? Se o mesmo e-mail existir noutro espaço (cliente/prestador), esse registo mantém-se. Esta ação não remove a conta de login unificada (App) por completo.',
     ul_activate: 'Ativar conta',
     ul_pwdMin: 'A senha deve ter pelo menos 8 caracteres, com uma letra maiúscula, uma minúscula e um número.',
     ul_pwdOk: 'Senha resetada com sucesso.',
@@ -773,6 +776,9 @@ const M = {
     ul_editUser: 'Edit user',
     ul_resetPwdBtn: 'Reset password',
     ul_deactivate: 'Deactivate account',
+    ul_deleteUser: 'Delete user (this organization)',
+    ul_deleteUserConfirm:
+      'Permanently delete «{name}» in this organization? If the same email exists in another workspace (client / provider), that record stays. This does not remove the unified login account entirely.',
     ul_activate: 'Activate account',
     ul_pwdMin: 'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, and a number.',
     ul_pwdOk: 'Password reset successfully.',

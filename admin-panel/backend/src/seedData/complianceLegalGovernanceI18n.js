@@ -310,17 +310,17 @@ const I18N_SPECS = [
           'de-DE': '1. Wer wir sind, Rollen und materieller Anwendungsbereich',
         },
         body: {
-          'en-US': `This Policy describes how ${commonController['en-US']} processes personal data in the context of ${commonScope['en-US']}
+          'en-US': `This Policy describes how ${commonController['en-US'].replace(/\.\s*$/, '')} processes personal data in the context of ${commonScope['en-US']}
 
 In **B2B** relationships, the **Customer (tenant)** is generally the **controller** of data relating to its users, employees, field contractors and end customers recorded or monitored through the platform. **BrSpark** predominantly acts as a **processor**, carrying out processing necessary to deliver the contracted service based on instructions compatible with law and console settings.
 
 BrSpark may act as an **independent controller** where it processes data for **its own purposes**, such as billing, fraud prevention, information security, legal compliance, commercial relationship, product improvement in aggregated or anonymised form where feasible, and responses to authorities.`,
-          'es-ES': `Esta Política describe cómo ${commonController['es-ES']} realiza el tratamiento de datos personales en el marco de ${commonScope['es-ES']}
+          'es-ES': `Esta Política describe cómo ${commonController['es-ES'].replace(/\.\s*$/, '')} realiza el tratamiento de datos personales en el marco de ${commonScope['es-ES']}
 
 En relaciones **B2B**, por regla general el **Cliente (tenant)** es el **responsable** del tratamiento de datos relativos a sus usuarios, empleados, contratistas de campo y clientes finales registrados o supervisados en la plataforma. **BrSpark** actúa predominantemente como **encargado**, ejecutando tratamientos necesarios para la prestación del servicio contratado, con base en instrucciones compatibles con la ley y la configuración del panel.
 
 BrSpark podrá actuar como **responsable independiente** cuando trate datos para **fines propios**, como facturación, prevención de fraudes, seguridad de la información, cumplimiento legal, relación comercial, mejora de producto de forma agregada o anonimizada cuando sea posible y respuesta a autoridades.`,
-          'de-DE': `Diese Erklärung beschreibt, wie ${commonController['de-DE']} personenbezogene Daten im Rahmen von ${commonScope['de-DE']} verarbeitet.
+          'de-DE': `Diese Erklärung beschreibt, wie ${commonController['de-DE'].replace(/\.\s*$/, '')} personenbezogene Daten im Rahmen von ${commonScope['de-DE']} verarbeitet.
 
 In **B2B**-Beziehungen ist der **Kunde (Tenant)** in der Regel **Verantwortlicher** für Daten zu seinen Nutzern, Arbeitnehmern, Außendienst-Auftragnehmern und Endkunden, die über die Plattform erfasst oder überwacht werden. **BrSpark** handelt überwiegend als **Auftragsverarbeiter** und führt Verarbeitungen durch, die zur Erbringung des vertraglich geschuldeten Dienstes erforderlich sind, gestützt auf Anweisungen, die mit dem Recht und den Konsoleneinstellungen vereinbar sind.
 

@@ -1070,7 +1070,7 @@ export class AuthService {
 
   /** Alterar senha — POST /api/auth/change-password */
   static async changePassword(oldPassword: string, newPassword: string): Promise<{ success: boolean; message?: string }> {
-    const res = await apiFetch('/api/auth/change-password', {
+    const res = await apiFetch('/api/me/change-password', {
       method: 'POST',
       body: JSON.stringify({ oldPassword, newPassword }),
     });

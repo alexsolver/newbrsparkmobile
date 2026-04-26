@@ -1224,7 +1224,7 @@
     "tabConfiguracoes": "Einstellungen",
     "tabSincronizacao": "Sync",
     "siblingWorkspacesTitle": "Organisation",
-    "siblingWorkspacesHint": "Diese E-Mail gehört zu mehreren Organisationen. Beim Anmelden wählen wir die mit den meisten Benutzern; tippen Sie auf eine andere Zeile, um die Sitzung zu wechseln.",
+    "siblingWorkspacesHint": "Dieselbe E-Mail kann Kunden- und Anbieter-Arbeitsbereiche haben. Beim Anmelden öffnen wir zuerst den Anbieter, falls vorhanden; sonst den Kunden. Im Profil wechseln Sie die Organisation mit dem Schalter Kunde | Anbieter.",
     "siblingWorkspaceMembers": "{{count}} Benutzer in dieser Organisation",
     "siblingWorkspaceCurrent": "Aktuelle Sitzung",
     "switchWorkspaceConfirmTitle": "Organisation wechseln?",

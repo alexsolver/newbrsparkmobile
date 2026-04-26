@@ -11,7 +11,7 @@ const OTP_REG_SETUP_TTL = process.env.OTP_REG_SETUP_TTL || '20m';
 
 const { validateAppPasswordPolicy } = require('./appPasswordPolicy');
 const { assertEmailFreeAcrossAllTenants } = require('./appRegistrationEmailGuard');
-const { createPersonalClientTenantAndUser } = require('./registerPersonalClientTenant');
+const { createPersonalClientTenantAndUserInTransaction } = require('./registerPersonalClientTenant');
 const { selectUserForMultiAccountLogin } = require('./multiAccountLoginPick');
 
 const CHALLENGE_TTL_MS = Number(process.env.OTP_TTL_MINUTES || 10) * 60 * 1000;
@@ -468,14 +468,20 @@ async function verifyChallenge(
       (nameFromMeta && String(nameFromMeta).trim()) || (isEmail ? displayEmail.split('@')[0] : 'Prestador');
     const passHash = await bcrypt.hash(require('crypto').randomBytes(32).toString('hex'), 10);
     try {
-      const { user: created } = await createPersonalClientTenantAndUser(prisma, {
-        name: String(name).trim(),
-        emailNorm: displayEmail,
-        passwordHash: passHash,
-        phone: phoneVal,
-        phoneVerifiedAt: phoneVal ? new Date() : null,
-        auditAction: 'USER_REGISTER_OTP',
-        auditResource: displayEmail,
+      const { user: created } = await prisma.$transaction(async (tx) => {
+        const acc = await tx.appAccount.create({
+          data: { emailNorm: displayEmail, password: passHash },
+        });
+        return createPersonalClientTenantAndUserInTransaction(tx, {
+          name: String(name).trim(),
+          emailNorm: displayEmail,
+          passwordHash: passHash,
+          phone: phoneVal,
+          phoneVerifiedAt: phoneVal ? new Date() : null,
+          auditAction: 'USER_REGISTER_OTP',
+          auditResource: displayEmail,
+          appAccountId: acc.id,
+        });
       });
       user = created;
     } catch (e) {
@@ -686,14 +692,20 @@ async function completeRegisterFromSetupToken(
 
   let user;
   try {
-    const out = await createPersonalClientTenantAndUser(prisma, {
-      name,
-      emailNorm: displayEmail,
-      passwordHash: passHash,
-      phone: phoneVal,
-      phoneVerifiedAt: phoneVal ? new Date() : null,
-      auditAction: 'USER_REGISTER_OTP_PASSWORD',
-      auditResource: displayEmail,
+    const out = await prisma.$transaction(async (tx) => {
+      const acc = await tx.appAccount.create({
+        data: { emailNorm: displayEmail, password: passHash },
+      });
+      return createPersonalClientTenantAndUserInTransaction(tx, {
+        name,
+        emailNorm: displayEmail,
+        passwordHash: passHash,
+        phone: phoneVal,
+        phoneVerifiedAt: phoneVal ? new Date() : null,
+        auditAction: 'USER_REGISTER_OTP_PASSWORD',
+        auditResource: displayEmail,
+        appAccountId: acc.id,
+      });
     });
     user = out.user;
   } catch (e) {

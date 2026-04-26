@@ -1,11 +1,27 @@
 'use strict';
 
 /**
- * Quando o mesmo e-mail existe em vários tenants, escolhe o utilizador cuja organização tem mais membros.
- * Empate: utilizador com `createdAt` mais antigo entre os empatados.
+ * Prioridade do tipo de tenant para o login por defeito (app móvel / mesmo e-mail):
+ * prestador (PROVIDER) > empresa (COMPANY) > cliente (CLIENT).
+ * Empate no mesmo tipo: organização com mais membros; novo empate: `createdAt` mais antigo.
+ *
+ * @param {string|null|undefined} kind
+ * @returns {number}
+ */
+function tenantKindPriorityForDefaultLogin(kind) {
+  const k = String(kind || '').toUpperCase();
+  if (k === 'PROVIDER') return 3;
+  if (k === 'COMPANY') return 2;
+  if (k === 'CLIENT') return 1;
+  return 0;
+}
+
+/**
+ * Quando o mesmo e-mail existe em vários tenants, escolhe a filiação com tenant de maior prioridade
+ * (PROVIDER > COMPANY > CLIENT); empates: mais membros na organização, depois utilizador mais antigo.
  *
  * @param {import('@prisma/client').PrismaClient} prisma
- * @param {Array<{ tenantId: string; createdAt: Date | string }>} candidates
+ * @param {Array<{ tenantId: string; createdAt: Date | string; tenant?: { kind?: string|null } }>} candidates
  * @returns {Promise<import('@prisma/client').User | null>}
  */
 async function selectUserForMultiAccountLogin(prisma, candidates) {
@@ -24,16 +40,21 @@ async function selectUserForMultiAccountLogin(prisma, candidates) {
     countByTenant[g.tenantId] = g._count.id;
   }
 
-  let maxN = -1;
-  for (const tid of tenantIds) {
-    const n = countByTenant[tid] || 0;
-    if (n > maxN) maxN = n;
-  }
+  const scored = candidates.map((u) => {
+    const kind = u.tenant && u.tenant.kind != null ? u.tenant.kind : null;
+    const prio = tenantKindPriorityForDefaultLogin(kind);
+    const n = countByTenant[String(u.tenantId)] || 0;
+    const created = new Date(u.createdAt).getTime();
+    return { u, prio, n, created };
+  });
 
-  const topTenants = tenantIds.filter((tid) => (countByTenant[tid] || 0) === maxN);
-  const pool = candidates.filter((u) => topTenants.includes(String(u.tenantId)));
-  pool.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  return pool[0] || null;
+  scored.sort((a, b) => {
+    if (b.prio !== a.prio) return b.prio - a.prio;
+    if (b.n !== a.n) return b.n - a.n;
+    return a.created - b.created;
+  });
+
+  return scored[0]?.u || null;
 }
 
-module.exports = { selectUserForMultiAccountLogin };
+module.exports = { selectUserForMultiAccountLogin, tenantKindPriorityForDefaultLogin };

@@ -49,6 +49,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** CLIENT/PROVIDER: identidade do espaço; outros tenants mantêm a regra de domínio. */
+function defaultPersonaRoleForSession(u: User): 'CLIENT' | 'TECHNICIAN' {
+  const k = String(u.tenant?.kind || '').toUpperCase();
+  if (k === 'CLIENT') return 'CLIENT';
+  if (k === 'PROVIDER') return 'TECHNICIAN';
+  return canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -238,17 +246,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let role: 'CLIENT' | 'TECHNICIAN' =
           rawSaved === 'TECHNICIAN' || rawSaved === 'CLIENT' ? rawSaved : 'CLIENT';
 
-        const wasActive = localUser ? canUseProviderMode(localUser) : false;
-        const nowActive = effective ? canUseProviderMode(effective) : false;
+        if (effective) {
+          const k = String(effective.tenant?.kind || '').toUpperCase();
+          if (k === 'CLIENT') {
+            role = 'CLIENT';
+            await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
+          } else if (k === 'PROVIDER') {
+            role = 'TECHNICIAN';
+            await AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN');
+          } else {
+            const wasActive = localUser ? canUseProviderMode(localUser) : false;
+            const nowActive = canUseProviderMode(effective);
 
-        if (role === 'TECHNICIAN' && !nowActive) {
-          role = 'CLIENT';
-          await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
-        }
-        // Habilitação no painel enquanto o papel guardado era cliente (ou primeira sessão)
-        if (role === 'CLIENT' && !wasActive && nowActive) {
-          role = 'TECHNICIAN';
-          await AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN');
+            if (role === 'TECHNICIAN' && !nowActive) {
+              role = 'CLIENT';
+              await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
+            }
+            if (role === 'CLIENT' && !wasActive && nowActive) {
+              role = 'TECHNICIAN';
+              await AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN');
+            }
+          }
         }
 
         if (cancelled) return;
@@ -307,7 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.login(email, password, tenantId);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -323,7 +341,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.loginWithOAuth(params);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -334,7 +352,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.verifyOtp(challengeToken, otp);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -349,7 +367,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -406,7 +424,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.createWorkspace(kind);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
@@ -418,7 +436,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const u = await AuthService.switchWorkspace(tenantId);
     setUser(u);
     runAvatarWarm(u);
-    const defaultRole = canUseProviderMode(u) ? 'TECHNICIAN' : 'CLIENT';
+    const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
     await AsyncStorage.setItem('@brspark_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');

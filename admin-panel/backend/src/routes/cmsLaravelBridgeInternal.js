@@ -1,0 +1,198 @@
+'use strict';
+
+const crypto = require('crypto');
+const express = require('express');
+const prisma = require('../db');
+
+const router = express.Router();
+
+function timingSafeEqual(a, b) {
+  const x = Buffer.from(String(a || ''), 'utf8');
+  const y = Buffer.from(String(b || ''), 'utf8');
+  if (x.length !== y.length) return false;
+  return crypto.timingSafeEqual(x, y);
+}
+
+function requireBridge(req, res) {
+  const expected = process.env.BRSPARK_WEB_BRIDGE_SECRET;
+  if (!expected || !timingSafeEqual(req.headers['x-bridge-secret'], expected)) {
+    res.status(401).json({ error: 'Não autorizado.' });
+    return false;
+  }
+  return true;
+}
+
+function slugifyDomain(domain) {
+  let s = String(domain || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^www\./, '');
+  const parts = s.split('.');
+  s = parts[0] || s;
+  s = s.replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+  return (s || 'tenant').slice(0, 48);
+}
+
+async function tenantUserEmailsLower(tenantId) {
+  const rows = await prisma.user.findMany({
+    where: { tenantId },
+    select: { email: true },
+  });
+  return rows.map((r) => String(r.email || '').trim().toLowerCase()).filter(Boolean);
+}
+
+async function executionScopeWhere(tenantId) {
+  const emailsLower = await tenantUserEmailsLower(tenantId);
+  /** @type {import('@prisma/client').Prisma.ChecklistExecutionWhereInput['OR']} */
+  const scopeOr = [{ template: { is: { tenantId } } }];
+  if (emailsLower.length) {
+    scopeOr.push({
+      AND: [{ template: { is: { tenantId: null } } }, { ownerEmail: { in: emailsLower, mode: 'insensitive' } }],
+    });
+  }
+  return { OR: scopeOr };
+}
+
+/**
+ * POST /api/internal/cms-tenant-provision
+ * Laravel (SaaS) provisiona tenant COMPANY no PostgreSQL, idempotente por laravelTenantId.
+ */
+router.post('/cms-tenant-provision', express.json({ limit: '128kb' }), async (req, res) => {
+  try {
+    if (!requireBridge(req, res)) return;
+    const laravelTenantId = String(req.body.laravelTenantId || '').trim();
+    const name = String(req.body.name || 'Empresa').trim().slice(0, 200);
+    const domainSlug = String(req.body.domainSlug || '').trim();
+    if (!laravelTenantId || laravelTenantId.length < 8) {
+      return res.status(400).json({ error: 'laravelTenantId inválido.' });
+    }
+
+    const existing = await prisma.tenant.findFirst({
+      where: { laravelTenantId },
+    });
+    if (existing) {
+      return res.json({
+        ok: true,
+        created: false,
+        nodeTenantId: existing.id,
+        slug: existing.slug,
+      });
+    }
+
+    let baseSlug = slugifyDomain(domainSlug || name);
+    let slug = baseSlug;
+    let attempt = 0;
+    const syntheticEmail = () =>
+      `cms+${laravelTenantId.replace(/-/g, '').slice(0, 12)}-${attempt || '0'}@brspark.cms.linked`;
+
+    while (attempt < 20) {
+      const email = syntheticEmail();
+      try {
+        const row = await prisma.tenant.create({
+          data: {
+            name,
+            slug,
+            email,
+            ownerName: name,
+            kind: 'COMPANY',
+            laravelTenantId,
+            status: 'TRIAL',
+          },
+        });
+        return res.status(201).json({
+          ok: true,
+          created: true,
+          nodeTenantId: row.id,
+          slug: row.slug,
+        });
+      } catch (e) {
+        const code = e && e.code;
+        if (code === 'P2002') {
+          attempt += 1;
+          slug = `${baseSlug}-${attempt}`.slice(0, 60);
+          continue;
+        }
+        throw e;
+      }
+    }
+    return res.status(409).json({ error: 'Não foi possível gerar slug único.' });
+  } catch (err) {
+    console.error('[cms-tenant-provision]', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/internal/cms-operational-summary
+ * Resumo de OS/técnicos para o painel empresa no Laravel.
+ */
+router.post('/cms-operational-summary', express.json({ limit: '64kb' }), async (req, res) => {
+  try {
+    if (!requireBridge(req, res)) return;
+    const laravelTenantId = String(req.body.laravelTenantId || '').trim();
+    if (!laravelTenantId) {
+      return res.status(400).json({ error: 'laravelTenantId é obrigatório.' });
+    }
+    const tenant = await prisma.tenant.findFirst({
+      where: { laravelTenantId },
+    });
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant Node não encontrado para este laravelTenantId.' });
+    }
+    const tenantId = tenant.id;
+    const scope = await executionScopeWhere(tenantId);
+    const terminal = ['COMPLETED', 'SYNCED', 'CANCELLED'];
+
+    const [
+      technicianCount,
+      managerCount,
+      executionsTotal,
+      openFieldTasks,
+      recentExecutions,
+    ] = await Promise.all([
+      prisma.user.count({ where: { tenantId, role: 'PROVIDER' } }),
+      prisma.user.count({ where: { tenantId, role: 'MANAGER' } }),
+      prisma.checklistExecution.count({ where: scope }),
+      prisma.checklistExecution.count({
+        where: {
+          AND: [scope, { osNumber: { not: null } }, { NOT: { status: { in: terminal } } }],
+        },
+      }),
+      prisma.checklistExecution.findMany({
+        where: scope,
+        orderBy: [{ updatedAt: 'desc' }],
+        take: 30,
+        select: {
+          id: true,
+          osNumber: true,
+          routineTaskNumber: true,
+          status: true,
+          ownerEmail: true,
+          assignmentMode: true,
+          claimStatus: true,
+          createdAt: true,
+          completedAt: true,
+          template: { select: { id: true, title: true } },
+        },
+      }),
+    ]);
+
+    res.json({
+      ok: true,
+      nodeTenantId: tenantId,
+      laravelTenantId: tenant.laravelTenantId,
+      counts: {
+        technicians: technicianCount,
+        managers: managerCount,
+        checklistExecutions: executionsTotal,
+        openFieldTasks,
+      },
+      recentExecutions,
+    });
+  } catch (err) {
+    console.error('[cms-operational-summary]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;

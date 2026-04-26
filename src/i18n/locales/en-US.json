@@ -1224,7 +1224,7 @@
     "tabConfiguracoes": "Settings",
     "tabSincronizacao": "Sync",
     "siblingWorkspacesTitle": "Organization",
-    "siblingWorkspacesHint": "This email belongs to more than one organization. At sign-in we pick the one with the most users; tap another row to switch your session.",
+    "siblingWorkspacesHint": "The same email may have a client space and a provider space. At sign-in we open the provider workspace when it exists; otherwise the client one. In your profile, use the Client | Provider toggle to switch organization.",
     "siblingWorkspaceMembers": "{{count}} users in this organization",
     "siblingWorkspaceCurrent": "Current session",
     "switchWorkspaceConfirmTitle": "Switch organization?",

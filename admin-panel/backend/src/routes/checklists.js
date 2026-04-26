@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const router = express.Router();
 const prisma = require('../db');
+const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
 const authUser = require('../middleware/authUser');
 const { adminAuthThenPanel } = require('../middleware/auth');
 const { recordSync } = require('../services/cockpitMetrics');
@@ -1053,6 +1054,21 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
             onChecklistExecutionSynced(execution.id).catch((e) =>
                 console.error('[evaluationTrigger] onChecklistExecutionSynced', e)
             );
+            const tplTenantId = existing.template?.tenantId || null;
+            if (tplTenantId) {
+                deliverBrsparkLaravelEvent({
+                    type: EVENT_TYPES.CHECKLIST_EXECUTION_COMPLETED,
+                    idempotencyKey: `exec-${execution.id}-done-${nextStatus}`,
+                    payload: {
+                        executionId: execution.id,
+                        tenantNodeId: tplTenantId,
+                        osNumber: execution.osNumber || null,
+                        routineTaskNumber: execution.routineTaskNumber || null,
+                        ownerEmail: execution.ownerEmail || null,
+                        status: nextStatus,
+                    },
+                }).catch((e) => console.warn('[checklists] checklist.execution.completed webhook', e));
+            }
         }
 
         res.json({ ok: true, id: execution.id, status: execution.status });

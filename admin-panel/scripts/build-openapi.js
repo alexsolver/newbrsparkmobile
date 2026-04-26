@@ -387,6 +387,9 @@ const ROUTES = [
   ['post', '/api/users/{id}/disconnect', op('Invalidar sessões', ['Admin — Usuários'], bearerAdmin, {
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
+  ['delete', '/api/users/{id}', op('Eliminar utilizador (membro do tenant)', ['Admin — Usuários'], bearerAdmin, {
+    parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+  })],
 
   ['get', '/api/plans', op('Listar planos', ['Admin — Planos'], bearerAdmin)],
   ['post', '/api/plans', op('Criar plano', ['Admin — Planos'], bearerAdmin, {

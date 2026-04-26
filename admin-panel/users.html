@@ -1514,7 +1514,10 @@
     const fmt = (d) =>
       d ? new Date(d).toLocaleDateString(locBr, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 
-    const prestadorOsHint = (tp) => {
+    const prestadorOsHint = (u) => {
+      const tk = String(u.tenant?.kind || '').toUpperCase();
+      if (tk === 'CLIENT') return '';
+      const tp = u.technicianProfile;
       if (!tp || !tp.status) return '';
       const st = String(tp.status).toUpperCase();
       const lines = {
@@ -1660,7 +1663,7 @@
         <td style="vertical-align:top">
           <div class="list-cell-stack">
             <span class="badge ${u.isActive ? 'badge-green' : 'badge-red'}" style="font-size:10px;display:inline-flex;width:max-content">${u.isActive ? `<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${escAttr(t('ul_accountActive'))}` : `<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${escAttr(t('ul_accountInactive'))}`}</span>
-            ${prestadorOsHint(u.technicianProfile)}
+            ${prestadorOsHint(u)}
           </div>
         </td>
         <td class="col-hide-wide" style="vertical-align:top">${comprefaceListCell(u.comprefaceRecognitionSync)}</td>
@@ -1675,6 +1678,7 @@
                 ${canImpersonatePanelTarget(u) ? `<button type="button" class="ue-dropdown__item" role="menuitem" onclick="ulStartImpersonate(${JSON.stringify(u.id)})">${escAttr(t('ul_impersonateBtn'))}</button>` : ''}
                 <button type="button" class="ue-dropdown__item" role="menuitem" onclick="openReset('${uid(u.id)}')">${escAttr(t('ul_resetPwdBtn'))}</button>
                 <hr class="ue-dropdown__sep" />
+                ${canManageTenantUsers ? `<button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick="ulConfirmDeleteUser(${JSON.stringify(u.id)}, ${JSON.stringify(String(u.name || u.email || u.id))})">${escAttr(t('ul_deleteUser'))}</button>` : ''}
                 <button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick="toggleUser('${uid(u.id)}')">${escAttr(u.isActive ? t('ul_deactivate') : t('ul_activate'))}</button>
               </div>
             </div>
@@ -1697,6 +1701,19 @@
 
   window.toggleUser = async (id) => {
     await CONFIG.patch(`/users/${id}/toggle-active`);
+    loadUsers(currentPage);
+  };
+
+  window.ulConfirmDeleteUser = async (id, displayName) => {
+    closeAllUlRowActionMenus();
+    const nm = String(displayName || id || '').trim();
+    const msg = String(t('ul_deleteUserConfirm') || '').replace(/\{name\}/g, nm);
+    if (!confirm(msg)) return;
+    const res = await CONFIG.del(`/users/${encodeURIComponent(id)}`);
+    if (res && res.error) {
+      alert(String(res.error));
+      return;
+    }
     loadUsers(currentPage);
   };
 

@@ -72,7 +72,7 @@ const legalDocsPtBr = [
     content: md('Política de Privacidade BrSpark', [
       {
         title: '1. Quem somos, papéis e âmbito',
-        body: `Esta Política descreve como ${commonController} realiza o tratamento de dados pessoais no âmbito de ${commonScope}
+        body: `Esta Política descreve como ${commonController.replace(/\.\s*$/, '')} realiza o tratamento de dados pessoais no âmbito de ${commonScope}
 
 Em relações **B2B**, em regra o **Cliente (tenant)** é o **controlador** dos dados relativos aos seus usuários, colaboradores, prestadores de campo e clientes finais cadastrados ou monitorados na plataforma. A **BrSpark** atua predominantemente como **operadora**, executando tratamentos necessários à prestação do serviço contratado, com base em instruções compatíveis com a legislação e nas configurações do painel.
 

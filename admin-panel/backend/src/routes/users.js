@@ -14,6 +14,7 @@ const { assertTechnicianSeatForNewUser, assertTechnicianSeatForUserPatch } = req
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 const {
   assertTenantAccess,
+  hasCapability,
   isPlatformAdmin,
   normalizeRole,
   nonPlatformUserReadWhere,
@@ -21,6 +22,7 @@ const {
 } = require('../lib/authorization');
 const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverage');
 const { validateAppPasswordPolicy } = require('../lib/appPasswordPolicy');
+const { validatePanelRoleForTenantKind, setUnifiedPasswordHashForEmail } = require('../lib/appAccountAuth');
 const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
@@ -134,7 +136,7 @@ const userListSelect = {
   createdAt: true,
   updatedAt: true,
   comprefaceRecognitionSync: true,
-  tenant: { select: { id: true, name: true, email: true } },
+  tenant: { select: { id: true, name: true, email: true, kind: true } },
   technicianProfile: { select: { id: true, status: true } },
   workTimeTrackingEnabled: true,
   addressJson: true,
@@ -336,11 +338,12 @@ router.post('/', async (req, res) => {
     }
     const tenantsFound = await prisma.tenant.findMany({
       where: { id: { in: tenantIdsResolved } },
-      select: { id: true },
+      select: { id: true, kind: true },
     });
     if (tenantsFound.length !== tenantIdsResolved.length) {
       return res.status(400).json({ error: 'Um ou mais tenants não existem.' });
     }
+    const tenantKindById = new Map(tenantsFound.map((t) => [t.id, String(t.kind || '').toUpperCase()]));
 
     for (const scopedTenantId of tenantIdsResolved) {
       if (employeeMatricula) {
@@ -361,7 +364,11 @@ router.post('/', async (req, res) => {
           tenantId: scopedTenantId,
         });
       }
-      const seat = await assertTechnicianSeatForNewUser(prisma, scopedTenantId, role);
+      const kSeat = tenantKindById.get(scopedTenantId) || '';
+      let roleForSeat = role;
+      if (kSeat === 'CLIENT') roleForSeat = 'USER';
+      if (kSeat === 'PROVIDER') roleForSeat = 'PROVIDER';
+      const seat = await assertTechnicianSeatForNewUser(prisma, scopedTenantId, roleForSeat);
       if (!seat.ok) {
         return res.status(403).json({
           error: seat.error,
@@ -373,19 +380,38 @@ router.post('/', async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     const createdRows = await prisma.$transaction(async (tx) => {
+      const acc = await tx.appAccount.upsert({
+        where: { emailNorm },
+        create: { emailNorm, password: hash },
+        update: { password: hash },
+      });
+      await tx.user.updateMany({
+        where: { email: emailNorm },
+        data: { appAccountId: acc.id, password: hash },
+      });
       const out = [];
       for (const scopedTenantId of tenantIdsResolved) {
+        const tenantRow = await tx.tenant.findUnique({
+          where: { id: scopedTenantId },
+          select: { kind: true },
+        });
+        let roleForRow = String(role).toUpperCase();
+        const k = String(tenantRow?.kind || '').toUpperCase();
+        if (k === 'CLIENT') roleForRow = 'USER';
+        if (k === 'PROVIDER') roleForRow = 'PROVIDER';
+
         const u = await tx.user.create({
           data: {
             name: String(name).trim(),
             email: emailNorm,
             password: hash,
             tenantId: scopedTenantId,
-            role,
+            role: roleForRow,
             employeeMatricula,
+            appAccountId: acc.id,
           },
         });
-        if (role === 'PROVIDER') {
+        if (roleForRow === 'PROVIDER') {
           await tx.technicianProfile.create({
             data: { userId: u.id, status: 'PENDING', score: 5 },
           });
@@ -538,17 +564,16 @@ router.patch('/reset-password-by-email', async (req, res) => {
       if (matches.length === 0) {
         return res.status(404).json({ error: 'Nenhum utilizador encontrado com este e-mail.' });
       }
-      if (matches.length > 1) {
-        return res.status(400).json({
-          error:
-            'Vários utilizadores com este e-mail. Selecione a organização (tenant) ou utilize o reset a partir da linha na lista.',
-        });
-      }
       user = await findScopedUserOrNull(req, matches[0].id);
     }
     if (!user) return res.status(404).json({ error: 'Utilizador não encontrado.' });
     const hash = await bcrypt.hash(newPassword, 10);
-    const updated = await prisma.user.update({ where: { id: user.id }, data: { password: hash } });
+    await setUnifiedPasswordHashForEmail(prisma, em, hash);
+    await prisma.user.updateMany({
+      where: { email: em },
+      data: { currentSessionId: null, currentDeviceId: null },
+    });
+    const updated = await prisma.user.findUnique({ where: { id: user.id } });
     const _a = auditActor(req);
     await prisma.auditLog.create({
       data: {
@@ -580,7 +605,15 @@ router.patch('/:id/reset-password', async (req, res) => {
     const existing = await findScopedUserOrNull(req, req.params.id);
     if (!existing) return res.status(404).json({ error: 'Usuário não encontrado.' });
     const hash = await bcrypt.hash(newPassword, 10);
-    const user = await prisma.user.update({ where: { id: existing.id }, data: { password: hash } });
+    const em = String(existing.email || '')
+      .trim()
+      .toLowerCase();
+    await setUnifiedPasswordHashForEmail(prisma, em, hash);
+    await prisma.user.updateMany({
+      where: { email: em },
+      data: { currentSessionId: null, currentDeviceId: null },
+    });
+    const user = await prisma.user.findUnique({ where: { id: existing.id } });
     const _a2 = auditActor(req);
     await prisma.auditLog.create({
       data: {
@@ -1131,7 +1164,7 @@ router.patch('/:id', express.json(), async (req, res) => {
     const existing = await findScopedUserOrNull(req, id, {
       include: {
         technicianProfile: true,
-        tenant: { select: { locale: { select: { countryCode: true } } } },
+        tenant: { select: { kind: true, locale: { select: { countryCode: true } } } },
       },
     });
     if (!existing) return res.status(404).json({ error: 'Usuário não encontrado.' });
@@ -1217,6 +1250,8 @@ router.patch('/:id', express.json(), async (req, res) => {
 
     if (role != null) {
       const nextR = String(role).toUpperCase();
+      const tenantKindErr = validatePanelRoleForTenantKind(existing.tenant?.kind, nextR);
+      if (tenantKindErr) return res.status(400).json({ error: tenantKindErr });
       if (panelRole === 'MANAGER') {
         if (nextR === 'TENANT_ADMIN' || nextR === 'SAAS_ADMIN') {
           return res.status(403).json({ error: 'Sem permissão para atribuir este papel.' });
@@ -1466,6 +1501,73 @@ router.patch('/:id', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'Registo duplicado (e-mail ou outro campo único).' });
     }
     res.status(500).json({ error: err.message });
+  }
+});
+
+function canAdminDeleteUser(authz) {
+  if (isPlatformAdmin(authz)) return true;
+  return (
+    hasCapability(authz, 'tenant.users.write.any') ||
+    hasCapability(authz, 'tenant.users.write.self') ||
+    hasCapability(authz, 'tenant.users.write.limited')
+  );
+}
+
+// DELETE /api/users/:id — remove o registo User neste tenant (membria duplicada / limpeza).
+// Não remove AppAccount nem outros User do mesmo e-mail noutros tenants.
+router.delete('/:id', async (req, res) => {
+  try {
+    const authz = req.authorization;
+    if (!canAdminDeleteUser(authz)) {
+      return res.status(403).json({ error: 'Sem permissão para eliminar utilizadores.' });
+    }
+
+    const { id } = req.params;
+    const existing = await findScopedUserOrNull(req, id, {
+      include: { tenant: { select: { id: true, kind: true } } },
+    });
+    if (!existing) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const admin = req.admin;
+    const panelRole =
+      admin && admin.panelUser ? String(admin.role || '').trim().toUpperCase() : null;
+    if (panelRole === 'MANAGER' && String(existing.role || '').toUpperCase() === 'SAAS_ADMIN') {
+      return res.status(403).json({ error: 'Sem permissão para eliminar administrador da plataforma.' });
+    }
+    if (!isPlatformAdmin(authz) && String(existing.role || '').toUpperCase() === 'SAAS_ADMIN') {
+      return res.status(403).json({ error: 'Apenas administrador da plataforma pode eliminar esta conta.' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.auditLog.updateMany({ where: { userId: existing.id }, data: { userId: null } });
+      await tx.pushToken.deleteMany({ where: { userId: existing.id } });
+      await tx.user.delete({ where: { id: existing.id } });
+    });
+
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: existing.tenantId,
+          action: 'USER_DELETE_ADMIN',
+          resource: existing.email,
+          category: 'ADMIN',
+          metadata: { userId: existing.id, tenantKind: existing.tenant?.kind || null },
+        },
+      })
+      .catch(() => {});
+
+    res.json({ ok: true, id: existing.id });
+  } catch (err) {
+    console.error('DELETE /users/:id', err);
+    const code = err && err.code ? String(err.code) : '';
+    if (code === 'P2003' || code === 'P2014') {
+      return res.status(409).json({
+        error:
+          'Não foi possível eliminar: ainda existem dados ligados a este utilizador (OS, formulários, etc.). Desative a conta ou contacte suporte.',
+      });
+    }
+    res.status(500).json({ error: err.message || 'Erro ao eliminar.' });
   }
 });
 

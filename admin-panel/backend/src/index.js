@@ -62,6 +62,7 @@ const evaluationsRoutes       = require('./routes/evaluations');
 const evaluationsPublicRoutes = require('./routes/evaluationsPublic');
 const evaluationsAdminRoutes  = require('./routes/evaluationsAdmin');
 const evaluationsWebBridgeRoutes = require('./routes/evaluationsWebBridge');
+const cmsLaravelBridgeInternal = require('./routes/cmsLaravelBridgeInternal');
 const checklistsAiRoutes  = require('./routes/checklistsAi');
 const docsAssistantRoutes = require('./routes/docsAssistant');
 const checklistsVisionRoutes = require('./routes/checklistsVision');
@@ -142,6 +143,8 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use('/api/internal', evaluationsWebBridgeRoutes);
 /** Laravel CMS → espelho de branding no PostgreSQL (`features.cmsBrandingMirror`) */
 app.use('/api/internal', cmsBrandingMirrorInternal);
+/** Laravel CMS → provisionamento tenant + resumo operacional (PostgreSQL) */
+app.use('/api/internal', cmsLaravelBridgeInternal);
 
 // ── Health ─────────────────────────────────────────────────
 app.get('/health', (_req, res) => {

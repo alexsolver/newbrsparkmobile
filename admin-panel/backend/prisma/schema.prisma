@@ -75,6 +75,8 @@ model Tenant {
   features     Json     @default("{}")
   /// COMPANY = inventário partilhado na organização; CLIENT = espaço pessoal; PROVIDER = modo prestador (só partilhas + bens próprios criados aqui).
   kind         TenantKind @default(COMPANY)
+  /// UUID do tenant no CMS Laravel (BrsparkWeb) — provisionamento empresa↔app.
+  laravelTenantId String? @unique @map("laravel_tenant_id")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -465,12 +467,29 @@ model TenantPlanUsagePeriod {
 }
 
 // ─────────────────────────────────────────────────────────
+// CONTA GLOBAL (APP) — uma palavra-passe por e-mail; vários User (filiações por tenant).
+// ─────────────────────────────────────────────────────────
+model AppAccount {
+  id        String   @id @default(cuid())
+  emailNorm String   @unique @map("email_norm")
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+
+  @@map("app_accounts")
+}
+
+// ─────────────────────────────────────────────────────────
 // USUÁRIOS
 // ─────────────────────────────────────────────────────────
 model User {
   id         String   @id @default(cuid())
   tenantId   String
   tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  /// Credenciais partilhadas com outros `User` do mesmo e-mail (app).
+  appAccountId String? @map("app_account_id")
+  appAccount   AppAccount? @relation(fields: [appAccountId], references: [id], onDelete: SetNull)
   email      String
   /// Preenchido quando o utilizador confirma o e-mail (link enviado pelo painel).
   emailVerifiedAt              DateTime? @map("email_verified_at")
@@ -538,6 +557,7 @@ model User {
 
   @@unique([email, tenantId])
   @@unique([tenantId, employeeMatricula])
+  @@index([appAccountId])
 }
 
 /// Sessão de OTP (login / registo com telefone ou e-mail) — códigos são guardados com hash

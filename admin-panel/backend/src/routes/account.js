@@ -26,7 +26,13 @@ const {
 } = require('../lib/otpLoginService');
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
 const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
-const { createPersonalClientTenantAndUser } = require('../lib/registerPersonalClientTenant');
+const { createPersonalClientTenantAndUserInTransaction } = require('../lib/registerPersonalClientTenant');
+const {
+  ensureMembershipRoleMatchesTenantKind,
+  verifyAppLoginPasswordAndEnsureAccount,
+  setUnifiedPasswordHashForEmail,
+  resolvePasswordHashForResetVersion,
+} = require('../lib/appAccountAuth');
 const {
   validateAppPasswordPolicy,
   APP_PASSWORD_RULES_USER_FACING_PT,
@@ -110,6 +116,8 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
       currentDeviceId: deviceId || null,
     },
   });
+
+  await ensureMembershipRoleMatchesTenantKind(prisma, user.id);
 
   await prisma.auditLog.create({
     data: {
@@ -212,17 +220,34 @@ function buildPublicPasswordResetLink(req, token) {
   return `${base}/api/password-reset?token=${encodeURIComponent(token)}`;
 }
 
-function issuePasswordResetToken(user) {
+async function issuePasswordResetTokenForUser(user) {
+  const jwtSecret = String(process.env.JWT_SECRET || '').trim();
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET não configurado no servidor.');
+  }
+  const versionHash = await resolvePasswordHashForResetVersion(prisma, user);
+  return jwt.sign(
+    {
+      purpose: 'PASSWORD_RESET',
+      userId: user.id,
+      tenantId: user.tenantId,
+      version: passwordResetTokenVersionFromHash(versionHash),
+    },
+    jwtSecret,
+    { expiresIn: process.env.PASSWORD_RESET_EXPIRES_IN || '30m' },
+  );
+}
+
+function issuePasswordResetTokenForAppAccount(account) {
   const jwtSecret = String(process.env.JWT_SECRET || '').trim();
   if (!jwtSecret) {
     throw new Error('JWT_SECRET não configurado no servidor.');
   }
   return jwt.sign(
     {
-      purpose: 'PASSWORD_RESET',
-      userId: user.id,
-      tenantId: user.tenantId,
-      version: passwordResetTokenVersionFromHash(user.password),
+      purpose: 'PASSWORD_RESET_ACCOUNT',
+      accountId: account.id,
+      version: passwordResetTokenVersionFromHash(account.password),
     },
     jwtSecret,
     { expiresIn: process.env.PASSWORD_RESET_EXPIRES_IN || '30m' },
@@ -263,14 +288,20 @@ router.post('/register', async (req, res) => {
 
     let user;
     try {
-      const out = await createPersonalClientTenantAndUser(prisma, {
-        name: String(name).trim(),
-        emailNorm,
-        passwordHash: hash,
-        phone: phoneTrim,
-        phoneVerifiedAt: null,
-        auditAction: 'USER_REGISTER',
-        auditResource: emailNorm,
+      const out = await prisma.$transaction(async (tx) => {
+        const acc = await tx.appAccount.create({
+          data: { emailNorm, password: hash },
+        });
+        return createPersonalClientTenantAndUserInTransaction(tx, {
+          name: String(name).trim(),
+          emailNorm,
+          passwordHash: hash,
+          phone: phoneTrim,
+          phoneVerifiedAt: null,
+          auditAction: 'USER_REGISTER',
+          auditResource: emailNorm,
+          appAccountId: acc.id,
+        });
       });
       user = out.user;
     } catch (e) {
@@ -365,8 +396,8 @@ router.post('/login', async (req, res) => {
     if (user.tenant.status === 'SUSPENDED' || user.tenant.status === 'CANCELLED')
       return res.status(403).json({ error: 'Conta suspensa ou cancelada.' });
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.status(401).json({ error: 'Credenciais inválidas.' });
+    const authPw = await verifyAppLoginPasswordAndEnsureAccount(prisma, emailNorm, password);
+    if (!authPw.ok) return res.status(401).json({ error: 'Credenciais inválidas.' });
 
     const { deviceId } = req.body;
 
@@ -458,14 +489,20 @@ router.post('/login/oauth', async (req, res) => {
       } else {
         const hash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
         try {
-          const { user: createdOAuth } = await createPersonalClientTenantAndUser(prisma, {
-            name: displayName,
-            emailNorm,
-            passwordHash: hash,
-            phone: null,
-            phoneVerifiedAt: null,
-            auditAction: 'USER_REGISTER_OAUTH',
-            auditResource: emailNorm,
+          const { user: createdOAuth } = await prisma.$transaction(async (tx) => {
+            const acc = await tx.appAccount.create({
+              data: { emailNorm, password: hash },
+            });
+            return createPersonalClientTenantAndUserInTransaction(tx, {
+              name: displayName,
+              emailNorm,
+              passwordHash: hash,
+              phone: null,
+              phoneVerifiedAt: null,
+              auditAction: 'USER_REGISTER_OAUTH',
+              auditResource: emailNorm,
+              appAccountId: acc.id,
+            });
           });
           deliverBrsparkLaravelEvent({
             type: EVENT_TYPES.USER_CREATED,
@@ -598,9 +635,84 @@ router.post('/password-reset/request', async (req, res) => {
       });
     }
 
+    const appAccount =
+      !tenantSlug && users.length
+        ? await prisma.appAccount.findUnique({ where: { emailNorm: email } })
+        : null;
+
+    if (appAccount && !tenantSlug) {
+      const resetToken = issuePasswordResetTokenForAppAccount(appAccount);
+      const resetLink = buildPublicPasswordResetLink(req, resetToken);
+      if (!resetLink) {
+        return res.status(503).json({
+          error: 'Não foi possível gerar o link público de redefinição.',
+        });
+      }
+      const greet = String(users[0].name || 'usuário').trim();
+      const subject = 'BrSpark: redefina sua senha';
+      const text =
+        `Olá, ${greet}!\n\n` +
+        `Recebemos uma solicitação para redefinir a senha da sua conta BrSpark (todas as organizações associadas a este e-mail).\n\n` +
+        `Use este link para criar uma nova senha:\n${resetLink}\n\n` +
+        `${APP_PASSWORD_RULES_USER_FACING_PT}\n\n` +
+        `Este link expira em ${process.env.PASSWORD_RESET_EXPIRES_IN || '30 minutos'}.\n` +
+        `Se você não pediu a redefinição, pode ignorar este e-mail.\n`;
+      const html =
+        `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">` +
+        `<h2 style="margin:0 0 12px">Redefinição de senha</h2>` +
+        `<p>Olá, <strong>${escapeHtml(greet)}</strong>.</p>` +
+        `<p>Recebemos uma solicitação para redefinir a senha da sua conta BrSpark (todas as organizações associadas a este e-mail).</p>` +
+        `<p style="margin:0 0 16px;font-size:14px;color:#334155">${escapeHtml(APP_PASSWORD_RULES_USER_FACING_PT)}</p>` +
+        `<p style="margin:24px 0">` +
+        `<a href="${escapeHtml(resetLink)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Criar nova senha</a>` +
+        `</p>` +
+        `<p>Se preferir, copie e cole este link no navegador:</p>` +
+        `<p><a href="${escapeHtml(resetLink)}">${escapeHtml(resetLink)}</a></p>` +
+        `<p>Este link expira em ${escapeHtml(process.env.PASSWORD_RESET_EXPIRES_IN || '30 minutos')}.</p>` +
+        `<p>Se você não pediu a redefinição, pode ignorar este e-mail.</p>` +
+        `</div>`;
+      const { send } = await sendTransactionalEmailWithFallback({
+        to: { email, name: greet !== 'usuário' ? greet : undefined },
+        subject,
+        text,
+        html,
+      });
+      if (send.ok) {
+        await prisma.auditLog
+          .create({
+            data: {
+              tenantId: users[0].tenantId,
+              userId: users[0].id,
+              action: 'USER_PASSWORD_RESET_REQUESTED',
+              resource: email,
+              category: 'AUTH',
+              metadata: { unifiedAccount: true },
+            },
+          })
+          .catch(() => {});
+      }
+      if (!send.ok) {
+        return res.status(send.skipped ? 503 : 502).json({
+          error: send.skipped
+            ? 'A recuperação de senha está indisponível no momento. Tente novamente mais tarde.'
+            : 'Não foi possível enviar o e-mail de redefinição agora. Tente novamente em instantes.',
+        });
+      }
+      return res.json({
+        ok: true,
+        message:
+          'Se existir uma conta com esse e-mail, você receberá um link para redefinir a senha em instantes.',
+      });
+    }
+
     const results = await Promise.all(
       users.map(async (user) => {
-        const resetToken = issuePasswordResetToken(user);
+        const resetToken = await issuePasswordResetTokenForUser({
+          id: user.id,
+          tenantId: user.tenantId,
+          password: user.password,
+          appAccountId: user.appAccountId,
+        });
         const resetLink = buildPublicPasswordResetLink(req, resetToken);
         if (!resetLink) {
           return {
@@ -722,12 +834,58 @@ router.post('/password-reset/confirm', async (req, res) => {
       });
     }
 
-    if (
-      !payload ||
-      typeof payload !== 'object' ||
-      payload.purpose !== 'PASSWORD_RESET' ||
-      !payload.userId
-    ) {
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({ error: 'Link de redefinição inválido.' });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+
+    if (payload.purpose === 'PASSWORD_RESET_ACCOUNT' && payload.accountId) {
+      const acc = await prisma.appAccount.findUnique({
+        where: { id: String(payload.accountId) },
+      });
+      if (!acc) {
+        return res.status(400).json({ error: 'Link de redefinição inválido.' });
+      }
+      if (payload.version !== passwordResetTokenVersionFromHash(acc.password)) {
+        return res.status(400).json({ error: 'Este link de redefinição já foi usado ou ficou inválido.' });
+      }
+      await setUnifiedPasswordHashForEmail(prisma, acc.emailNorm, hash);
+      const affected = await prisma.user.findMany({
+        where: { appAccountId: acc.id, isActive: true },
+        select: { id: true, tenantId: true },
+      });
+      await prisma.user.updateMany({
+        where: { appAccountId: acc.id },
+        data: { currentSessionId: null, currentDeviceId: null },
+      });
+      for (const row of affected) {
+        const tokens = await prisma.pushToken.findMany({ where: { userId: row.id } });
+        if (tokens.length > 0) {
+          sendExpoPushToMany(tokens, {
+            data: { type: 'FORCE_LOGOUT', reason: 'PASSWORD_RESET' },
+          }).catch((err) => console.error('[password_reset_kickout]', err));
+        }
+        await prisma.auditLog
+          .create({
+            data: {
+              tenantId: row.tenantId,
+              userId: row.id,
+              action: 'USER_PASSWORD_RESET_COMPLETED',
+              resource: acc.emailNorm,
+              category: 'AUTH',
+              metadata: { unifiedAccount: true },
+            },
+          })
+          .catch(() => {});
+      }
+      return res.json({
+        ok: true,
+        message: 'Senha redefinida com sucesso. Faça login novamente com a nova senha.',
+      });
+    }
+
+    if (payload.purpose !== 'PASSWORD_RESET' || !payload.userId) {
       return res.status(400).json({ error: 'Link de redefinição inválido.' });
     }
 
@@ -738,7 +896,8 @@ router.post('/password-reset/confirm', async (req, res) => {
     if (!user) {
       return res.status(400).json({ error: 'Link de redefinição inválido.' });
     }
-    if (payload.version !== passwordResetTokenVersionFromHash(user.password)) {
+    const versionHash = await resolvePasswordHashForResetVersion(prisma, user);
+    if (payload.version !== passwordResetTokenVersionFromHash(versionHash)) {
       return res.status(400).json({ error: 'Este link de redefinição já foi usado ou ficou inválido.' });
     }
     if (!user.isActive) {
@@ -748,34 +907,34 @@ router.post('/password-reset/confirm', async (req, res) => {
       return res.status(403).json({ error: 'Esta conta está suspensa ou cancelada.' });
     }
 
-    const hash = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        password: hash,
-        currentSessionId: null,
-        currentDeviceId: null,
-      },
+    await setUnifiedPasswordHashForEmail(prisma, String(user.email || '').trim().toLowerCase(), hash);
+    await prisma.user.updateMany({
+      where: { email: String(user.email || '').trim().toLowerCase() },
+      data: { currentSessionId: null, currentDeviceId: null },
     });
-
-    const tokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
-    if (tokens.length > 0) {
-      sendExpoPushToMany(tokens, {
-        data: { type: 'FORCE_LOGOUT', reason: 'PASSWORD_RESET' },
-      }).catch((err) => console.error('[password_reset_kickout]', err));
+    const sameEmailUsers = await prisma.user.findMany({
+      where: { email: String(user.email || '').trim().toLowerCase(), isActive: true },
+      select: { id: true, tenantId: true },
+    });
+    for (const row of sameEmailUsers) {
+      const tokens = await prisma.pushToken.findMany({ where: { userId: row.id } });
+      if (tokens.length > 0) {
+        sendExpoPushToMany(tokens, {
+          data: { type: 'FORCE_LOGOUT', reason: 'PASSWORD_RESET' },
+        }).catch((err) => console.error('[password_reset_kickout]', err));
+      }
+      await prisma.auditLog
+        .create({
+          data: {
+            tenantId: row.tenantId,
+            userId: row.id,
+            action: 'USER_PASSWORD_RESET_COMPLETED',
+            resource: user.email,
+            category: 'AUTH',
+          },
+        })
+        .catch(() => {});
     }
-
-    await prisma.auditLog
-      .create({
-        data: {
-          tenantId: user.tenantId,
-          userId: user.id,
-          action: 'USER_PASSWORD_RESET_COMPLETED',
-          resource: user.email,
-          category: 'AUTH',
-        },
-      })
-      .catch(() => {});
 
     res.json({
       ok: true,
@@ -988,6 +1147,7 @@ router.put('/me/directory-hero', authUser, requireTenantDirectoryManager, async 
 
 router.get('/me', authUser, async (req, res) => {
   try {
+    await ensureMembershipRoleMatchesTenantKind(prisma, req.user.id);
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       include: {
@@ -998,6 +1158,41 @@ router.get('/me', authUser, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
     res.json(await buildSafeAppUserPayloadAsync(user));
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/** POST /api/me/change-password — altera a palavra-passe unificada (todas as filiações do mesmo e-mail). */
+router.post('/me/change-password', authUser, async (req, res) => {
+  try {
+    const oldPassword = String(req.body?.oldPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ error: 'Senha atual e nova são obrigatórias.' });
+    }
+    const pwReg = validateAppPasswordPolicy(newPassword);
+    if (!pwReg.ok) return res.status(400).json({ error: pwReg.error });
+
+    const me = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { id: true, email: true },
+    });
+    if (!me?.email) return res.status(404).json({ error: 'Utilizador não encontrado.' });
+    const emailNorm = String(me.email).trim().toLowerCase();
+
+    const authPw = await verifyAppLoginPasswordAndEnsureAccount(prisma, emailNorm, oldPassword);
+    if (!authPw.ok) return res.status(400).json({ error: 'Senha atual incorreta.' });
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await setUnifiedPasswordHashForEmail(prisma, emailNorm, hash);
+    await prisma.user.updateMany({
+      where: { email: emailNorm, NOT: { id: me.id } },
+      data: { currentSessionId: null, currentDeviceId: null },
+    });
+
+    res.json({ ok: true, message: 'Senha alterada com sucesso.' });
+  } catch (err) {
+    console.error('[me/change-password]', err);
+    res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
 });
 
 /** Outras organizações com o mesmo e-mail — troca no perfil do app. */
@@ -1362,6 +1557,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
           phone: me.phone,
           avatarUrl: me.avatarUrl,
           preferredChatLocale: me.preferredChatLocale,
+          ...(me.appAccountId ? { appAccountId: me.appAccountId } : {}),
         },
       });
       if (seatRole === 'PROVIDER') {
@@ -1439,6 +1635,7 @@ router.delete('/me', authUser, async (req, res) => {
           currentSessionId: null,
           currentDeviceId: null,
           isActive: false,
+          appAccountId: null,
         },
       });
     });

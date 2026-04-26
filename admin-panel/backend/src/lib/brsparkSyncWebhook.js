@@ -10,6 +10,7 @@ const EVENT_TYPES = {
   USER_PHONE_VERIFIED: 'user.phone_verified',
   KYC_STATUS_CHANGED: 'kyc.status_changed',
   ONBOARDING_SUBMITTED: 'onboarding.submitted',
+  CHECKLIST_EXECUTION_COMPLETED: 'checklist.execution.completed',
 };
 
 function signRequest(secret, timestamp, body) {

@@ -93,7 +93,12 @@ router.post('/kyc/start', authUser, express.json(), async (req, res) => {
     deliverBrsparkLaravelEvent({
       type: EVENT_TYPES.KYC_STATUS_CHANGED,
       idempotencyKey: `kyc-${req.user.id}-${Date.now()}`,
-      payload: { userId: req.user.id, kycStatus: updated.kycStatus, kycProvider: provider },
+      payload: {
+        userId: req.user.id,
+        tenantId: req.user.tenantId,
+        kycStatus: updated.kycStatus,
+        kycProvider: provider,
+      },
     }).catch(() => {});
     return res.json({ ok: true, kycStatus: updated.kycStatus, kycProvider: updated.kycProvider });
   } catch (e) {

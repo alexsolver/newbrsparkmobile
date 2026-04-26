@@ -1224,7 +1224,7 @@
     "tabConfiguracoes": "Ajustes",
     "tabSincronizacao": "Sincronización",
     "siblingWorkspacesTitle": "Organización",
-    "siblingWorkspacesHint": "Este correo está en más de una organización. Al iniciar sesión se elige la que tiene más usuarios; toque otra fila para cambiar la sesión.",
+    "siblingWorkspacesHint": "El mismo correo puede tener espacio de cliente y de prestador. Al iniciar sesión abrimos primero el prestador si existe; si no, el cliente. En el perfil, use el interruptor Cliente | Prestador para cambiar de organización.",
     "siblingWorkspaceMembers": "{{count}} usuarios en esta organización",
     "siblingWorkspaceCurrent": "Sesión actual",
     "switchWorkspaceConfirmTitle": "¿Cambiar de organización?",

@@ -22,6 +22,8 @@
     "embeddings:checklist-templates": "node scripts/backfillChecklistTemplateEmbeddings.js",
     "migrate:legacy-users-to-client": "node scripts/migrate-legacy-master-users-to-client-tenant.js",
     "directory:clear-legacy": "node scripts/clear-service-providers.js",
+    "compliance:seed": "node scripts/seed-compliance-ptbr.js",
+    "compliance:publish-privacy": "node scripts/publish-compliance-privacy-policy.js",
     "db:reset": "echo '🚫 db:reset foi desabilitado para proteger dados. Use db:migrate para migrações seguras.'"
   },
   "dependencies": {
