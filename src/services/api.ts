@@ -16,8 +16,8 @@ export { API_BASE, apiFetch };
 const PROVIDERS_CACHE_MAX = 50;
 
 /**
- * Catálogo do diretório (empresas do CMS web), paginado no servidor.
- * Mantém o nome ProviderService por compatibilidade; cada item é uma empresa (tenant).
+ * Catálogo do diretório (prestadores do CMS web), paginado no servidor.
+ * Mantém o nome ProviderService por compatibilidade; cada item é um profissional listado (`id` = professional_id; detalhe aceita tenant_id).
  * Caches the last PROVIDERS_CACHE_MAX entries in SQLite for offline fallback.
  */
 function filterProvidersLocal(
