@@ -123,6 +123,54 @@ router.post('/cms-tenant-provision', express.json({ limit: '128kb' }), async (re
 });
 
 /**
+ * POST /api/internal/cms-directory-providers-snapshot
+ * Laravel puxa snapshot de prestadores (cross-tenant) para alimentar o diretório público.
+ * Protegido por X-Bridge-Secret (mesmo segredo do provisionamento).
+ *
+ * Retorna:
+ *  { ok: true, providers: [{ userId, email, name, role, phone, city?, tenant: { id, slug, name, status, kind } }] }
+ */
+router.post('/cms-directory-providers-snapshot', express.json({ limit: '64kb' }), async (req, res) => {
+  try {
+    if (!requireBridge(req, res)) return;
+    const rows = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        // Diretório público: SOMENTE prestadores reais (provider-first), nunca tenants CLIENT.
+        role: 'PROVIDER',
+        tenant: {
+          is: {
+            kind: 'COMPANY',
+            status: { notIn: ['SUSPENDED', 'CANCELLED'] },
+          },
+        },
+      },
+      include: {
+        tenant: { select: { id: true, slug: true, name: true, status: true, kind: true } },
+        technicianProfile: true,
+      },
+      orderBy: [{ createdAt: 'asc' }],
+      take: 5000,
+    });
+
+    const providers = rows.map((u) => ({
+      userId: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      phone: u.phone || null,
+      city: u.technicianProfile?.city || null,
+      tenant: u.tenant,
+    }));
+
+    return res.json({ ok: true, providers });
+  } catch (err) {
+    console.error('[cms-directory-providers-snapshot]', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * POST /api/internal/cms-operational-summary
  * Resumo de OS/técnicos para o painel empresa no Laravel.
  */

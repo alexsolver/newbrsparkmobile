@@ -311,10 +311,24 @@ router.post('/register', async (req, res) => {
       }
       throw e;
     }
+    // Recarrega com tenant / technicianProfile para enviar contexto ao Laravel.
+    const hydrated = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { tenant: true, technicianProfile: true },
+    });
+    const roleHint = hydrated?.technicianProfile ? 'TECHNICIAN' : hydrated?.role;
     deliverBrsparkLaravelEvent({
       type: EVENT_TYPES.USER_CREATED,
       idempotencyKey: `user-${user.id}-register`,
-      payload: { userId: user.id, tenantId: user.tenantId, email: user.email, source: 'password' },
+      payload: {
+        userId: user.id,
+        tenantId: user.tenantId,
+        email: user.email,
+        userName: hydrated?.name || user.name,
+        role: roleHint || user.role,
+        tenantName: hydrated?.tenant?.name || out?.tenant?.name || undefined,
+        source: 'password',
+      },
     }).catch((e) => console.warn('[register] sync webhook', e));
 
     const newSessionId = crypto.randomUUID();

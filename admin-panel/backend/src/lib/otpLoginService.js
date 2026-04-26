@@ -491,10 +491,25 @@ async function verifyChallenge(
       }
       throw e;
     }
+    // Recarrega com tenant / technicianProfile para enviar contexto ao Laravel.
+    const hydrated = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { tenant: true, technicianProfile: true },
+    });
+    const roleHint = hydrated?.technicianProfile ? 'TECHNICIAN' : hydrated?.role;
     deliverBrsparkLaravelEvent({
       type: EVENT_TYPES.USER_CREATED,
       idempotencyKey: `user-${user.id}-created`,
-      payload: { userId: user.id, tenantId: user.tenantId, email: user.email, phone: user.phone, source: 'otp' },
+      payload: {
+        userId: user.id,
+        tenantId: user.tenantId,
+        email: user.email,
+        userName: hydrated?.name || user.name,
+        role: roleHint || user.role,
+        phone: hydrated?.phone || user.phone,
+        tenantName: hydrated?.tenant?.name || undefined,
+        source: 'otp',
+      },
     }).catch((e) => console.warn('[otp] sync webhook', e));
   } else {
     return { ok: false, error: 'Fluxo OTP inválido.', status: 400 };
