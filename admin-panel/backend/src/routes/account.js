@@ -61,6 +61,11 @@ const {
   accessJwtExpiresIn,
 } = require('../lib/appRefreshSession');
 const {
+  resolveAppEffectiveTenantId,
+  buildPresentationUserForApp,
+  assertAppLoginAllowedForEffectiveTenant,
+} = require('../lib/appLoginEffectiveTenant');
+const {
   allocateUniqueUserRowEmail,
   resolveCanonicalEmailNormForUser,
 } = require('../lib/userEmailUnique');
@@ -160,22 +165,27 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
 
   await ensureMembershipRoleMatchesTenantKind(prisma, user.id);
 
-  await prisma.auditLog.create({
-    data: {
-      tenantId: user.tenantId,
-      userId: user.id,
-      action: 'USER_LOGIN',
-      resource: auditResource,
-      category: 'AUTH',
-    },
-  });
-
   const fresh = await prisma.user.findUnique({
     where: { id: user.id },
     include: {
       tenant: { include: { subscription: { include: { plan: true } } } },
       technicianProfile: true,
       appAccount: { select: { emailNorm: true } },
+    },
+  });
+  if (!fresh) {
+    throw new Error('Falha ao carregar utilizador após login.');
+  }
+
+  const presentation = await buildPresentationUserForApp(prisma, fresh);
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: presentation.tenantId,
+      userId: fresh.id,
+      action: 'USER_LOGIN',
+      resource: auditResource,
+      category: 'AUTH',
     },
   });
 
@@ -189,7 +199,7 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
   const token = jwt.sign(
     {
       id: fresh.id,
-      tenantId: fresh.tenantId,
+      tenantId: presentation.tenantId,
       email: jwtEmail,
       role: fresh.role,
       sessionId: newSessionId,
@@ -201,7 +211,7 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
   return {
     token,
     refreshToken,
-    user: await buildSafeAppUserPayloadAsync(fresh),
+    user: await buildSafeAppUserPayloadAsync(presentation),
   };
 }
 
@@ -512,8 +522,8 @@ router.post('/login', async (req, res) => {
     if (!user.isActive)
       return res.status(403).json({ error: 'Conta suspensa. Entre em contato com o suporte.' });
 
-    if (user.tenant.status === 'SUSPENDED' || user.tenant.status === 'CANCELLED')
-      return res.status(403).json({ error: 'Conta suspensa ou cancelada.' });
+    const gateLogin = await assertAppLoginAllowedForEffectiveTenant(prisma, user);
+    if (!gateLogin.ok) return res.status(403).json({ error: gateLogin.error });
 
     const { deviceId } = req.body;
 
@@ -660,9 +670,8 @@ router.post('/login/oauth', async (req, res) => {
       return res.status(403).json({ error: 'Conta suspensa. Entre em contato com o suporte.' });
     }
 
-    if (user.tenant.status === 'SUSPENDED' || user.tenant.status === 'CANCELLED') {
-      return res.status(403).json({ error: 'Conta suspensa ou cancelada.' });
-    }
+    const gateOauth = await assertAppLoginAllowedForEffectiveTenant(prisma, user);
+    if (!gateOauth.ok) return res.status(403).json({ error: gateOauth.error });
 
     const { deviceId } = req.body;
 
@@ -1134,6 +1143,8 @@ router.post('/2fa/verify', async (req, res) => {
       },
     });
     if (!full) return res.status(500).json({ error: 'Falha ao carregar utilizador.' });
+    const gate2fa = await assertAppLoginAllowedForEffectiveTenant(prisma, full);
+    if (!gate2fa.ok) return res.status(403).json({ error: gate2fa.error });
     const out = await issueAppJwtAfterLogin(full, deviceId, emailCanon);
     res.json(out);
   } catch (err) {
@@ -1291,7 +1302,8 @@ router.get('/me', authUser, async (req, res) => {
       },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
-    res.json(await buildSafeAppUserPayloadAsync(user));
+    const presentation = await buildPresentationUserForApp(prisma, user);
+    res.json(await buildSafeAppUserPayloadAsync(presentation));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2074,10 +2086,16 @@ router.put('/me', authUser, async (req, res) => {
       include: {
         tenant: { include: { subscription: { include: { plan: true } } } },
         technicianProfile: true,
+        appAccount: { select: { emailNorm: true } },
       },
     });
     const { password: _, ...safe } = updated;
-    res.json(fresh ? await buildSafeAppUserPayloadAsync(fresh) : safe);
+    if (!fresh) {
+      res.json(safe);
+      return;
+    }
+    const presentation = await buildPresentationUserForApp(prisma, fresh);
+    res.json(await buildSafeAppUserPayloadAsync(presentation));
   } catch (err) { 
     res.status(500).json({ error: err.message }); 
   }

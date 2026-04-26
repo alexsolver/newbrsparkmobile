@@ -63,7 +63,7 @@ export const USER_PAGES_DE_MERGE = {
   ul_createUser: 'Benutzer anlegen',
   ul_lblTenantsMulti: 'Organisationen (Mandanten) *',
   ul_tenantsHint:
-    'Wählen Sie ein oder mehrere Konten. Pro Organisation wird ein Benutzer mit derselben E-Mail, Namen und Passwort angelegt (getrennte Konten pro Mandant).',
+    'Nur Unternehmens-Mandanten (COMPANY). Die E-Mail muss bereits als Benutzer in einem Anbieter-Mandanten (PROVIDER) existieren; Plattform-Admins können ohne diese Voraussetzung anlegen. Ein Datensatz pro ausgewählter Organisation mit derselben E-Mail, Namen und Passwort.',
   ul_tenantsAll: 'Alle auswählen',
   ul_tenantsNone: 'Auswahl leeren',
   ul_createPickTenants: 'Wählen Sie mindestens eine Organisation (Mandant).',

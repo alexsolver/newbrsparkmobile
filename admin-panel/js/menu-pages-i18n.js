@@ -56,6 +56,8 @@ const M = {
     ten_modal_title: 'Novo Tenant',
     ten_lbl_company: 'Nome da Empresa *',
     ten_ph_company: 'Ex: Benedito Imóveis',
+    ten_lbl_domain_slug: 'Slug do domínio',
+    ten_ph_domain_slug: 'ex.: lan-solver (vazio = derivado do nome)',
     ten_lbl_admin_email: 'E-mail do Admin *',
     ten_ph_admin_email: 'admin@empresa.com',
     ten_lbl_region: 'Região/País *',
@@ -67,6 +69,7 @@ const M = {
     ten_btn_saving: 'A criar…',
     ten_no_create_perm: 'A sua conta não tem permissão para criar tenants.',
     ten_alert_required: 'Campos obrigatórios: Nome, E-mail e Região.',
+    ten_alert_slug_invalid: 'O slug só pode conter letras minúsculas, números e hífens. Ajuste o valor ou deixe em branco.',
     ten_alert_create_fail: 'Não foi possível criar o tenant. Verifique a consola (F12) ou tente novamente.',
     ten_plan_per_mo: '/mês',
 
@@ -781,9 +784,11 @@ M['en-US'] = {
   ten_row_suspend: 'Suspend',
   ten_row_activate: 'Activate',
   ten_modal_title: 'New tenant',
-  ten_lbl_company: 'Company name *',
-  ten_ph_company: 'e.g. ACME Properties',
-  ten_lbl_admin_email: 'Admin e-mail *',
+    ten_lbl_company: 'Company name *',
+    ten_ph_company: 'e.g. ACME Properties',
+    ten_lbl_domain_slug: 'Domain slug',
+    ten_ph_domain_slug: 'e.g. acme-corp (empty = derived from name)',
+    ten_lbl_admin_email: 'Admin e-mail *',
   ten_ph_admin_email: 'admin@company.com',
   ten_lbl_region: 'Region / country *',
   ten_opt_region_pick: 'Select location…',
@@ -793,8 +798,9 @@ M['en-US'] = {
   ten_btn_create: 'Create tenant',
   ten_btn_saving: 'Creating…',
   ten_no_create_perm: 'Your account does not have permission to create tenants.',
-  ten_alert_required: 'Required fields: Name, E-mail and Region.',
-  ten_alert_create_fail: 'Could not create the tenant. Check the console (F12) or try again.',
+    ten_alert_required: 'Required fields: Name, E-mail and Region.',
+    ten_alert_slug_invalid: 'Slug may only contain lowercase letters, numbers and hyphens. Fix the value or leave it blank.',
+    ten_alert_create_fail: 'Could not create the tenant. Check the console (F12) or try again.',
   ten_plan_per_mo: '/mo',
 
   sub_pageTitle: 'BrSpark Admin, Subscriptions',
@@ -1866,6 +1872,7 @@ export function applyTenantsPageI18n() {
   setText('ten-modal-title', 'ten_modal_title');
   const labels = [
     ['ten-lbl-company', 'ten_lbl_company'],
+    ['ten-lbl-domain-slug', 'ten_lbl_domain_slug'],
     ['ten-lbl-admin-email', 'ten_lbl_admin_email'],
     ['ten-lbl-region', 'ten_lbl_region'],
     ['ten-lbl-plan-modal', 'ten_lbl_plan_modal'],
@@ -1874,6 +1881,8 @@ export function applyTenantsPageI18n() {
   for (const [id, k] of labels) setText(id, k);
   const nn = document.getElementById('new-name');
   if (nn) nn.placeholder = mpT('ten_ph_company');
+  const ns = document.getElementById('new-slug');
+  if (ns) ns.placeholder = mpT('ten_ph_domain_slug');
   const ne = document.getElementById('new-email');
   if (ne) ne.placeholder = mpT('ten_ph_admin_email');
   const lr = document.getElementById('new-locale-id');

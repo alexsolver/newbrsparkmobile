@@ -12,6 +12,7 @@ const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork')
 const { isGlobalAppTenantEntity } = require('../lib/mobileTenantBranding');
 const {
   assertTenantAccess,
+  hasCapability,
   isPlatformAdmin,
   resolveScopedTenantId,
 } = require('../lib/authorization');
@@ -36,6 +37,22 @@ function requireTenantRouteAccess(req, tenantId, res) {
   if (assertTenantAccess(req.authorization, tenantId)) return true;
   res.status(403).json({ error: 'Sem permissão para este tenant.' });
   return false;
+}
+
+function normalizeTenantSlug(raw) {
+  return String(raw || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function slugFromTenantName(name) {
+  let slug = normalizeTenantSlug(name);
+  if (!slug) slug = `tenant-${Date.now()}`;
+  return slug;
 }
 
 // GET /api/tenants
@@ -123,34 +140,91 @@ router.get('/:id/branding', async (req, res) => {
 // POST /api/tenants
 router.post('/', async (req, res) => {
   try {
-    if (!isPlatformAdmin(req.authorization)) {
-      return res.status(403).json({ error: 'Apenas a plataforma pode criar tenants.' });
+    if (!hasCapability(req.authorization, 'platform.tenants.write')) {
+      return res.status(403).json({
+        error:
+          'Sem permissão para criar tenants. Use conta da plataforma (admin global ou SaaS admin) com permissão «platform.tenants.write».',
+      });
     }
-    const { name, email, defaultLang = 'pt-BR', planId, localeId, kind: bodyKind } = req.body;
+    const { name, email, defaultLang = 'pt-BR', planId, localeId, kind: bodyKind, slug: bodySlug } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' });
-    let slug = String(name)
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9-]/g, '')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
-    if (!slug) slug = `tenant-${Date.now()}`;
+    const slugInput = bodySlug != null ? String(bodySlug).trim() : '';
+    let slug;
+    if (slugInput) {
+      slug = normalizeTenantSlug(slugInput);
+      if (!slug) {
+        return res.status(400).json({
+          error: 'Slug inválido. Use apenas letras minúsculas, números e hífens.',
+        });
+      }
+    } else {
+      slug = slugFromTenantName(name);
+    }
+    const baseSlug = slug.slice(0, 56);
     const ownerName = String(name).trim().slice(0, 200) || String(email).split('@')[0] || 'Admin';
     const kindRaw = String(bodyKind || 'COMPANY').trim().toUpperCase();
     const kind = ['COMPANY', 'CLIENT', 'PROVIDER'].includes(kindRaw) ? kindRaw : 'COMPANY';
 
-    const tenant = await prisma.tenant.create({
-      data: {
-        name: String(name).trim(),
-        slug,
-        email: String(email).trim().toLowerCase(),
-        ownerName,
-        defaultLang,
-        localeId: localeId || null,
-        status: 'TRIAL',
-        kind,
-      },
+    const localeIdNorm = localeId ? String(localeId).trim() : '';
+    if (localeIdNorm) {
+      const loc = await prisma.localeProfile.findFirst({
+        where: { id: localeIdNorm, isActive: true },
+        select: { id: true },
+      });
+      if (!loc) {
+        return res.status(400).json({
+          error:
+            'Região/país inválido ou inativo. Atualize a página (F5), escolha de novo a região e tente criar o tenant.',
+        });
+      }
+    }
+
+    const emailNorm = String(email).trim().toLowerCase();
+    const nameNorm = String(name).trim();
+
+    const existingEmail = await prisma.tenant.findFirst({
+      where: { email: emailNorm },
+      select: { slug: true },
     });
+    if (existingEmail) {
+      return res.status(409).json({
+        error: `Já existe um tenant com o e-mail «${emailNorm}» (organização: «${existingEmail.slug}»). Cada tenant precisa de um e-mail de administrador único — use outro e-mail.`,
+      });
+    }
+
+    let tenant;
+    let lastErr;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const slugTry = attempt === 0 ? slug.slice(0, 60) : `${baseSlug}-${attempt}`.slice(0, 60);
+      try {
+        tenant = await prisma.tenant.create({
+          data: {
+            name: nameNorm,
+            slug: slugTry,
+            email: emailNorm,
+            ownerName,
+            defaultLang,
+            localeId: localeIdNorm || null,
+            status: 'TRIAL',
+            kind,
+          },
+        });
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (e && e.code === 'P2002') {
+          const rawT = e.meta?.target;
+          const fields = Array.isArray(rawT) ? rawT.map(String) : rawT != null ? [String(rawT)] : [];
+          if (fields.some((f) => f.includes('email'))) {
+            throw e;
+          }
+          if (attempt < 7) continue;
+        }
+        throw e;
+      }
+    }
+    if (!tenant) throw lastErr || new Error('Falha ao criar tenant.');
 
     if (planId) {
       const plan = await prisma.plan.findUnique({ where: { id: planId } });
@@ -168,9 +242,18 @@ router.post('/', async (req, res) => {
   } catch (err) {
     const code = err && err.code;
     if (code === 'P2002') {
-      return res.status(409).json({
-        error: 'Já existe um tenant com este e-mail ou slug. Escolha outro nome ou e-mail.',
-      });
+      const rawT = err.meta?.target;
+      const fields = Array.isArray(rawT) ? rawT.map(String) : rawT != null ? [String(rawT)] : [];
+      let msg =
+        'Já existe um registo com estes dados. Verifique e-mail (único por tenant) ou slug (único).';
+      if (fields.some((f) => f.includes('email'))) {
+        msg =
+          'Este e-mail já está a ser usado por outro tenant. O e-mail do administrador tem de ser único em toda a plataforma — escolha outro.';
+      } else if (fields.some((f) => f.includes('slug'))) {
+        msg =
+          'Este slug já está em uso. Altere o campo «Slug do domínio» ou o nome da empresa até o sistema aceitar.';
+      }
+      return res.status(409).json({ error: msg });
     }
     console.error('[POST /tenants]', err);
     res.status(500).json({ error: err.message || 'Falha ao criar tenant.' });

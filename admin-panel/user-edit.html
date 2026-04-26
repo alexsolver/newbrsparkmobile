@@ -74,6 +74,7 @@
           </div>
           <div class="ue-nav-group">
             <a href="#sec-tecnico" id="ue-nav-tech">Prestador</a>
+            <a href="#sec-provider-affiliations" id="ue-nav-paff">Empresas (vínculos)</a>
             <a href="#sec-horarios" id="ue-nav-schedule">Horários</a>
             <a href="#sec-regioes" id="ue-nav-regions">Regiões</a>
           </div>
@@ -299,6 +300,58 @@
                   </div>
                 </section>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="data-shell ue-section ue-section-spaced fade-in" id="sec-provider-affiliations" data-ue-default-collapsed="true">
+          <div class="panel-header"><span class="panel-title" id="ue-sec-paff-title">Vínculos com empresas (rede prestador)</span></div>
+          <div class="data-shell-body">
+            <p id="ue-paff-intro" class="ue-section-intro" style="margin-top:0"></p>
+            <p id="ue-paff-kyc" class="hint-box" style="display:none;margin-bottom:12px"></p>
+            <p id="ue-paff-no-pi" class="hint-box" hidden style="margin-bottom:12px"></p>
+            <p id="ue-paff-loading" style="font-size:13px;color:var(--text3)">…</p>
+            <p id="ue-paff-error" class="hint-box" style="display:none;border-color:#fecaca;background:#fef2f2;color:#991b1b"></p>
+            <div id="ue-paff-body" hidden>
+              <div class="ue-task-grid" style="margin-bottom:16px">
+                <section class="ue-task-card ue-task-card--wide">
+                  <div class="ue-inline-kicker" id="ue-paff-invite-kicker">Convidar / atualizar convite</div>
+                  <h3 class="ue-task-card__title" id="ue-paff-invite-title">Nova associação</h3>
+                  <p id="ue-paff-invite-hint" class="ue-task-card__hint"></p>
+                  <div class="grid-2" style="align-items:end">
+                    <div class="form-group" id="ue-paff-tenant-wrap">
+                      <label class="form-label" for="ue-paff-tenant" id="ue-paff-lbl-tenant">Empresa (tenant)</label>
+                      <select class="form-control" id="ue-paff-tenant"></select>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" for="ue-paff-rel" id="ue-paff-lbl-rel">Tipo de vínculo</label>
+                      <select class="form-control" id="ue-paff-rel">
+                        <option value="PARTNER">Parceria</option>
+                        <option value="DEDICATED">Dedicado</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="form-group" style="max-width:720px">
+                    <label class="form-label" for="ue-paff-note" id="ue-paff-lbl-note">Nota (opcional)</label>
+                    <textarea id="ue-paff-note" class="form-control" rows="2" maxlength="2000" placeholder=""></textarea>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-primary" id="ue-paff-invite-btn">Enviar convite</button>
+                </section>
+              </div>
+              <div class="table-wrap">
+                <table class="table-data">
+                  <thead><tr>
+                    <th id="ue-paff-th-company">Empresa</th>
+                    <th id="ue-paff-th-type">Tipo</th>
+                    <th id="ue-paff-th-status">Estado</th>
+                    <th id="ue-paff-th-dates">Datas</th>
+                    <th id="ue-paff-th-note">Nota</th>
+                    <th id="ue-paff-th-actions">Ações</th>
+                  </tr></thead>
+                  <tbody id="ue-paff-tbody"></tbody>
+                </table>
+              </div>
+              <p id="ue-paff-empty" style="display:none;font-size:13px;color:var(--text3)">—</p>
             </div>
           </div>
         </section>

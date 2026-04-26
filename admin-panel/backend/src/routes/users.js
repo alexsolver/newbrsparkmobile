@@ -256,6 +256,29 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * Contas que já existem como User num tenant PROVIDER (ou mesmo AppAccount) podem ser associadas a tenants empresa.
+ */
+async function emailHasProviderTenantMembership(db, emailNorm) {
+  const norm = String(emailNorm || '').trim().toLowerCase();
+  if (!norm) return false;
+  const direct = await db.user.findFirst({
+    where: { email: norm, tenant: { kind: 'PROVIDER' } },
+    select: { id: true },
+  });
+  if (direct) return true;
+  const acc = await db.appAccount.findUnique({
+    where: { emailNorm: norm },
+    select: { id: true },
+  });
+  if (!acc?.id) return false;
+  const viaAcc = await db.user.findFirst({
+    where: { appAccountId: acc.id, tenant: { kind: 'PROVIDER' } },
+    select: { id: true },
+  });
+  return !!viaAcc;
+}
+
 // POST /api/users — `tenantId` (um) ou `tenantIds` (vários); cria um registo User por tenant com o mesmo e-mail e senha.
 router.post('/', async (req, res) => {
   try {
@@ -316,6 +339,28 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Um ou mais tenants não existem.' });
     }
     const tenantKindById = new Map(tenantsFound.map((t) => [t.id, String(t.kind || '').toUpperCase()]));
+
+    const nonCompanyIds = tenantIdsResolved.filter((tid) => {
+      const k = tenantKindById.get(tid) || '';
+      return k !== 'COMPANY';
+    });
+    if (nonCompanyIds.length) {
+      return res.status(400).json({
+        error:
+          'Apenas tenants do tipo empresa (COMPANY) podem receber utilizadores criados por esta rota. Contas imobiliária (CLIENT) ou prestador (PROVIDER) usam outros fluxos.',
+      });
+    }
+
+    if (!isPlatformAdmin(req.authorization)) {
+      const hasProvider = await emailHasProviderTenantMembership(prisma, emailNorm);
+      if (!hasProvider) {
+        return res.status(400).json({
+          error:
+            'Só é possível associar a organizações empresa contas que já existam como utilizador num tenant prestador (PROVIDER) com o mesmo e-mail (ou a mesma conta global). Conclua primeiro o cadastro na carteira do prestador ou contacte a plataforma.',
+          code: 'USER_CREATE_COMPANY_REQUIRES_PROVIDER_SEAT',
+        });
+      }
+    }
 
     for (const scopedTenantId of tenantIdsResolved) {
       if (employeeMatricula) {
@@ -1065,6 +1110,65 @@ router.delete('/:id/face-enrollment/:photoId', async (req, res) => {
     });
   } catch (err) {
     console.error('DELETE /users/:id/face-enrollment/:photoId', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/users/:id/provider-affiliations — vínculos prestador ↔ tenants empresa (painel)
+router.get('/:id/provider-affiliations', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const user = await findScopedUserOrNull(req, id, { select: { id: true, email: true, role: true } });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const providerIdentity = await prisma.providerIdentity.findUnique({
+      where: { userId: id },
+      select: {
+        id: true,
+        globalStatus: true,
+        kycStatus: true,
+        updatedAt: true,
+        affiliations: {
+          orderBy: { updatedAt: 'desc' },
+          include: {
+            tenant: { select: { id: true, name: true, email: true, kind: true } },
+          },
+        },
+      },
+    });
+
+    if (!providerIdentity) {
+      return res.json({ providerIdentity: null, affiliations: [] });
+    }
+
+    const rows = (providerIdentity.affiliations || []).filter((row) => {
+      const kind = String(row.tenant?.kind || 'COMPANY').toUpperCase();
+      if (kind !== 'COMPANY') return false;
+      return assertTenantAccess(req.authorization, row.tenantId);
+    });
+
+    res.json({
+      providerIdentity: {
+        id: providerIdentity.id,
+        globalStatus: providerIdentity.globalStatus,
+        kycStatus: providerIdentity.kycStatus,
+        updatedAt: providerIdentity.updatedAt,
+      },
+      affiliations: rows.map((row) => ({
+        id: row.id,
+        tenantId: row.tenantId,
+        tenant: row.tenant,
+        status: row.status,
+        relationshipType: row.relationshipType || 'PARTNER',
+        note: row.note,
+        invitedAt: row.invitedAt,
+        requestedAt: row.requestedAt,
+        activatedAt: row.activatedAt,
+        endedAt: row.endedAt,
+      })),
+    });
+  } catch (err) {
+    console.error('GET /users/:id/provider-affiliations', err);
     res.status(500).json({ error: err.message });
   }
 });

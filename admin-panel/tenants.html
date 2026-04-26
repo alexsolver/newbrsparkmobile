@@ -11,6 +11,19 @@
       animation: ten-save-spin 0.75s linear infinite;
     }
     @keyframes ten-save-spin { to { transform: rotate(360deg); } }
+    .new-tenant-inline-error {
+      margin-top: 4px;
+      margin-bottom: 2px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(220, 38, 38, 0.45);
+      color: #b91c1c;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+    .new-tenant-inline-error[hidden] { display: none !important; }
   </style>
 </head>
 <body>
@@ -131,6 +144,9 @@
           <div class="tenant-branding-modal__upload-row">
             <input class="tenant-branding-modal__file-input" type="file" id="tenant-branding-logo-light-file" accept="image/*" />
             <button type="button" class="btn btn-ghost btn-sm" id="tenant-branding-logo-light-upload">Upload</button>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.4;">
+            Ao concluir o upload do logo claro, primária, destaque, superfície, secundária e cores dos chips são sugeridas automaticamente (pode editar depois).
           </div>
         </div>
         <div class="form-group tenant-branding-modal__field">
@@ -312,6 +328,7 @@
     </div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label" id="ten-lbl-company">Nome da Empresa *</label><input class="form-control" id="new-name" placeholder="Ex: Benedito Imóveis" /></div>
+      <div class="form-group"><label class="form-label" id="ten-lbl-domain-slug">Slug do domínio</label><input class="form-control" id="new-slug" type="text" inputmode="text" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="ex.: lan-solver" /></div>
       <div class="form-group"><label class="form-label" id="ten-lbl-admin-email">E-mail do Admin *</label><input class="form-control" id="new-email" type="email" placeholder="admin@empresa.com" /></div>
       <div class="form-group"><label class="form-label" id="ten-lbl-region">Região/País *</label>
         <select class="form-control" id="new-locale-id"><option value="">Selecione a localização...</option></select>
@@ -324,6 +341,7 @@
           <select class="form-control" id="new-lang"><option value="pt-BR">pt-BR</option><option value="en-US">en-US</option><option value="es-ES">es-ES</option><option value="de-DE">de-DE</option></select>
         </div>
       </div>
+      <div id="new-tenant-inline-error" class="new-tenant-inline-error" role="alert" hidden></div>
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-ghost" id="ten-modal-cancel" onclick="closeModal('new-tenant-modal')">Cancelar</button>
@@ -338,7 +356,16 @@
 </div>
 
 <script>
-  function openModal(id)  { document.getElementById(id).classList.add('open'); }
+  function openModal(id) {
+    document.getElementById(id).classList.add('open');
+    if (id === 'new-tenant-modal') {
+      const errEl = document.getElementById('new-tenant-inline-error');
+      if (errEl) {
+        errEl.textContent = '';
+        errEl.hidden = true;
+      }
+    }
+  }
   function closeModal(id) { document.getElementById(id).classList.remove('open'); }
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
@@ -346,12 +373,12 @@
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
-  import { CONFIG, getPanelCapabilities }   from './js/config.js';
+  import { CONFIG, getEffectivePanelCapabilities } from './js/config.js';
   import { applyTenantsPageI18n, tenantsStatusLabel, mpT, mpIntlLocale } from './js/menu-pages-i18n.js';
 
   await initPage();
   applyTenantsPageI18n();
-  const panelCaps = new Set(getPanelCapabilities());
+  const panelCaps = new Set(getEffectivePanelCapabilities());
   const canCreateTenant = panelCaps.has('platform.tenants.write');
   const canChangeTenantStatus = panelCaps.has('platform.tenants.write');
   const canEditTenantBranding =
@@ -376,6 +403,16 @@
       .replace(/"/g, '&quot;');
   }
 
+  function normalizeNewTenantSlugInput(raw) {
+    return String(raw || '')
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
   const [planData, localeData] = await Promise.all([
     CONFIG.get('/plans'),
     CONFIG.get('/i18n/entries?source=locales&activeOnly=1'),
@@ -387,6 +424,14 @@
   const planSel   = document.getElementById('new-plan-id');
   const localeSel = document.getElementById('new-locale-id');
   let cachedTenants = [];
+  /** Permissões do plano no momento de abrir o modal (alinhar validação ao servidor). */
+  let brandingModalPermissions = {
+    enabled: false,
+    allowLogo: false,
+    allowColors: false,
+    allowLoginScreen: false,
+    allowAppDisplayName: false,
+  };
 
   plansList.forEach(p => { planSel.innerHTML += `<option value="${escHtml(p.id)}">${escHtml(p.name)} — R$ ${Number(p.priceMonthly).toFixed(0)}${mpT('ten_plan_per_mo')}</option>`; });
   localesList.forEach(l => { localeSel.innerHTML += `<option value="${escHtml(l.id)}">${flags[l.countryCode] || '🌐'} ${escHtml(l.name)} (${escHtml(l.countryCode)})</option>`; });
@@ -637,6 +682,285 @@
       .replace(/\)/g, '%29');
   }
 
+  function brandingRgbToHsl(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    const l = (max + min) / 2;
+    let s = 0;
+    if (d !== 0) {
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r:
+          h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+          break;
+        case g:
+          h = ((b - r) / d + 2) / 6;
+          break;
+        default:
+          h = ((r - g) / d + 4) / 6;
+          break;
+      }
+    }
+    return { h: h * 360, s, l };
+  }
+
+  function brandingHue2rgb(p, q, t) {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  }
+
+  function brandingHslToRgb(h, s, l) {
+    h /= 360;
+    if (s <= 0) {
+      const v = Math.round(l * 255);
+      return [v, v, v];
+    }
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    const r = brandingHue2rgb(p, q, h + 1 / 3);
+    const g = brandingHue2rgb(p, q, h);
+    const b = brandingHue2rgb(p, q, h - 1 / 3);
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+  }
+
+  function brandingHexFromRgb(r, g, b) {
+    const c = (n) => Math.max(0, Math.min(255, Math.round(n)));
+    const rr = c(r);
+    const gg = c(g);
+    const bb = c(b);
+    return (
+      '#' +
+      [rr, gg, bb]
+        .map((x) => x.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase()
+    );
+  }
+
+  /** Média ponderada por croma (logos pretos/cinzentos / pouco saturados). */
+  function computeFallbackBrandRgbFromImageData(imageData) {
+    const px = imageData.data;
+    let tw = 0;
+    let tr = 0;
+    let tg = 0;
+    let tb = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      const a = px[i + 3];
+      if (a < 12) continue;
+      const r = px[i];
+      const g = px[i + 1];
+      const b = px[i + 2];
+      const { s, l } = brandingRgbToHsl(r, g, b);
+      if (l > 0.995 || l < 0.012) continue;
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      const w = (chroma / 255 + 0.06) * (0.1 + s) * (a / 255);
+      tw += w;
+      tr += r * w;
+      tg += g * w;
+      tb += b * w;
+    }
+    if (tw < 1e-6) return null;
+    return { r: tr / tw, g: tg / tw, b: tb / tw };
+  }
+
+  /**
+   * Amostra pixels do logo (canvas) e deriva primária / destaque / neutros alinhados ao app (chips + cabeçalho na prévia).
+   */
+  function computePaletteFromBrandingImageData(imageData) {
+    const px = imageData.data;
+    const BUCKETS = 36;
+    const buckets = Array.from({ length: BUCKETS }, () => ({ w: 0, r: 0, g: 0, b: 0 }));
+    let anyW = 0;
+    let anyR = 0;
+    let anyG = 0;
+    let anyB = 0;
+
+    for (let i = 0; i < px.length; i += 4) {
+      const a = px[i + 3];
+      if (a < 16) continue;
+      const r = px[i];
+      const g = px[i + 1];
+      const b = px[i + 2];
+      const { h: hue, s, l } = brandingRgbToHsl(r, g, b);
+      if (l > 0.985 || l < 0.012) continue;
+      const chromaWeight = s * s * (a / 255);
+      if (s > 0.08) {
+        let bi = Math.floor((hue / 360) * BUCKETS);
+        if (bi >= BUCKETS) bi = BUCKETS - 1;
+        if (bi < 0) bi = 0;
+        buckets[bi].w += chromaWeight;
+        buckets[bi].r += r * chromaWeight;
+        buckets[bi].g += g * chromaWeight;
+        buckets[bi].b += b * chromaWeight;
+      }
+      if (s > 0.04 && l > 0.06 && l < 0.94) {
+        const ww = (0.12 + s) * (a / 255);
+        anyW += ww;
+        anyR += r * ww;
+        anyG += g * ww;
+        anyB += b * ww;
+      }
+    }
+
+    let bestIdx = 0;
+    let bestW = 0;
+    for (let j = 0; j < BUCKETS; j++) {
+      if (buckets[j].w > bestW) {
+        bestW = buckets[j].w;
+        bestIdx = j;
+      }
+    }
+
+    let sr;
+    let sg;
+    let sb;
+    if (bestW > 1e-6) {
+      const B = buckets[bestIdx];
+      sr = B.r / B.w;
+      sg = B.g / B.w;
+      sb = B.b / B.w;
+    } else if (anyW > 1e-6) {
+      sr = anyR / anyW;
+      sg = anyG / anyW;
+      sb = anyB / anyW;
+    } else {
+      const fb = computeFallbackBrandRgbFromImageData(imageData);
+      if (!fb) return null;
+      sr = fb.r;
+      sg = fb.g;
+      sb = fb.b;
+    }
+
+    let { h, s, l } = brandingRgbToHsl(sr, sg, sb);
+    if (!Number.isFinite(h)) h = 175;
+    if (s < 0.12) {
+      h = 175;
+      s = 0.52;
+      l = Math.min(0.45, Math.max(0.28, l));
+    } else {
+      s = Math.min(1, Math.max(0.28, s * 1.02));
+    }
+
+    const primaryL = Math.min(0.4, Math.max(0.22, l * 0.52));
+    const primary = brandingHexFromRgb(...brandingHslToRgb(h, s, primaryL));
+
+    const accentL = Math.min(0.6, Math.max(0.36, primaryL + 0.2));
+    const accentS = Math.min(1, s * 1.1);
+    const accent = brandingHexFromRgb(...brandingHslToRgb(h, accentS, accentL));
+
+    const secondary = brandingHexFromRgb(...brandingHslToRgb(h, Math.min(0.22, s * 0.42), 0.27));
+
+    const surface = brandingHexFromRgb(...brandingHslToRgb(h, 0.038, 0.982));
+
+    const chipActiveBg = accent;
+    const chipActiveFg = brandingPreviewContrastOn(chipActiveBg);
+    const chipInactiveBg = '#FFFFFF';
+    const chipInactiveFg = secondary;
+    const chipInactiveBorder = brandingHexFromRgb(...brandingHslToRgb(h, 0.11, 0.9));
+
+    return {
+      primary,
+      accent,
+      secondary,
+      surface,
+      chipActiveBg,
+      chipActiveFg,
+      chipInactiveBg,
+      chipInactiveFg,
+      chipInactiveBorder,
+    };
+  }
+
+  function imageDataFromDrawable(drawable, maxSide) {
+    const iw = drawable.naturalWidth || drawable.width;
+    const ih = drawable.naturalHeight || drawable.height;
+    if (!iw || !ih) return null;
+    const scale = Math.min(1, maxSide / Math.max(iw, ih));
+    const cw = Math.max(1, Math.round(iw * scale));
+    const ch = Math.max(1, Math.round(ih * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(drawable, 0, 0, cw, ch);
+    try {
+      return ctx.getImageData(0, 0, cw, ch);
+    } catch {
+      return null;
+    }
+  }
+
+  async function extractBrandingPaletteFromObjectUrl(objectUrl) {
+    const img = await new Promise((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('load'));
+      im.src = objectUrl;
+    });
+    if (img.decode) {
+      try {
+        await img.decode();
+      } catch {
+        /* continuar */
+      }
+    }
+    const imageData = imageDataFromDrawable(img, 280);
+    if (!imageData) return null;
+    return computePaletteFromBrandingImageData(imageData);
+  }
+
+  /** Preferível ao Image+URL: decodifica o ficheiro direto (menos falhas com PNG/alpha). */
+  async function extractBrandingPaletteFromFile(file) {
+    if (typeof createImageBitmap === 'function') {
+      try {
+        const bmp = await createImageBitmap(file);
+        try {
+          const imageData = imageDataFromDrawable(bmp, 280);
+          if (imageData) {
+            const pal = computePaletteFromBrandingImageData(imageData);
+            if (pal) return pal;
+          }
+        } finally {
+          if (typeof bmp.close === 'function') bmp.close();
+        }
+      } catch {
+        /* cair para Image */
+      }
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      return await extractBrandingPaletteFromObjectUrl(url);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  function applyBrandingPaletteFields(p) {
+    if (!p) return;
+    document.getElementById('tenant-branding-primary').value = p.primary;
+    document.getElementById('tenant-branding-accent').value = p.accent;
+    document.getElementById('tenant-branding-secondary').value = p.secondary;
+    document.getElementById('tenant-branding-surface').value = p.surface;
+    document.getElementById('tenant-branding-menu-chip-active-bg').value = p.chipActiveBg;
+    document.getElementById('tenant-branding-menu-chip-active-fg').value = p.chipActiveFg;
+    document.getElementById('tenant-branding-menu-chip-inactive-bg').value = p.chipInactiveBg;
+    document.getElementById('tenant-branding-menu-chip-inactive-fg').value = p.chipInactiveFg;
+    document.getElementById('tenant-branding-menu-chip-inactive-border').value = p.chipInactiveBorder;
+    syncAllBrandingColorPickers();
+    setBrandingPreview();
+    renderBrandingValidation();
+  }
+
   function setBrandingPreview() {
     const name = document.getElementById('tenant-branding-app-name').value.trim() || 'BrSpark';
     const tagline = document.getElementById('tenant-branding-tagline').value.trim() || 'Precisou, resolveu.';
@@ -813,9 +1137,15 @@
     const accent = document.getElementById('tenant-branding-accent').value.trim();
     const issues = [];
     if (!enabled) return issues;
-    if (!logoLight && !logoDark) issues.push('Informe ao menos um logo para branding ativo.');
+    const bp = brandingModalPermissions || {};
+    if (bp.allowLogo && !logoLight && !logoDark) {
+      issues.push('Informe ao menos um logo para branding ativo (plano exige logo).');
+    }
     if (primary && !isHexColor(primary)) issues.push('Cor primária inválida. Use formato #RRGGBB.');
     if (accent && !isHexColor(accent)) issues.push('Cor de destaque inválida. Use formato #RRGGBB.');
+    if (bp.allowColors && !isHexColor(primary) && !isHexColor(accent)) {
+      issues.push('Informe ao menos uma cor de marca válida (primária ou destaque, #RRGGBB).');
+    }
     const chipHexIds = [
       'tenant-branding-menu-chip-active-bg',
       'tenant-branding-menu-chip-active-fg',
@@ -931,6 +1261,14 @@
       return;
     }
     targetInput.value = res.url;
+    if (kind === 'logo-light') {
+      try {
+        const palette = await extractBrandingPaletteFromFile(file);
+        if (palette) applyBrandingPaletteFields(palette);
+      } catch (e) {
+        console.warn('[branding palette]', e);
+      }
+    }
     setBrandingPreview();
   }
 
@@ -947,6 +1285,13 @@
         return;
       }
       const perms = data.permissions || {};
+      brandingModalPermissions = {
+        enabled: !!perms.enabled,
+        allowLogo: !!perms.allowLogo,
+        allowColors: !!perms.allowColors,
+        allowLoginScreen: !!perms.allowLoginScreen,
+        allowAppDisplayName: !!perms.allowAppDisplayName,
+      };
       const branding = data.branding || {};
       const isGlobalAppTenant = !!data?.tenant?.isGlobalAppTenant;
       const liveActivityBox = document.getElementById('tenant-branding-live-activity-box');
@@ -992,10 +1337,37 @@
   });
 
   document.getElementById('save-tenant-branding-btn').onclick = async () => {
-    if (!canEditTenantBranding) return;
+    const saveBrandingBtn = document.getElementById('save-tenant-branding-btn');
+    const valBox = document.getElementById('tenant-branding-validation');
+    if (!canEditTenantBranding) {
+      try {
+        window.alert(
+          'Sem permissão para guardar branding. Recarregue a página (ou refaça login) para atualizar as permissões do painel.',
+        );
+      } catch {
+        /* */
+      }
+      return;
+    }
     const id = document.getElementById('tenant-branding-id').value;
-    if (!id) return;
-    if (!renderBrandingValidation()) return;
+    if (!id) {
+      try {
+        window.alert('Nenhum tenant selecionado. Feche o modal e abra o branding de novo a partir da tabela.');
+      } catch {
+        /* */
+      }
+      return;
+    }
+    if (!renderBrandingValidation()) {
+      valBox?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const iss = validateBrandingForm();
+      try {
+        if (iss[0]) window.alert(iss[0]);
+      } catch {
+        /* */
+      }
+      return;
+    }
     const body = {
       branding: {
         enabled: document.getElementById('tenant-branding-enabled').checked,
@@ -1016,19 +1388,69 @@
         menuChipInactiveBorder: document.getElementById('tenant-branding-menu-chip-inactive-border').value.trim(),
       },
     };
-    const res = await CONFIG.put(`/tenants/${id}/branding`, body);
-    if (res?.error) {
-      alert(res.error);
-      return;
+    if (saveBrandingBtn) {
+      saveBrandingBtn.disabled = true;
+      saveBrandingBtn.setAttribute('aria-busy', 'true');
     }
-    closeModal('tenant-branding-modal');
-    await loadTenants();
+    try {
+      const res = await CONFIG.put(`/tenants/${id}/branding`, body);
+      if (res == null) return;
+      if (res?.error) {
+        if (valBox) {
+          valBox.style.display = 'block';
+          valBox.textContent = res.error;
+          valBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        try {
+          window.alert(res.error);
+        } catch {
+          /* */
+        }
+        return;
+      }
+      closeModal('tenant-branding-modal');
+      await loadTenants();
+    } catch (e) {
+      const msg = e?.message || 'Falha ao guardar branding.';
+      if (valBox) {
+        valBox.style.display = 'block';
+        valBox.textContent = msg;
+      }
+      try {
+        window.alert(msg);
+      } catch {
+        /* */
+      }
+    } finally {
+      if (saveBrandingBtn) {
+        saveBrandingBtn.disabled = false;
+        saveBrandingBtn.removeAttribute('aria-busy');
+      }
+    }
   };
 
   const saveTenantBtn = document.getElementById('save-tenant-btn');
   const saveTenantText = document.getElementById('ten-modal-save-text');
   const saveTenantSpin = document.getElementById('ten-save-spinner');
   const cancelTenantBtn = document.getElementById('ten-modal-cancel');
+  const newTenantErrEl = document.getElementById('new-tenant-inline-error');
+
+  /** Erros do modal «Novo tenant»: visível no próprio modal (alert é bloqueado em alguns browsers / Electron). */
+  function showNewTenantError(msg) {
+    const t = String(msg || '').trim();
+    if (newTenantErrEl) {
+      newTenantErrEl.textContent = t;
+      newTenantErrEl.hidden = !t;
+      if (t) newTenantErrEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    if (t) {
+      try {
+        window.alert(t);
+      } catch {
+        /* ignorar */
+      }
+    }
+  }
 
   function setTenantSaveLoading(on) {
     if (!saveTenantBtn || !saveTenantText) return;
@@ -1049,6 +1471,12 @@
 
   saveTenantBtn?.addEventListener('click', async () => {
     if (!canCreateTenant) return;
+    const slugRaw = document.getElementById('new-slug').value.trim();
+    const slugNorm = slugRaw ? normalizeNewTenantSlugInput(slugRaw) : '';
+    if (slugRaw && !slugNorm) {
+      showNewTenantError(mpT('ten_alert_slug_invalid'));
+      return;
+    }
     const body = {
       name:        document.getElementById('new-name').value.trim(),
       email:       document.getElementById('new-email').value.trim(),
@@ -1056,27 +1484,36 @@
       defaultLang: document.getElementById('new-lang').value,
       planId:      document.getElementById('new-plan-id').value || undefined,
     };
+    if (slugNorm) body.slug = slugNorm;
     if (!body.name || !body.email || !body.localeId) {
-      alert(mpT('ten_alert_required'));
+      showNewTenantError(mpT('ten_alert_required'));
       return;
     }
+    showNewTenantError('');
     setTenantSaveLoading(true);
     try {
       const res = await CONFIG.post('/tenants', body);
       if (!res) return;
-      if (res.error) {
-        alert(res.error);
+      const apiErr =
+        (typeof res.error === 'string' && res.error.trim()) ||
+        (typeof res.message === 'string' && res.message.trim()) ||
+        (typeof res.msg === 'string' && res.msg.trim()) ||
+        '';
+      if (apiErr) {
+        showNewTenantError(apiErr);
+        document.getElementById('new-email')?.focus?.();
         return;
       }
       if (res.id) {
+        showNewTenantError('');
         closeModal('new-tenant-modal');
         await loadTenants();
         return;
       }
-      alert(mpT('ten_alert_create_fail'));
+      showNewTenantError(mpT('ten_alert_create_fail'));
     } catch (err) {
       console.error('[save-tenant]', err);
-      alert(err?.message || mpT('ten_alert_create_fail'));
+      showNewTenantError(err?.message || mpT('ten_alert_create_fail'));
     } finally {
       setTenantSaveLoading(false);
     }

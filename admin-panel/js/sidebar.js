@@ -79,6 +79,8 @@ function seedAdminSessionFromOpenerIfNeeded() {
       'brspark_admin_role',
       'brspark_panel_mode',
       'brspark_panel_tenant',
+      'brspark_admin_context',
+      'brspark_admin_capabilities',
     ];
     for (const k of keys) {
       try {

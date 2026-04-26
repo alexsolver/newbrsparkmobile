@@ -76,9 +76,249 @@ const COLLAPSIBLE_SECTION_SUMMARIES = {
   'sec-docs-pro': 'Certificações, NR, ASO e anexos operacionais.',
   'sec-horarios': 'Turnos e disponibilidade por dia.',
   'sec-regioes': 'Cobertura geográfica e bases habilitadas.',
+  'sec-provider-affiliations': 'Parceria ou dedicado com empresas (convites e estado).',
   'sec-ops': 'Sessão ativa, notas internas e preferências.',
   'sec-audit': 'Histórico recente de ações administrativas.',
 };
+
+function panelTenantIdUserEdit() {
+  try {
+    if (sessionStorage.getItem('brspark_panel_mode') === 'tenant') {
+      const row = JSON.parse(sessionStorage.getItem('brspark_panel_tenant') || '{}');
+      return row.id || null;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function formatUeDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString(adminIntlLocale(getAdminUiLocale()), { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function providerAffStatusLabel(status) {
+  const u = String(status || '').toUpperCase();
+  const key =
+    {
+      INVITED: 'ue_paffStInvited',
+      REQUESTED: 'ue_paffStRequested',
+      ACTIVE: 'ue_paffStActive',
+      INACTIVE: 'ue_paffStInactive',
+      SUSPENDED: 'ue_paffStSuspended',
+      REJECTED: 'ue_paffStRejected',
+    }[u] || null;
+  return key ? t(key) : u || '—';
+}
+
+function paintProviderAffiliationsSection(payload) {
+  const tbody = document.getElementById('ue-paff-tbody');
+  const empty = document.getElementById('ue-paff-empty');
+  const kycBox = document.getElementById('ue-paff-kyc');
+  if (!tbody) return;
+
+  const pi = payload?.providerIdentity;
+  const rows = Array.isArray(payload?.affiliations) ? payload.affiliations : [];
+  const kycOk = pi && String(pi.kycStatus || '').toUpperCase() === 'APPROVED';
+
+  if (kycBox) {
+    if (pi) {
+      kycBox.style.display = '';
+      const ks = String(pi.kycStatus || '').toUpperCase();
+      kycBox.innerHTML = `${esc(t('ue_paffKycLine').replace(/\{kyc\}/g, ks).replace(/\{global\}/g, String(pi.globalStatus || '—')))}`;
+    } else {
+      kycBox.style.display = 'none';
+      kycBox.textContent = '';
+    }
+  }
+
+  if (!rows.length) {
+    tbody.innerHTML = '';
+    if (empty) {
+      empty.style.display = '';
+      empty.textContent = t('ue_paffEmpty');
+    }
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  tbody.innerHTML = rows
+    .map((row) => {
+      const name = row.tenant?.name || row.tenantId || '—';
+      const rel = String(row.relationshipType || 'PARTNER').toUpperCase();
+      const relLab = rel === 'DEDICATED' ? t('ue_paffRelDedicated') : t('ue_paffRelPartner');
+      const st = String(row.status || '').toUpperCase();
+      const dates = [
+        row.invitedAt ? `${t('ue_paffDtInvited')}: ${esc(formatUeDateTime(row.invitedAt))}` : '',
+        row.activatedAt ? `${t('ue_paffDtActive')}: ${esc(formatUeDateTime(row.activatedAt))}` : '',
+        row.endedAt ? `${t('ue_paffDtEnded')}: ${esc(formatUeDateTime(row.endedAt))}` : '',
+      ]
+        .filter(Boolean)
+        .join('<br/>');
+      const note = row.note ? esc(String(row.note).slice(0, 160)) + (String(row.note).length > 160 ? '…' : '') : '—';
+      const canAct = !isUserEditReadonly();
+      let actions = '';
+      if (canAct && pi && (st === 'INVITED' || st === 'REQUESTED')) {
+        const dis = kycOk ? '' : ' disabled title="' + esc(t('ue_paffActivateNeedKyc')) + '"';
+        actions += `<button type="button" class="btn btn-sm btn-primary ue-paff-act" data-aff="${esc(row.id)}" data-act="activate"${dis}>${esc(t('ue_paffBtnActivate'))}</button> `;
+      }
+      if (canAct && (st === 'ACTIVE' || st === 'INVITED' || st === 'REQUESTED' || st === 'SUSPENDED')) {
+        actions += `<button type="button" class="btn btn-sm btn-secondary ue-paff-act" data-aff="${esc(row.id)}" data-act="end">${esc(t('ue_paffBtnEnd'))}</button>`;
+      }
+      if (!actions) actions = `<span style="color:var(--text3);font-size:12px">—</span>`;
+      return `<tr>
+        <td><strong>${esc(name)}</strong><div style="font-size:11px;color:var(--text3);margin-top:2px"><code>${esc(row.tenantId)}</code></div></td>
+        <td>${esc(relLab)}</td>
+        <td>${esc(providerAffStatusLabel(st))}</td>
+        <td style="font-size:12px;line-height:1.35">${dates || '—'}</td>
+        <td style="font-size:12px;max-width:220px;word-break:break-word">${note}</td>
+        <td style="white-space:nowrap">${actions}</td>
+      </tr>`;
+    })
+    .join('');
+
+  tbody.querySelectorAll('button.ue-paff-act').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (isUserEditReadonly()) return;
+      const affId = btn.getAttribute('data-aff');
+      const act = btn.getAttribute('data-act');
+      if (!affId || !act) return;
+      if (act === 'end' && !confirm(t('ue_paffEndConfirm'))) return;
+      const noteEl = document.getElementById('ue-paff-note');
+      const note = noteEl ? String(noteEl.value || '').trim() : '';
+      const path =
+        act === 'activate'
+          ? `/providers/affiliations/${encodeURIComponent(affId)}/activate`
+          : `/providers/affiliations/${encodeURIComponent(affId)}/end`;
+      const body = note ? { note } : {};
+      const res = await CONFIG.post(path, body).catch(() => null);
+      if (res?.error) {
+        alert(res.error);
+        return;
+      }
+      if (!res?.ok) {
+        alert(res?.error || t('ue_paffGenericErr'));
+        return;
+      }
+      await refreshUserEditProviderAffiliations();
+    });
+  });
+}
+
+let uePaffBound = false;
+let uePaffLastUserId = '';
+
+async function refreshUserEditProviderAffiliations() {
+  const id = uePaffLastUserId;
+  const loading = document.getElementById('ue-paff-loading');
+  const errEl = document.getElementById('ue-paff-error');
+  const body = document.getElementById('ue-paff-body');
+  const noPi = document.getElementById('ue-paff-no-pi');
+  if (!id) return;
+  if (loading) {
+    loading.hidden = false;
+    loading.textContent = t('ue_paffLoading');
+  }
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+  }
+  const data = await CONFIG.get(`/users/${encodeURIComponent(id)}/provider-affiliations`).catch(() => null);
+  if (loading) loading.hidden = true;
+  if (!data || data.error) {
+    if (errEl) {
+      errEl.style.display = '';
+      errEl.textContent = data?.error || t('ue_paffLoadErr');
+    }
+    return;
+  }
+  if (body) body.hidden = false;
+  if (noPi) {
+    noPi.hidden = !!data.providerIdentity;
+    noPi.textContent = t('ue_paffNoIdentity');
+  }
+  paintProviderAffiliationsSection(data);
+}
+
+async function loadCompanyTenantsForPaffSelect() {
+  const sel = document.getElementById('ue-paff-tenant');
+  if (!sel) return;
+  const scoped = panelTenantIdUserEdit();
+  if (scoped) {
+    sel.innerHTML = `<option value="${esc(scoped)}">${esc(t('ue_paffTenantCurrent'))}</option>`;
+    sel.value = scoped;
+    return;
+  }
+  const res = await CONFIG.get('/tenants?limit=300');
+  const list = res?.data || res || [];
+  const rows = Array.isArray(list) ? list : [];
+  const companies = rows.filter((t) => String(t.kind || 'COMPANY').toUpperCase() === 'COMPANY');
+  sel.innerHTML =
+    `<option value="">${esc(t('ue_paffTenantPick'))}</option>` +
+    companies
+      .map((t) => `<option value="${esc(t.id)}">${esc(t.name || t.slug || t.id)}</option>`)
+      .join('');
+}
+
+async function initUserEditProviderAffiliations(userId, u) {
+  const section = document.getElementById('sec-provider-affiliations');
+  if (!section) return;
+  uePaffLastUserId = String(userId || '').trim();
+  const email = String(u?.email || '').trim();
+  const intro = document.getElementById('ue-paff-intro');
+  if (intro) intro.innerHTML = t('ue_paffIntro_html');
+
+  const tenantWrap = document.getElementById('ue-paff-tenant-wrap');
+  if (tenantWrap) {
+    tenantWrap.style.display = panelTenantIdUserEdit() ? 'none' : '';
+  }
+
+  if (!uePaffBound) {
+    uePaffBound = true;
+    const btn = document.getElementById('ue-paff-invite-btn');
+    if (btn) {
+      btn.addEventListener('click', async () => {
+        if (isUserEditReadonly()) return;
+        const tid = panelTenantIdUserEdit() || String(document.getElementById('ue-paff-tenant')?.value || '').trim();
+        const rel = String(document.getElementById('ue-paff-rel')?.value || 'PARTNER').toUpperCase();
+        const note = String(document.getElementById('ue-paff-note')?.value || '').trim();
+        if (!tid) {
+          alert(t('ue_paffNeedTenant'));
+          return;
+        }
+        if (!email) {
+          alert(t('ue_paffNeedEmail'));
+          return;
+        }
+        btn.disabled = true;
+        const res = await CONFIG.post('/providers/affiliations/invite', {
+          email,
+          tenantId: tid,
+          relationshipType: rel === 'DEDICATED' ? 'DEDICATED' : 'PARTNER',
+          note: note || undefined,
+        }).catch(() => null);
+        btn.disabled = false;
+        if (res?.error) {
+          alert(res.error);
+          return;
+        }
+        if (!res?.affiliationId && !res?.ok) {
+          alert(res?.error || t('ue_paffInviteErr'));
+          return;
+        }
+        const accept = res.acceptUrl ? `\n\n${res.acceptUrl}` : '';
+        alert(t('ue_paffInviteOk') + accept);
+        await refreshUserEditProviderAffiliations();
+      });
+    }
+  }
+
+  await loadCompanyTenantsForPaffSelect();
+  await refreshUserEditProviderAffiliations();
+}
 
 function docKindFromTbodyId(tbodyId) {
   return tbodyId && String(tbodyId).includes('docs-pro') ? 'professional' : 'personal';
@@ -1826,6 +2066,7 @@ export async function bootUserEditPage() {
   paintSummaryBar(u);
   paintWorkspaceBar(u);
   paintTechSummary(u);
+  void initUserEditProviderAffiliations(id, u);
 
   const sess = document.getElementById('ue-session-info');
   if (sess) {

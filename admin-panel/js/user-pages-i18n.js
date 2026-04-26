@@ -169,7 +169,7 @@ const M = {
     ul_lblTenant: 'Conta (Tenant)',
     ul_lblTenantsMulti: 'Organizações (tenants) *',
     ul_tenantsHint:
-      'Selecione uma ou mais contas. Será criado um utilizador por organização com o mesmo e-mail, nome e senha (contas distintas por tenant).',
+      'Apenas organizações empresa (COMPANY). O e-mail já deve existir como utilizador num tenant prestador (PROVIDER); administrador da plataforma pode criar sem esse pré-requisito. Um registo por organização selecionada com o mesmo e-mail, nome e senha.',
     ul_tenantsAll: 'Marcar todas',
     ul_tenantsNone: 'Limpar seleção',
     ul_createPickTenants: 'Selecione pelo menos uma organização (tenant).',
@@ -410,6 +410,53 @@ const M = {
     ue_techActive: 'Ativo',
     ue_techInactive: 'Inativo',
     ue_techSuspended: 'Suspenso',
+    ue_navPaff: 'Empresas (vínculos)',
+    ue_secPaffTitle: 'Vínculos com empresas (rede prestador)',
+    ue_paffIntro_html:
+      '<strong>Parceria</strong>: o prestador não opera “dentro” da empresa no app; pode receber OS dessa empresa entre outras. <strong>Dedicado</strong>: vínculo exclusivo na app com essa empresa (ao ativar, outras afiliações ativas são encerradas automaticamente). Requer identidade global de prestador e fluxo provider-first ativo na empresa.',
+    ue_paffNoIdentity:
+      'Ainda não existe identidade global de prestador para este e-mail. Conclua o cadastro global / KYC antes de convites ou use o fluxo de cadastro de prestador.',
+    ue_paffLoading: 'A carregar vínculos…',
+    ue_paffLoadErr: 'Não foi possível carregar os vínculos com empresas.',
+    ue_paffEmpty: 'Sem vínculos com empresas visíveis para a sua sessão.',
+    ue_paffKycLine: 'Estado global: KYC <strong>{kyc}</strong> · identidade <strong>{global}</strong>.',
+    ue_paffInviteKicker: 'Convidar / atualizar convite',
+    ue_paffInviteTitle: 'Nova associação',
+    ue_paffInviteHint_html:
+      'O convite usa o <strong>e-mail desta ficha</strong>. Só aparecem tenants do tipo empresa que a sua sessão pode gerir. Em modo tenant, o convite é sempre para a sua organização.',
+    ue_paffLblTenant: 'Empresa (tenant)',
+    ue_paffLblRel: 'Tipo de vínculo',
+    ue_paffLblNote: 'Nota (opcional)',
+    ue_paffNotePh: 'Contexto interno (visível na afiliação)',
+    ue_paffBtnInvite: 'Enviar convite',
+    ue_paffRelPartner: 'Parceria',
+    ue_paffRelDedicated: 'Dedicado',
+    ue_paffThCompany: 'Empresa',
+    ue_paffThType: 'Tipo',
+    ue_paffThStatus: 'Estado',
+    ue_paffThDates: 'Datas',
+    ue_paffThNote: 'Nota',
+    ue_paffThActions: 'Ações',
+    ue_paffStInvited: 'Convidado',
+    ue_paffStRequested: 'Solicitado',
+    ue_paffStActive: 'Ativo',
+    ue_paffStInactive: 'Inativo',
+    ue_paffStSuspended: 'Suspenso',
+    ue_paffStRejected: 'Rejeitado',
+    ue_paffDtInvited: 'Convite',
+    ue_paffDtActive: 'Ativação',
+    ue_paffDtEnded: 'Encerramento',
+    ue_paffBtnActivate: 'Ativar',
+    ue_paffBtnEnd: 'Encerrar',
+    ue_paffEndConfirm: 'Encerrar este vínculo com a empresa? O prestador deixa de operar nessa tenant.',
+    ue_paffActivateNeedKyc: 'KYC global tem de estar aprovado para ativar.',
+    ue_paffGenericErr: 'Operação falhou.',
+    ue_paffTenantPick: '(escolher empresa)',
+    ue_paffTenantCurrent: '(organização atual)',
+    ue_paffNeedTenant: 'Escolha a empresa destino.',
+    ue_paffNeedEmail: 'Esta ficha não tem e-mail — não é possível convidar.',
+    ue_paffInviteOk: 'Convite registado. O prestador deve aceitar no app (deep link abaixo, se existir).',
+    ue_paffInviteErr: 'Não foi possível criar o convite.',
     ue_lblScore: 'Score interno',
     ue_lblCft: 'CFT / registro profissional',
     ue_lblSpecialty: 'Especialidade principal',
@@ -717,7 +764,7 @@ const M = {
     ul_lblTenant: 'Account (tenant)',
     ul_lblTenantsMulti: 'Organizations (tenants) *',
     ul_tenantsHint:
-      'Select one or more accounts. One user record will be created per organization with the same email, name and password (separate accounts per tenant).',
+      'Company organizations (COMPANY) only. The email must already exist as a user on a provider (PROVIDER) tenant; platform admins can create without that prerequisite. One record per selected organization with the same email, name and password.',
     ul_tenantsAll: 'Select all',
     ul_tenantsNone: 'Clear selection',
     ul_createPickTenants: 'Select at least one organization (tenant).',
@@ -958,6 +1005,53 @@ const M = {
     ue_techActive: 'Active',
     ue_techInactive: 'Inactive',
     ue_techSuspended: 'Suspended',
+    ue_navPaff: 'Companies (links)',
+    ue_secPaffTitle: 'Company links (provider network)',
+    ue_paffIntro_html:
+      '<strong>Partnership</strong>: the provider does not work “inside” that company in the app; they may receive work orders from it among others. <strong>Dedicated</strong>: exclusive in-app relationship with that company (activating automatically ends other active affiliations). Requires a global provider identity and provider-first enabled on the company tenant.',
+    ue_paffNoIdentity:
+      'No global provider identity exists for this email yet. Complete global onboarding / KYC before invitations, or use the provider signup flow.',
+    ue_paffLoading: 'Loading company links…',
+    ue_paffLoadErr: 'Could not load company links.',
+    ue_paffEmpty: 'No company links visible for your session.',
+    ue_paffKycLine: 'Global state: KYC <strong>{kyc}</strong> · identity <strong>{global}</strong>.',
+    ue_paffInviteKicker: 'Invite / refresh invitation',
+    ue_paffInviteTitle: 'New affiliation',
+    ue_paffInviteHint_html:
+      'The invitation uses <strong>this profile’s email</strong>. Only company tenants you can administer are listed. In tenant panel mode, invitations always target your organization.',
+    ue_paffLblTenant: 'Company (tenant)',
+    ue_paffLblRel: 'Link type',
+    ue_paffLblNote: 'Note (optional)',
+    ue_paffNotePh: 'Internal context (stored on the affiliation)',
+    ue_paffBtnInvite: 'Send invite',
+    ue_paffRelPartner: 'Partnership',
+    ue_paffRelDedicated: 'Dedicated',
+    ue_paffThCompany: 'Company',
+    ue_paffThType: 'Type',
+    ue_paffThStatus: 'Status',
+    ue_paffThDates: 'Dates',
+    ue_paffThNote: 'Note',
+    ue_paffThActions: 'Actions',
+    ue_paffStInvited: 'Invited',
+    ue_paffStRequested: 'Requested',
+    ue_paffStActive: 'Active',
+    ue_paffStInactive: 'Inactive',
+    ue_paffStSuspended: 'Suspended',
+    ue_paffStRejected: 'Rejected',
+    ue_paffDtInvited: 'Invited',
+    ue_paffDtActive: 'Activated',
+    ue_paffDtEnded: 'Ended',
+    ue_paffBtnActivate: 'Activate',
+    ue_paffBtnEnd: 'End',
+    ue_paffEndConfirm: 'End this company link? The provider will no longer operate under that tenant.',
+    ue_paffActivateNeedKyc: 'Global KYC must be approved before activation.',
+    ue_paffGenericErr: 'Operation failed.',
+    ue_paffTenantPick: '(pick a company)',
+    ue_paffTenantCurrent: '(current organization)',
+    ue_paffNeedTenant: 'Pick a target company.',
+    ue_paffNeedEmail: 'This profile has no email — cannot send an invite.',
+    ue_paffInviteOk: 'Invite recorded. The provider should accept in the app (deep link below, if any).',
+    ue_paffInviteErr: 'Could not create the invite.',
     ue_lblScore: 'Internal score',
     ue_lblCft: 'Professional registration',
     ue_lblSpecialty: 'Main specialty',
@@ -1587,6 +1681,7 @@ export function applyUserEditStaticPageI18n() {
   setT('ue-nav-addr', 'ue_navAddr');
   setT('ue-nav-access', 'ue_navAccess');
   setT('ue-nav-tech', 'ue_navTech');
+  setT('ue-nav-paff', 'ue_navPaff');
   setT('ue-nav-docs-p', 'ue_navDocsP');
   setT('ue-nav-docs-pro', 'ue_navDocsPro');
   setT('ue-nav-schedule', 'ue_navSchedule');
@@ -1640,6 +1735,30 @@ export function applyUserEditStaticPageI18n() {
   setT('ue-active-lbl', 'ue_activeLbl');
   setH('ue-active-hint', 'ue_activeHint_html');
   setT('ue-sec-tech-title', 'ue_secTech');
+  setT('ue-sec-paff-title', 'ue_secPaffTitle');
+  setH('ue-paff-intro', 'ue_paffIntro_html');
+  setT('ue-paff-invite-kicker', 'ue_paffInviteKicker');
+  setT('ue-paff-invite-title', 'ue_paffInviteTitle');
+  setH('ue-paff-invite-hint', 'ue_paffInviteHint_html');
+  setT('ue-paff-lbl-tenant', 'ue_paffLblTenant');
+  setT('ue-paff-lbl-rel', 'ue_paffLblRel');
+  setT('ue-paff-lbl-note', 'ue_paffLblNote');
+  const paffNote = document.getElementById('ue-paff-note');
+  if (paffNote) paffNote.placeholder = t('ue_paffNotePh');
+  setT('ue-paff-invite-btn', 'ue_paffBtnInvite');
+  const prel = document.getElementById('ue-paff-rel');
+  if (prel) {
+    const op = prel.querySelector('option[value="PARTNER"]');
+    if (op) op.textContent = t('ue_paffRelPartner');
+    const od = prel.querySelector('option[value="DEDICATED"]');
+    if (od) od.textContent = t('ue_paffRelDedicated');
+  }
+  setT('ue-paff-th-company', 'ue_paffThCompany');
+  setT('ue-paff-th-type', 'ue_paffThType');
+  setT('ue-paff-th-status', 'ue_paffThStatus');
+  setT('ue-paff-th-dates', 'ue_paffThDates');
+  setT('ue-paff-th-note', 'ue_paffThNote');
+  setT('ue-paff-th-actions', 'ue_paffThActions');
   setH('ue-tech-intro', 'ue_techIntro');
   setT('ue-lbl-t-status', 'ue_lblTechStatus');
   const ts = document.getElementById('t-status');

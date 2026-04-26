@@ -2,6 +2,7 @@
 const jwt = require('jsonwebtoken');
 const prisma = require('../db');
 const { buildAppAuthorization } = require('../lib/authorization');
+const { resolveAppEffectiveTenantId } = require('../lib/appLoginEffectiveTenant');
 
 // Middleware para usuários do app (não admin)
 module.exports = async function authUser(req, res, next) {
@@ -74,8 +75,14 @@ module.exports = async function authUser(req, res, next) {
       return res.status(403).json({ error: 'Conta desativada.', code: 'ACCOUNT_INACTIVE' });
     }
 
-    // tenantId/role vêm sempre da BD — o JWT pode ficar desatualizado (ex.: usuário mudou de tenant sem novo login).
-    req.user = { ...payload, tenantId: user.tenantId, role: user.role };
+    const effectiveTenantId = await resolveAppEffectiveTenantId(prisma, payload.id);
+    const tenantIdForReq =
+      effectiveTenantId && String(effectiveTenantId).trim()
+        ? String(effectiveTenantId).trim()
+        : user.tenantId;
+
+    // tenantId do contexto app: dedicado ativo → tenant da empresa; caso contrário, linha User (o JWT pode ficar desatualizado).
+    req.user = { ...payload, tenantId: tenantIdForReq, role: user.role };
     req.userAuthorization = buildAppAuthorization(req.user);
     next();
   } catch(err) {

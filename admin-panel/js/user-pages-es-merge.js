@@ -155,7 +155,7 @@ export const USER_PAGES_ES_MERGE = {
   ul_lblTenant: "Cuenta (inquilino)",
   ul_lblTenantsMulti: "Organizaciones (inquilinos) *",
   ul_tenantsHint:
-    "Seleccione una o más cuentas. Se creará un usuario por organización con el mismo correo, nombre y contraseña (cuentas distintas por inquilino).",
+    "Solo organizaciones empresa (COMPANY). El correo ya debe existir como usuario en un inquilino proveedor (PROVIDER); el administrador de plataforma puede crear sin ese requisito. Un registro por organización seleccionada con el mismo correo, nombre y contraseña.",
   ul_tenantsAll: "Marcar todas",
   ul_tenantsNone: "Borrar selección",
   ul_createPickTenants: "Seleccione al menos una organización (inquilino).",

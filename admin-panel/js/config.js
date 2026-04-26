@@ -119,6 +119,54 @@ export function getPanelCapabilities() {
   }
 }
 
+/**
+ * Capabilities do painel + inferência mínima quando `brspark_admin_capabilities` falta no sessionStorage
+ * (ex.: nova aba via `opener`, bundle antigo): Admin legado (`panel:false`+`id`) e SaaS admin (`panel:true`+`role=SAAS_ADMIN`).
+ * O servidor continua a ser a fonte de verdade; isto evita UI sem permissões aparentes.
+ */
+export function getEffectivePanelCapabilities() {
+  const base = getPanelCapabilities();
+  const extra = [];
+  try {
+    const token = sessionStorage.getItem('brspark_admin_token');
+    if (!token) return base;
+    const parts = token.split('.');
+    if (parts.length < 2) return base;
+    let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const payload = JSON.parse(atob(b64));
+    if (payload && payload.panel === false && payload.id) {
+      extra.push(
+        'platform.access',
+        'platform.dashboard.read',
+        'platform.tenants.read',
+        'platform.tenants.write',
+        'platform.users.read',
+        'platform.users.write',
+        'tenant.branding.read.any',
+        'tenant.branding.write.any'
+      );
+    } else if (payload && payload.panel === true) {
+      const role = String(payload.role || '').trim().toUpperCase();
+      if (role === 'SAAS_ADMIN') {
+        extra.push(
+          'platform.access',
+          'platform.dashboard.read',
+          'platform.tenants.read',
+          'platform.tenants.write',
+          'platform.users.read',
+          'platform.users.write',
+          'tenant.branding.read.any',
+          'tenant.branding.write.any'
+        );
+      }
+    }
+  } catch {
+    /* JWT inválido / parse */
+  }
+  return [...new Set([...base, ...extra])];
+}
+
 export async function refreshPanelSessionBootstrap() {
   if (typeof window === 'undefined' || !window.sessionStorage) return null;
   const token = sessionStorage.getItem('brspark_admin_token');
@@ -481,8 +529,13 @@ export const CONFIG = {
     const raw = await res.text();
     try {
       const data = raw ? JSON.parse(raw) : {};
-      if (!res.ok && data && typeof data === 'object' && !data.error) {
-        data.error = `Pedido falhou (HTTP ${res.status}).`;
+      if (!res.ok && data && typeof data === 'object') {
+        const fromApi =
+          (typeof data.error === 'string' && data.error.trim()) ||
+          (typeof data.message === 'string' && data.message.trim()) ||
+          (typeof data.msg === 'string' && data.msg.trim()) ||
+          '';
+        data.error = fromApi || `Pedido falhou (HTTP ${res.status}).`;
       }
       return data;
     } catch {
@@ -512,8 +565,13 @@ export const CONFIG = {
     const raw = await res.text();
     try {
       const data = raw ? JSON.parse(raw) : {};
-      if (!res.ok && data && typeof data === 'object' && !data.error) {
-        data.error = `Pedido falhou (HTTP ${res.status}).`;
+      if (!res.ok && data && typeof data === 'object') {
+        const fromApi =
+          (typeof data.error === 'string' && data.error.trim()) ||
+          (typeof data.message === 'string' && data.message.trim()) ||
+          (typeof data.msg === 'string' && data.msg.trim()) ||
+          '';
+        data.error = fromApi || `Pedido falhou (HTTP ${res.status}).`;
       }
       return data;
     } catch {
@@ -543,8 +601,13 @@ export const CONFIG = {
     const raw = await res.text();
     try {
       const data = raw ? JSON.parse(raw) : {};
-      if (!res.ok && data && typeof data === 'object' && !data.error) {
-        data.error = `Pedido falhou (HTTP ${res.status}).`;
+      if (!res.ok && data && typeof data === 'object') {
+        const fromApi =
+          (typeof data.error === 'string' && data.error.trim()) ||
+          (typeof data.message === 'string' && data.message.trim()) ||
+          (typeof data.msg === 'string' && data.msg.trim()) ||
+          '';
+        data.error = fromApi || `Pedido falhou (HTTP ${res.status}).`;
       }
       return data;
     } catch {

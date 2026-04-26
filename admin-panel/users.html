@@ -437,6 +437,13 @@
     return null;
   }
 
+  /** Só tenants empresa aceitam associação de utilizadores pelo painel (criação / convites empresa). */
+  function tenantsAssociableForPanelUsers(list) {
+    return (Array.isArray(list) ? list : []).filter(
+      (t) => String(t.kind || 'COMPANY').toUpperCase() === 'COMPANY',
+    );
+  }
+
   async function loadTenantsForAffInvite() {
     const wrap = document.getElementById('wrap-aff-invite-tenant');
     const sel = document.getElementById('aff-invite-tenant');
@@ -448,7 +455,7 @@
     wrap.style.display = '';
     const res = await CONFIG.get('/tenants?limit=200');
     const list = res?.data || res || [];
-    const rows = Array.isArray(list) ? list : [];
+    const rows = tenantsAssociableForPanelUsers(Array.isArray(list) ? list : []);
     sel.innerHTML = rows
       .map((t) => `<option value="${escAttr(t.id)}">${escAttr(t.name || t.slug || t.id)}</option>`)
       .join('');
@@ -1382,16 +1389,19 @@
       const ft = document.getElementById('filter-tenant');
       const rten = document.getElementById('reset-email-tenant');
       const cbHost = document.getElementById('new-tenants-checkboxes');
+      const companyOnly = tenantsAssociableForPanelUsers(res?.data || []);
       if (cbHost && isPlatformAdmin) {
-        cbHost.innerHTML = (res?.data || [])
-          .map(
-            (t) =>
-              `<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin:0">
+        cbHost.innerHTML = companyOnly.length
+          ? companyOnly
+              .map(
+                (t) =>
+                  `<label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin:0">
             <input type="checkbox" name="new-tenant-cb" value="${escAttr(t.id)}" style="margin-top:3px" />
-            <span style="font-size:13px;line-height:1.4"><strong>${escAttr(t.name)}</strong><br /><span style="color:var(--text3)">${escAttr(t.email)}</span></span>
+            <span style="font-size:13px;line-height:1.4"><strong>${escAttr(t.name)}</strong><br /><span style="color:var(--text3)">${escAttr(t.slug || '')}${t.slug && t.email ? ' · ' : ''}${escAttr(t.email)}</span></span>
           </label>`
-          )
-          .join('');
+              )
+              .join('')
+          : '<div style="font-size:12px;color:var(--text3);padding:6px 2px">Nenhuma organização do tipo empresa (COMPANY) disponível.</div>';
         if (pendingDupTenantForCb) {
           const tid = pendingDupTenantForCb;
           pendingDupTenantForCb = null;
@@ -1400,7 +1410,7 @@
           });
         }
       }
-      (res?.data || []).forEach((t) => {
+      companyOnly.forEach((t) => {
         const opt = `<option value="${escAttr(t.id)}">${escAttr(t.name)} (${escAttr(t.email)})</option>`;
         if (sel) sel.innerHTML += opt;
         if (ft && isPlatformAdmin) ft.innerHTML += opt;

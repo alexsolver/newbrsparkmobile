@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { resolveCanonicalEmailNormForUser } = require('./userEmailUnique');
+const { resolveAppEffectiveTenantId } = require('./appLoginEffectiveTenant');
 
 function hashRefreshToken(plain) {
   return crypto.createHash('sha256').update(String(plain || ''), 'utf8').digest('hex');
@@ -129,10 +130,11 @@ async function refreshAppSession(prisma, jwt, refreshTokenPlain, env) {
   }
 
   const jwtEmail = await resolveCanonicalEmailNormForUser(prisma, user);
+  const effTenantId = await resolveAppEffectiveTenantId(prisma, user.id);
   const token = jwt.sign(
     {
       id: user.id,
-      tenantId: user.tenantId,
+      tenantId: effTenantId || user.tenantId,
       email: jwtEmail,
       role: user.role,
       sessionId: row.sessionId,
