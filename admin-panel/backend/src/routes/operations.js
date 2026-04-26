@@ -854,9 +854,10 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
     }
 
     const st = String(existing.status || '').toUpperCase();
-    if (!['COMPLETED', 'SYNCED', 'REJECTED'].includes(st)) {
+    if (!['COMPLETED', 'SYNCED', 'REJECTED', 'CANCELLED'].includes(st)) {
       return res.status(400).json({
-        error: 'Só é possível reabrir OS concluídas, sincronizadas ou rejeitadas pelo técnico.',
+        error:
+          'Só é possível reabrir OS concluídas, sincronizadas, rejeitadas pelo técnico ou canceladas pelo painel.',
       });
     }
 
@@ -917,6 +918,10 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
     if (st === 'REJECTED') {
       delete mergedMeta.rejectionReason;
       delete mergedMeta.rejectedAt;
+    }
+    if (st === 'CANCELLED') {
+      delete mergedMeta.cancelledAt;
+      delete mergedMeta.cancelReason;
     }
 
     const stripped = stripResponsesForRevision(existing.responses, existing.template?.schemaData);

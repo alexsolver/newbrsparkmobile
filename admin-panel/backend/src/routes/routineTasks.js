@@ -3,7 +3,7 @@
 const express = require('express');
 const prisma = require('../db');
 const authUser = require('../middleware/authUser');
-const { canReceiveFieldTasksForEmail } = require('../lib/technicianEligibility');
+const { canReceiveFieldTasksForAppSession } = require('../lib/technicianEligibility');
 const { allocateNextRtNumber } = require('../lib/rtSerialNumber');
 const { routineTaskMetadataFromTemplate } = require('../lib/routineTaskMetadata');
 const {
@@ -28,7 +28,11 @@ router.get('/me', async (req, res) => {
     if (!tenantId || !email) {
       return res.status(400).json({ error: 'Sessão inválida.' });
     }
-    const can = await canReceiveFieldTasksForEmail(prisma, email, tenantId);
+    const can = await canReceiveFieldTasksForAppSession(prisma, {
+      userId,
+      email,
+      effectiveTenantId: tenantId,
+    });
     if (!can) {
       return res.json({ assignments: [] });
     }
@@ -90,7 +94,11 @@ router.post('/open', express.json(), async (req, res) => {
     if (!tenantId || !email || !templateId) {
       return res.status(400).json({ error: 'templateId é obrigatório.' });
     }
-    const can = await canReceiveFieldTasksForEmail(prisma, email, tenantId);
+    const can = await canReceiveFieldTasksForAppSession(prisma, {
+      userId,
+      email,
+      effectiveTenantId: tenantId,
+    });
     if (!can) {
       return res.status(403).json({ error: 'Esta conta não pode usar tarefas de rotina (apenas perfil de cliente).' });
     }

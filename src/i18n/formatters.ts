@@ -117,27 +117,41 @@ export function formatCurrencyShort(amount: number, locale?: string): string {
 }
 
 // ── Date/Time ────────────────────────────────────────────────────────────────
+/** `YYYY-MM-DD` como meia-noite local — `new Date('YYYY-MM-DD')` é UTC e pode mudar o dia no fuso. */
+function parseDateInput(date: string | Date): Date {
+  if (date instanceof Date) return date;
+  const s = String(date).trim();
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (ymd) {
+    const y = Number(ymd[1]);
+    const mo = Number(ymd[2]);
+    const d = Number(ymd[3]);
+    return new Date(y, mo - 1, d);
+  }
+  return new Date(s);
+}
+
 export function formatDate(date: string | Date, locale?: string): string {
   const loc = locale || getCurrentLanguage();
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = parseDateInput(date);
   return d.toLocaleDateString(loc);
 }
 
 export function formatDateShort(date: string | Date, locale?: string): string {
   const loc = locale || getCurrentLanguage();
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = parseDateInput(date);
   return d.toLocaleDateString(loc, { day: '2-digit', month: '2-digit' });
 }
 
 export function formatDateLong(date: string | Date, locale?: string): string {
   const loc = locale || getCurrentLanguage();
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = parseDateInput(date);
   return d.toLocaleDateString(loc, { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
 export function formatDateTime(date: string | Date, locale?: string): string {
   const loc = locale || getCurrentLanguage();
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = parseDateInput(date);
   return d.toLocaleDateString(loc, {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -151,7 +165,7 @@ export function formatMonthYear(date: Date, locale?: string): string {
 
 export function formatDayMonth(date: string | Date, locale?: string): string {
   const loc = locale || getCurrentLanguage();
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = parseDateInput(date);
   return d.toLocaleDateString(loc, { day: '2-digit', month: 'long' });
 }
 

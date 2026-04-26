@@ -59,13 +59,31 @@ function slugFromTenantName(name) {
 router.get('/', async (req, res) => {
   try {
     const { status, plan, q, page = 1, limit = 50 } = req.query;
-    const scopedTenantId = resolveScopedTenantId(req.authorization);
+    /** Lista completa para o seletor de contexto (sidebar) — só admin de plataforma. */
+    const listAll =
+      isPlatformAdmin(req.authorization) && String(req.query.all || '').trim() === '1';
+    const scopedTenantId = listAll ? null : resolveScopedTenantId(req.authorization);
     const where = {
       ...(status && { status }),
       ...(q && { OR: [{ name: { contains: q, mode: 'insensitive' } }, { slug: { contains: q, mode: 'insensitive' } }] }),
       ...(plan && { subscription: { plan: { name: plan } } }),
       ...(scopedTenantId ? { id: scopedTenantId } : {}),
     };
+    /** Com `all=1` (seletor do painel): por defeito só tenants empresa; `kind=ALL|CLIENT|PROVIDER` para filtrar. */
+    if (listAll) {
+      const kindStr = String(req.query.kind ?? '')
+        .trim()
+        .toUpperCase();
+      if (!kindStr || kindStr === 'COMPANY') {
+        where.kind = 'COMPANY';
+      } else if (kindStr === 'ALL') {
+        /* sem filtro por tipo */
+      } else if (kindStr === 'CLIENT' || kindStr === 'PROVIDER') {
+        where.kind = kindStr;
+      } else {
+        where.kind = 'COMPANY';
+      }
+    }
     const [tenants, total] = await Promise.all([
       prisma.tenant.findMany({
         where, skip: (page - 1) * limit, take: +limit,

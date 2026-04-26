@@ -114,6 +114,17 @@ function providerAffStatusLabel(status) {
   return key ? t(key) : u || '—';
 }
 
+/** Convite requer `ProviderIdentity`; desativa o botão e evita 404 no POST. Não reativar em modo leitura. */
+function syncPaffInviteButtonFromPayload(payload) {
+  const invBtn = document.getElementById('ue-paff-invite-btn');
+  if (!invBtn) return;
+  if (isUserEditReadonly()) return;
+  const needPi = !payload?.providerIdentity;
+  invBtn.disabled = needPi;
+  invBtn.title = needPi ? t('ue_paffInviteNeedPi') : '';
+  invBtn.setAttribute('aria-disabled', needPi ? 'true' : 'false');
+}
+
 function paintProviderAffiliationsSection(payload) {
   const tbody = document.getElementById('ue-paff-tbody');
   const empty = document.getElementById('ue-paff-empty');
@@ -141,6 +152,7 @@ function paintProviderAffiliationsSection(payload) {
       empty.style.display = '';
       empty.textContent = t('ue_paffEmpty');
     }
+    syncPaffInviteButtonFromPayload(payload);
     return;
   }
   if (empty) empty.style.display = 'none';
@@ -206,6 +218,8 @@ function paintProviderAffiliationsSection(payload) {
       await refreshUserEditProviderAffiliations();
     });
   });
+
+  syncPaffInviteButtonFromPayload(payload);
 }
 
 let uePaffBound = false;
@@ -277,11 +291,15 @@ async function initUserEditProviderAffiliations(userId, u) {
   }
 
   if (!uePaffBound) {
-    uePaffBound = true;
     const btn = document.getElementById('ue-paff-invite-btn');
     if (btn) {
+      uePaffBound = true;
       btn.addEventListener('click', async () => {
-        if (isUserEditReadonly()) return;
+        if (isUserEditReadonly()) {
+          alert(t('ue_paffReadonlyBlock'));
+          return;
+        }
+        if (btn.disabled) return;
         const tid = panelTenantIdUserEdit() || String(document.getElementById('ue-paff-tenant')?.value || '').trim();
         const rel = String(document.getElementById('ue-paff-rel')?.value || 'PARTNER').toUpperCase();
         const note = String(document.getElementById('ue-paff-note')?.value || '').trim();
@@ -2066,7 +2084,7 @@ export async function bootUserEditPage() {
   paintSummaryBar(u);
   paintWorkspaceBar(u);
   paintTechSummary(u);
-  void initUserEditProviderAffiliations(id, u);
+  await initUserEditProviderAffiliations(id, u);
 
   const sess = document.getElementById('ue-session-info');
   if (sess) {

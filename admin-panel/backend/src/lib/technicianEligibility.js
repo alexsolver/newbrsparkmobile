@@ -1,5 +1,7 @@
 'use strict';
 
+const { resolveAppEffectiveTenantId } = require('./appLoginEffectiveTenant');
+
 /** Papéis que podem receber OS/FT e RT (exclui apenas cliente final). Alinhado a `UserRole` no Prisma. */
 const FIELD_TASK_ASSIGNEE_ROLES = ['PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN'];
 
@@ -57,9 +59,39 @@ async function canReceiveFieldTasksForEmail(db, email, tenantId) {
   return !!(await resolveFieldTaskAssigneeEmail(db, email, tenantId));
 }
 
+/**
+ * App móvel (JWT já corrigido por `authUser` com `resolveAppEffectiveTenantId`):
+ * o `User.tenantId` pode ser a org «casa» do prestador, enquanto a sessão opera na org
+ * DEDICATED (cliente). `canReceiveFieldTasksForEmail` exigia linha User com `tenantId` = org
+ * efetiva e devolvia falso — `/api/sync/tasks` vinha vazio e a central mostrava «Aguardando Envio».
+ *
+ * @param {{ userId: string, email: string, effectiveTenantId: string }} opts
+ */
+async function canReceiveFieldTasksForAppSession(db, opts) {
+  const userId = String(opts?.userId || '').trim();
+  const email = String(opts?.email || '').trim();
+  const tid = String(opts?.effectiveTenantId || '').trim();
+  if (!userId || !email || !tid) return false;
+
+  const u = await db.user.findFirst({
+    where: {
+      id: userId,
+      isActive: true,
+      email: { equals: email, mode: 'insensitive' },
+      role: { in: FIELD_TASK_ASSIGNEE_ROLES },
+    },
+    select: { id: true },
+  });
+  if (!u) return false;
+
+  const eff = await resolveAppEffectiveTenantId(db, userId);
+  return String(eff || '').trim() === tid;
+}
+
 module.exports = {
   FIELD_TASK_ASSIGNEE_ROLES,
   isActiveTechnicianForEmail,
   resolveFieldTaskAssigneeEmail,
   canReceiveFieldTasksForEmail,
+  canReceiveFieldTasksForAppSession,
 };

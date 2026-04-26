@@ -19,6 +19,14 @@ const M = {
     nav_home_title: 'BrSpark, Início',
     nav_sidebar_expand: 'Expandir menu',
     nav_sidebar_collapse: 'Recolher menu',
+    nav_panel_tenant_scope: 'Organização (contexto)',
+    nav_panel_tenant_all: 'Toda a plataforma',
+    nav_panel_tenant_apply_err: 'Não foi possível alterar o contexto. Tente de novo.',
+    nav_panel_tenant_kind_lbl: 'Mostrar tenants',
+    nav_panel_tenant_kind_company: 'Empresa',
+    nav_panel_tenant_kind_provider: 'Prestador',
+    nav_panel_tenant_kind_client: 'Cliente',
+    nav_panel_tenant_kind_all: 'Todos os tipos',
     imp_banner_prefix: 'Visualizando o painel como ',
     imp_banner_suffix: ' (sessão temporária).',
     imp_end_btn: 'Terminar impersonação',
@@ -520,7 +528,11 @@ const M = {
     ue_readonlyCrumb: 'Ver (só leitura)',
     ue_readonlyBannerTitle: 'Modo só leitura.',
     ue_readonlyBannerBody:
-      'Não é possível alterar dados nesta visualização. Feche a aba ou abra o cadastro em modo de edição a partir da lista.',
+      'Não é possível alterar dados nesta visualização. Feche a aba ou abra o cadastro em modo de edição a partir da lista. Convites e ações de vínculo de prestador também estão desativados.',
+    ue_paffReadonlyBlock:
+      'Modo só leitura: remova o parâmetro «readonly» ou «ro» do endereço (URL) e abra de novo em modo de edição para enviar convites.',
+    ue_paffInviteNeedPi:
+      'É necessária identidade global de prestador (KYC) nesta conta antes de convidar. Use o cadastro de prestador ou crie a identidade.',
     ue_roleMatrixIntro:
       'Modelo de acesso em alto nível. Permissões exatas acompanham o produto.',
     ue_roleMatrixLiUser: 'USER, usuário padrão / fluxos de cliente.',
@@ -615,6 +627,14 @@ const M = {
     nav_home_title: 'BrSpark, Home',
     nav_sidebar_expand: 'Expand menu',
     nav_sidebar_collapse: 'Collapse menu',
+    nav_panel_tenant_scope: 'Organization (context)',
+    nav_panel_tenant_all: 'Entire platform',
+    nav_panel_tenant_apply_err: 'Could not change context. Please try again.',
+    nav_panel_tenant_kind_lbl: 'Show tenants',
+    nav_panel_tenant_kind_company: 'Company',
+    nav_panel_tenant_kind_provider: 'Provider',
+    nav_panel_tenant_kind_client: 'Client',
+    nav_panel_tenant_kind_all: 'All types',
     imp_banner_prefix: 'Viewing the panel as ',
     imp_banner_suffix: ' (temporary session).',
     imp_end_btn: 'End impersonation',
@@ -1115,7 +1135,11 @@ const M = {
     ue_readonlyCrumb: 'View (read-only)',
     ue_readonlyBannerTitle: 'Read-only mode.',
     ue_readonlyBannerBody:
-      'You cannot change data in this view. Close the tab or open the record in edit mode from the list.',
+      'You cannot change data in this view. Close the tab or open the record in edit mode from the list. Provider invites and link actions are also disabled.',
+    ue_paffReadonlyBlock:
+      'Read-only mode: remove the “readonly” or “ro” query parameter from the URL and open the record in edit mode to send invites.',
+    ue_paffInviteNeedPi:
+      'A global provider identity (KYC) is required on this account before inviting. Use the provider onboarding flow or create the identity first.',
     ue_roleMatrixIntro: 'High-level access model. Exact permissions evolve with the product.',
     ue_roleMatrixLiUser: 'USER, default collaborator / client workflows.',
     ue_roleMatrixLiProv: 'PROVIDER, field technician, schedules, documents.',

@@ -3,7 +3,7 @@ const router  = require('express').Router();
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const prisma  = require('../db');
-const { adminAuthThenPanel } = require('../middleware/auth');
+const { adminAuthThenPanel, attachAdminFromPayload } = require('../middleware/auth');
 const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const {
   buildPanelSessionBootstrap,
@@ -167,6 +167,149 @@ async function postTenantLogin(req, res) {
 router.post('/tenant-login', postTenantLogin);
 
 // POST /api/auth/impersonate-panel — { userId } — SAAS_ADMIN, admin global ou TENANT_ADMIN (mesmo tenant)
+/**
+ * POST /api/auth/panel-select-tenant
+ * Admin de plataforma (JWT legado ou SAAS_ADMIN): filtra dados do painel a uma organização, ou «toda a plataforma».
+ */
+router.post('/panel-select-tenant', adminAuthThenPanel, async (req, res) => {
+  try {
+    if (!req.authorization?.isPlatform) {
+      return res.status(403).json({
+        error: 'Só administradores da plataforma podem definir o contexto de organização.',
+      });
+    }
+    const hdr = req.headers.authorization || '';
+    const bearer = hdr.startsWith('Bearer ') ? hdr.slice(7).trim() : '';
+    if (!bearer) return res.status(401).json({ error: 'Token ausente.' });
+
+    let old;
+    try {
+      old = jwt.verify(bearer, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({ error: 'Token inválido ou expirado.' });
+    }
+
+    const rawId = req.body?.tenantId;
+    const clear =
+      rawId === null ||
+      rawId === undefined ||
+      (typeof rawId === 'string' && rawId.trim() === '');
+
+    let tenantRow = null;
+    if (!clear) {
+      const id = String(rawId).trim();
+      tenantRow = await prisma.tenant.findUnique({
+        where: { id },
+        select: { id: true, slug: true, name: true, kind: true, status: true },
+      });
+      if (!tenantRow) return res.status(404).json({ error: 'Organização não encontrada.' });
+    }
+
+    const signOpts = { expiresIn: process.env.JWT_EXPIRES_IN || '8h' };
+    let newPayload;
+
+    if (old.panel === true && old.userId) {
+      newPayload = {
+        panel: true,
+        userId: old.userId,
+        tenantId: old.tenantId,
+        email: old.email,
+        name: old.name,
+        role: old.role,
+        tenantSlug: old.tenantSlug,
+        tenantName: old.tenantName,
+      };
+      if (old.impersonation) {
+        newPayload.impersonation = true;
+        newPayload.impersonatorUserId = old.impersonatorUserId || null;
+        newPayload.impersonatorEmail = old.impersonatorEmail || null;
+        newPayload.impersonatorLegacyAdminId = old.impersonatorLegacyAdminId || null;
+      }
+      if (!clear && tenantRow) {
+        newPayload.panelContextTenantId = tenantRow.id;
+        newPayload.panelContextTenantSlug = tenantRow.slug;
+        newPayload.panelContextTenantName = tenantRow.name;
+        newPayload.panelContextTenantKind = tenantRow.kind || 'COMPANY';
+      }
+    } else if (old.panel === false && old.id) {
+      newPayload = {
+        panel: false,
+        id: old.id,
+        email: old.email,
+        name: old.name,
+      };
+      if (!clear && tenantRow) {
+        newPayload.panelContextTenantId = tenantRow.id;
+        newPayload.panelContextTenantSlug = tenantRow.slug;
+        newPayload.panelContextTenantName = tenantRow.name;
+        newPayload.panelContextTenantKind = tenantRow.kind || 'COMPANY';
+      }
+    } else {
+      return res.status(400).json({ error: 'Sessão incompatível com alteração de contexto.' });
+    }
+
+    const token = jwt.sign(newPayload, process.env.JWT_SECRET, signOpts);
+    const sessionAdmin = attachAdminFromPayload(newPayload);
+    const session = buildPanelSessionBootstrap(sessionAdmin);
+    const tid = session.context?.tenantId || null;
+    let tenantKind = 'COMPANY';
+    if (tid) {
+      const trow = await prisma.tenant.findUnique({ where: { id: String(tid) }, select: { kind: true } });
+      if (trow?.kind) tenantKind = String(trow.kind);
+    }
+
+    if (sessionAdmin.panelUser) {
+      return res.json({
+        token,
+        mode: tid ? 'tenant' : 'global',
+        user: {
+          id: sessionAdmin.userId,
+          email: sessionAdmin.email,
+          name: sessionAdmin.name,
+          role: session.authz.roleKey,
+        },
+        ...(tid
+          ? {
+              tenant: {
+                id: tid,
+                slug: session.context?.tenantSlug || null,
+                name: session.context?.tenantName || null,
+                kind: tenantKind,
+              },
+            }
+          : {}),
+        ...session,
+      });
+    }
+
+    const adminRow = await prisma.admin.findUnique({
+      where: { id: sessionAdmin.id },
+      select: { id: true, email: true, name: true, createdAt: true },
+    });
+    if (!adminRow) return res.status(404).json({ error: 'Administrador não encontrado.' });
+
+    return res.json({
+      token,
+      mode: tid ? 'tenant' : 'global',
+      admin: adminRow,
+      ...(tid
+        ? {
+            tenant: {
+              id: tid,
+              slug: session.context?.tenantSlug || null,
+              name: session.context?.tenantName || null,
+              kind: tenantKind,
+            },
+          }
+        : {}),
+      ...session,
+    });
+  } catch (err) {
+    console.error('[auth/panel-select-tenant]', err);
+    res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
+});
+
 router.post('/impersonate-panel', adminAuthThenPanel, async (req, res) => {
   try {
     const { userId } = req.body || {};
@@ -282,20 +425,25 @@ router.get('/me', require('../middleware/auth').adminAuth, async (req, res) => {
         const trow = await prisma.tenant.findUnique({ where: { id: String(tid) }, select: { kind: true } });
         if (trow?.kind) tenantKind = String(trow.kind);
       }
+      const isGlobalPlatformPanel = !!req.authorization?.isPlatform && !tid;
       return res.json({
-        mode: 'tenant',
+        mode: isGlobalPlatformPanel ? 'global' : 'tenant',
         user: {
           id: req.admin.userId,
           email: req.admin.email,
           name: req.admin.name,
           role: session.authz.roleKey,
         },
-        tenant: {
-          id: tid,
-          slug: session.context?.tenantSlug || null,
-          name: session.context?.tenantName || null,
-          kind: tenantKind,
-        },
+        ...(tid
+          ? {
+              tenant: {
+                id: tid,
+                slug: session.context?.tenantSlug || null,
+                name: session.context?.tenantName || null,
+                kind: tenantKind,
+              },
+            }
+          : {}),
         ...session,
       });
     }
@@ -314,9 +462,32 @@ router.get('/me', require('../middleware/auth').adminAuth, async (req, res) => {
       role: null,
       tenantSlug: null,
       tenantName: null,
-      authz: buildAdminAuthorization(req.admin),
+      panelContextTenantId: req.admin.panelContextTenantId || null,
+      panelContextTenantSlug: req.admin.panelContextTenantSlug || null,
+      panelContextTenantName: req.admin.panelContextTenantName || null,
+      panelContextTenantKind: req.admin.panelContextTenantKind || null,
     });
-    res.json({ mode: 'global', admin, ...session });
+    const tidLegacy = session.context?.tenantId || null;
+    let kindLegacy = String(req.admin.panelContextTenantKind || 'COMPANY');
+    if (tidLegacy) {
+      const trow = await prisma.tenant.findUnique({ where: { id: String(tidLegacy) }, select: { kind: true } });
+      if (trow?.kind) kindLegacy = String(trow.kind);
+    }
+    res.json({
+      mode: tidLegacy ? 'tenant' : 'global',
+      admin,
+      ...(tidLegacy
+        ? {
+            tenant: {
+              id: tidLegacy,
+              slug: session.context?.tenantSlug || null,
+              name: session.context?.tenantName || null,
+              kind: kindLegacy,
+            },
+          }
+        : {}),
+      ...session,
+    });
   } catch (err) {
     console.error('[auth/me]', err);
     res.status(500).json({ error: 'Erro interno do servidor.' });

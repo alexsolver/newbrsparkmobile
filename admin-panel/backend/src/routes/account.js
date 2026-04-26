@@ -1808,7 +1808,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
       const clash = await prisma.tenant.findUnique({ where: { slug } });
       if (!clash) break;
     }
-    const tenantEmail = syntheticTenantEmailForWorkspace(emailNorm, slugPrefix);
+    const tenantEmail = syntheticTenantEmailForWorkspace(emailCanon, slugPrefix);
     /** Título da organização; discriminação por `Tenant.kind` (CLIENT | PROVIDER). */
     const tenantName = baseName;
 

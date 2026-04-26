@@ -15,6 +15,9 @@ interface Props {
   label?: string;
   accentColor?: string;
   minDate?: Date;
+  maxDate?: Date;
+  /** Só leitura: mostra a data formatada sem abrir o calendário */
+  disabled?: boolean;
   /** Oculta os chips (Hoje, +7d, …) */
   hideQuickChips?: boolean;
 }
@@ -76,6 +79,8 @@ export default function DatePickerButton({
   label,
   accentColor = '#6366F1',
   minDate,
+  maxDate,
+  disabled = false,
   hideQuickChips = false,
 }: Props) {
   const { t } = useTranslation();
@@ -164,7 +169,10 @@ export default function DatePickerButton({
       ) : null}
 
       <TouchableOpacity
-        onPress={() => setShowPicker(true)}
+        onPress={() => {
+          if (!disabled) setShowPicker(true);
+        }}
+        disabled={disabled}
         activeOpacity={0.75}
         style={{
           flexDirection: 'row',
@@ -176,11 +184,12 @@ export default function DatePickerButton({
           borderColor: showPicker ? accentColor : PALETTE.border,
           paddingHorizontal: 14,
           paddingVertical: 11,
+          opacity: disabled ? 0.85 : 1,
         }}
       >
         <Ionicons name="calendar-outline" size={18} color={accentColor} />
         <Text style={{ flex: 1, fontSize: 14, fontWeight: '700', color: PALETTE.text }}>{displayText}</Text>
-        <Ionicons name="chevron-down" size={14} color={PALETTE.sub} />
+        {!disabled ? <Ionicons name="chevron-down" size={14} color={PALETTE.sub} /> : null}
       </TouchableOpacity>
 
       {Platform.OS === 'android' && showPicker ? (
@@ -189,6 +198,7 @@ export default function DatePickerButton({
           display={pickerDisplay}
           value={currentDate}
           minimumDate={minDate}
+          maximumDate={maxDate}
           onChange={handleChange}
           locale={locale}
         />
@@ -234,6 +244,7 @@ export default function DatePickerButton({
               display={pickerDisplay}
               value={currentDate}
               minimumDate={minDate}
+              maximumDate={maxDate}
               onChange={handleChange}
               locale={locale}
               style={{ height: Platform.OS === 'ios' ? 380 : 200 }}

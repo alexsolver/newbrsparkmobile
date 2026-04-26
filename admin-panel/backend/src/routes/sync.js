@@ -6,7 +6,7 @@ const authUser = require('../middleware/authUser');
 const { recordSync } = require('../services/cockpitMetrics');
 const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRevision');
 const techStockMovementsSearchHandler = require('../lib/techStockMovementsSearchHandler');
-const { canReceiveFieldTasksForEmail } = require('../lib/technicianEligibility');
+const { canReceiveFieldTasksForAppSession } = require('../lib/technicianEligibility');
 const { broadcastCandidateArray, normalizeEmail: normalizeSyncEmail } = require('../lib/fieldTaskExecutionAccess');
 const {
   getTenantKind,
@@ -554,9 +554,15 @@ router.get('/tasks', async (req, res) => {
       return res.json([]);
     }
 
-    const canReceiveOs = await canReceiveFieldTasksForEmail(prisma, ownerEmail, tenantId);
+    const canReceiveOs = await canReceiveFieldTasksForAppSession(prisma, {
+      userId: req.user.id,
+      email: ownerEmail,
+      effectiveTenantId: tenantId,
+    });
     if (!canReceiveOs) {
-      console.log(`[sync/tasks] ${ownerEmail} — usuário inelegível para FT/OS neste tenant (ex.: cliente); retorno vazio.`);
+      console.log(
+        `[sync/tasks] ${ownerEmail} — inelegível para FT/OS neste contexto (perfil cliente ou tenant ≠ sessão efetiva); retorno vazio.`
+      );
       return res.json([]);
     }
 

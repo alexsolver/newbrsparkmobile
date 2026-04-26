@@ -29,6 +29,7 @@ export function persistAdminSessionBundleFromSessionStorage() {
       role: sessionStorage.getItem('brspark_admin_role') || '',
       panelMode: sessionStorage.getItem('brspark_panel_mode') || '',
       panelTenant: sessionStorage.getItem('brspark_panel_tenant') || '',
+      panelTenantListKind: sessionStorage.getItem('brspark_panel_tenant_list_kind') || '',
       adminContext: sessionStorage.getItem(SS_ADMIN_CONTEXT) || '',
       adminCapabilities: sessionStorage.getItem(SS_ADMIN_CAPABILITIES) || '',
     };
@@ -54,6 +55,9 @@ export function restoreAdminSessionBundleIfNeeded() {
     if (b.panelMode != null) sessionStorage.setItem('brspark_panel_mode', String(b.panelMode));
     if (b.panelTenant != null && String(b.panelTenant).trim() !== '') {
       sessionStorage.setItem('brspark_panel_tenant', String(b.panelTenant));
+    }
+    if (b.panelTenantListKind != null && String(b.panelTenantListKind).trim() !== '') {
+      sessionStorage.setItem('brspark_panel_tenant_list_kind', String(b.panelTenantListKind));
     }
     if (b.adminContext != null && String(b.adminContext).trim() !== '') {
       sessionStorage.setItem(SS_ADMIN_CONTEXT, String(b.adminContext));
@@ -194,7 +198,7 @@ export async function refreshPanelSessionBootstrap() {
       sessionStorage.setItem('brspark_admin_name', data.admin.name || '');
       sessionStorage.setItem('brspark_admin_role', '');
     }
-    if (data?.tenant) {
+    if (data?.tenant && data.tenant.id) {
       sessionStorage.setItem('brspark_panel_mode', 'tenant');
       sessionStorage.setItem('brspark_panel_tenant', JSON.stringify(data.tenant));
     } else if (data?.mode === 'global') {

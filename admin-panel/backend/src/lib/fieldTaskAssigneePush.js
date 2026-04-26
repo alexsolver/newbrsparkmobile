@@ -38,55 +38,45 @@ async function sendFieldTaskActivityPushToAssignee(prisma, opts) {
   );
   const liveActivityBadgeKey = await resolveGlobalLiveActivityBadgeKey(prisma, 'brspark-badge');
 
-  let userIds = [];
-  if (assigneeTid) {
-    const u = await prisma.user.findFirst({
-      where: { isActive: true, tenantId: assigneeTid, email: emailFilter },
-      select: { id: true, email: true },
-    });
-    if (u) userIds = [u.id];
-  } else if (templateTid) {
-    const u = await prisma.user.findFirst({
-      where: { isActive: true, tenantId: templateTid, email: emailFilter },
-      select: { id: true, email: true, tenantId: true },
-    });
-    if (u) {
-      userIds = [u.id];
-    } else {
-      /**
-       * O despacho usa `template.tenantId`, mas o técnico pode estar noutro tenant (prestador filiado,
-       * migração, etc.). Sem fallback o push ia a zero utilizadores → sem faixa no iPhone.
-       */
-      const fb = await prisma.user.findFirst({
-        where: { isActive: true, email: emailFilter },
-        orderBy: { updatedAt: 'desc' },
-        select: { id: true, tenantId: true },
-      });
-      if (fb) {
-        userIds = [fb.id];
-        console.warn(
-          `[${label}] Nenhum utilizador no tenant do template (${templateTid}) para ${emailRaw}; ` +
-            `push com utilizador tenantId=${fb.tenantId} (fallback por e-mail).`
-        );
-      }
-    }
-  } else {
-    const users = await prisma.user.findMany({
-      where: { isActive: true, email: emailFilter },
-      select: { id: true, email: true },
-    });
-    userIds = users.map((x) => x.id);
-    if (users.length > 1) {
-      console.warn(`[${label}] Vários usuários ativos com o mesmo e-mail:`, emailRaw);
-    }
-  }
+  /** Todas as contas ativas com este e-mail (case-insensitive). */
+  const allEmailRows = await prisma.user.findMany({
+    where: { isActive: true, email: emailFilter },
+    select: { id: true, tenantId: true },
+  });
 
-  if (userIds.length === 0) {
+  if (allEmailRows.length === 0) {
     console.warn(`[${label}] Push ignorado: nenhum usuário ativo:`, emailRaw);
     return { sent: 0, skipped: 'no_user' };
   }
+  if (allEmailRows.length > 1) {
+    console.warn(`[${label}] Vários usuários ativos com o mesmo e-mail (${allEmailRows.length}):`, emailRaw);
+  }
 
-  const pushTokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
+  const preferTid = String(assigneeTid || templateTid || '').trim();
+  /** Preferir tenant da OS/template; o token Expo pode estar noutra conta com o mesmo e-mail. */
+  let userIds = allEmailRows.map((r) => r.id);
+  if (preferTid) {
+    const inTenantIds = allEmailRows.filter((r) => String(r.tenantId || '') === preferTid).map((r) => r.id);
+    if (inTenantIds.length) {
+      userIds = inTenantIds;
+    } else {
+      console.warn(
+        `[${label}] Nenhum utilizador no tenant de contexto (${preferTid}) para ${emailRaw}; ` +
+          `push dirigido a todas as contas ativas com este e-mail (${userIds.length}).`
+      );
+    }
+  }
+
+  let pushTokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
+  if (pushTokens.length === 0 && userIds.length < allEmailRows.length) {
+    console.warn(
+      `[${label}] Sem token Expo nas contas do tenant preferido; ` +
+        `nova tentativa com todos os utilizadores ativos deste e-mail (${allEmailRows.length}).`
+    );
+    userIds = allEmailRows.map((r) => r.id);
+    pushTokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
+  }
+
   if (pushTokens.length === 0) {
     console.warn(`[${label}] Push ignorado: sem token Expo (app com sessão + notificações). email=`, emailRaw);
     return { sent: 0, skipped: 'no_tokens' };

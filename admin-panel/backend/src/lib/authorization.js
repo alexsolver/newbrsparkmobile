@@ -97,12 +97,15 @@ function buildAdminAuthorization(admin) {
       scope: PUBLIC_SCOPE,
       accessibleScopes: [PUBLIC_SCOPE],
       contextTenantId: null,
+      panelFilterTenantId: null,
       capabilities: [],
       isPlatform: false,
       isTenantScoped: false,
       canImpersonate: false,
     };
   }
+
+  const platformPanelFilterId = String(admin.panelContextTenantId || '').trim() || null;
 
   if (!admin.panelUser) {
     const capabilities = uniqueCapabilities(PLATFORM_CAPABILITIES);
@@ -112,6 +115,7 @@ function buildAdminAuthorization(admin) {
       scope: PLATFORM_SCOPE,
       accessibleScopes: [PLATFORM_SCOPE, NETWORK_SCOPE, TENANT_SCOPE, PUBLIC_SCOPE],
       contextTenantId: null,
+      panelFilterTenantId: platformPanelFilterId,
       capabilities,
       isPlatform: true,
       isTenantScoped: false,
@@ -128,6 +132,7 @@ function buildAdminAuthorization(admin) {
       scope: PLATFORM_SCOPE,
       accessibleScopes: [PLATFORM_SCOPE, NETWORK_SCOPE, TENANT_SCOPE, PUBLIC_SCOPE],
       contextTenantId: null,
+      panelFilterTenantId: platformPanelFilterId,
       capabilities,
       isPlatform: true,
       isTenantScoped: false,
@@ -143,6 +148,7 @@ function buildAdminAuthorization(admin) {
       scope: TENANT_SCOPE,
       accessibleScopes: [TENANT_SCOPE, PUBLIC_SCOPE],
       contextTenantId: String(admin.tenantId || '').trim() || null,
+      panelFilterTenantId: null,
       capabilities,
       isPlatform: false,
       isTenantScoped: true,
@@ -157,6 +163,7 @@ function buildAdminAuthorization(admin) {
     scope: TENANT_SCOPE,
     accessibleScopes: [TENANT_SCOPE, PUBLIC_SCOPE],
     contextTenantId: String(admin.tenantId || '').trim() || null,
+    panelFilterTenantId: null,
     capabilities,
     isPlatform: false,
     isTenantScoped: true,
@@ -186,6 +193,8 @@ function assertTenantAccess(subject, tenantId) {
 }
 
 function resolveScopedTenantId(subject, requestedTenantId = null) {
+  const panelF = String(subject?.panelFilterTenantId || '').trim();
+  if (subject?.isPlatform && panelF) return panelF;
   if (isTenantScoped(subject) && subject?.contextTenantId) {
     return String(subject.contextTenantId).trim();
   }
@@ -210,28 +219,44 @@ function nonPlatformUserReadWhere(subject) {
 
 function buildPanelSessionBootstrap(admin) {
   const authz = buildAdminAuthorization(admin);
-  const context =
-    authz.scope === PLATFORM_SCOPE
-      ? {
-          scope: PLATFORM_SCOPE,
-          label: 'Plataforma BrSpark',
-          tenantId: null,
-          tenantName: null,
-          tenantSlug: null,
-        }
-      : {
-          scope: TENANT_SCOPE,
-          label: admin?.tenantName ? `Tenant ${admin.tenantName}` : 'Tenant',
-          tenantId: admin?.tenantId || null,
-          tenantName: admin?.tenantName || null,
-          tenantSlug: admin?.tenantSlug || null,
-        };
+  let context;
+  if (authz.scope === PLATFORM_SCOPE) {
+    const ptid = String(admin?.panelContextTenantId || '').trim();
+    if (ptid) {
+      const nm = String(admin.panelContextTenantName || '').trim();
+      const sl = String(admin.panelContextTenantSlug || '').trim();
+      context = {
+        scope: PLATFORM_SCOPE,
+        label: nm || sl || 'Organização',
+        tenantId: ptid,
+        tenantName: nm || null,
+        tenantSlug: sl || null,
+      };
+    } else {
+      context = {
+        scope: PLATFORM_SCOPE,
+        label: 'Plataforma BrSpark',
+        tenantId: null,
+        tenantName: null,
+        tenantSlug: null,
+      };
+    }
+  } else {
+    context = {
+      scope: TENANT_SCOPE,
+      label: admin?.tenantName ? `Tenant ${admin.tenantName}` : 'Tenant',
+      tenantId: admin?.tenantId || null,
+      tenantName: admin?.tenantName || null,
+      tenantSlug: admin?.tenantSlug || null,
+    };
+  }
 
   return {
     authz: {
       scope: authz.scope,
       roleKey: authz.roleKey,
       contextTenantId: authz.contextTenantId,
+      panelFilterTenantId: authz.panelFilterTenantId || null,
       accessibleScopes: authz.accessibleScopes,
       isPlatform: authz.isPlatform,
       isTenantScoped: authz.isTenantScoped,

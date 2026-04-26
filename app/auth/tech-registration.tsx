@@ -42,6 +42,7 @@ import {
 } from '../../src/lib/technicianScheduleForm';
 import { useAuth } from '../../src/hooks/useAuth';
 import i18n from '../../src/i18n';
+import DatePickerButton from '../../src/components/DatePickerButton';
 
 /** Mínimo de fotos para o reconhecimento facial do tenant — secção à parte do passo 1 (IA). */
 const MIN_FACE_ENROLLMENT_PHOTOS = 4;
@@ -2035,17 +2036,20 @@ export default function TechRegistrationScreen() {
           placeholder="Nome"
         />
         <Text style={styles.label}>Data de nascimento</Text>
-        <TextInput
-          style={styles.input}
-          value={birthDate}
-          onChangeText={(t) => {
-            setBirthDate(t.slice(0, 10));
-            saveDraftSoon();
-          }}
-          editable={!readOnly}
-          placeholder="AAAA-MM-DD"
-          keyboardType="numbers-and-punctuation"
-        />
+        <View style={{ marginBottom: 10 }}>
+          <DatePickerButton
+            value={birthDate || undefined}
+            onChange={(iso) => {
+              setBirthDate(iso);
+              saveDraftSoon();
+            }}
+            hideQuickChips
+            accentColor={C.accent}
+            minDate={new Date(1900, 0, 1)}
+            maxDate={new Date()}
+            disabled={readOnly}
+          />
+        </View>
         <Text style={styles.fieldHint}>Preenchida automaticamente a partir do documento quando possível; você pode corrigir.</Text>
         <Text style={styles.label}>{isCompanyInvite ? 'E-mail do convite' : 'E-mail da conta'}</Text>
         <TextInput style={[styles.input, { opacity: 0.85 }]} value={email} editable={false} />
@@ -2134,41 +2138,44 @@ export default function TechRegistrationScreen() {
             }}
           />
           <Text style={styles.label}>Data de emissão</Text>
-          <TextInput
-            style={styles.input}
-            value={primaryDocRow.validFrom}
-            editable={!readOnly}
-            placeholder="AAAA-MM-DD"
-            onChangeText={(t) => {
-              setPersonalDocs((prev) => {
-                const p0 = prev[0];
-                if (!p0) return prev;
-                const next = [...prev];
-                next[0] = { ...p0, validFrom: t.slice(0, 10) };
-                return next;
-              });
-              saveDraftSoon();
-            }}
-            keyboardType="numbers-and-punctuation"
-          />
+          <View style={{ marginBottom: 10 }}>
+            <DatePickerButton
+              value={primaryDocRow.validFrom || undefined}
+              onChange={(iso) => {
+                setPersonalDocs((prev) => {
+                  const p0 = prev[0];
+                  if (!p0) return prev;
+                  const next = [...prev];
+                  next[0] = { ...p0, validFrom: iso.slice(0, 10) };
+                  return next;
+                });
+                saveDraftSoon();
+              }}
+              hideQuickChips
+              accentColor={C.accent}
+              maxDate={new Date()}
+              disabled={readOnly}
+            />
+          </View>
           <Text style={styles.label}>Data de validade</Text>
-          <TextInput
-            style={styles.input}
-            value={primaryDocRow.validTo}
-            editable={!readOnly}
-            placeholder="AAAA-MM-DD"
-            onChangeText={(t) => {
-              setPersonalDocs((prev) => {
-                const p0 = prev[0];
-                if (!p0) return prev;
-                const next = [...prev];
-                next[0] = { ...p0, validTo: t.slice(0, 10) };
-                return next;
-              });
-              saveDraftSoon();
-            }}
-            keyboardType="numbers-and-punctuation"
-          />
+          <View style={{ marginBottom: 10 }}>
+            <DatePickerButton
+              value={primaryDocRow.validTo || undefined}
+              onChange={(iso) => {
+                setPersonalDocs((prev) => {
+                  const p0 = prev[0];
+                  if (!p0) return prev;
+                  const next = [...prev];
+                  next[0] = { ...p0, validTo: iso.slice(0, 10) };
+                  return next;
+                });
+                saveDraftSoon();
+              }}
+              hideQuickChips
+              accentColor={C.accent}
+              disabled={readOnly}
+            />
+          </View>
           <Text style={styles.label}>Órgão emissor</Text>
           <TextInput
             style={styles.input}

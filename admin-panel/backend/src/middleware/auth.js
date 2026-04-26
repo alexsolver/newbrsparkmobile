@@ -3,7 +3,26 @@ const jwt = require('jsonwebtoken');
 const { enforcePanelPermissions } = require('./panelPermissions');
 const { buildAdminAuthorization } = require('../lib/authorization');
 
+function copyPanelContextFromPayload(payload) {
+  const ptid = payload.panelContextTenantId != null ? String(payload.panelContextTenantId).trim() : '';
+  if (!ptid) {
+    return {
+      panelContextTenantId: null,
+      panelContextTenantSlug: null,
+      panelContextTenantName: null,
+      panelContextTenantKind: null,
+    };
+  }
+  return {
+    panelContextTenantId: ptid,
+    panelContextTenantSlug: payload.panelContextTenantSlug || null,
+    panelContextTenantName: payload.panelContextTenantName || null,
+    panelContextTenantKind: payload.panelContextTenantKind || null,
+  };
+}
+
 function attachAdminFromPayload(payload) {
+  const panelCtx = copyPanelContextFromPayload(payload);
   if (payload.panel === true && payload.userId) {
     return {
       panelUser: true,
@@ -15,6 +34,11 @@ function attachAdminFromPayload(payload) {
       role: payload.role,
       tenantSlug: payload.tenantSlug,
       tenantName: payload.tenantName,
+      impersonation: !!payload.impersonation,
+      impersonatorUserId: payload.impersonatorUserId || null,
+      impersonatorEmail: payload.impersonatorEmail || null,
+      impersonatorLegacyAdminId: payload.impersonatorLegacyAdminId || null,
+      ...panelCtx,
     };
   }
   return {
@@ -27,6 +51,7 @@ function attachAdminFromPayload(payload) {
     role: null,
     tenantSlug: null,
     tenantName: null,
+    ...panelCtx,
   };
 }
 
@@ -110,4 +135,10 @@ function rejectOsAuth(req, res, next) {
   return next();
 }
 
-module.exports = { adminAuth, adminAuthThenPanel, adminOrReportsApiKey, rejectOsAuth };
+module.exports = {
+  adminAuth,
+  adminAuthThenPanel,
+  adminOrReportsApiKey,
+  rejectOsAuth,
+  attachAdminFromPayload,
+};

@@ -2607,12 +2607,20 @@ function buildCard(task, colClass) {
   const fd = (d) => opsFormatCardDateTime(d);
 
   const stCard = String(task.status || '').toUpperCase();
-  const canReopenRevisionCard =
-    !isRt &&
-    ((colClass === 'col-completed' && ['COMPLETED', 'SYNCED'].includes(stCard)) ||
-      (colClass === 'col-cancelled' && stCard === 'REJECTED'));
-  const reopenForRevisionBtn = canReopenRevisionCard
-    ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" onclick="event.stopPropagation(); event.preventDefault(); void window.openReopenRevisionModal(this.getAttribute('data-reopen-task-id'));"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> Reabrir p/ revisão</button>`
+  const safeTaskIdAttr = String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const canCancelPendingCard = colClass === 'col-pending' && stCard === 'PENDING';
+  const canReopenCompletedCard =
+    !isRt && colClass === 'col-completed' && ['COMPLETED', 'SYNCED'].includes(stCard);
+  const canResendCancelledCard =
+    !isRt && colClass === 'col-cancelled' && ['REJECTED', 'CANCELLED'].includes(stCard);
+  const reopenForRevisionBtn = canReopenCompletedCard
+    ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${safeTaskIdAttr}" onclick="event.stopPropagation(); event.preventDefault(); void window.openReopenRevisionModal(this.getAttribute('data-reopen-task-id'));"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> ${opsT('ops_card_reopen_revision')}</button>`
+    : '';
+  const resendFromCancelledBtn = canResendCancelledCard
+    ? `<button type="button" class="btn-resend-cancelled" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${safeTaskIdAttr}" onclick="event.stopPropagation(); event.preventDefault(); void window.openReopenRevisionModal(this.getAttribute('data-reopen-task-id'));"><ion-icon name="paper-plane-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> ${opsT('ops_card_resend')}</button>`
+    : '';
+  const cancelPendingBtn = canCancelPendingCard
+    ? `<button type="button" class="btn-cancel-pending-os" title="${String(opsT('ops_detail_cancel_os')).replace(/"/g, '&quot;')}" style="padding:8px 12px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;cursor:pointer;font-size:11px;font-weight:800" data-cancel-task-id="${safeTaskIdAttr}" onclick="event.stopPropagation(); event.preventDefault(); void window.cancelTaskFromBoard(this.getAttribute('data-cancel-task-id'));"><ion-icon name="trash-outline" style="font-size:16px;vertical-align:-2px"></ion-icon> ${opsT('ops_detail_cancel_os')}</button>`
     : '';
 
   const locationBlock = (() => {
@@ -2651,7 +2659,7 @@ function buildCard(task, colClass) {
       </div>
 
       <div class="task-card-meta" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px; flex-direction:column; align-items:stretch; gap:6px;">
-        <div style="display:flex; justify-content:flex-end; width:100%; margin-bottom:2px">
+        <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:2px; flex-wrap:wrap; gap:6px">
           <button type="button" title="${String(opsT('ops_card_chat_title')).replace(/"/g, '&quot;')}" aria-label="${String(opsT('ops_card_chat_title')).replace(/"/g, '&quot;')}"
             data-ops-chat-task="${String(task.id).replace(/"/g, '&quot;')}"
             onclick="event.stopPropagation(); event.preventDefault(); void window.openOpsChatModal(this.getAttribute('data-ops-chat-task'));"
@@ -2659,6 +2667,7 @@ function buildCard(task, colClass) {
             <ion-icon name="chatbubbles-outline" style="font-size:18px;vertical-align:-2px;color:#2563eb"></ion-icon>
             <span style="letter-spacing:0.02em">Chat</span>
           </button>
+          ${cancelPendingBtn}
         </div>
         <div style="display:flex; justify-content:flex-end; align-items:center; width:100%; flex-wrap:wrap; gap:4px">
           <span style="display:flex; align-items:center; gap:4px; flex-wrap:wrap">
@@ -2676,6 +2685,7 @@ function buildCard(task, colClass) {
             📋 Copiar
           </button>
         </div>` : ''}
+        ${resendFromCancelledBtn}
         ${reopenForRevisionBtn}
       </div>
     </div>`;
@@ -5954,7 +5964,7 @@ function applyDetailModalHeader(t) {
   const isRoutineHdr = t.routineTaskNumber != null && String(t.routineTaskNumber).trim() !== '';
   const reopenHdr = document.getElementById('detail-reopen-revision-btn');
   if (reopenHdr) {
-    const showReopenHdr = !isRoutineHdr && ['COMPLETED', 'SYNCED', 'REJECTED'].includes(stHdr);
+    const showReopenHdr = !isRoutineHdr && ['COMPLETED', 'SYNCED', 'REJECTED', 'CANCELLED'].includes(stHdr);
     reopenHdr.style.display = showReopenHdr ? '' : 'none';
   }
   const canCancel = !['COMPLETED', 'SYNCED', 'CANCELLED', 'REJECTED'].includes(t.status);
@@ -8096,6 +8106,24 @@ window.downloadRevisionsCsv = async function (execId, includeResponses) {
     URL.revokeObjectURL(a.href);
   } catch (e) {
     alert('Erro de rede ao exportar CSV.');
+  }
+};
+
+window.cancelTaskFromBoard = async function (taskId) {
+  const tid = taskId != null ? String(taskId).trim() : '';
+  if (!tid) {
+    alert(opsT('ops_chat_missing_id'));
+    return;
+  }
+  if (!confirm(opsT('ops_card_cancel_confirm'))) return;
+  try {
+    const res = await CONFIG.del(`/operations/tasks/${encodeURIComponent(tid)}?_t=${Date.now()}`);
+    if (res && res.error) throw new Error(res.error);
+    alert(opsT('ops_card_cancel_ok'));
+    await window.loadBoard();
+  } catch (e) {
+    console.error('[OPS] cancelTaskFromBoard', e);
+    alert(opsT('ops_card_cancel_err') + ' ' + (e.message || ''));
   }
 };
 

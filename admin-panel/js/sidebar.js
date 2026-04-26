@@ -58,6 +58,165 @@ function tenantKindBadgeLabelPt(kind) {
   return 'Empresa';
 }
 
+function escSidebarAttr(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/"/g, '&quot;');
+}
+
+const SS_PANEL_TENANT_LIST_KIND = 'brspark_panel_tenant_list_kind';
+
+function getPanelTenantListKind() {
+  try {
+    const v = sessionStorage.getItem(SS_PANEL_TENANT_LIST_KIND);
+    const u = String(v || '').trim().toUpperCase();
+    if (u === 'COMPANY' || u === 'PROVIDER' || u === 'CLIENT' || u === 'ALL') return u;
+  } catch {
+    /* ignore */
+  }
+  return 'COMPANY';
+}
+
+function setPanelTenantListKind(v) {
+  try {
+    const u = String(v || 'COMPANY').trim().toUpperCase();
+    const ok = u === 'ALL' || u === 'CLIENT' || u === 'PROVIDER' || u === 'COMPANY';
+    sessionStorage.setItem(SS_PANEL_TENANT_LIST_KIND, ok ? u : 'COMPANY');
+  } catch {
+    /* ignore */
+  }
+}
+
+function getCurrentContextTenantId() {
+  try {
+    const raw = sessionStorage.getItem('brspark_panel_tenant');
+    if (!raw) return '';
+    const o = JSON.parse(raw);
+    return o && o.id ? String(o.id) : '';
+  } catch {
+    return '';
+  }
+}
+
+async function fetchTenantsForPickerKind(kindU) {
+  const k = String(kindU || 'COMPANY').trim().toUpperCase();
+  const j = await CONFIG.get(`/tenants?page=1&limit=500&all=1&kind=${encodeURIComponent(k)}`);
+  return Array.isArray(j?.data) ? j.data : [];
+}
+
+async function refillPanelTenantSelectOptions(kindFilterEl, sel) {
+  const kindVal = kindFilterEl ? String(kindFilterEl.value || 'COMPANY').trim().toUpperCase() : 'COMPANY';
+  setPanelTenantListKind(kindVal);
+  const currentId = getCurrentContextTenantId();
+  sel.innerHTML = `<option value="">${escSidebarAttr(t('nav_panel_tenant_all'))}</option>`;
+  sel.disabled = true;
+
+  let rows = [];
+  try {
+    rows = await fetchTenantsForPickerKind(kindVal);
+  } catch {
+    rows = [];
+  }
+  const seen = new Set();
+  rows.sort((a, b) =>
+    String(a?.name || '').localeCompare(String(b?.name || ''), undefined, { sensitivity: 'base' })
+  );
+  for (const row of rows) {
+    if (!row || !row.id) continue;
+    seen.add(String(row.id));
+    const opt = document.createElement('option');
+    opt.value = String(row.id);
+    const slug = row.slug ? ` (${row.slug})` : '';
+    opt.textContent = `${row.name || row.slug || row.id}${slug}`;
+    sel.appendChild(opt);
+  }
+
+  if (currentId && !seen.has(currentId)) {
+    try {
+      const one = await CONFIG.get(`/tenants/${encodeURIComponent(currentId)}`);
+      if (one && one.id && !one.error) {
+        const opt = document.createElement('option');
+        opt.value = String(one.id);
+        const slug = one.slug ? ` (${one.slug})` : '';
+        opt.textContent = `${one.name || one.slug || one.id}${slug}`;
+        sel.insertBefore(opt, sel.children[1] || null);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  sel.value = currentId;
+  if (sel.value !== currentId) sel.value = '';
+  sel.dataset.brsparkPrev = sel.value;
+  sel.disabled = false;
+}
+
+/** Seletor de organização para admin de plataforma (JWT com filtro opcional no token). */
+async function bindPanelTenantScopePicker() {
+  const wrap = document.getElementById('sidebar-panel-scope-picker');
+  if (!wrap || wrap.dataset.brsparkPickerInit === '1') return;
+
+  const kindSel = document.getElementById('sidebar-panel-tenant-kind-filter');
+  const sel = document.getElementById('sidebar-panel-tenant-select');
+  if (!kindSel || !sel) return;
+
+  kindSel.value = getPanelTenantListKind();
+  if (!['COMPANY', 'PROVIDER', 'CLIENT', 'ALL'].includes(kindSel.value)) kindSel.value = 'COMPANY';
+
+  await refillPanelTenantSelectOptions(kindSel, sel);
+
+  kindSel.addEventListener('change', async () => {
+    kindSel.disabled = true;
+    sel.disabled = true;
+    try {
+      await refillPanelTenantSelectOptions(kindSel, sel);
+    } finally {
+      kindSel.disabled = false;
+      sel.disabled = false;
+    }
+  });
+
+  sel.addEventListener('change', async () => {
+    const v = String(sel.value || '').trim();
+    const prev = sel.dataset.brsparkPrev || '';
+    if (v === prev) return;
+    sel.disabled = true;
+    kindSel.disabled = true;
+    const res = await CONFIG.post('/auth/panel-select-tenant', { tenantId: v || null });
+    if (!res || !res.token) {
+      alert(typeof res?.error === 'string' && res.error ? res.error : t('nav_panel_tenant_apply_err'));
+      sel.value = prev;
+      sel.disabled = false;
+      kindSel.disabled = false;
+      return;
+    }
+    sessionStorage.setItem('brspark_admin_token', res.token);
+    if (res.user) {
+      sessionStorage.setItem('brspark_admin_email', res.user.email || '');
+      sessionStorage.setItem('brspark_admin_name', res.user.name || '');
+      sessionStorage.setItem('brspark_admin_role', res.user.role || '');
+    } else if (res.admin) {
+      sessionStorage.setItem('brspark_admin_email', res.admin.email || '');
+      sessionStorage.setItem('brspark_admin_name', res.admin.name || '');
+      sessionStorage.setItem('brspark_admin_role', '');
+    }
+    applyPanelSessionBootstrap(res);
+    if (res.tenant && res.tenant.id) {
+      sessionStorage.setItem('brspark_panel_mode', 'tenant');
+      sessionStorage.setItem('brspark_panel_tenant', JSON.stringify(res.tenant));
+    } else {
+      sessionStorage.setItem('brspark_panel_mode', 'global');
+      sessionStorage.removeItem('brspark_panel_tenant');
+    }
+    persistAdminSessionBundleFromSessionStorage();
+    window.location.reload();
+  });
+
+  wrap.dataset.brsparkPickerInit = '1';
+}
+
 const SIDEBAR_COLLAPSED_KEY = 'brspark_admin_sidebar_collapsed';
 
 /**
@@ -79,6 +238,7 @@ function seedAdminSessionFromOpenerIfNeeded() {
       'brspark_admin_role',
       'brspark_panel_mode',
       'brspark_panel_tenant',
+      'brspark_panel_tenant_list_kind',
       'brspark_admin_context',
       'brspark_admin_capabilities',
     ];
@@ -382,28 +542,46 @@ export function renderSidebar(alertCount = 3) {
   const currentPage = page.endsWith('.html') ? page : page + '.html';
   const ctx = getPanelContext();
   const panelMode = sessionStorage.getItem('brspark_panel_mode') || (ctx?.scope === 'platform' ? 'global' : 'tenant');
+  const isPlatformCtx = ctx?.scope === 'platform';
   let tenantLine = '';
-  try {
-    const raw = sessionStorage.getItem('brspark_panel_tenant');
-    if (raw && panelMode === 'tenant') {
-      const t = JSON.parse(raw);
-      const kind = t.kind || 'COMPANY';
-      const slug = String(t.slug || '').replace(/</g, '&lt;');
-      const display = String(stripTenantDisplaySuffix(t.name, kind) || t.name || '').replace(/</g, '&lt;');
-      const badge = String(tenantKindBadgeLabelPt(kind)).replace(/</g, '&lt;');
-      const kslug = tenantKindSlugForChip(kind);
-      tenantLine = `<div class="sidebar-tenant-chip sidebar-tenant-chip--${kslug}" title="${slug}">
+  if (!isPlatformCtx) {
+    try {
+      const raw = sessionStorage.getItem('brspark_panel_tenant');
+      if (raw && panelMode === 'tenant') {
+        const tn = JSON.parse(raw);
+        const kind = tn.kind || 'COMPANY';
+        const slug = String(tn.slug || '').replace(/</g, '&lt;');
+        const display = String(stripTenantDisplaySuffix(tn.name, kind) || tn.name || '').replace(/</g, '&lt;');
+        const badge = String(tenantKindBadgeLabelPt(kind)).replace(/</g, '&lt;');
+        const kslug = tenantKindSlugForChip(kind);
+        tenantLine = `<div class="sidebar-tenant-chip sidebar-tenant-chip--${kslug}" title="${slug}">
         <span class="sidebar-tenant-chip__badge">${badge}</span>
         <span class="sidebar-tenant-chip__name">${display}</span>
         <span class="sidebar-tenant-chip__slug">· ${slug}</span>
       </div>`;
+      }
+    } catch {
+      /* ignore */
     }
-  } catch {
-    /* ignore */
+    if (!tenantLine && ctx?.label) {
+      tenantLine = `<div class="sidebar-tenant-chip">${String(ctx.label)}</div>`;
+    }
   }
-  if (!tenantLine && ctx?.label) {
-    tenantLine = `<div class="sidebar-tenant-chip">${String(ctx.label)}</div>`;
-  }
+  const scopePickerHtml = isPlatformCtx
+    ? `<div class="sidebar-panel-scope-picker" id="sidebar-panel-scope-picker">
+        <span class="sidebar-panel-scope-picker__lbl">${escSidebarAttr(t('nav_panel_tenant_kind_lbl'))}</span>
+        <select id="sidebar-panel-tenant-kind-filter" class="sidebar-panel-scope-picker__select sidebar-panel-scope-picker__select--kind" aria-label="${escSidebarAttr(t('nav_panel_tenant_kind_lbl'))}">
+          <option value="COMPANY">${escSidebarAttr(t('nav_panel_tenant_kind_company'))}</option>
+          <option value="PROVIDER">${escSidebarAttr(t('nav_panel_tenant_kind_provider'))}</option>
+          <option value="CLIENT">${escSidebarAttr(t('nav_panel_tenant_kind_client'))}</option>
+          <option value="ALL">${escSidebarAttr(t('nav_panel_tenant_kind_all'))}</option>
+        </select>
+        <span class="sidebar-panel-scope-picker__lbl">${escSidebarAttr(t('nav_panel_tenant_scope'))}</span>
+        <select id="sidebar-panel-tenant-select" class="sidebar-panel-scope-picker__select" aria-label="${escSidebarAttr(t('nav_panel_tenant_scope'))}">
+          <option value="">${escSidebarAttr(t('nav_panel_tenant_all'))}</option>
+        </select>
+      </div>`
+    : '';
   const role = getStoredPanelRole();
   const items = navItemsForRole(role);
   let lastSection = null;
@@ -448,6 +626,7 @@ export function renderSidebar(alertCount = 3) {
           </button>
         </div>
         ${tenantLine}
+        ${scopePickerHtml}
         ${impersonationBannerHtml()}
       </div>
       <nav class="sidebar-nav">${navHtml}</nav>
@@ -536,6 +715,7 @@ export async function initPage() {
   if (!document.querySelector('body > aside.sidebar')) {
     document.body.insertAdjacentHTML('afterbegin', renderSidebar());
   }
+  await bindPanelTenantScopePicker().catch((e) => console.warn('[sidebar] panel tenant picker', e));
   dismissStrayAdminUiLayers();
   if (isSidebarCollapsed() && window.matchMedia('(min-width: 769px)').matches) {
     document.body.classList.add('sidebar-collapsed');
