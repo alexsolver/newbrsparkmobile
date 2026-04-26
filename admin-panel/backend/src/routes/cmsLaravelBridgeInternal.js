@@ -3,6 +3,8 @@
 const crypto = require('crypto');
 const express = require('express');
 const prisma = require('../db');
+const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
+const { sendExpoPushToMany } = require('../services/expoPush');
 
 const router = express.Router();
 
@@ -20,6 +22,24 @@ function requireBridge(req, res) {
     return false;
   }
   return true;
+}
+
+async function ensureProviderFirstEnabledOr403(res, tenantId) {
+  const enabled = await isProviderFirstNetworkEnabled(String(tenantId));
+  if (!enabled) {
+    res.status(403).json({
+      error: 'Fluxo provider-first desativado para este tenant.',
+      code: 'PROVIDER_FIRST_DISABLED',
+    });
+    return false;
+  }
+  return true;
+}
+
+function normalizeEmail(raw) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase();
 }
 
 function slugifyDomain(domain) {
@@ -240,6 +260,114 @@ router.post('/cms-operational-summary', express.json({ limit: '64kb' }), async (
   } catch (err) {
     console.error('[cms-operational-summary]', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/internal/provider-affiliations/invite
+ * Laravel cria convite de parceria (provider-first) para aparecer no app do prestador.
+ *
+ * Body: { tenantId, email, relationshipType?, note?, pushTitle?, pushBody? }
+ */
+router.post('/provider-affiliations/invite', express.json({ limit: '64kb' }), async (req, res) => {
+  try {
+    if (!requireBridge(req, res)) return;
+    const email = normalizeEmail(req.body?.email);
+    const tenantId = String(req.body?.tenantId || '').trim();
+    if (!email) return res.status(400).json({ error: 'email é obrigatório.' });
+    if (!tenantId) return res.status(400).json({ error: 'tenantId é obrigatório.' });
+    if (!(await ensureProviderFirstEnabledOr403(res, tenantId))) return;
+
+    const providers = await prisma.providerIdentity.findMany({
+      where: {
+        user: {
+          email: {
+            equals: email,
+            mode: 'insensitive',
+          },
+        },
+      },
+      include: { user: { select: { id: true, email: true, name: true } } },
+      take: 3,
+    });
+    if (!providers.length) {
+      return res.status(404).json({
+        error: 'Prestador ainda não possui cadastro global concluído.',
+        code: 'PROVIDER_NOT_FOUND',
+      });
+    }
+    if (providers.length > 1) {
+      return res.status(409).json({
+        error: 'Mais de uma conta global encontrada para este e-mail.',
+        code: 'PROVIDER_IDENTITY_AMBIGUOUS',
+      });
+    }
+    const provider = providers[0];
+
+    const relationshipTypeRaw = String(req.body?.relationshipType || 'PARTNER').trim().toUpperCase();
+    const relationshipType = relationshipTypeRaw === 'DEDICATED' ? 'DEDICATED' : 'PARTNER';
+    const note = String(req.body?.note || '').trim();
+    const invitationToken = crypto.randomBytes(24).toString('hex');
+    const now = new Date();
+
+    const row = await prisma.providerTenantAffiliation.upsert({
+      where: {
+        tenantId_providerIdentityId: {
+          tenantId: String(tenantId),
+          providerIdentityId: provider.id,
+        },
+      },
+      create: {
+        tenantId: String(tenantId),
+        providerIdentityId: provider.id,
+        status: 'INVITED',
+        relationshipType,
+        invitationToken,
+        invitedAt: now,
+        note: note || null,
+        invitedByUserId: null,
+      },
+      update: {
+        status: 'INVITED',
+        relationshipType,
+        invitationToken,
+        invitedAt: now,
+        note: note || null,
+        invitedByUserId: null,
+      },
+    });
+
+    const pushTitle = String(req.body?.pushTitle || 'Nova parceria').trim() || 'Nova parceria';
+    const pushBody =
+      String(req.body?.pushBody || 'Você recebeu um convite de parceria.').trim() ||
+      'Você recebeu um convite de parceria.';
+    const tokens = await prisma.pushToken.findMany({ where: { userId: provider.userId } });
+    if (tokens.length) {
+      sendExpoPushToMany(tokens, {
+        title: pushTitle,
+        body: pushBody,
+        data: {
+          type: 'PROVIDER_AFFILIATION_INVITED',
+          tenantId: String(tenantId),
+          affiliationId: row.id,
+        },
+      }).catch((err) =>
+        console.error('[internal/provider-affiliations/invite] Expo push falhou:', err?.message || err)
+      );
+    }
+
+    return res.status(201).json({
+      ok: true,
+      affiliationId: row.id,
+      providerIdentityId: provider.id,
+      email: provider.user.email,
+      status: row.status,
+      relationshipType: row.relationshipType || relationshipType,
+      invitedAt: row.invitedAt,
+    });
+  } catch (err) {
+    console.error('[internal/provider-affiliations/invite]', err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
