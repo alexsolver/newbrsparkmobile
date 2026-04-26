@@ -33,8 +33,22 @@ router.post('/laravel-evaluations-bridge', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'email e tenantId são obrigatórios.' });
     }
 
+    // O Laravel envia tenant_id (UUID) do CMS. No Node, `User.tenantId` referencia `Tenant.id` (cuid).
+    // Aceita ambos: cuid (id) ou UUID do Laravel (laravelTenantId).
+    const tenant = await prisma.tenant.findFirst({
+      where: {
+        OR: [{ id: tenantId }, { laravelTenantId: tenantId }],
+      },
+    });
+    if (!tenant) {
+      return res.status(404).json({
+        error:
+          'Tenant não encontrado na base BrSpark (PostgreSQL). Confirme se o tenant do Laravel foi provisionado e está ligado ao tenant do Node.',
+      });
+    }
+
     const user = await prisma.user.findFirst({
-      where: { tenantId, email },
+      where: { tenantId: tenant.id, email },
       include: { tenant: true },
     });
     if (!user) {
