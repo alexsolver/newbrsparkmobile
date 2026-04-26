@@ -4,6 +4,14 @@
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BrSpark Admin — Tenants</title>
   <link rel="stylesheet" href="css/main.css" />
+  <style>
+    #save-tenant-btn.is-loading { pointer-events: none; opacity: 0.88; }
+    #save-tenant-btn.is-loading #ten-save-spinner {
+      display: inline-block !important;
+      animation: ten-save-spin 0.75s linear infinite;
+    }
+    @keyframes ten-save-spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
 <body>
 <div class="admin-layout">
@@ -319,7 +327,12 @@
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-ghost" id="ten-modal-cancel" onclick="closeModal('new-tenant-modal')">Cancelar</button>
-      <button type="button" class="btn btn-primary" id="save-tenant-btn"><span id="ten-modal-save">Criar Tenant</span></button>
+      <button type="button" class="btn btn-primary" id="save-tenant-btn" aria-busy="false">
+        <span id="ten-modal-save" class="ten-save-btn-inner" style="display:inline-flex;align-items:center;gap:8px">
+          <ion-icon id="ten-save-spinner" name="refresh-outline" aria-hidden="true" style="display:none;font-size:18px;vertical-align:-3px"></ion-icon>
+          <span id="ten-modal-save-text">Criar Tenant</span>
+        </span>
+      </button>
     </div>
   </div>
 </div>
@@ -348,7 +361,12 @@
 
   const statusMap = { TRIAL:'badge-amber', ACTIVE:'badge-green', SUSPENDED:'badge-red', CANCELLED:'badge-gray' };
   const planMap   = { Basic:'badge-gray', Pro:'badge-accent', Enterprise:'badge-blue' };
-  const flags     = { BR:'🇧🇷', US:'🇺🇸', ES:'🇪🇸', AR:'🇦🇷', CL:'🇨🇱', MX:'🇲🇽', PT:'🇵🇹' };
+  const flags = {
+    BR: '🇧🇷', US: '🇺🇸', ES: '🇪🇸', AR: '🇦🇷', CL: '🇨🇱', MX: '🇲🇽', PT: '🇵🇹',
+    DE: '🇩🇪', FR: '🇫🇷', GB: '🇬🇧', CO: '🇨🇴', PE: '🇵🇪', UY: '🇺🇾', IT: '🇮🇹', NL: '🇳🇱',
+    BE: '🇧🇪', CH: '🇨🇭', AT: '🇦🇹', PL: '🇵🇱', IE: '🇮🇪', CA: '🇨🇦', AU: '🇦🇺', NZ: '🇳🇿',
+    JP: '🇯🇵', CN: '🇨🇳', IN: '🇮🇳', ZA: '🇿🇦',
+  };
 
   function escHtml(s) {
     return String(s ?? '')
@@ -360,15 +378,18 @@
 
   const [planData, localeData] = await Promise.all([
     CONFIG.get('/plans'),
-    CONFIG.get('/i18n/entries?source=locales')
+    CONFIG.get('/i18n/entries?source=locales&activeOnly=1'),
   ]);
+
+  const plansList = Array.isArray(planData) ? planData : [];
+  const localesList = Array.isArray(localeData) ? localeData : [];
 
   const planSel   = document.getElementById('new-plan-id');
   const localeSel = document.getElementById('new-locale-id');
   let cachedTenants = [];
 
-  (planData || []).forEach(p => { planSel.innerHTML += `<option value="${escHtml(p.id)}">${escHtml(p.name)} — R$ ${Number(p.priceMonthly).toFixed(0)}${mpT('ten_plan_per_mo')}</option>`; });
-  (localeData || []).forEach(l => { localeSel.innerHTML += `<option value="${escHtml(l.id)}">${flags[l.countryCode] || '🌐'} ${escHtml(l.name)} (${escHtml(l.countryCode)})</option>`; });
+  plansList.forEach(p => { planSel.innerHTML += `<option value="${escHtml(p.id)}">${escHtml(p.name)} — R$ ${Number(p.priceMonthly).toFixed(0)}${mpT('ten_plan_per_mo')}</option>`; });
+  localesList.forEach(l => { localeSel.innerHTML += `<option value="${escHtml(l.id)}">${flags[l.countryCode] || '🌐'} ${escHtml(l.name)} (${escHtml(l.countryCode)})</option>`; });
 
   function applyTenantsUrlFilters() {
     try {
@@ -1004,7 +1025,29 @@
     await loadTenants();
   };
 
-  document.getElementById('save-tenant-btn').onclick = async () => {
+  const saveTenantBtn = document.getElementById('save-tenant-btn');
+  const saveTenantText = document.getElementById('ten-modal-save-text');
+  const saveTenantSpin = document.getElementById('ten-save-spinner');
+  const cancelTenantBtn = document.getElementById('ten-modal-cancel');
+
+  function setTenantSaveLoading(on) {
+    if (!saveTenantBtn || !saveTenantText) return;
+    saveTenantBtn.classList.toggle('is-loading', !!on);
+    saveTenantBtn.setAttribute('aria-busy', on ? 'true' : 'false');
+    saveTenantBtn.disabled = !!on || !canCreateTenant;
+    if (saveTenantSpin) saveTenantSpin.style.display = on ? 'inline-block' : 'none';
+    saveTenantText.textContent = on ? mpT('ten_btn_saving') : mpT('ten_btn_create');
+    if (cancelTenantBtn) cancelTenantBtn.disabled = !!on;
+  }
+
+  if (!canCreateTenant) {
+    if (saveTenantBtn) {
+      saveTenantBtn.disabled = true;
+      saveTenantBtn.title = mpT('ten_no_create_perm') || '';
+    }
+  }
+
+  saveTenantBtn?.addEventListener('click', async () => {
     if (!canCreateTenant) return;
     const body = {
       name:        document.getElementById('new-name').value.trim(),
@@ -1013,10 +1056,31 @@
       defaultLang: document.getElementById('new-lang').value,
       planId:      document.getElementById('new-plan-id').value || undefined,
     };
-    if (!body.name || !body.email || !body.localeId) return alert(mpT('ten_alert_required'));
-    const res = await CONFIG.post('/tenants', body);
-    if (res) { closeModal('new-tenant-modal'); loadTenants(); }
-  };
+    if (!body.name || !body.email || !body.localeId) {
+      alert(mpT('ten_alert_required'));
+      return;
+    }
+    setTenantSaveLoading(true);
+    try {
+      const res = await CONFIG.post('/tenants', body);
+      if (!res) return;
+      if (res.error) {
+        alert(res.error);
+        return;
+      }
+      if (res.id) {
+        closeModal('new-tenant-modal');
+        await loadTenants();
+        return;
+      }
+      alert(mpT('ten_alert_create_fail'));
+    } catch (err) {
+      console.error('[save-tenant]', err);
+      alert(err?.message || mpT('ten_alert_create_fail'));
+    } finally {
+      setTenantSaveLoading(false);
+    }
+  });
 
   let debounce;
   document.getElementById('search-input').addEventListener('input', () => {

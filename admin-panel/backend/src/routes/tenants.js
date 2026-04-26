@@ -128,12 +128,28 @@ router.post('/', async (req, res) => {
     }
     const { name, email, defaultLang = 'pt-BR', planId, localeId, kind: bodyKind } = req.body;
     if (!name || !email) return res.status(400).json({ error: 'Nome e e-mail são obrigatórios.' });
-    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    let slug = String(name)
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    if (!slug) slug = `tenant-${Date.now()}`;
+    const ownerName = String(name).trim().slice(0, 200) || String(email).split('@')[0] || 'Admin';
     const kindRaw = String(bodyKind || 'COMPANY').trim().toUpperCase();
     const kind = ['COMPANY', 'CLIENT', 'PROVIDER'].includes(kindRaw) ? kindRaw : 'COMPANY';
 
     const tenant = await prisma.tenant.create({
-      data: { name, slug, email, defaultLang, localeId, status: 'TRIAL', kind },
+      data: {
+        name: String(name).trim(),
+        slug,
+        email: String(email).trim().toLowerCase(),
+        ownerName,
+        defaultLang,
+        localeId: localeId || null,
+        status: 'TRIAL',
+        kind,
+      },
     });
 
     if (planId) {
@@ -149,7 +165,16 @@ router.post('/', async (req, res) => {
 
     await auditFromReq(req, 'TENANT_CREATE', tenant.name);
     res.status(201).json(tenant);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    const code = err && err.code;
+    if (code === 'P2002') {
+      return res.status(409).json({
+        error: 'Já existe um tenant com este e-mail ou slug. Escolha outro nome ou e-mail.',
+      });
+    }
+    console.error('[POST /tenants]', err);
+    res.status(500).json({ error: err.message || 'Falha ao criar tenant.' });
+  }
 });
 
 // PATCH /api/tenants/:id/status

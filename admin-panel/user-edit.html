@@ -131,6 +131,25 @@
                 <h3 class="ue-task-card__title">Base visual do colaborador</h3>
                 <p id="ue-face-intro" class="ue-task-card__hint">Use esta área só para gestão da matrícula facial: fotos base nítidas, sincronizadas com o FaceMatch. Formatos aceitos: <strong>JPEG, PNG ou WebP</strong>, até <strong>12</strong> imagens de <strong>5 MB</strong>.</p>
                 <p id="face-identity-admin-hint" style="display:none;font-size:12px;line-height:1.45;margin-bottom:12px;padding:10px 12px;border-radius:10px;border:1px solid #fcd34d;background:#fffbeb;color:#92400e;font-weight:600"></p>
+                <div id="ue-face-reenroll-wrap" hidden style="margin:0 0 14px;padding:12px;border-radius:10px;border:1px solid #bae6fd;background:#f0f9ff">
+                  <div class="ue-inline-kicker" id="ue-face-reenroll-kicker">Rematrícula no app</div>
+                  <p id="ue-face-reenroll-desc" style="font-size:12px;color:#0c4a6e;line-height:1.45;margin:6px 0 10px"></p>
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px">
+                    <label style="font-size:12px;font-weight:700;color:#0f172a" for="ue-face-reenroll-hours" id="ue-face-reenroll-hours-lbl">Horas</label>
+                    <select id="ue-face-reenroll-hours" class="form-control" style="max-width:130px">
+                      <option value="24">24 h</option>
+                      <option value="72" selected>72 h</option>
+                      <option value="168">7 dias</option>
+                    </select>
+                    <button type="button" class="btn btn-sm btn-primary" id="ue-face-reenroll-open">Abrir janela</button>
+                    <button type="button" class="btn btn-sm btn-secondary" id="ue-face-reenroll-clear">Encerrar</button>
+                  </div>
+                  <div class="form-group" style="margin-bottom:8px">
+                    <label class="form-label" for="ue-face-reenroll-note" id="ue-face-reenroll-note-lbl">Nota (opcional)</label>
+                    <textarea id="ue-face-reenroll-note" class="form-control" rows="2" maxlength="2000"></textarea>
+                  </div>
+                  <p id="ue-face-reenroll-status" style="font-size:12px;color:#0369a1;font-weight:600;margin:0"></p>
+                </div>
                 <input type="file" id="face-file-input" accept="image/jpeg,image/png,image/webp" multiple style="display:none" />
                 <div class="ue-inline-actions">
                   <button type="button" class="btn btn-sm btn-primary" id="btn-face-pick">+ Adicionar fotos</button>

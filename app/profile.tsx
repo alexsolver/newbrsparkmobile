@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ScrollView, Image, Dimensions, Switch, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager, Linking } from 'react-native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -20,6 +20,8 @@ import {
   API_BASE,
   getToken,
   isTechnicianProfileActive,
+  isTechnicianAvatarLocked,
+  isFaceReenrollmentWindowOpen,
   isFieldTaskEligibleRole,
   canUseFieldWorkAppRole,
   canUseProviderMode,
@@ -76,6 +78,15 @@ const REGIONS = [
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
+/** Cópia da foto oficial na galeria FaceMatch (materialização do cadastro) — não conta como uma das 4 biométricas. */
+const REGISTRATION_PRIMARY_FACE_ID = 'fe_reg_primary';
+const MIN_FACE_REENROLLMENT_BIOMETRIC = 4;
+
+function countBiometricFaceEnrollmentPhotos(photos: { id?: string }[] | undefined | null): number {
+  if (!Array.isArray(photos)) return 0;
+  return photos.filter((p) => p && p.id && p.id !== REGISTRATION_PRIMARY_FACE_ID).length;
+}
+
 const BRSPARK_COMPANY_SIGNUP_URL =
   (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BRSPARK_COMPANY_SIGNUP_URL) ||
   'https://www.brspark.com/empresa';
@@ -84,7 +95,8 @@ type ProfileTab = 'conta' | 'trabalho' | 'config' | 'sync';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, userRole, setUserRole, logout, deleteAccount, patchUser, switchWorkspace, createWorkspace } = useAuth();
+  const { user, userRole, setUserRole, logout, deleteAccount, patchUser, switchWorkspace, createWorkspace, refreshUser } =
+    useAuth();
   const displayAvatarUri = useResolvedAvatarUri(user);
   const { dark: darkMode, colors: C, toggleDarkMode, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createProfileStyles(C), [C]);
@@ -750,7 +762,7 @@ export default function ProfileScreen() {
 
   const uploadAvatar = async (asset: any) => {
     try {
-      if (user && isTechnicianProfileActive(user)) {
+      if (user && isTechnicianAvatarLocked(user)) {
         Alert.alert(t('profile.avatarLockedTitle'), t('profile.avatarLockedBody'));
         return;
       }
@@ -837,12 +849,168 @@ export default function ProfileScreen() {
   };
 
   const pickAvatar = () => {
-    if (user && isTechnicianProfileActive(user)) {
+    if (user && isTechnicianAvatarLocked(user)) {
       Alert.alert(t('profile.avatarLockedTitle'), t('profile.avatarLockedBody'));
       return;
     }
     setShowAvatarModal(true);
   };
+
+  const [faceGalleryBusy, setFaceGalleryBusy] = useState(false);
+  /** Passo 1 (foto oficial + IA) concluído nesta janela — exige refazer quando abre nova janela. */
+  const [faceReenrollOfficialOk, setFaceReenrollOfficialOk] = useState(false);
+  const faceReenrollWindowKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const key = user?.technicianProfile?.faceReenrollmentUntil ?? null;
+    if (!key) return;
+    if (faceReenrollWindowKeyRef.current !== key) {
+      faceReenrollWindowKeyRef.current = key;
+      setFaceReenrollOfficialOk(false);
+    }
+  }, [user?.technicianProfile?.faceReenrollmentUntil]);
+
+  const captureOfficialAvatarSelfieForReenroll = async () => {
+    if (!user || !isFaceReenrollmentWindowOpen(user)) return;
+    const cam = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cam.granted) {
+      Alert.alert(t('profile.permDenied'), t('profile.faceReenrollCameraPerm'));
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.88,
+      base64: true,
+      cameraType: ImagePicker.CameraType.front,
+    });
+    if (result.canceled || !result.assets?.[0]?.base64) return;
+    const asset = result.assets[0];
+    const mime = asset.mimeType || 'image/jpeg';
+    const dataUrl = `data:${mime};base64,${asset.base64}`;
+    setFaceGalleryBusy(true);
+    try {
+      const token = await getToken();
+      const valRes = await fetch(`${API_BASE}/api/me/validate-technician-profile-photo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ imageBase64: dataUrl }),
+      });
+      const valData = await valRes.json().catch(() => ({}));
+      if (!valRes.ok) {
+        Alert.alert(t('common.error'), String(valData.error || `HTTP ${valRes.status}`));
+        return;
+      }
+      if (!valData.approved) {
+        const reasons = Array.isArray(valData.rejectReasonsPtBr)
+          ? valData.rejectReasonsPtBr.filter(Boolean).join('\n• ')
+          : '';
+        Alert.alert(
+          t('profile.faceReenrollAiRejectTitle'),
+          reasons ? `• ${reasons}` : String(valData.userMessagePtBr || t('profile.faceReenrollAiRejectBody')),
+        );
+        return;
+      }
+      const ext = mime.includes('png') ? 'png' : 'jpg';
+      await uploadAvatar({
+        base64: asset.base64,
+        uri: `official-reenroll.${ext}`,
+        mimeType: mime,
+      });
+      setFaceReenrollOfficialOk(true);
+      await refreshUser();
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
+    } finally {
+      setFaceGalleryBusy(false);
+    }
+  };
+
+  const addFaceEnrollmentSelfieForReenroll = async () => {
+    if (!user || !isFaceReenrollmentWindowOpen(user)) return;
+    if (!faceReenrollOfficialOk) {
+      Alert.alert(t('profile.faceReenrollStep1FirstTitle'), t('profile.faceReenrollStep1FirstBody'));
+      return;
+    }
+    const cam = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cam.granted) {
+      Alert.alert(t('profile.permDenied'), t('profile.faceReenrollCameraPerm'));
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      base64: true,
+      cameraType: ImagePicker.CameraType.front,
+    });
+    if (result.canceled || !result.assets?.[0]?.base64) return;
+    const asset = result.assets[0];
+    const fileBase64 = asset.base64;
+    const mimeType = asset.mimeType || 'image/jpeg';
+    setFaceGalleryBusy(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_BASE}/api/me/face-enrollment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ fileBase64, mimeType }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.code === 'RE_ENROLL_OFFICIAL_REQUIRED') {
+          Alert.alert(t('common.attention'), t('profile.faceReenrollOfficialRequiredError'));
+          return;
+        }
+        Alert.alert(t('common.error'), String(data.error || `HTTP ${res.status}`));
+        return;
+      }
+      await refreshUser();
+      const nextList = Array.isArray(data.photos) ? data.photos : [];
+      const n = countBiometricFaceEnrollmentPhotos(nextList);
+      if (n >= MIN_FACE_REENROLLMENT_BIOMETRIC) {
+        Alert.alert(t('common.success'), t('profile.faceReenrollBiometricComplete'));
+      } else {
+        Alert.alert(t('common.success'), t('profile.faceReenrollOk'));
+      }
+    } catch (e: unknown) {
+      Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
+    } finally {
+      setFaceGalleryBusy(false);
+    }
+  };
+
+  const removeFaceEnrollmentPhoto = useCallback(
+    async (photoId: string) => {
+      if (!user || !isFaceReenrollmentWindowOpen(user)) return;
+      Alert.alert(t('profile.faceReenrollRemoveTitle'), t('profile.faceReenrollRemoveConfirm'), [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setFaceGalleryBusy(true);
+              const token = await getToken();
+              const res = await fetch(
+                `${API_BASE}/api/me/face-enrollment/${encodeURIComponent(photoId)}`,
+                { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+              );
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                Alert.alert(t('common.error'), String(data.error || `HTTP ${res.status}`));
+                return;
+              }
+              await refreshUser();
+            } catch (e: unknown) {
+              Alert.alert(t('common.error'), e instanceof Error ? e.message : String(e));
+            } finally {
+              setFaceGalleryBusy(false);
+            }
+          },
+        },
+      ]);
+    },
+    [user, refreshUser, t],
+  );
 
   const { showProviderModeToggles, showBecomeProviderCta } = useMemo(() => {
     const b2c = isB2CConsumerUser(user);
@@ -858,6 +1026,11 @@ export default function ProfileScreen() {
             canUseProviderMode(user))),
     };
   }, [user]);
+
+  const faceReenrollBioCount = useMemo(
+    () => countBiometricFaceEnrollmentPhotos(user?.faceEnrollmentPhotos),
+    [user?.faceEnrollmentPhotos],
+  );
 
   const visibleProfileTabs = useMemo(() => {
     const rows: [ProfileTab, string][] = [
@@ -973,9 +1146,9 @@ export default function ProfileScreen() {
                 <Ionicons name="person" size={40} color={C.textLight} />
               </View>
             )}
-            <View style={[styles.headerAvatarEdit, user && isTechnicianProfileActive(user) ? { opacity: 0.85 } : null]}>
+            <View style={[styles.headerAvatarEdit, user && isTechnicianAvatarLocked(user) ? { opacity: 0.85 } : null]}>
               <Ionicons
-                name={user && isTechnicianProfileActive(user) ? 'lock-closed' : 'camera'}
+                name={user && isTechnicianAvatarLocked(user) ? 'lock-closed' : 'camera'}
                 size={14}
                 color="#fff"
               />
@@ -1064,6 +1237,116 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
                 )
               ) : null}
+            </View>
+          ) : null}
+
+          {user && isTechnicianProfileActive(user) && isFaceReenrollmentWindowOpen(user) ? (
+            <View
+              style={{
+                marginTop: 12,
+                marginHorizontal: 16,
+                maxWidth: SCREEN_W - 32,
+                alignSelf: 'center',
+                width: '100%',
+                padding: 14,
+                borderRadius: 12,
+                backgroundColor: '#ecfeff',
+                borderWidth: 1,
+                borderColor: '#67e8f9',
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '800', color: '#0e7490', marginBottom: 6 }}>
+                {t('profile.faceReenrollBannerTitle')}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#155e75', marginBottom: 8 }}>
+                {t('profile.faceReenrollBannerUntil', {
+                  date: user.technicianProfile?.faceReenrollmentUntil
+                    ? new Date(user.technicianProfile.faceReenrollmentUntil).toLocaleString(i18n.language)
+                    : '—',
+                })}
+              </Text>
+              {user.technicianProfile?.faceReenrollmentNote ? (
+                <Text style={{ fontSize: 13, color: '#164e63', lineHeight: 20, marginBottom: 10 }}>
+                  {user.technicianProfile.faceReenrollmentNote}
+                </Text>
+              ) : null}
+              <Text style={{ fontSize: 12, color: '#155e75', marginBottom: 10, lineHeight: 18 }}>
+                {t('profile.faceReenrollFlowHint')}
+              </Text>
+              <TouchableOpacity
+                onPress={() => void captureOfficialAvatarSelfieForReenroll()}
+                disabled={faceGalleryBusy}
+                style={{
+                  backgroundColor: faceReenrollOfficialOk ? '#fff' : '#0f766e',
+                  borderWidth: faceReenrollOfficialOk ? 2 : 0,
+                  borderColor: '#0f766e',
+                  paddingVertical: 11,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  marginBottom: 8,
+                  opacity: faceGalleryBusy ? 0.6 : 1,
+                }}
+              >
+                <Text
+                  style={{
+                    color: faceReenrollOfficialOk ? '#0f766e' : '#fff',
+                    fontWeight: '800',
+                    fontSize: 13,
+                  }}
+                >
+                  {faceReenrollOfficialOk ? `✓ ${t('profile.faceReenrollStep1Done')}` : `1. ${t('profile.faceReenrollStep1Button')}`}
+                </Text>
+              </TouchableOpacity>
+              <Text style={{ fontSize: 11, color: '#0e7490', fontWeight: '600', marginBottom: 8 }}>
+                {t('profile.faceReenrollStep2Progress', {
+                  current: faceReenrollBioCount,
+                  min: MIN_FACE_REENROLLMENT_BIOMETRIC,
+                })}
+              </Text>
+              <TouchableOpacity
+                onPress={() => void addFaceEnrollmentSelfieForReenroll()}
+                disabled={
+                  faceGalleryBusy ||
+                  !faceReenrollOfficialOk ||
+                  faceReenrollBioCount >= MIN_FACE_REENROLLMENT_BIOMETRIC
+                }
+                style={{
+                  backgroundColor:
+                    !faceReenrollOfficialOk || faceReenrollBioCount >= MIN_FACE_REENROLLMENT_BIOMETRIC
+                      ? '#cbd5e1'
+                      : '#0e7490',
+                  paddingVertical: 11,
+                  borderRadius: 10,
+                  alignItems: 'center',
+                  marginBottom: 10,
+                  opacity: faceGalleryBusy ? 0.6 : 1,
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
+                  {faceGalleryBusy
+                    ? '…'
+                    : faceReenrollBioCount >= MIN_FACE_REENROLLMENT_BIOMETRIC
+                      ? `2. ${t('profile.faceReenrollStep2Done')}`
+                      : `2. ${t('profile.faceReenrollStep2Button', {
+                          slot: faceReenrollBioCount + 1,
+                          min: MIN_FACE_REENROLLMENT_BIOMETRIC,
+                        })}`}
+                </Text>
+              </TouchableOpacity>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {(Array.isArray(user.faceEnrollmentPhotos) ? user.faceEnrollmentPhotos : []).map((ph) => (
+                    <View key={ph.id} style={{ width: 72, alignItems: 'center', marginRight: 10 }}>
+                      <Image source={{ uri: ph.url }} style={{ width: 64, height: 64, borderRadius: 10 }} />
+                      <TouchableOpacity onPress={() => void removeFaceEnrollmentPhoto(ph.id)} style={{ marginTop: 4 }}>
+                        <Text style={{ fontSize: 11, color: '#b91c1c', fontWeight: '700' }}>
+                          {t('profile.faceReenrollRemove')}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
             </View>
           ) : null}
 

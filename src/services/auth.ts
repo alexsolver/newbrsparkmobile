@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { clearRoomListCache } from './chatOfflineStorage';
 import { clearLocalDatabase } from '../database';
 import { deleteAvatarCache, mergeServerUserWithLocalAvatar } from './avatarLocalCache';
@@ -229,6 +230,9 @@ export interface User {
     score: number;
     cft?: string;
     specialty?: string;
+    /** Janela de rematrícula facial (prestador ACTIVE): até quando pode alterar fotos na app. */
+    faceReenrollmentUntil?: string | null;
+    faceReenrollmentNote?: string | null;
     /** Ver schema Prisma — turnos por dia. */
     workScheduleJson?: Record<string, unknown> | null;
     /** IDs de `Location` do tenant. */
@@ -248,6 +252,8 @@ export interface User {
       updatedAt?: string | null;
     } | null;
   };
+  /** Fotos base FaceMatch (quando há `technicianProfile`); URLs absolutas. */
+  faceEnrollmentPhotos?: Array<{ id: string; url: string; mimeType?: string; createdAt?: string }>;
   /** Documentos pessoais (painel) — ex.: identificador para exibição em ponto. */
   personalDocuments?: Array<{ identifier?: string; docType?: string; label?: string }>;
   appContext?: {
@@ -260,6 +266,19 @@ export interface User {
 /** Prestador habilitado a receber OS (backend exige `TechnicianProfile.status === ACTIVE`). */
 export function isTechnicianProfileActive(user: User | null | undefined): boolean {
   return String(user?.technicianProfile?.status || '').toUpperCase() === 'ACTIVE';
+}
+
+/** Janela temporária para o prestador renovar avatar + fotos biométricas na app. */
+export function isFaceReenrollmentWindowOpen(user: User | null | undefined): boolean {
+  const raw = user?.technicianProfile?.faceReenrollmentUntil;
+  if (!raw) return false;
+  const t = new Date(String(raw)).getTime();
+  return Number.isFinite(t) && t > Date.now();
+}
+
+/** Avatar bloqueado no app (prestador ACTIVE sem janela de rematrícula). */
+export function isTechnicianAvatarLocked(user: User | null | undefined): boolean {
+  return isTechnicianProfileActive(user) && !isFaceReenrollmentWindowOpen(user);
 }
 
 /** Papel na API — pode receber OS/FT e RT no servidor (todos exceto cliente `USER`). */
@@ -326,6 +345,92 @@ export class MultipleAccountsError extends Error {
 
 const TOKEN_KEY = 'brspark_jwt';
 const USER_KEY  = 'brspark_user';
+/** Refresh opaco do app — SecureStore (fallback AsyncStorage em ambientes sem Keychain/Keystore). */
+const REFRESH_TOKEN_SECURE_KEY = 'brspark_refresh_token_v1';
+const REFRESH_TOKEN_ASYNC_FALLBACK_KEY = 'brspark_refresh_token_fb';
+
+async function clearRefreshTokenSecure(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(REFRESH_TOKEN_SECURE_KEY);
+  } catch {
+    /* inexistente */
+  }
+  try {
+    await AsyncStorage.removeItem(REFRESH_TOKEN_ASYNC_FALLBACK_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function getRefreshTokenSecure(): Promise<string | null> {
+  try {
+    const a = await SecureStore.getItemAsync(REFRESH_TOKEN_SECURE_KEY);
+    if (a) return a;
+  } catch {
+    /* ignore */
+  }
+  try {
+    return await AsyncStorage.getItem(REFRESH_TOKEN_ASYNC_FALLBACK_KEY);
+  } catch {
+    return null;
+  }
+}
+
+async function setRefreshTokenSecure(token: string): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(REFRESH_TOKEN_SECURE_KEY, token);
+    await AsyncStorage.removeItem(REFRESH_TOKEN_ASYNC_FALLBACK_KEY);
+    return;
+  } catch {
+    /* SecureStore indisponível (ex.: web) */
+  }
+  await AsyncStorage.setItem(REFRESH_TOKEN_ASYNC_FALLBACK_KEY, token);
+}
+
+/** Grava access + utilizador; refresh opcional (ausente = limpar refresh antigo). */
+export async function persistAppSessionPayload(data: {
+  token: string;
+  user: User;
+  refreshToken?: string | null;
+}): Promise<void> {
+  await AsyncStorage.setItem(TOKEN_KEY, data.token);
+  await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+  const rt = data.refreshToken != null ? String(data.refreshToken).trim() : '';
+  if (rt) await setRefreshTokenSecure(rt);
+  else await clearRefreshTokenSecure();
+}
+
+let refreshAccessTokenInFlight: Promise<boolean> | null = null;
+
+/** Uma renovação em voo por vez; devolve true se o access token foi atualizado. */
+async function refreshAccessTokenOnce(): Promise<boolean> {
+  if (refreshAccessTokenInFlight) return refreshAccessTokenInFlight;
+  refreshAccessTokenInFlight = (async () => {
+    try {
+      const rt = await getRefreshTokenSecure();
+      if (!rt) return false;
+      const res = await fetch(`${API_BASE}/api/session/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: rt }),
+      });
+      if (!res.ok) {
+        if (res.status === 401) await clearRefreshTokenSecure();
+        return false;
+      }
+      const data = (await res.json()) as { token?: string; refreshToken?: string };
+      if (!data.token || !data.refreshToken) return false;
+      await AsyncStorage.setItem(TOKEN_KEY, data.token);
+      await setRefreshTokenSecure(String(data.refreshToken));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshAccessTokenInFlight = null;
+    }
+  })();
+  return refreshAccessTokenInFlight;
+}
 /** Branding efectivo da última sessão — ecrã de login sem JWT ainda mostra logo/cores até novo login. */
 export const GUEST_LOGIN_BRANDING_KEY = '@brspark:guest_login_branding_v1';
 /** Não apagar no purge — evita re-disparar migração nuclear em `_layout` a cada login. */
@@ -397,6 +502,7 @@ export async function purgeAllBrSparkLocalCaches(): Promise<void> {
   }
 
   clearLocalDatabase();
+  await clearRefreshTokenSecure();
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -483,6 +589,8 @@ export class AuthService {
       }
     }
 
+    await clearRefreshTokenSecure();
+
     const existing = await AuthService.getUser();
     if (existing?.id) {
       try {
@@ -536,8 +644,11 @@ export class AuthService {
     }
 
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await persistAppSessionPayload({
+      token: data.token,
+      user: data.user as User,
+      refreshToken: (data as { refreshToken?: string }).refreshToken,
+    });
     await AuthService.restorePostLoginLocalState(data.user as User);
     return data.user as User;
   }
@@ -587,8 +698,11 @@ export class AuthService {
     }
 
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await persistAppSessionPayload({
+      token: data.token,
+      user: data.user as User,
+      refreshToken: (data as { refreshToken?: string }).refreshToken,
+    });
     await AuthService.restorePostLoginLocalState(data.user as User);
     return data.user as User;
   }
@@ -644,8 +758,11 @@ export class AuthService {
       throw new Error((data as { error?: string }).error || 'Não foi possível mudar de organização.');
     }
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await persistAppSessionPayload({
+      token: data.token,
+      user: data.user as User,
+      refreshToken: (data as { refreshToken?: string }).refreshToken,
+    });
     await AuthService.restorePostLoginLocalState(data.user as User);
     return data.user as User;
   }
@@ -675,8 +792,11 @@ export class AuthService {
       throw new Error((data as { error?: string }).error || 'Não foi possível criar o espaço.');
     }
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await persistAppSessionPayload({
+      token: data.token,
+      user: data.user as User,
+      refreshToken: (data as { refreshToken?: string }).refreshToken,
+    });
     await AuthService.restorePostLoginLocalState(data.user as User);
     return data.user as User;
   }
@@ -735,10 +855,13 @@ export class AuthService {
         (data as { error?: string }).error || (data as { code?: string }).code || 'Código inválido.',
       );
     }
-    const d = data as { token: string; user: User };
+    const d = data as { token: string; user: User; refreshToken?: string };
     await AuthService.wipeLocalDataBeforeNewSession(d.user);
-    await AsyncStorage.setItem(TOKEN_KEY, d.token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(d.user));
+    await persistAppSessionPayload({
+      token: d.token,
+      user: d.user,
+      refreshToken: d.refreshToken,
+    });
     await AuthService.restorePostLoginLocalState(d.user);
     return d.user;
   }
@@ -792,10 +915,13 @@ export class AuthService {
     if (!res.ok) {
       throw new Error((data as { error?: string }).error || (data as { code?: string }).code || 'Erro ao criar conta.');
     }
-    const d = data as { token: string; user: User };
+    const d = data as { token: string; user: User; refreshToken?: string };
     await AuthService.wipeLocalDataBeforeNewSession(d.user);
-    await AsyncStorage.setItem(TOKEN_KEY, d.token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(d.user));
+    await persistAppSessionPayload({
+      token: d.token,
+      user: d.user,
+      refreshToken: d.refreshToken,
+    });
     await AuthService.restorePostLoginLocalState(d.user);
     return d.user;
   }
@@ -832,8 +958,11 @@ export class AuthService {
     }
 
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await persistAppSessionPayload({
+      token: data.token,
+      user: data.user as User,
+      refreshToken: (data as { refreshToken?: string }).refreshToken,
+    });
     await AuthService.restorePostLoginLocalState(data.user as User);
     return data.user as User;
   }
@@ -916,6 +1045,7 @@ export class AuthService {
     const existing = await AuthService.getUser();
     if (preserveLocalData) {
       await AuthService.savePreservedLocalOwner(existing, options?.reason);
+      await clearRefreshTokenSecure();
       await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
       return;
     }
@@ -1124,8 +1254,11 @@ export class AuthService {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Código inválido.');
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    await persistAppSessionPayload({
+      token: data.token,
+      user: data.user as User,
+      refreshToken: (data as { refreshToken?: string }).refreshToken,
+    });
     await AuthService.restorePostLoginLocalState(data.user as User);
     return data.user as User;
   }
@@ -1197,7 +1330,9 @@ export function subscribeSessionInvalidated(cb: () => void): () => void {
 
 /** Logout + alerta + notificação aos listeners (push remoto ou 401 SESSION_INVALIDATED). Idempotente. */
 export async function applySessionInvalidatedFromServer(): Promise<void> {
-  if (!(await getToken())) return;
+  const hasAccess = !!(await getToken());
+  const hasRefresh = !!(await getRefreshTokenSecure());
+  if (!hasAccess && !hasRefresh) return;
   await AuthService.logout({ preserveLocalData: true, reason: 'session_invalidated' });
   sessionInvalidatedListeners.forEach((fn) => {
     try {
@@ -1225,7 +1360,7 @@ export async function handleUnauthorizedMaybeSessionInvalidated(res: Response): 
 /** Timeout por defeito em pedidos autenticados (evita ecrã preso em «Conectando…» sem rede). */
 const DEFAULT_API_FETCH_TIMEOUT_MS = 18_000;
 
-export type ApiFetchOptions = RequestInit & { timeoutMs?: number };
+export type ApiFetchOptions = RequestInit & { timeoutMs?: number; skipTokenRefresh?: boolean };
 
 function createAbortError(): Error {
   const err = new Error('The operation was aborted.');
@@ -1259,7 +1394,12 @@ function mergeFetchHeaders(
 
 /** Fetch autenticado — adiciona JWT automaticamente e aborta após `timeoutMs` (AbortError sem rede). */
 export async function apiFetch(path: string, options: ApiFetchOptions = {}): Promise<Response> {
-  const { timeoutMs = DEFAULT_API_FETCH_TIMEOUT_MS, signal: userSignal, ...rest } = options;
+  const {
+    timeoutMs = DEFAULT_API_FETCH_TIMEOUT_MS,
+    skipTokenRefresh,
+    signal: userSignal,
+    ...rest
+  } = options;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let onUserAbort: (() => void) | null = null;
@@ -1290,15 +1430,24 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
       headers: mergeFetchHeaders(baseHeaders, rest.headers),
     });
     if (res.status === 401) {
-      console.warn(`[apiFetch] ⚠️ 401 em ${path} — token expirado? Faça logout e login novamente.`);
+      let sessionInvalidated = false;
       try {
         const body = await res.clone().json();
-        if (body?.code === 'SESSION_INVALIDATED') {
-          await applySessionInvalidatedFromServer();
-        }
+        if (body?.code === 'SESSION_INVALIDATED') sessionInvalidated = true;
       } catch {
         /* ignore */
       }
+      if (sessionInvalidated) {
+        await applySessionInvalidatedFromServer();
+        return res;
+      }
+      if (!skipTokenRefresh && path !== '/api/session/refresh') {
+        const refreshed = await refreshAccessTokenOnce();
+        if (refreshed) {
+          return apiFetch(path, { ...options, skipTokenRefresh: true });
+        }
+      }
+      console.warn(`[apiFetch] ⚠️ 401 em ${path} — token expirado? Faça logout e login novamente.`);
     }
     return res;
   } finally {

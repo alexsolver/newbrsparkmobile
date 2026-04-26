@@ -5,12 +5,10 @@ import { usePersona } from '../src/context/PersonaContext';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { View, ActivityIndicator } from 'react-native';
 import { useTheme } from '../src/theme/ThemeContext';
-import { isAppIntroDismissedForGuestSession } from '../src/lib/appIntroPrefs';
-
-type GuestTarget = 'boot' | 'intro' | 'login';
+type GuestTarget = 'boot' | 'login';
 
 /**
- * Ponto de entrada “/” — primeira abertura: apresentação; depois login ou área autenticada.
+ * Ponto de entrada “/” — sem sessão: login (ou convite técnico); com sessão: área autenticada.
  */
 export default function AppEntryIndex() {
   const { user, loading } = useAuth();
@@ -28,7 +26,7 @@ export default function AppEntryIndex() {
       setGuestTarget('login');
       return;
     }
-    setGuestTarget(isAppIntroDismissedForGuestSession() ? 'login' : 'intro');
+    setGuestTarget('login');
   }, [loading, user, pendingTechRegInvite]);
 
   if (loading) {
@@ -49,10 +47,6 @@ export default function AppEntryIndex() {
         <ActivityIndicator size="large" color={C.accent} />
       </View>
     );
-  }
-
-  if (guestTarget === 'intro') {
-    return <Redirect href={'/auth/app-intro' as any} />;
   }
 
   if (pendingTechRegInvite) {

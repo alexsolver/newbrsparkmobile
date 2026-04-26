@@ -64,7 +64,10 @@ const M = {
     ten_opt_no_plan: 'Sem plano',
     ten_lbl_default_lang: 'Idioma Padrão',
     ten_btn_create: 'Criar Tenant',
+    ten_btn_saving: 'A criar…',
+    ten_no_create_perm: 'A sua conta não tem permissão para criar tenants.',
     ten_alert_required: 'Campos obrigatórios: Nome, E-mail e Região.',
+    ten_alert_create_fail: 'Não foi possível criar o tenant. Verifique a consola (F12) ou tente novamente.',
     ten_plan_per_mo: '/mês',
 
     /* Subscriptions */
@@ -788,7 +791,10 @@ M['en-US'] = {
   ten_opt_no_plan: 'No plan',
   ten_lbl_default_lang: 'Default language',
   ten_btn_create: 'Create tenant',
+  ten_btn_saving: 'Creating…',
+  ten_no_create_perm: 'Your account does not have permission to create tenants.',
   ten_alert_required: 'Required fields: Name, E-mail and Region.',
+  ten_alert_create_fail: 'Could not create the tenant. Check the console (F12) or try again.',
   ten_plan_per_mo: '/mo',
 
   sub_pageTitle: 'BrSpark Admin, Subscriptions',
@@ -1875,8 +1881,10 @@ export function applyTenantsPageI18n() {
   const np = document.getElementById('new-plan-id');
   if (np && np.options[0]) np.options[0].textContent = mpT('ten_opt_no_plan');
   setText('ten-modal-cancel', 'common_cancel');
-  const sv = document.getElementById('ten-modal-save');
-  if (sv) sv.textContent = mpT('ten_btn_create');
+  const svt = document.getElementById('ten-modal-save-text');
+  const svLegacy = document.getElementById('ten-modal-save');
+  if (svt) svt.textContent = mpT('ten_btn_create');
+  else if (svLegacy && !svLegacy.querySelector('#ten-modal-save-text')) svLegacy.textContent = mpT('ten_btn_create');
 }
 
 export function tenantsStatusLabel(code) {

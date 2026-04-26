@@ -81,7 +81,11 @@ router.get('/entries', adminAuth, async (req, res) => {
 
 
     if (source === 'locales') {
-      const locales = await prisma.localeProfile.findMany({ orderBy: { name: 'asc' } });
+      const activeOnly = ['1', 'true', 'yes'].includes(String(req.query.activeOnly || '').toLowerCase());
+      const locales = await prisma.localeProfile.findMany({
+        where: activeOnly ? { isActive: true } : undefined,
+        orderBy: { name: 'asc' },
+      });
       return res.json(locales);
     }
 

@@ -9,7 +9,19 @@ const path = require('path');
 const { initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { normalizeChatLocale, CANON_LOCALES } = require('../lib/chatTranslation');
-const { isTechnicianIdentityLockedForUserId, TECH_IDENTITY_LOCKED_BODY } = require('../lib/technicianIdentityLock');
+const {
+  isTechnicianIdentityLockedForUserId,
+  isFaceReenrollmentWindowOpenForUserId,
+  TECH_IDENTITY_LOCKED_BODY,
+} = require('../lib/technicianIdentityLock');
+const {
+  appendUserFaceEnrollmentPhoto,
+  removeUserFaceEnrollmentPhoto,
+  normalizeFacePhotos,
+  decodeFaceEnrollmentBase64,
+} = require('../lib/faceEnrollmentPersist');
+const { readUserAvatarImageBuffer } = require('../lib/userAvatarRead');
+const { verifyTechRegEnrollmentAgainstProfile } = require('../lib/techRegComprefaceVerify');
 const { assertTechnicianSeatForNewUser } = require('../lib/planQuotaService');
 const { verifyOAuthWithLaravel } = require('../lib/laravelInternalOAuthVerify');
 const { buildEffectiveTenantBranding } = require('../lib/tenantBranding');
@@ -43,6 +55,21 @@ const {
   isPrivateOrLocalHost,
 } = require('../lib/publicHttpsUrl');
 const { selectUserForMultiAccountLogin } = require('../lib/multiAccountLoginPick');
+const {
+  replaceUserRefreshSession,
+  refreshAppSession,
+  accessJwtExpiresIn,
+} = require('../lib/appRefreshSession');
+const {
+  allocateUniqueUserRowEmail,
+  resolveCanonicalEmailNormForUser,
+} = require('../lib/userEmailUnique');
+
+const FACE_REENROLLMENT_CLOSED_BODY = {
+  error:
+    'Não há janela aberta para atualizar as fotos de reconhecimento facial no app. Peça à organização (painel) para autorizar a rematrícula.',
+  code: 'FACE_REENROLLMENT_CLOSED',
+};
 
 function buildSafeTenantForApp(tenant) {
   if (!tenant) return null;
@@ -70,10 +97,23 @@ function buildSafeTenantForApp(tenant) {
 
 function buildSafeAppUserPayload(user) {
   const authz = buildAppAuthorization(user);
+  const displayEmail =
+    user.appAccount && user.appAccount.emailNorm
+      ? String(user.appAccount.emailNorm).trim().toLowerCase()
+      : user.email;
+  const faceEnrollmentPhotos =
+    user.technicianProfile != null
+      ? normalizeFacePhotos(user.faceEnrollmentPhotos).map((p) => ({
+          id: p.id,
+          url: ensureHttpsUrlForPublicInternet(p.url),
+          mimeType: p.mimeType,
+          createdAt: p.createdAt,
+        }))
+      : undefined;
   return {
     id: user.id,
     name: user.name,
-    email: user.email,
+    email: displayEmail,
     role: user.role,
     avatarUrl: ensureHttpsUrlForPublicInternet(user.avatarUrl),
     preferredChatLocale: user.preferredChatLocale ?? null,
@@ -82,6 +122,7 @@ function buildSafeAppUserPayload(user) {
     tenantId: user.tenantId,
     tenant: buildSafeTenantForApp(user.tenant),
     technicianProfile: user.technicianProfile,
+    ...(faceEnrollmentPhotos !== undefined ? { faceEnrollmentPhotos } : {}),
     appContext: {
       scope: authz.scope,
       contextTenantId: authz.contextTenantId,
@@ -134,23 +175,32 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
     include: {
       tenant: { include: { subscription: { include: { plan: true } } } },
       technicianProfile: true,
+      appAccount: { select: { emailNorm: true } },
     },
   });
 
+  const refreshToken = await replaceUserRefreshSession(prisma, {
+    userId: fresh.id,
+    sessionId: newSessionId,
+    deviceId,
+  });
+
+  const jwtEmail = await resolveCanonicalEmailNormForUser(prisma, fresh);
   const token = jwt.sign(
     {
       id: fresh.id,
       tenantId: fresh.tenantId,
-      email: fresh.email,
+      email: jwtEmail,
       role: fresh.role,
       sessionId: newSessionId,
     },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+    { expiresIn: accessJwtExpiresIn(process.env) },
   );
 
   return {
     token,
+    refreshToken,
     user: await buildSafeAppUserPayloadAsync(fresh),
   };
 }
@@ -169,6 +219,29 @@ async function buildSafeAppUserPayloadAsync(user) {
     }
   }
   return payload;
+}
+
+/** Filiações ativas para login (prioriza `AppAccount` — suporta `User.email` técnico único por filiação). */
+async function loadAppLoginCandidates(emailNorm) {
+  const em = String(emailNorm || '').trim().toLowerCase();
+  const acc = await prisma.appAccount.findUnique({ where: { emailNorm: em }, select: { id: true } });
+  const include = {
+    tenant: true,
+    technicianProfile: true,
+    appAccount: { select: { emailNorm: true } },
+  };
+  if (acc) {
+    return prisma.user.findMany({
+      where: { appAccountId: acc.id, isActive: true },
+      include,
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+  return prisma.user.findMany({
+    where: { email: em, isActive: true },
+    include,
+    orderBy: { createdAt: 'asc' },
+  });
 }
 
 // /api/vision/* — biometria de campo / checklists (FaceMatch conforme plano). Gate IA do cadastro prestador: index.js → /api/ai-technician-profile-photo.
@@ -323,7 +396,7 @@ router.post('/register', async (req, res) => {
       payload: {
         userId: user.id,
         tenantId: user.tenantId,
-        email: user.email,
+        email: emailNorm,
         userName: hydrated?.name || user.name,
         role: roleHint || user.role,
         tenantName: hydrated?.tenant?.name || out?.tenant?.name || undefined,
@@ -341,30 +414,63 @@ router.post('/register', async (req, res) => {
       },
     });
 
+    const uReg = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { tenant: true, technicianProfile: true, appAccount: { select: { emailNorm: true } } },
+    });
+    if (!uReg) {
+      return res.status(500).json({ error: 'Falha ao carregar utilizador após registo.' });
+    }
+    const refreshToken = await replaceUserRefreshSession(prisma, {
+      userId: uReg.id,
+      sessionId: newSessionId,
+      deviceId,
+    });
+    const regJwtEmail = await resolveCanonicalEmailNormForUser(prisma, uReg);
     const token = jwt.sign(
       {
-        id: user.id,
-        tenantId: user.tenantId,
-        email: user.email,
-        role: user.role,
+        id: uReg.id,
+        tenantId: uReg.tenantId,
+        email: regJwtEmail,
+        role: uReg.role,
         sessionId: newSessionId,
       },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+      { expiresIn: accessJwtExpiresIn(process.env) },
     );
 
     res.status(201).json({
       token,
+      refreshToken,
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        tenantId: user.tenantId,
+        id: uReg.id,
+        name: uReg.name,
+        email: regJwtEmail,
+        tenantId: uReg.tenantId,
       },
     });
   } catch (err) {
     console.error('[register]', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /api/session/refresh ───────────────────────────────────────────────
+// Público — renova JWT de acesso com refresh opaco (rotação do refresh).
+router.post('/session/refresh', async (req, res) => {
+  try {
+    const raw = String(req.body?.refreshToken || '').trim();
+    if (!raw || raw.length < 32) {
+      return res.status(400).json({ error: 'refreshToken é obrigatório.' });
+    }
+    const out = await refreshAppSession(prisma, jwt, raw, process.env);
+    if (!out.ok) {
+      return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
+    }
+    res.json({ token: out.token, refreshToken: out.refreshToken });
+  } catch (err) {
+    console.error('[session/refresh]', err);
+    res.status(500).json({ error: 'Erro interno.' });
   }
 });
 
@@ -377,11 +483,10 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
 
     const emailNorm = String(email).trim().toLowerCase();
-    const candidates = await prisma.user.findMany({
-      where: { email: emailNorm },
-      include: { tenant: true, technicianProfile: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    const authPw = await verifyAppLoginPasswordAndEnsureAccount(prisma, emailNorm, password);
+    if (!authPw.ok) return res.status(401).json({ error: 'Credenciais inválidas.' });
+
+    const candidates = await loadAppLoginCandidates(emailNorm);
 
     if (!candidates.length) return res.status(401).json({ error: 'Credenciais inválidas.' });
 
@@ -410,9 +515,6 @@ router.post('/login', async (req, res) => {
     if (user.tenant.status === 'SUSPENDED' || user.tenant.status === 'CANCELLED')
       return res.status(403).json({ error: 'Conta suspensa ou cancelada.' });
 
-    const authPw = await verifyAppLoginPasswordAndEnsureAccount(prisma, emailNorm, password);
-    if (!authPw.ok) return res.status(401).json({ error: 'Credenciais inválidas.' });
-
     const { deviceId } = req.body;
 
     const u2fa = await prisma.user.findUnique({
@@ -421,7 +523,7 @@ router.post('/login', async (req, res) => {
     });
     if (u2fa?.twoFactorEnabled) {
       const ch = await startEmailPurposeChallenge(prisma, {
-        emailNorm: user.email,
+        emailNorm: await resolveCanonicalEmailNormForUser(prisma, user),
         purpose: 'two_factor_login',
         metadataJson: { userId: user.id, deviceId: deviceId != null ? deviceId : null },
       });
@@ -483,20 +585,12 @@ router.post('/login/oauth', async (req, res) => {
         ? String(profile.name).trim()
         : emailNorm.split('@')[0] || 'Utilizador';
 
-    let candidates = await prisma.user.findMany({
-      where: { email: emailNorm },
-      include: { tenant: true, technicianProfile: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    let candidates = await loadAppLoginCandidates(emailNorm);
 
     if (!candidates.length) {
       const emailTakenOAuth = await assertEmailFreeAcrossAllTenants(prisma, emailNorm);
       if (emailTakenOAuth) {
-        candidates = await prisma.user.findMany({
-          where: { email: emailNorm },
-          include: { tenant: true, technicianProfile: true },
-          orderBy: { createdAt: 'asc' },
-        });
+        candidates = await loadAppLoginCandidates(emailNorm);
         if (!candidates.length) {
           return res.status(409).json({ error: emailTakenOAuth, code: 'EMAIL_IN_USE' });
         }
@@ -524,7 +618,7 @@ router.post('/login/oauth', async (req, res) => {
             payload: {
               userId: createdOAuth.id,
               tenantId: createdOAuth.tenantId,
-              email: createdOAuth.email,
+              email: emailNorm,
               source: 'oauth',
             },
           }).catch((e) => console.warn('[login/oauth] sync webhook', e));
@@ -536,11 +630,7 @@ router.post('/login/oauth', async (req, res) => {
           throw e;
         }
 
-        candidates = await prisma.user.findMany({
-          where: { email: emailNorm },
-          include: { tenant: true, technicianProfile: true },
-          orderBy: { createdAt: 'asc' },
-        });
+        candidates = await loadAppLoginCandidates(emailNorm);
       }
     }
 
@@ -582,7 +672,7 @@ router.post('/login/oauth', async (req, res) => {
     });
     if (u2faOauth?.twoFactorEnabled) {
       const ch = await startEmailPurposeChallenge(prisma, {
-        emailNorm: user.email,
+        emailNorm: await resolveCanonicalEmailNormForUser(prisma, user),
         purpose: 'two_factor_login',
         metadataJson: { userId: user.id, deviceId: deviceId != null ? deviceId : null },
       });
@@ -622,23 +712,44 @@ router.post('/password-reset/request', async (req, res) => {
         select: { id: true, name: true, status: true },
       });
       if (tenant && tenant.status !== 'SUSPENDED' && tenant.status !== 'CANCELLED') {
+        const acc = await prisma.appAccount.findUnique({ where: { emailNorm: email }, select: { id: true } });
         const user = await prisma.user.findFirst({
-          where: { email, tenantId: tenant.id, isActive: true },
+          where: {
+            tenantId: tenant.id,
+            isActive: true,
+            ...(acc
+              ? { appAccountId: acc.id }
+              : { email: { equals: email, mode: 'insensitive' } }),
+          },
           include: { tenant: true },
         });
         if (user) users = [user];
       }
     } else {
-      users = await prisma.user.findMany({
-        where: {
-          email,
-          isActive: true,
-          tenant: { is: { status: { notIn: ['SUSPENDED', 'CANCELLED'] } } },
-        },
-        include: { tenant: true },
-        orderBy: { createdAt: 'asc' },
-        take: 5,
-      });
+      const acc = await prisma.appAccount.findUnique({ where: { emailNorm: email }, select: { id: true } });
+      if (acc) {
+        users = await prisma.user.findMany({
+          where: {
+            appAccountId: acc.id,
+            isActive: true,
+            tenant: { is: { status: { notIn: ['SUSPENDED', 'CANCELLED'] } } },
+          },
+          include: { tenant: true },
+          orderBy: { createdAt: 'asc' },
+          take: 5,
+        });
+      } else {
+        users = await prisma.user.findMany({
+          where: {
+            email,
+            isActive: true,
+            tenant: { is: { status: { notIn: ['SUSPENDED', 'CANCELLED'] } } },
+          },
+          include: { tenant: true },
+          orderBy: { createdAt: 'asc' },
+          take: 5,
+        });
+      }
     }
 
     if (!users.length) {
@@ -721,6 +832,7 @@ router.post('/password-reset/request', async (req, res) => {
 
     const results = await Promise.all(
       users.map(async (user) => {
+        const deliverTo = (await resolveCanonicalEmailNormForUser(prisma, user)) || String(user.email || '').trim().toLowerCase();
         const resetToken = await issuePasswordResetTokenForUser({
           id: user.id,
           tenantId: user.tenantId,
@@ -766,7 +878,7 @@ router.post('/password-reset/request', async (req, res) => {
           `</div>`;
 
         const { send, provider } = await sendTransactionalEmailWithFallback({
-          to: { email: user.email, name: user.name || undefined },
+          to: { email: deliverTo, name: user.name || undefined },
           subject,
           text,
           html,
@@ -779,7 +891,7 @@ router.post('/password-reset/request', async (req, res) => {
                 tenantId: user.tenantId,
                 userId: user.id,
                 action: 'USER_PASSWORD_RESET_REQUESTED',
-                resource: user.email,
+                resource: deliverTo,
                 category: 'AUTH',
               },
             })
@@ -905,7 +1017,7 @@ router.post('/password-reset/confirm', async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: String(payload.userId) },
-      include: { tenant: true },
+      include: { tenant: true, appAccount: { select: { id: true, emailNorm: true } } },
     });
     if (!user) {
       return res.status(400).json({ error: 'Link de redefinição inválido.' });
@@ -921,13 +1033,19 @@ router.post('/password-reset/confirm', async (req, res) => {
       return res.status(403).json({ error: 'Esta conta está suspensa ou cancelada.' });
     }
 
-    await setUnifiedPasswordHashForEmail(prisma, String(user.email || '').trim().toLowerCase(), hash);
+    const canon = await resolveCanonicalEmailNormForUser(prisma, user);
+    await setUnifiedPasswordHashForEmail(prisma, canon, hash);
+    const pwWhere = user.appAccountId
+      ? { appAccountId: user.appAccountId }
+      : { email: { equals: canon, mode: 'insensitive' } };
     await prisma.user.updateMany({
-      where: { email: String(user.email || '').trim().toLowerCase() },
+      where: pwWhere,
       data: { currentSessionId: null, currentDeviceId: null },
     });
     const sameEmailUsers = await prisma.user.findMany({
-      where: { email: String(user.email || '').trim().toLowerCase(), isActive: true },
+      where: user.appAccountId
+        ? { appAccountId: user.appAccountId, isActive: true }
+        : { email: { equals: canon, mode: 'insensitive' }, isActive: true },
       select: { id: true, tenantId: true },
     });
     for (const row of sameEmailUsers) {
@@ -943,7 +1061,7 @@ router.post('/password-reset/confirm', async (req, res) => {
             tenantId: row.tenantId,
             userId: row.id,
             action: 'USER_PASSWORD_RESET_COMPLETED',
-            resource: user.email,
+            resource: canon,
             category: 'AUTH',
           },
         })
@@ -991,7 +1109,7 @@ router.post('/2fa/verify', async (req, res) => {
     const deviceId = meta.deviceId != null ? meta.deviceId : null;
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { tenant: true, technicianProfile: true },
+      include: { tenant: true, technicianProfile: true, appAccount: { select: { emailNorm: true } } },
     });
     if (!user || !user.isActive || !user.tenant) {
       return res.status(403).json({ error: 'Conta indisponível.' });
@@ -999,10 +1117,8 @@ router.post('/2fa/verify', async (req, res) => {
     if (!user.twoFactorEnabled) {
       return res.status(400).json({ error: 'Verificação em duas etapas não está ativa para esta conta.' });
     }
-    const emailNorm = String(user.email || '')
-      .trim()
-      .toLowerCase();
-    if (String(ch.target || '').trim().toLowerCase() !== emailNorm) {
+    const emailCanon = await resolveCanonicalEmailNormForUser(prisma, user);
+    if (String(ch.target || '').trim().toLowerCase() !== emailCanon) {
       return res.status(400).json({ error: 'Desafio inválido.' });
     }
     await prisma.otpLoginChallenge.update({
@@ -1011,10 +1127,14 @@ router.post('/2fa/verify', async (req, res) => {
     });
     const full = await prisma.user.findUnique({
       where: { id: user.id },
-      include: { tenant: { include: { subscription: { include: { plan: true } } } }, technicianProfile: true },
+      include: {
+        tenant: { include: { subscription: { include: { plan: true } } } },
+        technicianProfile: true,
+        appAccount: { select: { emailNorm: true } },
+      },
     });
     if (!full) return res.status(500).json({ error: 'Falha ao carregar utilizador.' });
-    const out = await issueAppJwtAfterLogin(full, deviceId, emailNorm);
+    const out = await issueAppJwtAfterLogin(full, deviceId, emailCanon);
     res.json(out);
   } catch (err) {
     console.error('[2fa/verify]', err);
@@ -1167,11 +1287,127 @@ router.get('/me', authUser, async (req, res) => {
       include: {
         tenant: { include: { subscription: { include: { plan: true } } } },
         technicianProfile: true,
+        appAccount: { select: { emailNorm: true } },
       },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
     res.json(await buildSafeAppUserPayloadAsync(user));
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/** POST /api/me/face-enrollment — prestador ACTIVE com janela de rematrícula: adiciona foto base (FaceMatch). */
+router.post('/me/face-enrollment', authUser, async (req, res) => {
+  try {
+    if (!(await isFaceReenrollmentWindowOpenForUserId(req.user.id))) {
+      return res.status(403).json(FACE_REENROLLMENT_CLOSED_BODY);
+    }
+    const me = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        tenantId: true,
+        email: true,
+        appAccountId: true,
+        appAccount: { select: { emailNorm: true } },
+        avatarUrl: true,
+      },
+    });
+    if (!me) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const { fileBase64, mimeType } = req.body || {};
+    if (!fileBase64 || typeof fileBase64 !== 'string') {
+      return res.status(400).json({ error: 'fileBase64 é obrigatório.' });
+    }
+
+    const dec = decodeFaceEnrollmentBase64(fileBase64, mimeType);
+    if (!dec.ok) {
+      return res.status(400).json({ error: dec.error || 'Imagem inválida.' });
+    }
+
+    const profRead = await readUserAvatarImageBuffer(me.avatarUrl);
+    if (!profRead.buf) {
+      return res.status(400).json({
+        error:
+          'É necessária uma foto de perfil oficial antes das fotos biométricas. Use primeiro o passo «Foto oficial» no perfil.',
+        code: 'RE_ENROLL_OFFICIAL_REQUIRED',
+      });
+    }
+
+    const v = await verifyTechRegEnrollmentAgainstProfile(prisma, me.tenantId, profRead.buf, dec.buf);
+    if (!v.ok) {
+      const st =
+        v.code === 'NO_VISION_INTEGRATION' ||
+        v.code === 'NO_VERIFICATION_KEY' ||
+        v.code === 'UNSUPPORTED_ENGINE'
+          ? 503
+          : 400;
+      return res.status(st).json({ error: v.message, code: v.code });
+    }
+
+    const resourceEmail = await resolveCanonicalEmailNormForUser(prisma, me);
+    const out = await appendUserFaceEnrollmentPhoto(prisma, {
+      userId: me.id,
+      tenantId: me.tenantId,
+      resourceEmail,
+      fileBase64,
+      mimeType,
+      req,
+      auditAction: 'USER_FACE_ENROLLMENT_ADD_SELF',
+      auditCategory: 'AUTH',
+      syncReason: 'me_face_reenrollment_add',
+    });
+    if (!out.ok) return res.status(out.status || 400).json({ error: out.error });
+    res.status(201).json({
+      photo: out.photo,
+      photos: out.photos,
+      comprefaceSync: out.comprefaceSync,
+      comprefaceRecognitionSync: out.comprefaceRecognitionSync,
+    });
+  } catch (err) {
+    console.error('[account] POST /me/face-enrollment', err);
+    res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
+});
+
+/** DELETE /api/me/face-enrollment/:photoId — rematrícula facial (janela ativa). */
+router.delete('/me/face-enrollment/:photoId', authUser, async (req, res) => {
+  try {
+    if (!(await isFaceReenrollmentWindowOpenForUserId(req.user.id))) {
+      return res.status(403).json(FACE_REENROLLMENT_CLOSED_BODY);
+    }
+    const me = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: {
+        id: true,
+        tenantId: true,
+        email: true,
+        appAccountId: true,
+        appAccount: { select: { emailNorm: true } },
+      },
+    });
+    if (!me) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const photoId = String(req.params.photoId || '').trim();
+    if (!photoId) return res.status(400).json({ error: 'photoId é obrigatório.' });
+    const resourceEmail = await resolveCanonicalEmailNormForUser(prisma, me);
+    const out = await removeUserFaceEnrollmentPhoto(prisma, {
+      userId: me.id,
+      tenantId: me.tenantId,
+      resourceEmail,
+      photoId,
+      req,
+      auditAction: 'USER_FACE_ENROLLMENT_REMOVE_SELF',
+      auditCategory: 'AUTH',
+      syncReason: 'me_face_reenrollment_delete',
+    });
+    if (!out.ok) return res.status(out.status || 400).json({ error: out.error });
+    res.json({
+      photos: out.photos,
+      comprefaceSync: out.comprefaceSync,
+      comprefaceRecognitionSync: out.comprefaceRecognitionSync,
+    });
+  } catch (err) {
+    console.error('[account] DELETE /me/face-enrollment/:photoId', err);
+    res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
 });
 
 /** POST /api/me/change-password — altera a palavra-passe unificada (todas as filiações do mesmo e-mail). */
@@ -1187,10 +1423,10 @@ router.post('/me/change-password', authUser, async (req, res) => {
 
     const me = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { id: true, email: true },
+      select: { id: true, email: true, appAccountId: true, appAccount: { select: { emailNorm: true } } },
     });
-    if (!me?.email) return res.status(404).json({ error: 'Utilizador não encontrado.' });
-    const emailNorm = String(me.email).trim().toLowerCase();
+    if (!me?.email && !me?.appAccount?.emailNorm) return res.status(404).json({ error: 'Utilizador não encontrado.' });
+    const emailNorm = await resolveCanonicalEmailNormForUser(prisma, me);
 
     const authPw = await verifyAppLoginPasswordAndEnsureAccount(prisma, emailNorm, oldPassword);
     if (!authPw.ok) return res.status(400).json({ error: 'Senha atual incorreta.' });
@@ -1198,7 +1434,9 @@ router.post('/me/change-password', authUser, async (req, res) => {
     const hash = await bcrypt.hash(newPassword, 10);
     await setUnifiedPasswordHashForEmail(prisma, emailNorm, hash);
     await prisma.user.updateMany({
-      where: { email: emailNorm, NOT: { id: me.id } },
+      where: me.appAccountId
+        ? { appAccountId: me.appAccountId, NOT: { id: me.id } }
+        : { email: { equals: emailNorm, mode: 'insensitive' }, NOT: { id: me.id } },
       data: { currentSessionId: null, currentDeviceId: null },
     });
 
@@ -1215,17 +1453,25 @@ router.get('/me/sibling-workspaces', authUser, async (req, res) => {
     if (req.user.panel === true) {
       return res.json({ workspaces: [] });
     }
-    const emailNorm = String(req.user.email || '')
-      .trim()
-      .toLowerCase();
+    const meRow = await prisma.user.findUnique({
+      where: { id: String(req.user.id || '').trim() },
+      select: { id: true, appAccountId: true, email: true, appAccount: { select: { emailNorm: true } } },
+    });
+    const emailNorm = await resolveCanonicalEmailNormForUser(prisma, meRow || req.user);
     if (!emailNorm) return res.json({ workspaces: [] });
 
     const meId = String(req.user.id || '').trim();
-    const rows = await prisma.user.findMany({
-      where: { email: emailNorm, isActive: true },
-      include: { tenant: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    const rows = meRow?.appAccountId
+      ? await prisma.user.findMany({
+          where: { appAccountId: meRow.appAccountId, isActive: true },
+          include: { tenant: true },
+          orderBy: { createdAt: 'asc' },
+        })
+      : await prisma.user.findMany({
+          where: { email: emailNorm, isActive: true },
+          include: { tenant: true },
+          orderBy: { createdAt: 'asc' },
+        });
     const usable = rows.filter((u) => u.tenant && u.tenant.status !== 'SUSPENDED' && u.tenant.status !== 'CANCELLED');
     const byTenant = new Map();
     for (const u of usable) {
@@ -1297,13 +1543,21 @@ router.post('/me/switch-workspace', authUser, async (req, res) => {
     const tenantId = String(req.body?.tenantId || '').trim();
     if (!tenantId) return res.status(400).json({ error: 'tenantId é obrigatório.' });
 
-    const emailNorm = String(req.user.email || '')
-      .trim()
-      .toLowerCase();
+    const meSw = await prisma.user.findUnique({
+      where: { id: String(req.user.id || '').trim() },
+      select: { id: true, appAccountId: true, email: true, appAccount: { select: { emailNorm: true } } },
+    });
+    const emailNorm = await resolveCanonicalEmailNormForUser(prisma, meSw || req.user);
     if (!emailNorm) return res.status(400).json({ error: 'Sessão sem e-mail.' });
 
     const target = await prisma.user.findFirst({
-      where: { email: emailNorm, tenantId, isActive: true },
+      where: {
+        tenantId,
+        isActive: true,
+        ...(meSw?.appAccountId
+          ? { appAccountId: meSw.appAccountId }
+          : { email: { equals: emailNorm, mode: 'insensitive' } }),
+      },
       include: { tenant: { include: { subscription: { include: { plan: true } } } }, technicianProfile: true },
     });
     if (!target || !target.tenant) {
@@ -1343,15 +1597,13 @@ router.post('/2fa/enable', authUser, async (req, res) => {
   try {
     const me = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { twoFactorEnabled: true, email: true },
+      select: { twoFactorEnabled: true, email: true, appAccountId: true, appAccount: { select: { emailNorm: true } } },
     });
     if (!me) return res.status(404).json({ error: 'Utilizador não encontrado.' });
     if (me.twoFactorEnabled) {
       return res.status(400).json({ error: 'A verificação em duas etapas já está ativa.' });
     }
-    const em = String(me.email || '')
-      .trim()
-      .toLowerCase();
+    const em = await resolveCanonicalEmailNormForUser(prisma, me);
     const ch = await startEmailPurposeChallenge(prisma, {
       emailNorm: em,
       purpose: 'two_factor_enable',
@@ -1384,10 +1636,12 @@ router.post('/2fa/enable/confirm', authUser, async (req, res) => {
     if (String(meta.userId) !== String(req.user.id)) {
       return res.status(400).json({ error: 'Desafio inválido.' });
     }
-    const emailNorm = String(req.user.email || '')
-      .trim()
-      .toLowerCase();
-    if (String(ch.target || '').trim().toLowerCase() !== emailNorm) {
+    const me2fa = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { email: true, appAccountId: true, appAccount: { select: { emailNorm: true } } },
+    });
+    const emailCanon = await resolveCanonicalEmailNormForUser(prisma, me2fa);
+    if (String(ch.target || '').trim().toLowerCase() !== emailCanon) {
       return res.status(400).json({ error: 'Desafio inválido.' });
     }
     const good = await bcrypt.compare(String(otp).trim(), ch.codeHash);
@@ -1413,14 +1667,12 @@ router.post('/2fa/disable/request', authUser, async (req, res) => {
   try {
     const me = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { twoFactorEnabled: true, email: true },
+      select: { twoFactorEnabled: true, email: true, appAccountId: true, appAccount: { select: { emailNorm: true } } },
     });
     if (!me?.twoFactorEnabled) {
       return res.status(400).json({ error: 'A verificação em duas etapas não está ativa.' });
     }
-    const em = String(me.email || '')
-      .trim()
-      .toLowerCase();
+    const em = await resolveCanonicalEmailNormForUser(prisma, me);
     const ch = await startEmailPurposeChallenge(prisma, {
       emailNorm: em,
       purpose: 'two_factor_disable',
@@ -1440,14 +1692,18 @@ router.post('/2fa/disable', authUser, async (req, res) => {
     if (!otp || otp.length < 6) return res.status(400).json({ error: 'Indique o código de 6 dígitos.' });
     const me = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { id: true, email: true, twoFactorEnabled: true },
+      select: {
+        id: true,
+        email: true,
+        twoFactorEnabled: true,
+        appAccountId: true,
+        appAccount: { select: { emailNorm: true } },
+      },
     });
     if (!me?.twoFactorEnabled) {
       return res.status(400).json({ error: 'A verificação em duas etapas não está ativa.' });
     }
-    const emailNorm = String(me.email || '')
-      .trim()
-      .toLowerCase();
+    const emailNorm = await resolveCanonicalEmailNormForUser(prisma, me);
     const rows = await prisma.otpLoginChallenge.findMany({
       where: {
         purpose: 'two_factor_disable',
@@ -1506,15 +1762,17 @@ router.post('/me/workspaces', authUser, async (req, res) => {
 
     const me = await prisma.user.findUnique({
       where: { id: req.user.id },
-      include: { tenant: true },
+      include: { tenant: true, appAccount: { select: { emailNorm: true } } },
     });
     if (!me) return res.status(404).json({ error: 'Utilizador não encontrado.' });
 
-    const emailNorm = String(me.email || '').trim().toLowerCase();
+    const emailCanon = await resolveCanonicalEmailNormForUser(prisma, me);
 
     const existsKind = await prisma.user.findFirst({
       where: {
-        email: emailNorm,
+        ...(me.appAccountId
+          ? { appAccountId: me.appAccountId }
+          : { email: { equals: emailCanon, mode: 'insensitive' } }),
         tenant: { kind },
       },
       select: { id: true, tenantId: true },
@@ -1561,10 +1819,14 @@ router.post('/me/workspaces', authUser, async (req, res) => {
         e.code = seatCheck.code || 'PLAN_MAX_TECHNICIANS';
         throw e;
       }
+      const rowEmail = await allocateUniqueUserRowEmail(tx, {
+        appAccountId: me.appAccountId,
+        loginEmailNorm: emailCanon,
+      });
       const u = await tx.user.create({
         data: {
           name: me.name,
-          email: emailNorm,
+          email: rowEmail,
           password: me.password,
           tenantId: tenant.id,
           role: seatRole,
@@ -1584,7 +1846,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
           tenantId: tenant.id,
           userId: u.id,
           action: 'WORKSPACE_CREATE',
-          resource: emailNorm,
+          resource: emailCanon,
           category: 'AUTH',
           metadata: { kind, sourceUserId: me.id },
         },
@@ -1593,7 +1855,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
     });
 
     const deviceId = req.body?.deviceId;
-    const out = await issueAppJwtAfterLogin(newUser, deviceId, emailNorm);
+    const out = await issueAppJwtAfterLogin(newUser, deviceId, emailCanon);
     res.status(201).json({
       ...out,
       workspace: { tenantId: newTenant.id, kind },
@@ -1684,8 +1946,12 @@ router.put('/me', authUser, async (req, res) => {
       technicianServiceLocationIds,
     } = req.body;
 
-    if (avatarUrl !== undefined && (await isTechnicianIdentityLockedForUserId(req.user.id))) {
-      return res.status(403).json(TECH_IDENTITY_LOCKED_BODY);
+    if (avatarUrl !== undefined) {
+      const locked = await isTechnicianIdentityLockedForUserId(req.user.id);
+      const reWin = locked && (await isFaceReenrollmentWindowOpenForUserId(req.user.id));
+      if (locked && !reWin) {
+        return res.status(403).json(TECH_IDENTITY_LOCKED_BODY);
+      }
     }
 
     let localeUpdate = undefined;

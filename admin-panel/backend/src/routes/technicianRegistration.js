@@ -21,7 +21,12 @@ const { sendExpoPushToMany } = require('../services/expoPush');
 const { handleTechnicianProfilePhotoAiValidate } = require('../lib/handleTechnicianProfilePhotoAiValidate');
 const {
   draftPatchTouchesLockedIdentity,
+  draftPatchTouchesForbiddenIdentityWhenTechActive,
+  draftPatchTouchesIdentityOutsideReenrollment,
+  isTechnicianIdentityLockedForUserId,
+  isFaceReenrollmentWindowOpenForUserId,
   respondWithTechnicianIdentityLockIfNeeded,
+  blockLockedTechnicianIdentity,
 } = require('../lib/technicianIdentityLock');
 const { verifyTechRegEnrollmentAgainstProfile } = require('../lib/techRegComprefaceVerify');
 const {
@@ -564,16 +569,6 @@ function validateSubmitPayload(app, body) {
   return null;
 }
 
-/** Bloqueia alterações de identidade facial no fluxo candidato quando o TechnicianProfile já está ACTIVE. */
-async function blockLockedTechnicianIdentity(req, res, next) {
-  try {
-    if (await respondWithTechnicianIdentityLockIfNeeded(req, res)) return;
-    next();
-  } catch (e) {
-    next(e);
-  }
-}
-
 async function bindTechRegistrationCandidate(req, res, next) {
   try {
     const app = await prisma.technicianRegistrationApplication.findUnique({
@@ -621,7 +616,7 @@ publicRouter.post(
   express.json({ limit: '15mb' }),
   authUser,
   bindTechRegistrationCandidate,
-  blockLockedTechnicianIdentity,
+  blockLockedTechnicianIdentity({ allowReenrollmentRoutes: true }),
   async (req, res) => {
     try {
       const { fileBase64, mimeType, techRegPrimaryProfileCapture: capIn } = req.body || {};
@@ -808,8 +803,15 @@ publicRouter.patch(
         return res.status(400).json({ error: 'Candidatura aguarda análise. Não é possível alterar o rascunho agora.' });
       }
       const patchIn = req.body.responsesJson || req.body;
-      if (draftPatchTouchesLockedIdentity(patchIn) && (await respondWithTechnicianIdentityLockIfNeeded(req, res))) {
-        return;
+      if (await isTechnicianIdentityLockedForUserId(req.user.id)) {
+        if (draftPatchTouchesForbiddenIdentityWhenTechActive(patchIn)) {
+          if (await respondWithTechnicianIdentityLockIfNeeded(req, res)) return;
+        } else if (draftPatchTouchesLockedIdentity(patchIn)) {
+          const win = await isFaceReenrollmentWindowOpenForUserId(req.user.id);
+          if (!win || draftPatchTouchesIdentityOutsideReenrollment(patchIn)) {
+            if (await respondWithTechnicianIdentityLockIfNeeded(req, res)) return;
+          }
+        }
       }
       let next = mergeJsonResponses(app.responsesJson, patchIn);
       const saniDraft = sanitizeTechRegFaceEnrollmentPhotosIfAiProfile(next);
@@ -834,7 +836,7 @@ publicRouter.post(
   express.json({ limit: '10mb' }),
   authUser,
   bindTechRegistrationCandidate,
-  blockLockedTechnicianIdentity,
+  blockLockedTechnicianIdentity(),
   async (req, res) => {
     try {
       const app = req.techRegApp;
@@ -962,7 +964,7 @@ publicRouter.post(
   express.json({ limit: '15mb' }),
   authUser,
   bindTechRegistrationCandidate,
-  blockLockedTechnicianIdentity,
+  blockLockedTechnicianIdentity({ allowReenrollmentRoutes: true }),
   async (req, res) => {
   try {
     const { fileBase64, mimeType } = req.body;
@@ -1069,7 +1071,7 @@ publicRouter.delete(
   '/:token/face-enrollment/:photoId',
   authUser,
   bindTechRegistrationCandidate,
-  blockLockedTechnicianIdentity,
+  blockLockedTechnicianIdentity({ allowReenrollmentRoutes: true }),
   async (req, res) => {
   try {
     const { photoId } = req.params;
@@ -1177,7 +1179,7 @@ publicRouter.post(
   express.json({ limit: '15mb' }),
   authUser,
   bindTechRegistrationCandidate,
-  blockLockedTechnicianIdentity,
+  blockLockedTechnicianIdentity(),
   async (req, res) => {
     try {
       const { fileBase64, mimeType } = req.body || {};
@@ -1673,13 +1675,21 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
     if (!tenant) return res.status(404).json({ error: 'Tenant não encontrado.' });
 
     const em = String(email).trim().toLowerCase();
+    const acc = await prisma.appAccount.findUnique({ where: { emailNorm: em }, select: { id: true } });
     /** O convite é sempre para alguém que já tem User neste tenant (preenche o formulário com a mesma sessão). */
     const userInTenant = await prisma.user.findFirst({
-      where: { tenantId, email: em },
+      where: acc
+        ? { tenantId, isActive: true, appAccountId: acc.id }
+        : { tenantId, isActive: true, email: em },
       select: { id: true },
     });
     if (!userInTenant) {
-      const elsewhere = await prisma.user.findFirst({ where: { email: em }, select: { id: true, tenantId: true } });
+      const elsewhere = await prisma.user.findFirst({
+        where: acc
+          ? { appAccountId: acc.id, tenantId: { not: tenantId } }
+          : { email: em, tenantId: { not: tenantId } },
+        select: { id: true, tenantId: true },
+      });
       if (elsewhere) {
         return res.status(400).json({
           error:

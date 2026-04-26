@@ -5,7 +5,8 @@ const APP_REGISTER_EMAIL_TAKEN_PT =
   'Este e-mail já está associado a uma conta BrSpark. Inicie sessão; se aparecer mais do que uma organização, escolha a correta. Para um registo novo, utilize outro e-mail.';
 
 /**
- * Bloqueia `POST /api/register` e criação OTP quando o e-mail já existe em qualquer tenant.
+ * Bloqueia `POST /api/register` e criação OTP quando o e-mail de login já existe (`AppAccount`)
+ * ou ainda existe filiação legada sem conta com esse `User.email`.
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} emailNorm
@@ -14,11 +15,13 @@ const APP_REGISTER_EMAIL_TAKEN_PT =
 async function assertEmailFreeAcrossAllTenants(prisma, emailNorm) {
   const e = String(emailNorm || '').trim().toLowerCase();
   if (!e) return 'E-mail inválido.';
-  const row = await prisma.user.findFirst({
-    where: { email: { equals: e, mode: 'insensitive' } },
+  const acc = await prisma.appAccount.findUnique({ where: { emailNorm: e }, select: { id: true } });
+  if (acc) return APP_REGISTER_EMAIL_TAKEN_PT;
+  const legacy = await prisma.user.findFirst({
+    where: { email: { equals: e, mode: 'insensitive' }, appAccountId: null },
     select: { id: true },
   });
-  return row ? APP_REGISTER_EMAIL_TAKEN_PT : null;
+  return legacy ? APP_REGISTER_EMAIL_TAKEN_PT : null;
 }
 
 /**
@@ -34,11 +37,20 @@ async function assertNoActiveSameEmailOutsideDefaultTenant(prisma, emailNorm, de
   const e = String(emailNorm || '').trim().toLowerCase();
   const tid = String(defaultTenantId || '').trim();
   if (!e || !tid) return null;
+  const acc = await prisma.appAccount.findUnique({ where: { emailNorm: e }, select: { id: true } });
+  if (acc) {
+    const row = await prisma.user.findFirst({
+      where: { appAccountId: acc.id, isActive: true, tenantId: { not: tid } },
+      select: { id: true },
+    });
+    return row ? APP_REGISTER_EMAIL_TAKEN_PT : null;
+  }
   const row = await prisma.user.findFirst({
     where: {
       email: { equals: e, mode: 'insensitive' },
       isActive: true,
       tenantId: { not: tid },
+      appAccountId: null,
     },
     select: { id: true },
   });

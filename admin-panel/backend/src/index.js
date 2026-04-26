@@ -188,10 +188,6 @@ app.use('/api/maps/google', googleMapsRoutes); // app JWT: POST route-metrics, G
 app.use('/api/sync',    syncRoutes);          // app: GET /api/sync/assets | POST /api/sync/push
 app.use('/api/sync',    syncModulesRoutes);   // app: módulos — costs, insurance, vault, media…
 app.use('/api/storage', storageRoutes);       // app: POST /api/storage/upload | GET /api/storage/config
-/** App: slots / hold / confirmação (capacity CMS via Laravel) */
-app.use('/api/cms', require('./routes/cmsAppAvailability'));
-/** App: atendimentos do cliente (Laravel) — my-appointments */
-app.use('/api/cms', require('./routes/cmsAppAppointments'));
 app.use('/api/shares',  sharesRoutes);        // app: gerenciamento de compartilhamento
 app.use('/api/chat',    chatRoutes);          // app: social & chat
 app.use('/api/barcode', require('./routes/barcode')); // app: proxy integration com barcode (UPCItemDB/Cosmos)

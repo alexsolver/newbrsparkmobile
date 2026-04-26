@@ -1994,6 +1994,88 @@ export async function bootUserEditPage() {
     }
   }
 
+  const reWrap = document.getElementById('ue-face-reenroll-wrap');
+  const reStatus = document.getElementById('ue-face-reenroll-status');
+  const reNoteTa = document.getElementById('ue-face-reenroll-note');
+  const btnReOpen = document.getElementById('ue-face-reenroll-open');
+  const btnReClear = document.getElementById('ue-face-reenroll-clear');
+  const hoursSel = document.getElementById('ue-face-reenroll-hours');
+  const paintFaceReenrollStatus = () => {
+    if (!reWrap || !reStatus) return;
+    const tp = uRef.technicianProfile;
+    const active = String(tp?.status || '').toUpperCase() === 'ACTIVE';
+    if (!active) {
+      reWrap.hidden = true;
+      return;
+    }
+    reWrap.hidden = false;
+    const until = tp?.faceReenrollmentUntil;
+    if (until && new Date(until).getTime() > Date.now()) {
+      const loc = adminIntlLocale(getAdminUiLocale());
+      reStatus.textContent = t('ue_faceReenrollStatusOpen').replace(
+        '{date}',
+        new Date(until).toLocaleString(loc || undefined),
+      );
+    } else {
+      reStatus.textContent = t('ue_faceReenrollStatusClosed');
+    }
+  };
+  paintFaceReenrollStatus();
+  const setReReadonly = () => {
+    const ro = isUserEditReadonly();
+    if (btnReOpen) btnReOpen.disabled = ro;
+    if (btnReClear) btnReClear.disabled = ro;
+    if (hoursSel) hoursSel.disabled = ro;
+    if (reNoteTa) reNoteTa.disabled = ro;
+  };
+  setReReadonly();
+  if (btnReOpen) {
+    btnReOpen.onclick = async () => {
+      try {
+        const hours = hoursSel ? parseInt(String(hoursSel.value || '72'), 10) || 72 : 72;
+        const note = reNoteTa && String(reNoteTa.value || '').trim() ? String(reNoteTa.value).trim() : undefined;
+        const res = await CONFIG.post(`/users/${encodeURIComponent(id)}/face-reenrollment-window`, {
+          hours,
+          ...(note ? { note } : {}),
+        });
+        if (!res || res.error) {
+          alert(res?.error || 'Falha ao abrir janela.');
+          return;
+        }
+        if (uRef.technicianProfile) {
+          uRef.technicianProfile.faceReenrollmentUntil = res.faceReenrollmentUntil;
+          uRef.technicianProfile.faceReenrollmentNote = res.faceReenrollmentNote || null;
+        }
+        paintFaceReenrollStatus();
+        alert(t('ue_faceReenrollOpenedOk'));
+      } catch (e) {
+        console.error(e);
+        alert(String(e && e.message ? e.message : 'Erro'));
+      }
+    };
+  }
+  if (btnReClear) {
+    btnReClear.onclick = async () => {
+      try {
+        const res = await CONFIG.post(`/users/${encodeURIComponent(id)}/face-reenrollment-window`, { clear: true });
+        if (!res || res.error) {
+          alert(res?.error || 'Falha.');
+          return;
+        }
+        if (uRef.technicianProfile) {
+          uRef.technicianProfile.faceReenrollmentUntil = null;
+          uRef.technicianProfile.faceReenrollmentNote = null;
+        }
+        if (reNoteTa) reNoteTa.value = '';
+        paintFaceReenrollStatus();
+        alert(t('ue_faceReenrollClearedOk'));
+      } catch (e) {
+        console.error(e);
+        alert(String(e && e.message ? e.message : 'Erro'));
+      }
+    };
+  }
+
   const btnFacePick = document.getElementById('btn-face-pick');
   const faceFileInput = document.getElementById('face-file-input');
   const faceUploadStatus = document.getElementById('face-upload-status');

@@ -35,7 +35,7 @@ interface ConsentState {
   DATA_RETENTION: boolean;
 }
 
-/** Sem `INTRO`: o hero de marketing fica só em `/auth/app-intro`; pós-login começa já no consentimento (WELCOME). */
+/** Pós-login: consentimento (WELCOME) — sem ecrã de marketing pré-login. */
 const SLIDES_TECH = ['WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
 const SLIDES_CLIENT = ['WELCOME', 'LOCATION', 'DEVICE', 'NOTIFICATIONS', 'RETENTION', 'CONFIRM'] as const;
 type SlideTech = typeof SLIDES_TECH[number];

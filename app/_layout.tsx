@@ -19,7 +19,6 @@ import { AppProvider } from '../src/context/AppContext';
 import { PersonaProvider, usePersona } from '../src/context/PersonaContext';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
-import { isAppIntroDismissedForGuestSession } from '../src/lib/appIntroPrefs';
 import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryBridge';
 import { pollStaleGpsReminders } from '../src/services/syncService';
 import { NotificationService, preparePushNotificationInfrastructure } from '../src/services/notifications';
@@ -72,26 +71,10 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inTechRegistration =
       segments[0] === 'auth' && (segments as string[])[1] === 'tech-registration';
     const inLogin = segments[0] === 'auth' && (segments as string[])[1] === 'login';
-    const inAppIntro = segments[0] === 'auth' && (segments as string[])[1] === 'app-intro';
     const inProviderCatalog = segments[0] === 'provider-services';
     const seg0 = (segments as string[])[0];
-    /** `/` ou ecrã `index` — deixar `app/index` decidir intro vs login (não forçar login aqui). */
+    /** `/` ou ecrã `index` — deixar `app/index` decidir login vs home (não forçar login aqui). */
     const atRootOrIndex = !seg0 || seg0 === 'index';
-
-    /** Apresentação inicial antes de qualquer outro ecrã em `auth/` (exc. convite técnico e jornadas OTP). */
-    /** `login` fica de fora: convidado que toca «Criar conta ou entrar» no perfil deve ver o ecrã de login, não voltar ao intro. */
-    if (
-      !user &&
-      inAuthGroup &&
-      !inAppIntro &&
-      !inLogin &&
-      !inOtpJourney &&
-      !inTechRegistration &&
-      !pendingTechRegInvite &&
-      !isAppIntroDismissedForGuestSession()
-    ) {
-      router.replace('/auth/app-intro' as any);
-    }
 
     if (!user && !atRootOrIndex && !inAuthGroup && !inClient && !inProvider && !inProfile && !inProviderCatalog) {
       router.replace('/auth/login' as any);

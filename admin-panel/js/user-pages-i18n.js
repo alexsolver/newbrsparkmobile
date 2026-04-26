@@ -525,7 +525,7 @@ const M = {
     ue_wtHintFaceMatchNotSynced:
       'FaceMatch ainda não confirmou esta galeria no servidor (integração, rede ou falha no envio). Em Integrações, verifique «Exadel CompreFace» ativo e use «Testar». Batidas podem sair com ressalva até ficar OK.',
     ue_wtHintTechActive:
-      'Prestador ACTIVE: fotos de perfil e de matrícula só por esta ficha no painel (não pelo app).',
+      'Prestador ACTIVE: fotos de perfil e de matrícula só por esta ficha no painel (não pelo app), salvo durante uma janela de rematrícula.',
     ue_wtHintAttentionPrefix: 'Atenção:',
     ue_wtHintPolicyPrefix: 'Política:',
     ue_wtHintPolicyOk:
@@ -534,7 +534,18 @@ const M = {
     ue_wtFacePhotosCount: '{n} foto(s) base',
     ue_wtFaceNoPhotos: 'sem fotos base',
     ue_faceIdentityActive:
-      'Prestador ACTIVE: o colaborador não altera foto de perfil nem matrícula facial pelo app, só por esta ficha no painel.',
+      'Prestador ACTIVE: o colaborador não altera foto de perfil nem matrícula facial pelo app, salvo durante uma janela de rematrícula aberta abaixo.',
+    ue_faceReenrollKicker: 'Rematrícula facial no app',
+    ue_faceReenrollDesc_html:
+      'Autorize um período em que o prestador pode atualizar a foto de perfil e as fotos base de reconhecimento diretamente no telemóvel (útil após troca de visual ou falhas na biometria).',
+    ue_faceReenrollHoursLbl: 'Duração',
+    ue_faceReenrollOpenBtn: 'Abrir janela',
+    ue_faceReenrollClearBtn: 'Encerrar janela',
+    ue_faceReenrollNoteLbl: 'Nota para o prestador (opcional)',
+    ue_faceReenrollStatusOpen: 'Janela aberta até {date}.',
+    ue_faceReenrollStatusClosed: 'Sem janela de rematrícula ativa.',
+    ue_faceReenrollOpenedOk: 'Janela de rematrícula criada.',
+    ue_faceReenrollClearedOk: 'Janela encerrada.',
     ue_faceHeicAlert:
       'HEIC não é suportado aqui: {file}\nNo iPhone use Ajustes → Câmera → Formatos → «Mais compatível», ou converta para JPEG.',
     ue_faceFormatAlert: 'Formato não reconhecido (use JPEG, PNG ou WebP): {file}',
@@ -1061,7 +1072,7 @@ const M = {
     ue_wtHintFaceMatchNotSynced:
       'FaceMatch has not confirmed this gallery on the server (integration, network, or upload failure). In Integrations, check “Exadel CompreFace” is active and use “Test”. Punches may stay flagged until OK.',
     ue_wtHintTechActive:
-      'Provider ACTIVE: profile and enrollment photos are only from this admin page (not the app).',
+      'Provider ACTIVE: profile and enrollment photos are only from this admin page (not the app), except during a re-enrollment window.',
     ue_wtHintAttentionPrefix: 'Warning:',
     ue_wtHintPolicyPrefix: 'Policy:',
     ue_wtHintPolicyOk: 'tenant requirements match the current enrollment (always verify before requiring punches).',
@@ -1069,7 +1080,18 @@ const M = {
     ue_wtFacePhotosCount: '{n} base photo(s)',
     ue_wtFaceNoPhotos: 'no base photos',
     ue_faceIdentityActive:
-      'Provider ACTIVE: the worker cannot change profile photo or enrollment photos in the app, only on this page.',
+      'Provider ACTIVE: the worker cannot change profile photo or enrollment photos in the app, except during a re-enrollment window opened below.',
+    ue_faceReenrollKicker: 'Face re-enrollment in the app',
+    ue_faceReenrollDesc_html:
+      'Allow a period where the technician can update profile and base face photos on the phone (e.g. after a look change or biometric issues).',
+    ue_faceReenrollHoursLbl: 'Duration',
+    ue_faceReenrollOpenBtn: 'Open window',
+    ue_faceReenrollClearBtn: 'Close window',
+    ue_faceReenrollNoteLbl: 'Note to technician (optional)',
+    ue_faceReenrollStatusOpen: 'Window open until {date}.',
+    ue_faceReenrollStatusClosed: 'No active re-enrollment window.',
+    ue_faceReenrollOpenedOk: 'Re-enrollment window created.',
+    ue_faceReenrollClearedOk: 'Window closed.',
     ue_faceHeicAlert:
       'HEIC is not supported here: {file}\nOn iPhone use Settings → Camera → Formats → “Most Compatible”, or convert to JPEG.',
     ue_faceFormatAlert: 'Unrecognized format (use JPEG, PNG or WebP): {file}',
@@ -1585,6 +1607,12 @@ export function applyUserEditStaticPageI18n() {
   if (fa) fa.placeholder = t('ue_docPhAttach');
   setT('ue-sec-face-title', 'ue_secFace');
   setH('ue-face-intro', 'ue_faceIntro_html');
+  setT('ue-face-reenroll-kicker', 'ue_faceReenrollKicker');
+  setH('ue-face-reenroll-desc', 'ue_faceReenrollDesc_html');
+  setT('ue-face-reenroll-hours-lbl', 'ue_faceReenrollHoursLbl');
+  setT('ue-face-reenroll-open', 'ue_faceReenrollOpenBtn');
+  setT('ue-face-reenroll-clear', 'ue_faceReenrollClearBtn');
+  setT('ue-face-reenroll-note-lbl', 'ue_faceReenrollNoteLbl');
   setT('btn-face-pick', 'ue_faceAddPhotos');
   setT('ue-cf-gallery-title', 'ue_cfGalleryTitle');
   setH('ue-cf-gallery-desc', 'ue_cfGalleryDesc_html');

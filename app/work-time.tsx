@@ -687,6 +687,19 @@ export default function WorkTimeScreen() {
                   </Text>
                 </View>
               ) : null}
+              {me.faceReenrollmentWindowOpen ? (
+                <View
+                  style={[
+                    styles.bannerRow,
+                    { backgroundColor: C.status.info.bg, borderColor: C.status.info.border, marginBottom: space.sm },
+                  ]}
+                >
+                  <Ionicons name="camera-outline" size={22} color={C.status.info.fg} style={{ marginRight: space.sm }} />
+                  <Text style={[styles.bannerText, { color: C.status.info.fg }]}>
+                    {t('workTime.faceReenrollmentBanner')}
+                  </Text>
+                </View>
+              ) : null}
               <View style={styles.actionGrid}>
                 {actionTypes.map((pt) => {
                   const accent = punchAccent(pt, C);

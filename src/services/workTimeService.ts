@@ -25,6 +25,9 @@ export type WorkTimeMeOk = {
   userWorkTimeEnabled: boolean;
   workTimeEnrolledAt: string | null;
   faceEnrollmentOk: boolean;
+  faceReenrollmentWindowOpen?: boolean;
+  faceReenrollmentUntil?: string | null;
+  faceReenrollmentNote?: string | null;
   showWorkTimeInApp: boolean;
   canRegisterPunch: boolean;
 };

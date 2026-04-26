@@ -10,6 +10,16 @@ const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { syncComprefaceGalleryAfterUserChange } = require('../lib/comprefaceGallerySyncTrigger');
 const { isRegistrationPrimaryFacePhoto } = require('../lib/faceEnrollmentPrimary');
+const {
+  MAX_FACE_ENROLLMENT_PHOTOS,
+  MAX_FACE_ENROLLMENT_BYTES,
+  normalizeFacePhotos,
+  sortFaceEnrollmentPrimaryFirst,
+  mimeToFaceExt,
+  detectFaceExtFromBuffer,
+  appendUserFaceEnrollmentPhoto,
+  removeUserFaceEnrollmentPhoto,
+} = require('../lib/faceEnrollmentPersist');
 const { assertTechnicianSeatForNewUser, assertTechnicianSeatForUserPatch } = require('../lib/planQuotaService');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 const {
@@ -25,8 +35,6 @@ const { validateAppPasswordPolicy } = require('../lib/appPasswordPolicy');
 const { validatePanelRoleForTenantKind, setUnifiedPasswordHashForEmail } = require('../lib/appAccountAuth');
 const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 
-const MAX_FACE_ENROLLMENT_PHOTOS = 12;
-const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
 const MAX_AVATAR_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_DOC_ATTACHMENT_BYTES = 15 * 1024 * 1024;
 
@@ -64,42 +72,6 @@ function normalizeEmployeeMatricula(raw) {
   const s = String(raw).trim();
   if (!s) return null;
   return s.slice(0, 80);
-}
-
-function normalizeFacePhotos(raw) {
-  if (raw == null) return [];
-  if (Array.isArray(raw)) return raw.filter((p) => p && typeof p === 'object' && p.id && p.url);
-  return [];
-}
-
-function sortFaceEnrollmentPrimaryFirst(arr) {
-  const list = normalizeFacePhotos(arr);
-  const prim = list.filter(isRegistrationPrimaryFacePhoto);
-  const rest = list.filter((p) => !isRegistrationPrimaryFacePhoto(p));
-  return [...prim, ...rest];
-}
-
-function mimeToFaceExt(mt) {
-  const m = String(mt || '').toLowerCase();
-  if (m.includes('jpeg') || m.includes('jpg')) return 'jpg';
-  if (m.includes('png')) return 'png';
-  if (m.includes('webp')) return 'webp';
-  return null;
-}
-
-/** Quando o browser envia `application/octet-stream` ou MIME vazio (comum em Android). */
-function detectFaceExtFromBuffer(buf) {
-  if (!buf || buf.length < 12) return null;
-  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'png';
-  const head = buf.slice(0, 12);
-  if (head.slice(0, 4).toString('ascii') === 'RIFF' && head.slice(8, 12).toString('ascii') === 'WEBP') return 'webp';
-  // HEIC/HEIF (ISO BMFF): não suportado pelo pipeline atual
-  if (buf.length >= 12 && buf.slice(4, 8).toString('ascii') === 'ftyp') {
-    const brand = buf.slice(8, 12).toString('ascii').toLowerCase();
-    if (brand.includes('heic') || brand.includes('heix') || brand === 'mif1' || brand === 'msf1') return 'heic';
-  }
-  return null;
 }
 
 function mimeToDocAttachmentExt(mt) {
@@ -705,6 +677,84 @@ router.post('/:id/disconnect', async (req, res) => {
   }
 });
 
+// POST /api/users/:id/face-reenrollment-window — abre ou encerra janela para o prestador atualizar fotos na app
+router.post('/:id/face-reenrollment-window', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await findScopedUserOrNull(req, id, {
+      include: { technicianProfile: true },
+    });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    if (!user.technicianProfile) {
+      return res.status(400).json({ error: 'Este utilizador não tem perfil técnico.' });
+    }
+    if (String(user.technicianProfile.status || '').toUpperCase() !== 'ACTIVE') {
+      return res.status(400).json({
+        error: 'A janela de rematrícula facial aplica-se apenas a prestadores com estado ACTIVE.',
+      });
+    }
+    const clear = !!req.body?.clear;
+    if (clear) {
+      await prisma.technicianProfile.update({
+        where: { userId: id },
+        data: { faceReenrollmentUntil: null, faceReenrollmentNote: null },
+      });
+      await prisma.auditLog
+        .create({
+          data: {
+            ...auditActor(req),
+            tenantId: user.tenantId,
+            action: 'USER_FACE_REENROLLMENT_WINDOW_CLEARED',
+            resource: user.email,
+            category: 'ADMIN',
+            metadata: { userId: id },
+          },
+        })
+        .catch(() => {});
+      return res.json({ ok: true, cleared: true });
+    }
+    let until;
+    const untilRaw = req.body?.until;
+    if (untilRaw != null && String(untilRaw).trim()) {
+      until = new Date(String(untilRaw).trim());
+      if (Number.isNaN(until.getTime()) || until.getTime() <= Date.now()) {
+        return res.status(400).json({ error: 'Data «until» inválida ou já passou.' });
+      }
+    } else {
+      const hours = Math.min(336, Math.max(1, parseInt(String(req.body?.hours ?? 72), 10) || 72));
+      until = new Date(Date.now() + hours * 3600 * 1000);
+    }
+    const note =
+      req.body?.note != null && String(req.body.note).trim()
+        ? String(req.body.note).trim().slice(0, 2000)
+        : null;
+    await prisma.technicianProfile.update({
+      where: { userId: id },
+      data: { faceReenrollmentUntil: until, faceReenrollmentNote: note },
+    });
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: user.tenantId,
+          action: 'USER_FACE_REENROLLMENT_WINDOW_OPENED',
+          resource: user.email,
+          category: 'ADMIN',
+          metadata: { userId: id, until: until.toISOString(), hasNote: !!note },
+        },
+      })
+      .catch(() => {});
+    res.json({
+      ok: true,
+      faceReenrollmentUntil: until.toISOString(),
+      faceReenrollmentNote: note,
+    });
+  } catch (err) {
+    console.error('POST /users/:id/face-reenrollment-window', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/users/:id/face-enrollment — foto base para reconhecimento facial (JPEG/PNG/WebP, máx. 5 MB)
 router.post('/:id/face-enrollment', async (req, res) => {
   try {
@@ -713,78 +763,30 @@ router.post('/:id/face-enrollment', async (req, res) => {
     if (!fileBase64 || typeof fileBase64 !== 'string') {
       return res.status(400).json({ error: 'fileBase64 é obrigatório.' });
     }
-    const b64 = String(fileBase64).replace(/\s/g, '');
-    let buf;
-    try {
-      buf = Buffer.from(b64, 'base64');
-    } catch {
-      return res.status(400).json({ error: 'Base64 inválido.' });
-    }
-    if (buf.length > MAX_FACE_ENROLLMENT_BYTES) {
-      return res.status(400).json({ error: 'Imagem muito grande (máx. 5 MB).' });
-    }
-    if (buf.length < 64) return res.status(400).json({ error: 'Arquivo inválido.' });
 
-    let ext = mimeToFaceExt(mimeType);
-    if (!ext) ext = detectFaceExtFromBuffer(buf);
-    if (ext === 'heic') {
-      return res.status(400).json({
-        error:
-          'HEIC/HEIF não é suportado. No iPhone: Ajustes → Câmera → Formatos → «Mais compatível», ou exporte a foto como JPEG antes de enviar.',
-      });
-    }
-    if (!ext) return res.status(400).json({ error: 'Use imagem JPEG, PNG ou WebP.' });
-
-    const user = await findScopedUserOrNull(req, id);
+    const user = await findScopedUserOrNull(req, id, {
+      select: { id: true, tenantId: true, email: true, role: true },
+    });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
-    const list = normalizeFacePhotos(user.faceEnrollmentPhotos);
-    if (list.length >= MAX_FACE_ENROLLMENT_PHOTOS) {
-      return res.status(400).json({ error: `Limite de ${MAX_FACE_ENROLLMENT_PHOTOS} fotos base atingido.` });
-    }
-
-    const photoId = `fe_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
-    const fname = `${photoId}.${ext}`;
-    const absDir = path.join(__dirname, '../../public/uploads/face-enrollment', id);
-    await fs.mkdir(absDir, { recursive: true });
-    await fs.writeFile(path.join(absDir, fname), buf);
-
-    const publicPath = `/uploads/face-enrollment/${id}/${fname}`;
-    const createdAt = new Date().toISOString();
-    const entry = {
-      id: photoId,
-      url: publicPath,
-      mimeType: mimeType || `image/${ext === 'jpg' ? 'jpeg' : ext}`,
-      createdAt,
-    };
-    const next = sortFaceEnrollmentPrimaryFirst([...list, entry]);
-
-    await prisma.user.update({
-      where: { id },
-      data: { faceEnrollmentPhotos: next },
-    });
-
-    await prisma.auditLog
-      .create({
-        data: {
-          ...auditActor(req),
-          tenantId: user.tenantId,
-          action: 'USER_FACE_ENROLLMENT_ADD',
-          resource: user.email,
-          category: 'ADMIN',
-          metadata: { userId: id, photoId },
-        },
-      })
-      .catch(() => {});
-
-    const { comprefaceSync, comprefaceRecognitionSync } = await syncComprefaceGalleryAfterUserChange(
-      prisma,
-      id,
+    const out = await appendUserFaceEnrollmentPhoto(prisma, {
+      userId: id,
+      tenantId: user.tenantId,
+      resourceEmail: user.email,
+      fileBase64,
+      mimeType,
       req,
-      'face_enrollment_add',
-    );
-
-    res.status(201).json({ photo: entry, photos: next, comprefaceSync, comprefaceRecognitionSync });
+      auditAction: 'USER_FACE_ENROLLMENT_ADD',
+      auditCategory: 'ADMIN',
+      syncReason: 'face_enrollment_add',
+    });
+    if (!out.ok) return res.status(out.status || 400).json({ error: out.error });
+    res.status(201).json({
+      photo: out.photo,
+      photos: out.photos,
+      comprefaceSync: out.comprefaceSync,
+      comprefaceRecognitionSync: out.comprefaceRecognitionSync,
+    });
   } catch (err) {
     console.error('POST /users/:id/face-enrollment', err);
     res.status(500).json({ error: err.message });
@@ -1041,43 +1043,26 @@ router.post('/:id/sync-compreface', async (req, res) => {
 router.delete('/:id/face-enrollment/:photoId', async (req, res) => {
   try {
     const { id, photoId } = req.params;
-    const user = await findScopedUserOrNull(req, id);
-    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
-    const list = normalizeFacePhotos(user.faceEnrollmentPhotos);
-    const found = list.find((p) => p.id === photoId);
-    if (!found) return res.status(404).json({ error: 'Foto não encontrada.' });
-    if (isRegistrationPrimaryFacePhoto(found)) {
-      return res.status(400).json({
-        error:
-          'Esta foto é a do passo 1 do cadastro do prestador (referência principal) e não pode ser removida aqui. Ela só é substituída se o cadastro for refeito e aprovado de novo, ou se o usuário for excluído.',
-      });
-    }
-
-    const next = sortFaceEnrollmentPrimaryFirst(list.filter((p) => p.id !== photoId));
-
-    if (found.url && typeof found.url === 'string' && found.url.startsWith('/uploads/face-enrollment/')) {
-      const rel = found.url.replace(/^\/uploads\//, '');
-      const abs = path.join(__dirname, '../../public/uploads', ...rel.split('/'));
-      try {
-        await fs.unlink(abs);
-      } catch {
-        /* arquivo já ausente */
-      }
-    }
-
-    await prisma.user.update({
-      where: { id },
-      data: { faceEnrollmentPhotos: next },
+    const user = await findScopedUserOrNull(req, id, {
+      select: { id: true, tenantId: true, email: true, role: true },
     });
-
-    const { comprefaceSync, comprefaceRecognitionSync } = await syncComprefaceGalleryAfterUserChange(
-      prisma,
-      id,
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const out = await removeUserFaceEnrollmentPhoto(prisma, {
+      userId: id,
+      tenantId: user.tenantId,
+      resourceEmail: user.email,
+      photoId,
       req,
-      'face_enrollment_delete',
-    );
-
-    res.json({ photos: next, comprefaceSync, comprefaceRecognitionSync });
+      auditAction: 'USER_FACE_ENROLLMENT_REMOVE',
+      auditCategory: 'ADMIN',
+      syncReason: 'face_enrollment_delete',
+    });
+    if (!out.ok) return res.status(out.status || 400).json({ error: out.error });
+    res.json({
+      photos: out.photos,
+      comprefaceSync: out.comprefaceSync,
+      comprefaceRecognitionSync: out.comprefaceRecognitionSync,
+    });
   } catch (err) {
     console.error('DELETE /users/:id/face-enrollment/:photoId', err);
     res.status(500).json({ error: err.message });

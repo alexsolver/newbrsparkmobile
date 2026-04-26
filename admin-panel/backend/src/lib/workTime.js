@@ -100,6 +100,9 @@ async function getWorkTimeEffectiveForUser(userId) {
       faceEnrollmentPhotos: true,
       comprefaceRecognitionSync: true,
       tenant: { select: { locale: { select: { countryCode: true } } } },
+      technicianProfile: {
+        select: { faceReenrollmentUntil: true, faceReenrollmentNote: true },
+      },
     },
   });
   if (!user) {
@@ -125,6 +128,10 @@ async function getWorkTimeEffectiveForUser(userId) {
   const workTimeBrazilRegime =
     tenantIsBr && userOn ? user.workTimeBrazilRegime || 'CLT' : null;
 
+  const reUntil = user.technicianProfile?.faceReenrollmentUntil;
+  const faceReenrollmentWindowOpen =
+    !!reUntil && new Date(reUntil).getTime() > Date.now();
+
   return {
     ok: true,
     tenantId: user.tenantId,
@@ -145,6 +152,9 @@ async function getWorkTimeEffectiveForUser(userId) {
     userWorkTimeEnabled: userOn,
     workTimeEnrolledAt: user.workTimeEnrolledAt,
     faceEnrollmentOk: enrolled,
+    faceReenrollmentWindowOpen,
+    faceReenrollmentUntil: reUntil ? new Date(reUntil).toISOString() : null,
+    faceReenrollmentNote: user.technicianProfile?.faceReenrollmentNote || null,
     showWorkTimeInApp: effective,
     canRegisterPunch: canPunch,
   };

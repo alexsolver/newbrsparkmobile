@@ -9,6 +9,7 @@
     "dev": "bash scripts/dev-with-tunnel.sh",
     "dev:without-auto-tunnel": "node scripts/checkLocalDbReachable.js && nodemon src/index.js",
     "start": "node src/index.js",
+    "test": "node --test src/lib/__tests__",
     "db:migrate": "bash scripts/db-migrate.sh",
     "db:backup": "bash scripts/backup.sh manual",
     "db:seed": "node src/seed.js",
