@@ -312,6 +312,20 @@
             <p id="ue-paff-no-pi" class="hint-box" hidden style="margin-bottom:12px"></p>
             <p id="ue-paff-loading" style="font-size:13px;color:var(--text3)">…</p>
             <p id="ue-paff-error" class="hint-box" style="display:none;border-color:#fecaca;background:#fef2f2;color:#991b1b"></p>
+            <div id="ue-paff-onboarding-wrap" class="ue-task-card ue-task-card--wide" hidden style="margin-bottom:16px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface2)">
+              <div class="ue-inline-kicker" id="ue-paff-ob-kicker">Onboarding global (KYC)</div>
+              <p id="ue-paff-ob-summary" class="hint-box" style="margin-top:8px;margin-bottom:10px"></p>
+              <p id="ue-paff-ob-revision-prior" class="hint-box" style="display:none;margin-bottom:10px;font-size:12px"></p>
+              <div class="form-group" id="ue-paff-ob-revision-wrap" style="max-width:720px">
+                <label class="form-label" for="ue-paff-ob-revision-note" id="ue-paff-ob-lbl-revision">Nota ao pedir ajustes</label>
+                <textarea id="ue-paff-ob-revision-note" class="form-control" rows="3" maxlength="8000" placeholder=""></textarea>
+              </div>
+              <div id="ue-paff-ob-actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+                <button type="button" class="btn btn-sm btn-primary ue-paff-ob-act" data-ob-act="approve" id="ue-paff-ob-approve">Aprovar KYC</button>
+                <button type="button" class="btn btn-sm btn-secondary ue-paff-ob-act" data-ob-act="revision" id="ue-paff-ob-revision">Pedir ajustes</button>
+                <button type="button" class="btn btn-sm btn-outline ue-paff-ob-act" data-ob-act="reject" id="ue-paff-ob-reject">Rejeitar candidatura</button>
+              </div>
+            </div>
             <div id="ue-paff-body" hidden>
               <div class="ue-task-grid" style="margin-bottom:16px">
                 <section class="ue-task-card ue-task-card--wide">

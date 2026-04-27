@@ -23,6 +23,33 @@ function escAttr(s) {
     .replace(/>/g, '&gt;');
 }
 
+/** Clic no texto dentro do `<button>` → `target` pode ser nó de texto (sem `closest`). */
+function prDomElementFromTarget(clickTarget) {
+  if (!clickTarget) return null;
+  return clickTarget.nodeType === 1 ? clickTarget : clickTarget.parentElement || null;
+}
+
+async function onPrBondsActivateDelegatedClick(ev) {
+  const el = prDomElementFromTarget(ev.target);
+  const btn = el?.closest?.('button.pr-tp-act');
+  if (!btn) return;
+  ev.preventDefault();
+  const affId = btn.getAttribute('data-aff');
+  if (!affId) return;
+  if (!confirm(t('pr_confirm_activate'))) return;
+  btn.disabled = true;
+  try {
+    const res = await CONFIG.post(`/providers/affiliations/${encodeURIComponent(affId)}/activate`, {});
+    if (res?.error) {
+      alert(res.error);
+      return;
+    }
+    await loadBondsTable();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function panelTenantId() {
   try {
     if (sessionStorage.getItem('brspark_panel_mode') === 'tenant') {
@@ -76,6 +103,14 @@ if (!canManageTenantUsers && !canManageTechApplications) {
   if (secBonds) secBonds.hidden = !canManageTenantUsers;
   if (secInvite) secInvite.hidden = !canManageTenantUsers;
   if (secApps) secApps.hidden = !canManageTechApplications;
+}
+
+if (canManageTenantUsers) {
+  const prBondsSection = document.getElementById('pr-section-bonds');
+  if (prBondsSection && prBondsSection.dataset.prBondsActDeleg !== '1') {
+    prBondsSection.dataset.prBondsActDeleg = '1';
+    prBondsSection.addEventListener('click', (ev) => void onPrBondsActivateDelegatedClick(ev));
+  }
 }
 
 async function loadTenantSelects() {
@@ -234,24 +269,7 @@ async function loadBondsTable() {
           </tr>`;
       })
       .join('');
-    tbody.querySelectorAll('button.pr-tp-act').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        const affId = btn.getAttribute('data-aff');
-        if (!affId) return;
-        if (!confirm(t('pr_confirm_activate'))) return;
-        btn.disabled = true;
-        try {
-          const res = await CONFIG.post(`/providers/affiliations/${encodeURIComponent(affId)}/activate`, {});
-          if (res?.error) {
-            alert(res.error);
-            return;
-          }
-          await loadBondsTable();
-        } finally {
-          btn.disabled = false;
-        }
-      });
-    });
+    /* Ativar: ver `onPrBondsActivateDelegatedClick` em `#pr-section-bonds`. */
   } catch (e) {
     console.error(e);
     if (statusEl) statusEl.textContent = e?.message || String(e) || '—';

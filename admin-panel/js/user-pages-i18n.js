@@ -431,6 +431,20 @@ const M = {
     ue_paffLoadErr: 'Não foi possível carregar os vínculos com empresas.',
     ue_paffEmpty: 'Sem vínculos com empresas visíveis para a sua sessão.',
     ue_paffKycLine: 'Estado global: KYC <strong>{kyc}</strong> · identidade <strong>{global}</strong>.',
+    ue_paffObKicker: 'Onboarding global (KYC)',
+    ue_paffObSummarySubmitted:
+      'Há uma candidatura de onboarding global submetida ({submitted}). Pode aprovar o KYC, pedir ajustes (com nota ao prestador) ou rejeitar.',
+    ue_paffObSummaryNeedsRevision:
+      'Estado: aguarda correção pelo prestador. Quando reenviar, voltará a aparecer aqui para nova revisão.',
+    ue_paffObPriorNotePrefix: 'Última nota do revisor:',
+    ue_paffObLblRevision: 'Nota ao pedir ajustes',
+    ue_paffObRevisionPh: 'Explique o que falta corrigir ou anexar. O prestador vê isto na app.',
+    ue_paffObBtnApprove: 'Aprovar KYC',
+    ue_paffObBtnRevision: 'Pedir ajustes',
+    ue_paffObBtnReject: 'Rejeitar candidatura',
+    ue_paffObRejectConfirm: 'Rejeitar definitivamente esta candidatura de onboarding global? O KYC ficará REJECTED.',
+    ue_paffObRevisionNoteRequired: 'Escreva a nota com os ajustes pedidos antes de enviar.',
+    ue_paffObApprovedOk: 'KYC global aprovado. Já pode ativar vínculos com empresas, se aplicável.',
     ue_paffInviteKicker: 'Convidar / atualizar convite',
     ue_paffInviteTitle: 'Nova associação',
     ue_paffInviteHint_html:
@@ -1112,6 +1126,20 @@ const M = {
     ue_paffLoadErr: 'Could not load company links.',
     ue_paffEmpty: 'No company links visible for your session.',
     ue_paffKycLine: 'Global state: KYC <strong>{kyc}</strong> · identity <strong>{global}</strong>.',
+    ue_paffObKicker: 'Global onboarding (KYC)',
+    ue_paffObSummarySubmitted:
+      'A global onboarding application is submitted ({submitted}). You can approve KYC, request changes (with a note to the provider), or reject.',
+    ue_paffObSummaryNeedsRevision:
+      'Status: waiting for the provider to fix and resubmit. When they resubmit, it will show up here again for review.',
+    ue_paffObPriorNotePrefix: 'Last reviewer note:',
+    ue_paffObLblRevision: 'Note when requesting changes',
+    ue_paffObRevisionPh: 'Explain what must be fixed or uploaded. The provider sees this in the app.',
+    ue_paffObBtnApprove: 'Approve KYC',
+    ue_paffObBtnRevision: 'Request changes',
+    ue_paffObBtnReject: 'Reject application',
+    ue_paffObRejectConfirm: 'Reject this global onboarding application permanently? KYC will be set to REJECTED.',
+    ue_paffObRevisionNoteRequired: 'Enter the change request note before sending.',
+    ue_paffObApprovedOk: 'Global KYC approved. You can activate company links where applicable.',
     ue_paffInviteKicker: 'Invite / refresh invitation',
     ue_paffInviteTitle: 'New affiliation',
     ue_paffInviteHint_html:
@@ -1919,6 +1947,13 @@ export function applyUserEditStaticPageI18n() {
   const paffNote = document.getElementById('ue-paff-note');
   if (paffNote) paffNote.placeholder = t('ue_paffNotePh');
   setT('ue-paff-invite-btn', 'ue_paffBtnInvite');
+  setT('ue-paff-ob-kicker', 'ue_paffObKicker');
+  setT('ue-paff-ob-lbl-revision', 'ue_paffObLblRevision');
+  const obPh = document.getElementById('ue-paff-ob-revision-note');
+  if (obPh) obPh.placeholder = t('ue_paffObRevisionPh');
+  setT('ue-paff-ob-approve', 'ue_paffObBtnApprove');
+  setT('ue-paff-ob-revision', 'ue_paffObBtnRevision');
+  setT('ue-paff-ob-reject', 'ue_paffObBtnReject');
   const prel = document.getElementById('ue-paff-rel');
   if (prel) {
     const op = prel.querySelector('option[value="PARTNER"]');

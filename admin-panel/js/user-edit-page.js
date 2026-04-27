@@ -133,6 +133,198 @@ function syncPaffInviteButtonFromPayload(payload) {
   invBtn.setAttribute('aria-disabled', needPi ? 'true' : 'false');
 }
 
+/** Clic no texto dentro do `<button>` → `target` pode ser nó de texto (sem `closest`). */
+function uePaffDomElementFromTarget(clickTarget) {
+  if (!clickTarget) return null;
+  return clickTarget.nodeType === 1 ? clickTarget : clickTarget.parentElement || null;
+}
+
+function setUePaffInlineError(message) {
+  const errEl = document.getElementById('ue-paff-error');
+  if (!errEl || !message) return;
+  errEl.style.display = '';
+  errEl.textContent = message;
+  try {
+    errEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearUePaffInlineError() {
+  const errEl = document.getElementById('ue-paff-error');
+  if (!errEl) return;
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+}
+
+async function handleUePaffAffiliationAction(actBtn) {
+  if (isUserEditReadonly()) {
+    setUePaffInlineError(t('ue_paffReadonlyBlock'));
+    return;
+  }
+  const affId = actBtn.getAttribute('data-aff');
+  const act = actBtn.getAttribute('data-act');
+  if (!affId || !act) return;
+  if (act === 'activate' && actBtn.getAttribute('data-ue-paff-kyc-block') === '1') {
+    const msg = t('ue_paffActivateNeedKyc');
+    setUePaffInlineError(msg);
+    alert(msg);
+    return;
+  }
+  if (act === 'end' && !confirm(t('ue_paffEndConfirm'))) return;
+  clearUePaffInlineError();
+  const noteEl = document.getElementById('ue-paff-note');
+  const note = noteEl ? String(noteEl.value || '').trim() : '';
+  const path =
+    act === 'activate'
+      ? `/providers/affiliations/${encodeURIComponent(affId)}/activate`
+      : `/providers/affiliations/${encodeURIComponent(affId)}/end`;
+  const body = note ? { note } : {};
+  try {
+    const res = await CONFIG.post(path, body).catch(() => null);
+    if (res?.error) {
+      setUePaffInlineError(res.error);
+      alert(res.error);
+      return;
+    }
+    if (!res?.ok) {
+      const msg = res?.error || t('ue_paffGenericErr');
+      setUePaffInlineError(msg);
+      alert(msg);
+      return;
+    }
+    await refreshUserEditProviderAffiliations();
+  } catch (e) {
+    console.error('[ue-paff-act]', e);
+    const msg = e?.message || t('ue_paffGenericErr');
+    setUePaffInlineError(msg);
+    alert(msg);
+  }
+}
+
+/**
+ * Clic na secção: revisão onboarding global / Ativar / Encerrar / convite.
+ */
+async function onUePaffSectionUnifiedClick(ev) {
+  const el = uePaffDomElementFromTarget(ev.target);
+  const obBtn = el?.closest?.('.ue-paff-ob-act');
+  if (obBtn) {
+    ev.preventDefault();
+    await handleUePaffOnboardingReviewAction(obBtn);
+    return;
+  }
+  const actBtn = el?.closest?.('.ue-paff-act');
+  if (actBtn) {
+    ev.preventDefault();
+    await handleUePaffAffiliationAction(actBtn);
+    return;
+  }
+  await onUePaffSectionClickForInvite(ev);
+}
+
+function paintProviderOnboardingReview(payload) {
+  const wrap = document.getElementById('ue-paff-onboarding-wrap');
+  const summary = document.getElementById('ue-paff-ob-summary');
+  const prior = document.getElementById('ue-paff-ob-revision-prior');
+  const revisionWrap = document.getElementById('ue-paff-ob-revision-wrap');
+  const actions = document.getElementById('ue-paff-ob-actions');
+  const noteEl = document.getElementById('ue-paff-ob-revision-note');
+  if (!wrap || !summary) return;
+  const pi = payload?.providerIdentity;
+  const app = payload?.onboardingApplication;
+  if (!pi) {
+    wrap.hidden = true;
+    return;
+  }
+  const st = app ? String(app.status || '').toUpperCase() : '';
+  const kycOk = String(pi.kycStatus || '').toUpperCase() === 'APPROVED';
+  if (st === 'SUBMITTED' && !kycOk) {
+    wrap.hidden = false;
+    const sub = app?.submittedAt ? formatUeDateTime(app.submittedAt) : '—';
+    summary.textContent = String(t('ue_paffObSummarySubmitted')).replace(/\{submitted\}/g, sub);
+    if (prior) {
+      prior.style.display = 'none';
+      prior.textContent = '';
+    }
+    if (revisionWrap) revisionWrap.style.display = '';
+    if (actions) actions.style.display = '';
+    if (noteEl) noteEl.value = '';
+    return;
+  }
+  if (st === 'NEEDS_REVISION') {
+    wrap.hidden = false;
+    summary.textContent = t('ue_paffObSummaryNeedsRevision');
+    if (prior) {
+      const rn = app?.revisionNote ? String(app.revisionNote).trim() : '';
+      if (rn) {
+        prior.style.display = '';
+        prior.textContent = `${t('ue_paffObPriorNotePrefix')} ${rn}`.slice(0, 4000);
+      } else {
+        prior.style.display = 'none';
+        prior.textContent = '';
+      }
+    }
+    if (revisionWrap) revisionWrap.style.display = 'none';
+    if (actions) actions.style.display = 'none';
+    return;
+  }
+  wrap.hidden = true;
+}
+
+async function handleUePaffOnboardingReviewAction(btn) {
+  if (isUserEditReadonly()) {
+    setUePaffInlineError(t('ue_paffReadonlyBlock'));
+    return;
+  }
+  const uid = uePaffLastUserId;
+  const act = btn.getAttribute('data-ob-act');
+  if (!uid || !act) return;
+  if (act === 'reject' && !confirm(t('ue_paffObRejectConfirm'))) return;
+  const noteEl = document.getElementById('ue-paff-ob-revision-note');
+  const note = noteEl ? String(noteEl.value || '').trim() : '';
+  if (act === 'revision' && !note) {
+    alert(t('ue_paffObRevisionNoteRequired'));
+    return;
+  }
+  clearUePaffInlineError();
+  let path = '';
+  /** @type {Record<string, unknown>} */
+  let body = {};
+  if (act === 'approve') {
+    path = `/users/${encodeURIComponent(uid)}/provider-onboarding/approve`;
+  } else if (act === 'revision') {
+    path = `/users/${encodeURIComponent(uid)}/provider-onboarding/request-revision`;
+    body = { note };
+  } else if (act === 'reject') {
+    path = `/users/${encodeURIComponent(uid)}/provider-onboarding/reject`;
+    body = note ? { note } : {};
+  } else {
+    return;
+  }
+  try {
+    const res = await CONFIG.post(path, body).catch(() => null);
+    if (res?.error) {
+      setUePaffInlineError(res.error);
+      alert(res.error);
+      return;
+    }
+    if (!res?.ok) {
+      const msg = res?.error || t('ue_paffGenericErr');
+      setUePaffInlineError(msg);
+      alert(msg);
+      return;
+    }
+    if (act === 'approve') alert(t('ue_paffObApprovedOk'));
+    await refreshUserEditProviderAffiliations();
+  } catch (e) {
+    console.error('[ue-paff-ob]', e);
+    const msg = e?.message || t('ue_paffGenericErr');
+    setUePaffInlineError(msg);
+    alert(msg);
+  }
+}
+
 function paintProviderAffiliationsSection(payload) {
   const tbody = document.getElementById('ue-paff-tbody');
   const empty = document.getElementById('ue-paff-empty');
@@ -146,8 +338,10 @@ function paintProviderAffiliationsSection(payload) {
   if (kycBox) {
     if (pi) {
       kycBox.style.display = '';
-      const ks = String(pi.kycStatus || '').toUpperCase();
-      kycBox.innerHTML = `${esc(t('ue_paffKycLine').replace(/\{kyc\}/g, ks).replace(/\{global\}/g, String(pi.globalStatus || '—')))}`;
+      const ks = esc(String(pi.kycStatus || '').toUpperCase());
+      const gs = esc(String(pi.globalStatus || '—'));
+      // `ue_paffKycLine` inclui <strong> fixo do i18n; só os valores vêm do API (escapados).
+      kycBox.innerHTML = t('ue_paffKycLine').replace(/\{kyc\}/g, ks).replace(/\{global\}/g, gs);
     } else {
       kycBox.style.display = 'none';
       kycBox.textContent = '';
@@ -161,6 +355,7 @@ function paintProviderAffiliationsSection(payload) {
       empty.textContent = t('ue_paffEmpty');
     }
     syncPaffInviteButtonFromPayload(payload);
+    paintProviderOnboardingReview(payload);
     return;
   }
   if (empty) empty.style.display = 'none';
@@ -202,43 +397,10 @@ function paintProviderAffiliationsSection(payload) {
     })
     .join('');
 
-  tbody.querySelectorAll('button.ue-paff-act').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      if (isUserEditReadonly()) return;
-      const affId = btn.getAttribute('data-aff');
-      const act = btn.getAttribute('data-act');
-      if (!affId || !act) return;
-      if (act === 'activate' && btn.getAttribute('data-ue-paff-kyc-block') === '1') {
-        alert(t('ue_paffActivateNeedKyc'));
-        return;
-      }
-      if (act === 'end' && !confirm(t('ue_paffEndConfirm'))) return;
-      const noteEl = document.getElementById('ue-paff-note');
-      const note = noteEl ? String(noteEl.value || '').trim() : '';
-      const path =
-        act === 'activate'
-          ? `/providers/affiliations/${encodeURIComponent(affId)}/activate`
-          : `/providers/affiliations/${encodeURIComponent(affId)}/end`;
-      const body = note ? { note } : {};
-      try {
-        const res = await CONFIG.post(path, body).catch(() => null);
-        if (res?.error) {
-          alert(res.error);
-          return;
-        }
-        if (!res?.ok) {
-          alert(res?.error || t('ue_paffGenericErr'));
-          return;
-        }
-        await refreshUserEditProviderAffiliations();
-      } catch (e) {
-        console.error('[ue-paff-act]', e);
-        alert(e?.message || t('ue_paffGenericErr'));
-      }
-    });
-  });
+  /* Ativar / Encerrar: ver `onUePaffSectionUnifiedClick` (delegado em #sec-provider-affiliations). */
 
   syncPaffInviteButtonFromPayload(payload);
+  paintProviderOnboardingReview(payload);
 }
 
 let uePaffLastUserId = '';
@@ -248,15 +410,9 @@ let uePaffLastUserId = '';
  * bind perdido se o botão ainda não existia no 1.º passo).
  */
 async function onUePaffSectionClickForInvite(e) {
-  // Clic no texto do botão → `target` é Text; Text não tem `.closest()` e o handler saía em silêncio.
+  // Clic no texto do botão → `target` pode ser nó de texto (sem `closest`).
   // Não nomear `t` — sombreia `t()` de user-pages-i18n e quebra todos os `alert(t('…'))` (async falha em silêncio).
-  const clickTarget = e.target;
-  const from =
-    clickTarget && clickTarget.nodeType === 1
-      ? clickTarget
-      : clickTarget && clickTarget.parentElement
-        ? clickTarget.parentElement
-        : null;
+  const from = uePaffDomElementFromTarget(e.target);
   const btn = from && from.closest ? from.closest('#ue-paff-invite-btn') : null;
   if (!btn || String(btn.getAttribute('id') || '') !== 'ue-paff-invite-btn') return;
   e.preventDefault();
@@ -395,10 +551,10 @@ async function initUserEditProviderAffiliations(userId, u) {
     tenantWrap.style.display = panelTenantIdUserEdit() ? 'none' : '';
   }
 
-  if (section.dataset.uePaffInviteDeleg !== '1') {
-    section.dataset.uePaffInviteDeleg = '1';
+  if (section.dataset.uePaffUnifiedDeleg !== '1') {
+    section.dataset.uePaffUnifiedDeleg = '1';
     section.addEventListener('click', (ev) => {
-      void onUePaffSectionClickForInvite(ev);
+      void onUePaffSectionUnifiedClick(ev);
     });
   }
   section.dataset.uePaffInviteEmail = String(email || '').trim();

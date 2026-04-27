@@ -1224,7 +1224,7 @@ router.get('/:id/provider-affiliations', async (req, res) => {
     const emailNorm = normalizeEmailForPi(user.email || '');
     const providerIdentityFull = await resolveMergedProviderIdentityForUserId(prisma, id, emailNorm);
     if (!providerIdentityFull) {
-      return res.json({ providerIdentity: null, affiliations: [] });
+      return res.json({ providerIdentity: null, onboardingApplication: null, affiliations: [] });
     }
 
     const providerIdentity = {
@@ -1241,6 +1241,19 @@ router.get('/:id/provider-affiliations', async (req, res) => {
       return assertTenantAccess(req.authorization, row.tenantId);
     });
 
+    const latestOnboarding = await prisma.providerOnboardingApplication.findFirst({
+      where: { providerIdentityId: providerIdentityFull.id },
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        submittedAt: true,
+        revisionNote: true,
+        updatedAt: true,
+        resolvedAt: true,
+      },
+    });
+
     res.json({
       providerIdentity: {
         id: providerIdentity.id,
@@ -1248,6 +1261,7 @@ router.get('/:id/provider-affiliations', async (req, res) => {
         kycStatus: providerIdentity.kycStatus,
         updatedAt: providerIdentity.updatedAt,
       },
+      onboardingApplication: latestOnboarding,
       affiliations: rows.map((row) => ({
         id: row.id,
         tenantId: row.tenantId,
@@ -1263,6 +1277,188 @@ router.get('/:id/provider-affiliations', async (req, res) => {
     });
   } catch (err) {
     console.error('GET /users/:id/provider-affiliations', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function resolveSubmittedGlobalOnboardingForUser(req, userId) {
+  const user = await findScopedUserOrNull(req, userId, {
+    select: { id: true, email: true, tenantId: true, role: true },
+  });
+  if (!user) return { error: 'Usuário não encontrado.', status: 404 };
+  const emailNorm = normalizeEmailForPi(user.email || '');
+  const piFull = await resolveMergedProviderIdentityForUserId(prisma, user.id, emailNorm);
+  if (!piFull) return { error: 'Sem identidade global de prestador.', status: 404, code: 'NO_PROVIDER_IDENTITY' };
+  const app = await prisma.providerOnboardingApplication.findFirst({
+    where: { providerIdentityId: piFull.id, status: 'SUBMITTED' },
+    orderBy: { submittedAt: 'desc' },
+  });
+  if (!app) {
+    return {
+      error: 'Não há candidatura de onboarding global em estado SUBMETIDO para rever.',
+      status: 409,
+      code: 'NO_SUBMITTED_ONBOARDING',
+    };
+  }
+  return { user, piFull, app };
+}
+
+// POST /api/users/:id/provider-onboarding/approve — aprova KYC global (candidatura SUBMITTED)
+router.post('/:id/provider-onboarding/approve', express.json(), async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const resolved = await resolveSubmittedGlobalOnboardingForUser(req, id);
+    if (resolved.error) {
+      return res.status(resolved.status || 400).json({
+        error: resolved.error,
+        code: resolved.code,
+      });
+    }
+    const { user, piFull, app } = resolved;
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.providerOnboardingApplication.update({
+        where: { id: app.id },
+        data: { status: 'APPROVED', resolvedAt: now, revisionNote: null },
+      });
+      await tx.providerIdentity.update({
+        where: { id: piFull.id },
+        data: {
+          kycStatus: 'APPROVED',
+          globalStatus: 'VERIFIED',
+          kycReviewedAt: now,
+          kycReviewNote: null,
+        },
+      });
+    });
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: user.tenantId,
+          action: 'PROVIDER_ONBOARDING_KYC_APPROVED',
+          resource: user.email,
+          category: 'ADMIN',
+          metadata: auditContextMetadata(req, {
+            targetUserId: user.id,
+            providerIdentityId: piFull.id,
+            applicationId: app.id,
+          }),
+        },
+      })
+      .catch(() => {});
+    res.json({ ok: true, kycStatus: 'APPROVED', globalStatus: 'VERIFIED' });
+  } catch (err) {
+    console.error('POST /users/:id/provider-onboarding/approve', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/users/:id/provider-onboarding/request-revision — body: { note }
+router.post('/:id/provider-onboarding/request-revision', express.json(), async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const note = String(req.body?.note || '').trim();
+    if (!note) return res.status(400).json({ error: 'Indique a nota para o prestador (motivo dos ajustes).' });
+    if (note.length > 8000) return res.status(400).json({ error: 'Nota demasiado longa (máx. 8000 caracteres).' });
+    const resolved = await resolveSubmittedGlobalOnboardingForUser(req, id);
+    if (resolved.error) {
+      return res.status(resolved.status || 400).json({
+        error: resolved.error,
+        code: resolved.code,
+      });
+    }
+    const { piFull, app, user } = resolved;
+    await prisma.$transaction(async (tx) => {
+      await tx.providerOnboardingApplication.update({
+        where: { id: app.id },
+        data: { status: 'NEEDS_REVISION', revisionNote: note },
+      });
+      await tx.providerIdentity.update({
+        where: { id: piFull.id },
+        data: {
+          kycStatus: 'PENDING',
+          globalStatus: 'PENDING',
+          kycReviewedAt: new Date(),
+          kycReviewNote: note.slice(0, 2000),
+        },
+      });
+    });
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: user.tenantId,
+          action: 'PROVIDER_ONBOARDING_NEEDS_REVISION',
+          resource: user.email,
+          category: 'ADMIN',
+          metadata: auditContextMetadata(req, {
+            targetUserId: user.id,
+            providerIdentityId: piFull.id,
+            applicationId: app.id,
+          }),
+        },
+      })
+      .catch(() => {});
+    res.json({ ok: true, applicationStatus: 'NEEDS_REVISION' });
+  } catch (err) {
+    console.error('POST /users/:id/provider-onboarding/request-revision', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/users/:id/provider-onboarding/reject — body opcional: { note }
+router.post('/:id/provider-onboarding/reject', express.json(), async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const note = String(req.body?.note || '').trim().slice(0, 2000);
+    const resolved = await resolveSubmittedGlobalOnboardingForUser(req, id);
+    if (resolved.error) {
+      return res.status(resolved.status || 400).json({
+        error: resolved.error,
+        code: resolved.code,
+      });
+    }
+    const { piFull, app, user } = resolved;
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.providerOnboardingApplication.update({
+        where: { id: app.id },
+        data: {
+          status: 'REJECTED',
+          resolvedAt: now,
+          revisionNote: note || null,
+        },
+      });
+      await tx.providerIdentity.update({
+        where: { id: piFull.id },
+        data: {
+          kycStatus: 'REJECTED',
+          globalStatus: 'REJECTED',
+          kycReviewedAt: now,
+          kycReviewNote: note || null,
+        },
+      });
+    });
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: user.tenantId,
+          action: 'PROVIDER_ONBOARDING_REJECTED',
+          resource: user.email,
+          category: 'ADMIN',
+          metadata: auditContextMetadata(req, {
+            targetUserId: user.id,
+            providerIdentityId: piFull.id,
+            applicationId: app.id,
+          }),
+        },
+      })
+      .catch(() => {});
+    res.json({ ok: true, kycStatus: 'REJECTED' });
+  } catch (err) {
+    console.error('POST /users/:id/provider-onboarding/reject', err);
     res.status(500).json({ error: err.message });
   }
 });
