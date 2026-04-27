@@ -37,7 +37,7 @@ export type ProviderAffiliation = {
 
 export const ProviderAffiliationsApi = {
   async getMeStatus(): Promise<{ affiliations: ProviderAffiliation[] }> {
-    const r = await apiFetch('/api/providers/me/onboarding/status', {
+    const r = await apiFetch(`/api/providers/me/onboarding/status?_=${Date.now()}`, {
       method: 'GET',
       headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
     });

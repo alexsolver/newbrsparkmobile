@@ -2,6 +2,7 @@
 
 const prisma = require('../db');
 const { resolveScopedTenantId } = require('./authorization');
+const { resolveAppEffectiveTenantId } = require('./appLoginEffectiveTenant');
 
 const WORK_TIME_FLAG_KEY = 'work_time';
 
@@ -35,14 +36,15 @@ function faceEnrollmentOk(user) {
 /**
  * Flag efetiva work_time (global + override tenant), alinhado a GET /api/flags.
  * @param {string} tenantId
+ * @param {import('@prisma/client').PrismaClient} [db]
  */
-async function isWorkTimeFeatureFlagEnabled(tenantId) {
-  const global = await prisma.featureFlag.findFirst({
+async function isWorkTimeFeatureFlagEnabled(tenantId, db = prisma) {
+  const global = await db.featureFlag.findFirst({
     where: { key: WORK_TIME_FLAG_KEY, tenantId: null },
   });
   const gEnabled = global ? !!global.enabled : true;
   if (!tenantId) return gEnabled;
-  const over = await prisma.featureFlag.findFirst({
+  const over = await db.featureFlag.findFirst({
     where: { key: WORK_TIME_FLAG_KEY, tenantId },
   });
   if (over) return !!over.enabled;
@@ -63,11 +65,12 @@ const DEFAULT_SETTINGS = {
 /**
  * Garante linha WorkTimeSettings para o tenant (defaults).
  * @param {string} tenantId
+ * @param {import('@prisma/client').PrismaClient} [db]
  */
-async function ensureWorkTimeSettings(tenantId) {
-  let row = await prisma.workTimeSettings.findUnique({ where: { tenantId } });
+async function ensureWorkTimeSettings(tenantId, db = prisma) {
+  let row = await db.workTimeSettings.findUnique({ where: { tenantId } });
   if (!row) {
-    row = await prisma.workTimeSettings.create({
+    row = await db.workTimeSettings.create({
       data: { tenantId, ...DEFAULT_SETTINGS },
     });
   }
@@ -85,10 +88,14 @@ function resolveAdminTargetTenantId(req, queryTenantId) {
 
 /**
  * Efetivo para o app móvel: flag + módulo tenant + usuário.
+ * O escopo de políticas (flags, WorkTimeSettings, regime BR) segue a tenant **efetiva**
+ * (afiliação DEDICATED + ACTIVE, ver `authUser` / `resolveAppEffectiveTenantId`), não a linha `User.tenantId` na BD.
+ *
  * @param {string} userId
+ * @param {import('@prisma/client').PrismaClient} [db] — override para testes
  */
-async function getWorkTimeEffectiveForUser(userId) {
-  const user = await prisma.user.findUnique({
+async function getWorkTimeEffectiveForUser(userId, db = prisma) {
+  const user = await db.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -111,17 +118,32 @@ async function getWorkTimeEffectiveForUser(userId) {
       error: 'Utilizador não encontrado.',
     };
   }
-  const flagOn = await isWorkTimeFeatureFlagEnabled(user.tenantId);
-  const settings = await ensureWorkTimeSettings(user.tenantId);
+
+  const resolvedEff = await resolveAppEffectiveTenantId(db, userId);
+  const scopeTenantId = resolvedEff && String(resolvedEff).trim() ? String(resolvedEff).trim() : String(user.tenantId);
+
+  const flagOn = await isWorkTimeFeatureFlagEnabled(scopeTenantId, db);
+  const settings = await ensureWorkTimeSettings(scopeTenantId, db);
   const enrolled = faceEnrollmentOk(user);
   const moduleOn = !!settings.moduleEnabled;
   const userOn = !!user.workTimeTrackingEnabled;
-  const effective = flagOn && moduleOn && userOn && canAccountAccessWorkTime(user.role);
+  const eligibleRole = canAccountAccessWorkTime(user.role);
+  /** Módulo disponível para este papel (tab / entrada no ecrã); batidas exigem `userOn`. */
+  const moduleEligible = flagOn && moduleOn && eligibleRole;
+  const effective = moduleEligible && userOn;
 
   const canPunch = effective;
 
+  let localeCountry = user.tenant?.locale?.countryCode;
+  if (String(scopeTenantId) !== String(user.tenantId)) {
+    const effT = await db.tenant.findUnique({
+      where: { id: scopeTenantId },
+      select: { locale: { select: { countryCode: true } } },
+    });
+    localeCountry = effT?.locale?.countryCode ?? localeCountry;
+  }
   const tenantIsBr =
-    String(user.tenant?.locale?.countryCode || '')
+    String(localeCountry || '')
       .trim()
       .toUpperCase() === 'BR';
   /** `null` fora do Brasil; no BR, default CLT quando ainda não gravado. */
@@ -134,7 +156,7 @@ async function getWorkTimeEffectiveForUser(userId) {
 
   return {
     ok: true,
-    tenantId: user.tenantId,
+    tenantId: scopeTenantId,
     userId: user.id,
     role: user.role,
     workTimeBrazilRegime,
@@ -155,7 +177,7 @@ async function getWorkTimeEffectiveForUser(userId) {
     faceReenrollmentWindowOpen,
     faceReenrollmentUntil: reUntil ? new Date(reUntil).toISOString() : null,
     faceReenrollmentNote: user.technicianProfile?.faceReenrollmentNote || null,
-    showWorkTimeInApp: effective,
+    showWorkTimeInApp: moduleEligible,
     canRegisterPunch: canPunch,
   };
 }

@@ -33,6 +33,12 @@
     .wt-report-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 12px; }
     .wt-report-toolbar .form-group { margin-bottom: 0; }
     .wt-pagination { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 12px; color: var(--text3); font-weight: 600; }
+    #wt-btn-save.is-loading { pointer-events: none; opacity: 0.88; }
+    #wt-btn-save.is-loading #wt-save-spinner {
+      display: inline-block !important;
+      animation: wt-save-spin 0.75s linear infinite;
+    }
+    @keyframes wt-save-spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -58,7 +64,17 @@
             </p>
           </div>
           <div class="data-toolbar-actions" style="padding:0;border:none;background:transparent;flex-shrink:0">
-            <button type="button" class="btn btn-primary" id="wt-btn-save">Salvar</button>
+            <button type="button" class="btn btn-primary" id="wt-btn-save" aria-busy="false">
+              <span style="display: inline-flex; align-items: center; gap: 8px">
+                <ion-icon
+                  id="wt-save-spinner"
+                  name="refresh-outline"
+                  aria-hidden="true"
+                  style="display: none; font-size: 18px; vertical-align: -3px"
+                ></ion-icon>
+                <span id="wt-save-text">Salvar</span>
+              </span>
+            </button>
           </div>
         </div>
       </header>
@@ -531,6 +547,18 @@
     document.getElementById('wt-notice').value = s.employeeNoticeMarkdown || '';
   }
 
+  function setWtSaveLoading(on) {
+    const btn = document.getElementById('wt-btn-save');
+    const spin = document.getElementById('wt-save-spinner');
+    const txt = document.getElementById('wt-save-text');
+    if (!btn) return;
+    btn.classList.toggle('is-loading', !!on);
+    btn.setAttribute('aria-busy', on ? 'true' : 'false');
+    btn.disabled = !!on;
+    if (spin) spin.style.display = on ? 'inline-block' : 'none';
+    if (txt) txt.textContent = on ? 'Salvando…' : 'Salvar';
+  }
+
   async function loadSettings() {
     const tid = canCrossTenantWorkTime ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
     if (!tid) return;
@@ -563,13 +591,18 @@
       consentVersion: document.getElementById('wt-consent-ver').value.trim() || null,
       employeeNoticeMarkdown: document.getElementById('wt-notice').value.trim() || null,
     };
-    const res = await CONFIG.patch('/work-time/settings', body);
-    if (res?.error) {
-      alert(res.error);
-      return;
+    setWtSaveLoading(true);
+    try {
+      const res = await CONFIG.patch('/work-time/settings', body);
+      if (res?.error) {
+        alert(res.error);
+        return;
+      }
+      alert(mpT('wt_alert_saved'));
+      fillForm(res);
+    } finally {
+      setWtSaveLoading(false);
     }
-    alert(mpT('wt_alert_saved'));
-    fillForm(res);
   };
 
   document.getElementById('wt-report-load').onclick = () => void loadPunches(1);

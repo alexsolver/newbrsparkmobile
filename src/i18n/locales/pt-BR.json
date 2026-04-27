@@ -1370,7 +1370,8 @@
       "slotCirclesEmpty": "Toque em + Área para desenhar um círculo no alfinete vermelho ou no centro do mapa. Ajuste o raio (km) na lista; pode haver várias áreas por turno.",
       "slotCirclesMax": "No máximo 20 áreas por raio neste turno.",
       "slotCircleRadiusKm": "Raio",
-      "slotCirclesSummary": "{{n}} área(s) por raio (km)"
+      "slotCirclesSummary": "{{n}} área(s) por raio (km)",
+      "slotLocsMapTypingBanner": "Com o teclado aberto o mapa fica oculto para liberar espaço aos campos. Toque aqui para fechar o teclado e ver o mapa de novo."
     },
     "workTabConsumerHint": "Ative ou complete o cadastro de prestador na aba «Modo» para gerir parcerias e o formulário de horários."
   },
@@ -2590,6 +2591,8 @@
     "hintFlagOff": "A funcionalidade está desativada na plataforma para seu espaço.",
     "hintTenantModuleOff": "O módulo de ponto está desativado para sua empresa. Peça à administração para ativar em “Registro de horas”.",
     "hintUserOff": "O registro de ponto não está ativado para seu usuário. Peça à administração para ativar o rastreamento.",
+    "tabVsPunchExplainer": "O separador na barra pode aparecer só com a política da empresa ativa; para surgirem os botões de entrada/saída também é preciso «Registro de horas» ligado no seu utilizador no painel.",
+    "pullToRefreshAfterPolicyChange": "Alterou algo no painel? Puxe esta página para baixo para atualizar.",
     "hintRoleClient": "Contas com perfil de cliente (papel “Usuário” / USER) não utilizam o registro de ponto. Os demais perfis precisam da flag, do módulo da empresa e desta opção ativados.",
     "clientAccountNoAccess": "O registro de ponto não está disponível para contas com perfil de cliente.",
     "faceBlockedTitle": "Biometria necessária",

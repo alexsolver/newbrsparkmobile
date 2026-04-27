@@ -202,25 +202,35 @@ export const NotificationService = {
   async syncRealNotifications(userEmail: string) {
     let generated: AppNotification[] = [];
 
-    // 1. Pending Shares — módulo cliente
-    try {
-      const res = await apiFetch('/api/shares/pending');
-      if (res.ok) {
-        const pending = await res.json();
-        pending.forEach((p: any) => {
-          generated.push({
-            id: `share_${p.id}`,
-            title: 'Convite de Compartilhamento',
-            body: `${p.ownerEmail} quer compartilhar o ativo "${p.asset?.title || '—'}" com você.`,
-            category: 'info',
-            read: false,
-            timestamp: new Date(p.createdAt || Date.now()).getTime(),
-            personaScope: 'client',
-            assetId: p.assetId,
-          });
+    // 1 + 2c + 2d em paralelo (antes: soma das latências de rede — abrir alertas parecia «travar»).
+    const [shareSettled, evSettled, paffSettled] = await Promise.allSettled([
+      (async () => {
+        const res = await apiFetch('/api/shares/pending');
+        if (!res.ok) return null;
+        return res.json();
+      })(),
+      (async () => {
+        const res = await apiFetch('/api/evaluations/me/instances');
+        if (!res.ok) return null;
+        return res.json();
+      })(),
+      ProviderAffiliationsApi.getMeStatus().catch(() => null),
+    ]);
+
+    if (shareSettled.status === 'fulfilled' && Array.isArray(shareSettled.value)) {
+      shareSettled.value.forEach((p: any) => {
+        generated.push({
+          id: `share_${p.id}`,
+          title: 'Convite de Compartilhamento',
+          body: `${p.ownerEmail} quer compartilhar o ativo "${p.asset?.title || '—'}" com você.`,
+          category: 'info',
+          read: false,
+          timestamp: new Date(p.createdAt || Date.now()).getTime(),
+          personaScope: 'client',
+          assetId: p.assetId,
         });
-      }
-    } catch (e) {}
+      });
+    }
 
     // 2. Low Stock — bens (locais de ativo) — cliente
     const stockItems = getVenueStockItemsOnly(userEmail);
@@ -255,41 +265,34 @@ export const NotificationService = {
       }
     });
 
-    // 2c. Avaliações — ciência (fluxo técnico) — prestador
-    try {
-      const evRes = await apiFetch('/api/evaluations/me/instances');
-      if (evRes.ok) {
-        const evJson = await evRes.json();
-        const evItems: Array<{
-          id: string;
-          needsAck?: boolean;
-          osNumber?: string | null;
-          template?: { name?: string };
-          createdAt?: string;
-        }> = evJson.items || [];
-        for (const it of evItems) {
-          if (!it.needsAck) continue;
-          const os = it.osNumber ? ` OS ${it.osNumber}` : '';
-          const tpl = it.template?.name || 'Avaliação';
-          generated.push({
-            id: `eval_ack_${it.id}`,
-            title: 'Avaliação crítica, confirme ciência',
-            body: `${tpl}${os}: toque para abrir e confirmar que tomou conhecimento.`,
-            category: 'evaluation',
-            read: false,
-            timestamp: new Date(it.createdAt || Date.now()).getTime(),
-            personaScope: 'provider',
-            evaluationInstanceId: it.id,
-          });
-        }
+    if (evSettled.status === 'fulfilled' && evSettled.value && typeof evSettled.value === 'object') {
+      const evJson = evSettled.value as { items?: unknown[] };
+      const evItems: Array<{
+        id: string;
+        needsAck?: boolean;
+        osNumber?: string | null;
+        template?: { name?: string };
+        createdAt?: string;
+      }> = (Array.isArray(evJson.items) ? evJson.items : []) as any[];
+      for (const it of evItems) {
+        if (!it.needsAck) continue;
+        const os = it.osNumber ? ` OS ${it.osNumber}` : '';
+        const tpl = it.template?.name || 'Avaliação';
+        generated.push({
+          id: `eval_ack_${it.id}`,
+          title: 'Avaliação crítica, confirme ciência',
+          body: `${tpl}${os}: toque para abrir e confirmar que tomou conhecimento.`,
+          category: 'evaluation',
+          read: false,
+          timestamp: new Date(it.createdAt || Date.now()).getTime(),
+          personaScope: 'provider',
+          evaluationInstanceId: it.id,
+        });
       }
-    } catch (e) {
-      /* offline / não autenticado */
     }
 
-    // 2d. Convites de vínculo (provider-first) — prestador, lista na central de avisos
-    try {
-      const { affiliations } = await ProviderAffiliationsApi.getMeStatus();
+    if (paffSettled.status === 'fulfilled' && paffSettled.value && typeof paffSettled.value === 'object') {
+      const { affiliations } = paffSettled.value as { affiliations?: any[] };
       for (const row of affiliations || []) {
         if (String(row.status || '').toUpperCase() !== 'INVITED') continue;
         const tenantName = row.tenant?.name || '—';
@@ -304,8 +307,6 @@ export const NotificationService = {
           providerAffiliationId: row.id,
         });
       }
-    } catch {
-      /* offline / fluxo desativado / não prestador */
     }
 
     // 3. Maintenance / Warning Assets — visão gestão do bem (cliente)

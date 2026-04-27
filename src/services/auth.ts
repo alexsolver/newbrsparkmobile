@@ -1143,8 +1143,17 @@ export class AuthService {
               ? serverUser.appContext!.capabilities
               : null;
 
-            // Só “preserva” quando o servidor NÃO enviou capabilities; se enviou array (mesmo vazio), respeita.
+            // Preservar capabilities locais quando o `/me` omite o campo **ou** devolve `[]` (alguns deploys
+            // serializam array vazio em vez de omitir — apagava `mobile.workTime.access` / `mobile.mode.provider`).
             if (!serverCaps && prevCaps) {
+              const scope = serverUser.appContext?.scope ?? prev.appContext?.scope ?? 'default';
+              out.appContext = {
+                scope,
+                contextTenantId:
+                  serverUser.appContext?.contextTenantId ?? prev.appContext?.contextTenantId ?? null,
+                capabilities: prevCaps,
+              };
+            } else if (serverCaps && serverCaps.length === 0 && prevCaps && prevCaps.length > 0) {
               const scope = serverUser.appContext?.scope ?? prev.appContext?.scope ?? 'default';
               out.appContext = {
                 scope,

@@ -13,6 +13,9 @@ const { escapeHtmlEmailFragment } = require('../lib/emailEscapeHtml');
 const {
   ensureProviderIdentityForUserId,
   syncActiveAffiliationFromTechnicianStatus,
+  reconcileAffiliationsToTechnicianProfilesForAppAccount,
+  reconcileAffiliationRowsByIds,
+  ensureAffiliationRowStatusesMatchTechnicianProfiles,
 } = require('../lib/providerTechnicianAffiliationSync');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 const { sendExpoPushToMany } = require('../services/expoPush');
@@ -215,6 +218,16 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
     // «principal» do utilizador; o convite vem de outra empresa com provider-first ativo.
     // Bloquear pela sessão impedia ver afiliações INVITED na app (Organizações e parcerias).
     const emailNormSession = normalizeEmail(req.user.email || '');
+    try {
+      const rec = await reconcileAffiliationsToTechnicianProfilesForAppAccount(
+        prisma,
+        req.user.id,
+        emailNormSession
+      );
+      if (rec.updated > 0) invalidateAppEffectiveTenantIdCache(req.user.id);
+    } catch (e) {
+      console.error('[GET /providers/me/onboarding/status] reconcile affiliations:', e?.message || e);
+    }
     let providerIdentity = await resolveProviderIdentityForAppUserId(req.user.id, emailNormSession);
     const sessionTid = String(req.user.tenantId || '').trim();
     if (
@@ -223,6 +236,21 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
     ) {
       await maybeBackfillAffiliationForActiveTechnician(req.user.id, sessionTid);
       providerIdentity = await resolveProviderIdentityForAppUserId(req.user.id, emailNormSession);
+    }
+    try {
+      const affIds = (providerIdentity?.affiliations || []).map((a) => a.id).filter(Boolean);
+      const recRows = await reconcileAffiliationRowsByIds(
+        prisma,
+        affIds,
+        req.user.id,
+        emailNormSession
+      );
+      if (recRows.updated > 0) {
+        invalidateAppEffectiveTenantIdCache(req.user.id);
+        providerIdentity = await resolveProviderIdentityForAppUserId(req.user.id, emailNormSession);
+      }
+    } catch (e) {
+      console.error('[GET /providers/me/onboarding/status] reconcile affiliation rows by id:', e?.message || e);
     }
     if (!providerIdentity) {
       return res.json({
@@ -242,6 +270,14 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
       if (k === 'CLIENT' || k === 'PROVIDER') return false;
       return true;
     });
+    const aligned = await ensureAffiliationRowStatusesMatchTechnicianProfiles(
+      prisma,
+      affiliationsForApp,
+      req.user.id,
+      emailNormSession
+    );
+    if (aligned.persistedCount > 0) invalidateAppEffectiveTenantIdCache(req.user.id);
+
     return res.json({
       providerIdentity: {
         id: providerIdentity.id,
@@ -259,7 +295,7 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
             updatedAt: latest.updatedAt,
           }
         : null,
-      affiliations: affiliationsForApp.map((row) => affiliationPayloadFromRow(row)),
+      affiliations: aligned.rows.map((row) => affiliationPayloadFromRow(row)),
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

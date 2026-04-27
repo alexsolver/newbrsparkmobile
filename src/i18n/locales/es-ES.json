@@ -1370,7 +1370,8 @@
       "slotCirclesEmpty": "Pulse + Área para dibujar un círculo en el pin rojo o en el centro del mapa. Ajuste el radio (km) en la lista; puede haber varias áreas por turno.",
       "slotCirclesMax": "Como máximo 20 áreas por radio en este turno.",
       "slotCircleRadiusKm": "Radio",
-      "slotCirclesSummary": "{{n}} área(s) por radio (km)"
+      "slotCirclesSummary": "{{n}} área(s) por radio (km)",
+      "slotLocsMapTypingBanner": "Con el teclado abierto el mapa queda oculto para dejar espacio a los campos. Toca aquí para cerrar el teclado y volver a ver el mapa."
     },
     "workTabConsumerHint": "Active o complete el registro de proveedor en la pestaña «Modo» para gestionar alianzas y el formulario de horarios."
   },
@@ -2590,6 +2591,8 @@
     "hintFlagOff": "La función está desactivada en la plataforma para su espacio.",
     "hintTenantModuleOff": "El módulo de fichaje está desactivado para su empresa. Pida a gestión que lo active en «Registro de horas».",
     "hintUserOff": "El fichaje no está activado para su usuario. Pida a gestión que active el seguimiento.",
+    "tabVsPunchExplainer": "La pestaña puede mostrarse solo con la política de empresa activa; los botones de entrada/salida también exigen «Registro de horas» activado para su usuario en el panel.",
+    "pullToRefreshAfterPolicyChange": "¿Cambió algo en el panel? Arrastre hacia abajo para actualizar.",
     "hintRoleClient": "Las cuentas de cliente final (rol «Usuario») no usan el fichaje. Los demás roles siguen necesitando el flag, el módulo del tenant y la opción por usuario.",
     "clientAccountNoAccess": "El fichaje no está disponible para cuentas de cliente final.",
     "faceBlockedTitle": "Biometría necesaria",

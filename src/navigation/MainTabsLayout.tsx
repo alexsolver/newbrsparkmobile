@@ -94,7 +94,6 @@ function CustomTabBar({
   const { userRole, user } = useAuth();
   const { mode } = useAppContext();
   const canOpenProviderOsSearch = userHasCapability(user, 'mobile.provider.osSearch');
-  const canAccessWorkTime = userHasCapability(user, 'mobile.workTime.access');
   const [showWorkTimeTab, setShowWorkTimeTab] = useState(false);
   /** Tenant BR + utilizador em PJ: rótulo do separador «Registro» em pt-BR. */
   const [workTimeTabBrazilPj, setWorkTimeTabBrazilPj] = useState(false);
@@ -104,12 +103,42 @@ function CustomTabBar({
 
   const refreshWorkTimeTab = useCallback(async () => {
     if (tabBarVariant === 'client') {
+      // #region agent log
+      fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '12817a' },
+        body: JSON.stringify({
+          sessionId: '12817a',
+          runId: 'pre-fix',
+          hypothesisId: 'H3',
+          location: 'MainTabsLayout.tsx:refreshWorkTimeTab',
+          message: 'workTime tab skipped: client tabBar',
+          data: { tabBarVariant, mode },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       setShowWorkTimeTab(false);
       setWorkTimeTabBrazilPj(false);
       setWorkTimeJourneyPhase('idle_out');
       return;
     }
     if (!user?.id || String(user.role || '').toUpperCase() === 'USER') {
+      // #region agent log
+      fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '12817a' },
+        body: JSON.stringify({
+          sessionId: '12817a',
+          runId: 'pre-fix',
+          hypothesisId: 'H2',
+          location: 'MainTabsLayout.tsx:refreshWorkTimeTab',
+          message: 'workTime tab skipped: no user or role USER',
+          data: { hasUserId: !!user?.id, role: user?.role ? String(user.role).toUpperCase() : null, mode },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       setShowWorkTimeTab(false);
       setWorkTimeTabBrazilPj(false);
       setWorkTimeJourneyPhase('idle_out');
@@ -155,7 +184,52 @@ function CustomTabBar({
       }
       setShowWorkTimeTab(show);
       setWorkTimeTabBrazilPj(!!(show && d && d.ok && d.workTimeBrazilRegime === 'PJ'));
+      // #region agent log
+      {
+        const ok = d && d.ok;
+        const me = ok ? d : null;
+        fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '12817a' },
+          body: JSON.stringify({
+            sessionId: '12817a',
+            runId: 'pre-fix',
+            hypothesisId: 'H1',
+            location: 'MainTabsLayout.tsx:refreshWorkTimeTab:afterMe',
+            message: 'workTime /me decision for tab visibility',
+            data: {
+              meSource,
+              show,
+              mode,
+              tabBarVariant,
+              meOk: !!ok,
+              showWorkTimeInApp: me ? me.showWorkTimeInApp : null,
+              err: !ok && d && 'error' in d ? String((d as { error?: string }).error) : null,
+              featureFlagEnabled: me?.featureFlagEnabled,
+              userWorkTimeEnabled: me?.userWorkTimeEnabled,
+              moduleEnabled: me?.settings?.moduleEnabled,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
       if (!show || mode !== 'PROVIDER') {
+        // #region agent log
+        fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '12817a' },
+          body: JSON.stringify({
+            sessionId: '12817a',
+            runId: 'pre-fix',
+            hypothesisId: 'H5',
+            location: 'MainTabsLayout.tsx:refreshWorkTimeTab:noShowOrMode',
+            message: 'workTime tab not shown or mode not PROVIDER',
+            data: { show, mode, showJourneyReset: true },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
         setWorkTimeJourneyPhase('idle_out');
         return;
       }
@@ -383,7 +457,7 @@ function CustomTabBar({
             })()}
           </TouchableOpacity>
         )}
-        {tabBarVariant === 'provider' && showWorkTimeTab && canAccessWorkTime && mode === 'PROVIDER' && (() => {
+        {tabBarVariant === 'provider' && showWorkTimeTab && mode === 'PROVIDER' && (() => {
           const onWorkTimeRoute = pathname === '/work-time' || pathname.endsWith('/work-time');
           const highlightJourney = workTimeJourneyPhase === 'in_work' || workTimeJourneyPhase === 'on_break';
 

@@ -186,12 +186,6 @@ publicRouter.post('/punches', authUser, express.json(), async (req, res) => {
       }
     }
 
-    const userRow = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: { tenantId: true },
-    });
-    if (!userRow) return res.status(404).json({ error: 'Utilizador não encontrado.' });
-
     if (clientPunchUuid) {
       const hits = await prisma.$queryRaw`
         SELECT id FROM "WorkTimePunch"
@@ -328,7 +322,7 @@ publicRouter.post('/punches', authUser, express.json(), async (req, res) => {
 
     const punch = await prisma.workTimePunch.create({
       data: {
-        tenantId: userRow.tenantId,
+        tenantId: eff.tenantId,
         userId: req.user.id,
         type: t,
         deviceTimestamp: devTs,

@@ -21,8 +21,6 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../src/theme/ThemeContext';
 import { useAuth } from '../src/hooks/useAuth';
-import { usePersona } from '../src/context/PersonaContext';
-import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { collectPunchInputs, isLikelyOnline, type CollectedPunch } from '../src/lib/workTimePunchCollect';
 import { computeJourneyUiState, type WorkTimeJourneyPhase } from '../src/lib/workTimeJourney';
 import {
@@ -46,7 +44,6 @@ import { MODE_SEGMENT_COLORS } from '../src/theme/colors';
 import type { ColorPalette } from '../src/theme/colors';
 import { fontSize, fontWeight, radius, space } from '../src/theme/layout';
 import type { User } from '../src/services/auth';
-import { userHasCapability } from '../src/services/auth';
 import {
   deriveEmployeeMatriculaFromUser,
   formatDeviceSummaryFromSnapshot,
@@ -214,9 +211,7 @@ export default function WorkTimeScreen() {
   const { colors: C, dark: themeDark } = useTheme();
   const styles = useMemo(() => createStyles(C, themeDark), [C, themeDark]);
   const { user } = useAuth();
-  const { activePersona } = usePersona();
   const accountRole = String(user?.role || '').toUpperCase();
-  const canAccessWorkTime = userHasCapability(user, 'mobile.workTime.access');
   const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
@@ -234,11 +229,6 @@ export default function WorkTimeScreen() {
     justification: string;
   }>({ visible: false, punchType: null, summaryText: '', justification: '' });
   const pendingCollectRef = useRef<CollectedPunch | null>(null);
-
-  React.useEffect(() => {
-    if (canAccessWorkTime) return;
-    router.replace(getPersonaHomeHref(activePersona) as any);
-  }, [canAccessWorkTime, activePersona, router]);
 
   const loadAll = useCallback(async () => {
     try {
@@ -364,10 +354,6 @@ export default function WorkTimeScreen() {
       setRefreshing(false);
     }
   }, [loadAll]);
-
-  if (!canAccessWorkTime) {
-    return null;
-  }
 
   const punchLabel = (type: string) => {
     const k = `workTime.punchTypes.${type}` as const;
@@ -559,7 +545,9 @@ export default function WorkTimeScreen() {
     );
   }
 
-  const showActions = me?.ok && me.showWorkTimeInApp && me.canRegisterPunch;
+  const showActions = me?.ok && me.canRegisterPunch;
+  /** Tab pode estar visível só com política da org (`showWorkTimeInApp`); batidas exigem também `workTimeTrackingEnabled` no utilizador. */
+  const tabShowsButCannotPunchYet = !!(me?.ok && me.showWorkTimeInApp && !me.canRegisterPunch);
   const notice = me?.ok && me.settings.employeeNoticeMarkdown ? String(me.settings.employeeNoticeMarkdown).trim() : '';
   const actionTypes: WorkTimePunchType[] = ['CLOCK_IN', 'CLOCK_OUT', 'BREAK_START', 'BREAK_END'];
 
@@ -664,6 +652,37 @@ export default function WorkTimeScreen() {
         </View>
       ) : (
         <View style={styles.mainColumn}>
+          {me?.ok && !me.canRegisterPunch ? (
+            <View
+              style={[
+                styles.punchBlockedSticky,
+                { backgroundColor: C.background, borderBottomColor: C.divider },
+              ]}
+            >
+              <View style={[styles.messageCard, { borderColor: C.status.warning.border, backgroundColor: C.status.warning.bg }]}>
+                <Ionicons name="lock-closed-outline" size={26} color={C.status.warning.fg} style={{ marginBottom: space.sm }} />
+                <Text style={[styles.messageTitle, { color: C.status.warning.fg }]}>{t('workTime.moduleOffTitle')}</Text>
+                <Text style={[styles.messageBody, { color: C.status.warning.fg, marginTop: space.xs }]}>
+                  {!me.featureFlagEnabled
+                    ? t('workTime.hintFlagOff')
+                    : !me.settings.moduleEnabled
+                      ? t('workTime.hintTenantModuleOff')
+                      : !me.userWorkTimeEnabled
+                        ? t('workTime.hintUserOff')
+                        : t('workTime.hintRoleClient')}
+                </Text>
+                {tabShowsButCannotPunchYet ? (
+                  <Text style={[styles.messageBody, { color: C.status.warning.fg, marginTop: space.sm, fontWeight: '700' }]}>
+                    {t('workTime.tabVsPunchExplainer')}
+                  </Text>
+                ) : null}
+                <Text style={[styles.messageBody, { color: C.status.warning.fg, marginTop: space.sm, fontSize: 12, fontWeight: '600' }]}>
+                  {t('workTime.pullToRefreshAfterPolicyChange')}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
           {showActions ? (
             <View
               style={[
@@ -770,22 +789,6 @@ export default function WorkTimeScreen() {
               <Text style={[styles.messageTitle, { color: C.slate }]}>{t('workTime.unavailable')}</Text>
               <Text style={[styles.messageBody, { color: C.textSecondary, marginTop: space.xs }]}>
                 {t('workTime.offlineNoMeCacheHint')}
-              </Text>
-            </View>
-          ) : null}
-
-          {me?.ok && !me.showWorkTimeInApp ? (
-            <View style={[styles.messageCard, { borderColor: C.status.warning.border, backgroundColor: C.status.warning.bg }]}>
-              <Ionicons name="lock-closed-outline" size={26} color={C.status.warning.fg} style={{ marginBottom: space.sm }} />
-              <Text style={[styles.messageTitle, { color: C.status.warning.fg }]}>{t('workTime.moduleOffTitle')}</Text>
-              <Text style={[styles.messageBody, { color: C.status.warning.fg, marginTop: space.xs }]}>
-                {!me.featureFlagEnabled
-                  ? t('workTime.hintFlagOff')
-                  : !me.settings.moduleEnabled
-                    ? t('workTime.hintTenantModuleOff')
-                    : !me.userWorkTimeEnabled
-                      ? t('workTime.hintUserOff')
-                      : t('workTime.hintRoleClient')}
               </Text>
             </View>
           ) : null}
@@ -1101,6 +1104,12 @@ function createStyles(C: ColorPalette, themeDark: boolean) {
     },
     /** Coluna principal: ações fixas no topo + lista a rolar. */
     mainColumn: { flex: 1 },
+    punchBlockedSticky: {
+      paddingHorizontal: space.md,
+      paddingTop: space.sm,
+      paddingBottom: space.xs,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+    },
     scrollFlex: { flex: 1 },
     stickyActionsTop: {
       paddingHorizontal: space.md,

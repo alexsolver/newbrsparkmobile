@@ -1370,7 +1370,8 @@
       "slotCirclesEmpty": "Tap + Area to draw a circle at the red pin or map center. Edit radius (km) in the list; you can add several per shift.",
       "slotCirclesMax": "At most 20 radius areas per shift.",
       "slotCircleRadiusKm": "Radius",
-      "slotCirclesSummary": "{{n}} radius area(s) (km)"
+      "slotCirclesSummary": "{{n}} radius area(s) (km)",
+      "slotLocsMapTypingBanner": "While the keyboard is open, the map is hidden to keep fields readable. Tap here to dismiss the keyboard and show the map again."
     },
     "workTabConsumerHint": "Enable or complete provider registration in the «Mode» tab to manage partnerships and the hours form."
   },
@@ -2590,6 +2591,8 @@
     "hintFlagOff": "This feature is disabled for your organization.",
     "hintTenantModuleOff": "Time clock is disabled for your company. Ask an admin to enable it under Work time.",
     "hintUserOff": "Time tracking is not enabled for your user. Ask an admin to turn it on.",
+    "tabVsPunchExplainer": "The tab may appear once company policy is active; the punch buttons also require \"Work time\" enabled on your user in the admin panel.",
+    "pullToRefreshAfterPolicyChange": "Did you change settings in the admin? Pull down on this screen to refresh.",
     "hintRoleClient": "End-customer accounts (role «User») cannot use the time clock. Other roles still need the feature flag, tenant module and per-user option enabled.",
     "clientAccountNoAccess": "The time clock is not available for end-customer accounts.",
     "faceBlockedTitle": "Biometrics required",

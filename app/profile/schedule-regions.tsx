@@ -16,8 +16,9 @@ import {
   Alert,
   Platform,
   Modal,
-  KeyboardAvoidingView,
   Keyboard,
+  Dimensions,
+  InteractionManager,
 } from 'react-native';
 import MapView, { Circle, Marker, type Region } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -141,6 +142,76 @@ export default function ScheduleRegionsScreen() {
   /** Texto do campo de raio por id (vírgula no teclado PT) — evita input controlado só por número. */
   const [slotCircleRadiusTextById, setSlotCircleRadiusTextById] = useState<Record<string, string>>({});
   const slotMapRef = useRef<MapView | null>(null);
+  const slotModalScrollRef = useRef<ScrollView | null>(null);
+  const slotModalScrollYRef = useRef(0);
+  const keyboardHeightRef = useRef(0);
+  /** iOS: altura do teclado para reduzir o mapa e aplicar padding sem KeyboardAvoidingView (que conflita com Modal e cria “buracos”). */
+  const [slotModalKeyboardInset, setSlotModalKeyboardInset] = useState(0);
+  const circleRadiusRowRefs = useRef<Record<string, View | null>>({});
+  const focusedSlotCircleIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const subShow = Keyboard.addListener(showEvt, (e) => {
+      const h = e.endCoordinates?.height ?? 0;
+      keyboardHeightRef.current = h;
+      setSlotModalKeyboardInset(h);
+    });
+    const subHide = Keyboard.addListener(hideEvt, () => {
+      keyboardHeightRef.current = 0;
+      setSlotModalKeyboardInset(0);
+    });
+    return () => {
+      subShow.remove();
+      subHide.remove();
+    };
+  }, []);
+
+  const scrollSlotRadiusRowIntoView = useCallback(
+    (circleId: string) => {
+      const row = circleRadiusRowRefs.current[circleId];
+      if (!row || !slotModalScrollRef.current) return;
+      const winH = Dimensions.get('window').height;
+      const kb =
+        keyboardHeightRef.current || slotModalKeyboardInset || (Platform.OS === 'ios' ? 300 : 280);
+      const margin = 20;
+      const footerReserve = 72;
+      const visibleBottom = winH - kb - margin - insets.bottom - footerReserve;
+      const run = () => {
+        row.measureInWindow((_ix, iy, _iw, ih) => {
+          const bottom = iy + ih;
+          if (bottom > visibleBottom) {
+            const delta = bottom - visibleBottom + margin;
+            slotModalScrollRef.current?.scrollTo({
+              y: Math.max(0, slotModalScrollYRef.current + delta),
+              animated: true,
+            });
+          }
+        });
+      };
+      requestAnimationFrame(run);
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(run, 50);
+        setTimeout(run, 200);
+        setTimeout(run, 450);
+      });
+    },
+    [insets.bottom, slotModalKeyboardInset]
+  );
+
+  useEffect(() => {
+    if (!slotLocsModal || slotModalKeyboardInset <= 0) return;
+    const id = focusedSlotCircleIdRef.current;
+    if (!id) return;
+    scrollSlotRadiusRowIntoView(id);
+  }, [slotLocsModal, slotModalKeyboardInset, scrollSlotRadiusRowIntoView]);
+
+  /** Altura do mapa só com teclado fechado; com teclado aberto o mapa é omitido (melhor uso do espaço). */
+  const slotModalMapHeight = useMemo(() => {
+    const winH = Dimensions.get('window').height;
+    return Math.min(380, Math.max(220, Math.round(winH * 0.34)));
+  }, []);
 
   const dayLabelFixed = (k: DayKey) => {
     const key = `day${k[0].toUpperCase()}${k.slice(1)}` as
@@ -376,6 +447,8 @@ export default function ScheduleRegionsScreen() {
   );
 
   const closeSlotLocsModal = useCallback(() => {
+    Keyboard.dismiss();
+    focusedSlotCircleIdRef.current = null;
     setSlotLocsModal(null);
     setSlotLocsDraft([]);
     setSlotCirclesDraft([]);
@@ -384,6 +457,7 @@ export default function ScheduleRegionsScreen() {
     setSlotRefPin(null);
     setSlotLocsCity('');
     setSlotLocsFilter('');
+    setSlotModalKeyboardInset(0);
   }, []);
 
   const applySlotLocsModal = useCallback(() => {
@@ -432,6 +506,7 @@ export default function ScheduleRegionsScreen() {
       delete n[id];
       return n;
     });
+    delete circleRadiusRowRefs.current[id];
   }, []);
 
   const updateSlotCircleCenter = useCallback((id: string, latitude: number, longitude: number) => {
@@ -742,7 +817,7 @@ export default function ScheduleRegionsScreen() {
           marginBottom: 8,
           gap: 10,
         },
-        slotCirclesList: { maxHeight: 140, paddingHorizontal: 16, marginBottom: 8 },
+        slotCirclesList: { paddingHorizontal: 16, marginBottom: 8 },
         slotCircleRow: {
           flexDirection: 'row',
           flexWrap: 'wrap',
@@ -1122,12 +1197,15 @@ export default function ScheduleRegionsScreen() {
       </Modal>
 
       <Modal visible={!!slotLocsModal} animationType="slide" onRequestClose={closeSlotLocsModal}>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 6 : 0}
+        <View
+          style={[
+            styles.slotModalRoot,
+            {
+              paddingTop: insets.top + 8,
+              paddingBottom: Platform.OS === 'ios' ? slotModalKeyboardInset : 0,
+            },
+          ]}
         >
-        <View style={[styles.slotModalRoot, { paddingTop: insets.top + 8 }]}>
           <View style={styles.mapModalHeader}>
             <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate, flex: 1 }}>
               {t('profile.scheduleRegions.slotLocsModalTitle')}
@@ -1136,9 +1214,121 @@ export default function ScheduleRegionsScreen() {
               <Ionicons name="close" size={26} color={C.slate} />
             </TouchableOpacity>
           </View>
+          <ScrollView
+            ref={slotModalScrollRef}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 20 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            onScroll={(e) => {
+              slotModalScrollYRef.current = e.nativeEvent.contentOffset.y;
+            }}
+            scrollEventThrottle={16}
+          >
           <Text style={{ fontSize: 12, color: C.textSecondary, paddingHorizontal: 16, marginBottom: 8, lineHeight: 18 }}>
             {t('profile.scheduleRegions.slotLocsMapHelp')}
           </Text>
+          {slotModalKeyboardInset > 0 ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                Keyboard.dismiss();
+              }}
+              style={{
+                marginHorizontal: 16,
+                marginBottom: 10,
+                paddingVertical: 14,
+                paddingHorizontal: 12,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: C.border,
+                backgroundColor: C.surfaceLow,
+              }}
+            >
+              <Text style={{ fontSize: 13, color: C.textSecondary, textAlign: 'center', lineHeight: 20 }}>
+                {t('profile.scheduleRegions.slotLocsMapTypingBanner')}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View
+              style={{
+                height: slotModalMapHeight,
+                marginHorizontal: 16,
+                marginBottom: 10,
+                borderRadius: 12,
+                overflow: 'hidden',
+                borderWidth: 1,
+                borderColor: C.border,
+              }}
+            >
+              {slotMapRegion ? (
+                <MapView
+                  ref={(r) => {
+                    slotMapRef.current = r;
+                  }}
+                  style={{ flex: 1 }}
+                  initialRegion={slotMapRegion}
+                  showsUserLocation
+                >
+                  {bases.map((b) => {
+                    if (
+                      b.latitude == null ||
+                      b.longitude == null ||
+                      !Number.isFinite(Number(b.latitude)) ||
+                      !Number.isFinite(Number(b.longitude))
+                    ) {
+                      return null;
+                    }
+                    const sel = slotLocsDraft.includes(b.id);
+                    return (
+                      <Marker
+                        key={b.id}
+                        coordinate={{ latitude: Number(b.latitude), longitude: Number(b.longitude) }}
+                        title={b.name}
+                        pinColor={sel ? 'orange' : '#9CA3AF'}
+                        onPress={() => toggleSlotDraftLoc(b.id)}
+                      />
+                    );
+                  })}
+                  {slotCirclesDraft.map((c) => (
+                    <Circle
+                      key={`slot-circ-${c.id}`}
+                      center={{ latitude: c.latitude, longitude: c.longitude }}
+                      radius={previewRadiusKmForCircle(c, slotCircleRadiusTextById) * 1000}
+                      strokeColor={C.accent}
+                      fillColor={`${C.accent}26`}
+                      strokeWidth={2}
+                    />
+                  ))}
+                  {slotCirclesDraft.map((c) => (
+                    <Marker
+                      key={`slot-cm-${c.id}`}
+                      coordinate={{ latitude: c.latitude, longitude: c.longitude }}
+                      draggable
+                      pinColor="#ea580c"
+                      onDragEnd={(e) =>
+                        updateSlotCircleCenter(c.id, e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)
+                      }
+                    />
+                  ))}
+                  {slotRefPin ? (
+                    <Marker
+                      coordinate={slotRefPin}
+                      draggable
+                      pinColor="red"
+                      onDragEnd={(e) => setSlotRefPin(e.nativeEvent.coordinate)}
+                    />
+                  ) : null}
+                </MapView>
+              ) : (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+                  <ActivityIndicator color={C.accent} size="large" />
+                </View>
+              )}
+            </View>
+          )}
           <TextInput
             style={[styles.input, { marginHorizontal: 16, marginBottom: 8 }]}
             value={slotLocsFilter}
@@ -1203,20 +1393,34 @@ export default function ScheduleRegionsScreen() {
               <Text style={styles.addSlotBtnText}>{t('profile.scheduleRegions.slotCirclesAdd')}</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.slotCirclesList} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+          <View style={styles.slotCirclesList}>
             {slotCirclesDraft.length === 0 ? (
               <Text style={{ fontSize: 12, color: C.textSecondary, lineHeight: 18 }}>
                 {t('profile.scheduleRegions.slotCirclesEmpty')}
               </Text>
             ) : (
               slotCirclesDraft.map((c, i) => (
-                <View key={c.id} style={styles.slotCircleRow}>
+                <View
+                  key={c.id}
+                  ref={(el) => {
+                    circleRadiusRowRefs.current[c.id] = el;
+                  }}
+                  collapsable={false}
+                  style={styles.slotCircleRow}
+                >
                   <Text style={{ fontSize: 12, fontWeight: '800', color: C.slate }}>#{i + 1}</Text>
                   <Text style={{ fontSize: 11, color: C.textSecondary }}>{t('profile.scheduleRegions.slotCircleRadiusKm')}</Text>
                   <TextInput
                     style={styles.slotCircleRadiusInput}
                     value={slotCircleRadiusTextById[c.id] ?? formatRadiusKmForField(c.radiusKm)}
                     onChangeText={(txt) => onSlotCircleRadiusTextChange(c.id, txt)}
+                    onFocus={() => {
+                      focusedSlotCircleIdRef.current = c.id;
+                      scrollSlotRadiusRowIntoView(c.id);
+                    }}
+                    onBlur={() => {
+                      if (focusedSlotCircleIdRef.current === c.id) focusedSlotCircleIdRef.current = null;
+                    }}
                     onEndEditing={(e) => {
                       const raw = sanitizeRadiusKmInput(e.nativeEvent.text);
                       const parsed = parseRadiusKmDisplay(raw);
@@ -1243,84 +1447,8 @@ export default function ScheduleRegionsScreen() {
                 </View>
               ))
             )}
-          </ScrollView>
-          <View
-            style={{
-              flex: 1,
-              minHeight: 240,
-              marginHorizontal: 16,
-              marginBottom: 8,
-              borderRadius: 12,
-              overflow: 'hidden',
-              borderWidth: 1,
-              borderColor: C.border,
-            }}
-          >
-            {slotMapRegion ? (
-              <MapView
-                ref={(r) => {
-                  slotMapRef.current = r;
-                }}
-                style={{ flex: 1 }}
-                initialRegion={slotMapRegion}
-                showsUserLocation
-              >
-                {bases.map((b) => {
-                  if (
-                    b.latitude == null ||
-                    b.longitude == null ||
-                    !Number.isFinite(Number(b.latitude)) ||
-                    !Number.isFinite(Number(b.longitude))
-                  ) {
-                    return null;
-                  }
-                  const sel = slotLocsDraft.includes(b.id);
-                  return (
-                    <Marker
-                      key={b.id}
-                      coordinate={{ latitude: Number(b.latitude), longitude: Number(b.longitude) }}
-                      title={b.name}
-                      pinColor={sel ? 'orange' : '#9CA3AF'}
-                      onPress={() => toggleSlotDraftLoc(b.id)}
-                    />
-                  );
-                })}
-                {slotCirclesDraft.map((c) => (
-                  <Circle
-                    key={`slot-circ-${c.id}`}
-                    center={{ latitude: c.latitude, longitude: c.longitude }}
-                    radius={previewRadiusKmForCircle(c, slotCircleRadiusTextById) * 1000}
-                    strokeColor={C.accent}
-                    fillColor={`${C.accent}26`}
-                    strokeWidth={2}
-                  />
-                ))}
-                {slotCirclesDraft.map((c) => (
-                  <Marker
-                    key={`slot-cm-${c.id}`}
-                    coordinate={{ latitude: c.latitude, longitude: c.longitude }}
-                    draggable
-                    pinColor="#ea580c"
-                    onDragEnd={(e) =>
-                      updateSlotCircleCenter(c.id, e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)
-                    }
-                  />
-                ))}
-                {slotRefPin ? (
-                  <Marker
-                    coordinate={slotRefPin}
-                    draggable
-                    pinColor="red"
-                    onDragEnd={(e) => setSlotRefPin(e.nativeEvent.coordinate)}
-                  />
-                ) : null}
-              </MapView>
-            ) : (
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
-                <ActivityIndicator color={C.accent} size="large" />
-              </View>
-            )}
           </View>
+          </ScrollView>
           <View style={[styles.slotModalActions, { paddingBottom: 12 + insets.bottom }]}>
             <TouchableOpacity style={styles.slotModalBtnSecondary} onPress={closeSlotLocsModal}>
               <Text style={styles.slotModalBtnSecondaryText}>{t('profile.scheduleRegions.slotLocsCancel')}</Text>
@@ -1336,7 +1464,6 @@ export default function ScheduleRegionsScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

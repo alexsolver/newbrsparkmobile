@@ -1370,7 +1370,8 @@
       "slotCirclesEmpty": "Tippen Sie auf + Fläche, um einen Kreis am roten Pin oder in der Kartenmitte zu zeichnen. Radius (km) in der Liste anpassen; mehrere Flächen pro Schicht möglich.",
       "slotCirclesMax": "Höchstens 20 Radius-Flächen pro Schicht.",
       "slotCircleRadiusKm": "Radius",
-      "slotCirclesSummary": "{{n}} Radius-Fläche(n) (km)"
+      "slotCirclesSummary": "{{n}} Radius-Fläche(n) (km)",
+      "slotLocsMapTypingBanner": "Während die Tastatur offen ist, wird die Karte ausgeblendet, damit die Felder lesbar bleiben. Tippen Sie hier, um die Tastatur zu schließen und die Karte wieder anzuzeigen."
     },
     "workTabConsumerHint": "Aktivieren oder vervollständigen Sie die Anbieterregistrierung im Tab «Modus», um Partnerschaften und das Zeitenformular zu verwalten."
   },
@@ -2590,6 +2591,8 @@
     "hintFlagOff": "Diese Funktion ist für Ihre Organisation deaktiviert.",
     "hintTenantModuleOff": "Die Stechuhr ist für Ihr Unternehmen deaktiviert. Bitten Sie einen Administrator, es unter „Arbeitszeit“ zu aktivieren.",
     "hintUserOff": "Die Zeiterfassung ist für Ihren Benutzer nicht aktiviert. Bitten Sie einen Administrator, es zu aktivieren.",
+    "tabVsPunchExplainer": "Die Registerkarte kann bereits bei aktiver Unternehmensrichtlinie erscheinen; die Stempel-Buttons erfordern zusätzlich „Arbeitszeit“ für Ihren Benutzer im Admin-Panel.",
+    "pullToRefreshAfterPolicyChange": "Änderungen im Panel? Ziehen Sie diese Seite nach unten zum Aktualisieren.",
     "hintRoleClient": "Endkundenkonten (Rolle «Benutzer») können die Stechuhr nicht nutzen. Für andere Rollen müssen weiterhin das Feature-Flag, das Mandantenmodul und die Option pro Benutzer aktiviert sein.",
     "clientAccountNoAccess": "Für Endkundenkonten ist die Stechuhr nicht verfügbar.",
     "faceBlockedTitle": "Biometrie erforderlich",

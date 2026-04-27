@@ -44,6 +44,7 @@ import { isImperial, setUnitSystem, setNumberFormat, getNumberFormat, loadNumber
 import { shareUserLocalDataJson } from '../src/utils/exportUserLocalData';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
+import { usePersona } from '../src/context/PersonaContext';
 
 const REGION_KEY   = '@brspark_region';
 const LANGUAGE_KEY = '@brspark_language';
@@ -95,6 +96,7 @@ type ProfileTab = 'conta' | 'trabalho' | 'config' | 'sync';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { activePersona } = usePersona();
   const { user, userRole, setUserRole, logout, deleteAccount, patchUser, switchWorkspace, createWorkspace, refreshUser } =
     useAuth();
   const displayAvatarUri = useResolvedAvatarUri(user);
@@ -1135,8 +1137,12 @@ export default function ProfileScreen() {
 
         {/* ─── Profile Summary Card ─── */}
         <View style={styles.profileHeaderCard}>
-          <Text style={[styles.headerBrandName, { color: C.accent }]}>{appDisplayName}</Text>
-          {appTagline ? <Text style={[styles.headerBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text> : null}
+          {activePersona !== 'provider' ? (
+            <>
+              <Text style={[styles.headerBrandName, { color: C.accent }]}>{appDisplayName}</Text>
+              {appTagline ? <Text style={[styles.headerBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text> : null}
+            </>
+          ) : null}
           <TouchableOpacity onPress={pickAvatar} activeOpacity={0.8} style={styles.headerAvatarWrap}>
             {displayAvatarUri ? (
               <Image

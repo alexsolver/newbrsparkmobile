@@ -444,18 +444,20 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
               />
             </TouchableOpacity>
 
-            <View
-              style={{
-                minWidth: 70,
-                height: 22,
-                marginLeft: 2,
-                marginRight: 4,
-                flexShrink: 0,
-                justifyContent: 'center',
-              }}
-            >
-              {renderHeaderBrand(true)}
-            </View>
+            {!(isProfile && activePersona === 'provider') ? (
+              <View
+                style={{
+                  minWidth: 70,
+                  height: 22,
+                  marginLeft: 2,
+                  marginRight: 4,
+                  flexShrink: 0,
+                  justifyContent: 'center',
+                }}
+              >
+                {renderHeaderBrand(true)}
+              </View>
+            ) : null}
 
             {title ? (
               <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>

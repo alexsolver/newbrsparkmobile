@@ -28,7 +28,9 @@ export type WorkTimeMeOk = {
   faceReenrollmentWindowOpen?: boolean;
   faceReenrollmentUntil?: string | null;
   faceReenrollmentNote?: string | null;
+  /** Tab / ecrã: módulo + flag + papel; não exige `workTimeTrackingEnabled` no utilizador. */
   showWorkTimeInApp: boolean;
+  /** Batidas: inclui inscrição (`workTimeTrackingEnabled`) e restantes regras de `effective`. */
   canRegisterPunch: boolean;
 };
 

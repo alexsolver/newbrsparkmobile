@@ -34,7 +34,11 @@ const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverag
 const { validateAppPasswordPolicy } = require('../lib/appPasswordPolicy');
 const { validatePanelRoleForTenantKind, setUnifiedPasswordHashForEmail } = require('../lib/appAccountAuth');
 const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
-const { syncActiveAffiliationFromTechnicianStatus } = require('../lib/providerTechnicianAffiliationSync');
+const {
+  syncActiveAffiliationFromTechnicianStatus,
+  downsyncAffiliationsForSingleUserTechnician,
+} = require('../lib/providerTechnicianAffiliationSync');
+const { invalidateAppEffectiveTenantIdCache } = require('../lib/appLoginEffectiveTenant');
 const { resolveMergedProviderIdentityForUserId, normalizeEmail: normalizeEmailForPi } = require('../lib/providerIdentityMerge');
 const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
 const {
@@ -783,6 +787,13 @@ router.patch('/:id/technician-profile', async (req, res) => {
         }
       } catch (e) {
         console.error('[PATCH /users/:id/technician-profile] sync affiliation:', e?.message || e);
+      }
+    } else {
+      try {
+        await downsyncAffiliationsForSingleUserTechnician(prisma, user.id, st);
+        invalidateAppEffectiveTenantIdCache(user.id);
+      } catch (e) {
+        console.error('[PATCH /users/:id/technician-profile] downsync affiliation:', e?.message || e);
       }
     }
 
@@ -1941,16 +1952,27 @@ router.patch('/:id', express.json(), async (req, res) => {
     }
 
     try {
-      const tp = await prisma.technicianProfile.findUnique({
-        where: { userId: id },
-        select: { status: true },
-      });
-      if (tp && String(tp.status || '').toUpperCase() === 'ACTIVE') {
+      const [tp, freshUser] = await Promise.all([
+        prisma.technicianProfile.findUnique({
+          where: { userId: id },
+          select: { status: true },
+        }),
+        prisma.user.findUnique({ where: { id }, select: { isActive: true } }),
+      ]);
+      const techSt = String(tp?.status || '').toUpperCase();
+      const userActive = freshUser?.isActive !== false;
+      if (tp && !userActive) {
+        await downsyncAffiliationsForSingleUserTechnician(prisma, id, 'INACTIVE');
+        invalidateAppEffectiveTenantIdCache(id);
+      } else if (tp && techSt === 'ACTIVE' && userActive) {
         await syncActiveAffiliationFromTechnicianStatus(prisma, {
           userId: id,
           tenantId: existing.tenantId,
           tenantKind: existing.tenant?.kind,
         });
+      } else if (tp && techSt !== 'ACTIVE') {
+        await downsyncAffiliationsForSingleUserTechnician(prisma, id, techSt);
+        invalidateAppEffectiveTenantIdCache(id);
       }
     } catch (e) {
       console.error('[PATCH /users/:id] sync ProviderTenantAffiliation:', e?.message || e);
