@@ -39,6 +39,7 @@ const M = {
     nav_tenants: 'Tenants',
     nav_my_org: 'Minha organização',
     nav_users: 'Usuários',
+    nav_prestadores: 'Prestadores',
     nav_tech_signup: 'Cadastro prestador',
     nav_forms_builder: 'Forms Builder',
     nav_operations: 'Central de Operações',
@@ -154,6 +155,8 @@ const M = {
     ul_exportTitle: 'Exportar a página atual em CSV',
     ul_exportBtn: 'Exportar',
     ul_techSignup: 'Cadastro prestador',
+    ul_prestadoresHub: 'Prestadores',
+    ul_prestadoresHubTitle: 'Convites de parceria, vínculos na organização e candidaturas (onboarding)',
     ul_newUser: 'Novo usuário',
     ul_tableTitle: 'Lista de usuários',
     ul_thUser: 'Usuário',
@@ -233,7 +236,7 @@ const M = {
     ul_providerActive: 'Prestador: pode receber OS',
     ul_providerPending: 'Prestador: pendente (ainda não recebe OS)',
     ul_providerPendingSub:
-      'Isto é o perfil técnico. O formulário de cadastro é outra lista: <a href="technician-applications.html" style="color:inherit;text-decoration:underline;font-weight:600">Cadastro de prestadores</a> (procure «Perfil sem candidatura» se não houver convite).',
+      'Isto é o perfil técnico. A gestão de convites, vínculos e candidaturas está em <a href="prestadores.html" style="color:inherit;text-decoration:underline;font-weight:600">Prestadores</a> (procure «Perfil sem candidatura» se não houver convite).',
     ul_providerInactive: 'Prestador: inativo (não recebe OS)',
     ul_providerSuspended: 'Prestador: suspenso',
     ul_cfNoSync: 'Sem registro de sincronização FaceMatch',
@@ -615,6 +618,76 @@ const M = {
     ue_navActivity: 'Atividade',
     ue_secSessionNotesTitle: 'Sessão, notas e preferências',
     ue_lblSessionCurrent: 'Sessão atual (painel / app)',
+    pr_pageTitle: 'BrSpark Admin — Prestadores',
+    pr_bc_panel: 'Painel',
+    pr_bc_here: 'Prestadores',
+    pr_hero_title: 'Prestadores',
+    pr_hero_sub:
+      'Convites de parceria, vínculos provider-first (pedidos e activações) e candidaturas de onboarding — num só lugar.',
+    pr_perm_none: 'Sem permissão para gestão de prestadores nesta sessão.',
+    pr_card_bonds_title: 'Vínculos e pedidos (organização)',
+    pr_card_bonds_hint:
+      'Convites enviados, pedidos REQUESTED após o prestador aceitar no app, e vínculos activos nesta organização.',
+    pr_card_bonds_hint_global: 'Escolha a organização acima para carregar os vínculos (modo plataforma).',
+    pr_bonds_tenant_lbl: 'Organização (tenant)',
+    pr_bonds_refresh: 'Atualizar',
+    pr_th_provider: 'Prestador',
+    pr_th_type: 'Tipo',
+    pr_th_state: 'Estado',
+    pr_th_requested: 'Pedido em',
+    pr_th_actions: 'Ações',
+    pr_activate: 'Activar',
+    pr_confirm_activate: 'Activar esta parceria na organização?',
+    pr_kyc_pending: 'KYC pendente',
+    pr_rel_partner: 'Parceria',
+    pr_rel_dedicated: 'Dedicado',
+    pr_select_tenant_first: 'Seleccione a organização (tenant) para continuar.',
+    pr_loading: 'A carregar…',
+    pr_bonds_count: '{n} vínculo(s) mostrados.',
+    pr_candidates_count: '{n} prestador(es) na lista de candidatos.',
+    pr_candidates_filter_empty: 'Nenhum resultado para o filtro.',
+    pr_card_invite_title: 'Convidar parceria ou vínculo dedicado',
+    pr_invite_intro_html:
+      'Envie um convite de <strong>parceria</strong> (multi-empresa) ou <strong>vínculo dedicado</strong> (full time). Requer provider-first activo no tenant e prestador com cadastro global.',
+    pr_lbl_invite_email: 'E-mail do prestador *',
+    pr_ph_invite_email: 'tecnico@exemplo.com',
+    pr_lbl_candidates: 'Prestadores disponíveis para parceria',
+    pr_candidates_help:
+      'Contas com cadastro global de prestador sem vínculo dedicado activo ou pendente noutra empresa (nem na sua). Clique numa linha para preencher o e-mail.',
+    pr_candidates_filter_ph: 'Filtrar por nome ou e-mail…',
+    pr_lbl_invite_tenant: 'Tenant (empresa) *',
+    pr_invite_tenant_hint: 'Necessário no modo global. Em modo organização, usamos automaticamente o contexto actual.',
+    pr_lbl_type: 'Tipo de vínculo *',
+    pr_invite_opt_partner: 'Parceria (multi-empresa)',
+    pr_invite_opt_dedicated: 'Vínculo dedicado (full time)',
+    pr_type_hint:
+      'Se activado como dedicado, outras parcerias activas do prestador podem ser desactivadas automaticamente.',
+    pr_lbl_note: 'Mensagem (opcional)',
+    pr_ph_note: 'Ex.: Vínculo full time na operação de SP.',
+    pr_invite_submit: 'Criar convite',
+    pr_no_perm_invite: 'Sem permissão para criar convites nesta sessão.',
+    pr_alert_email: 'Informe o e-mail do prestador.',
+    pr_alert_tenant: 'Seleccione o tenant (empresa).',
+    pr_alert_session: 'Sessão expirada ou sem resposta da API. Entre de novo.',
+    pr_invite_created_title: 'Convite criado.',
+    pr_invite_created_body: 'Tipo: {type} · E-mail: {email}',
+    pr_invite_email_ok: 'E-mail ao prestador: enviado ({p}). Verifique spam.',
+    pr_invite_email_skip: 'E-mail: não enviado ({p}). {r}',
+    pr_invite_email_fail: 'E-mail: falhou — {e}',
+    pr_invite_push_ok: 'Notificação no telemóvel: {n} aceite(s) pela Expo.{err} Abra a app → Organizações e parcerias.',
+    pr_invite_push_partial: 'Push: {n} token(s) registado(s), 0 entregues.{e}',
+    pr_invite_push_none: 'Push: nenhum token Expo (o prestador tem de abrir a app com notificações activas).',
+    pr_card_apps_title: 'Candidaturas (onboarding)',
+    pr_apps_sub:
+      'Resumo das últimas linhas. Para convidar por e-mail ao formulário, filtros completos e aprovação, abra a lista dedicada.',
+    pr_apps_see_all: 'Abrir lista completa',
+    pr_apps_refresh: 'Atualizar',
+    pr_apps_summary: 'Total na API: {n} (mostramos até 12).',
+    pr_apps_empty: 'Nenhuma candidatura listada neste contexto.',
+    pr_apps_th_email: 'E-mail',
+    pr_apps_th_tenant: 'Tenant',
+    pr_apps_th_status: 'Estado',
+    pr_apps_th_updated: 'Atualizado',
     ue_prefLocaleDefault: '(Padrão do dispositivo / tenant)',
   },
   'en-US': {
@@ -647,6 +720,7 @@ const M = {
     nav_tenants: 'Tenants',
     nav_my_org: 'My organization',
     nav_users: 'Users',
+    nav_prestadores: 'Providers',
     nav_tech_signup: 'Technician signup',
     nav_forms_builder: 'Forms Builder',
     nav_operations: 'Operations center',
@@ -761,6 +835,8 @@ const M = {
     ul_exportTitle: 'Export current page as CSV',
     ul_exportBtn: 'Export',
     ul_techSignup: 'Technician signup',
+    ul_prestadoresHub: 'Providers',
+    ul_prestadoresHubTitle: 'Partnership invites, organization links and onboarding applications',
     ul_newUser: 'New user',
     ul_tableTitle: 'User list',
     ul_thUser: 'User',
@@ -840,7 +916,7 @@ const M = {
     ul_providerActive: 'Provider: can receive work orders',
     ul_providerPending: 'Provider: pending (cannot receive work orders yet)',
     ul_providerPendingSub:
-      'This is the technician profile. Signup is a separate list: <a href="technician-applications.html" style="color:inherit;text-decoration:underline;font-weight:600">Technician applications</a> (look for “profile without application” if there is no invite).',
+      'This is the technician profile. Invites, links and applications are in <a href="prestadores.html" style="color:inherit;text-decoration:underline;font-weight:600">Providers</a> (look for “profile without application” if there is no invite).',
     ul_providerInactive: 'Provider: inactive (no work orders)',
     ul_providerSuspended: 'Provider: suspended',
     ul_cfNoSync: 'No FaceMatch sync record',
@@ -1220,6 +1296,75 @@ const M = {
     ue_navActivity: 'Activity',
     ue_secSessionNotesTitle: 'Session, notes & preferences',
     ue_lblSessionCurrent: 'Current session (panel / app)',
+    pr_pageTitle: 'BrSpark Admin — Providers',
+    pr_bc_panel: 'Home',
+    pr_bc_here: 'Providers',
+    pr_hero_title: 'Providers',
+    pr_hero_sub:
+      'Partnership invites, provider-first links (requests and activations), and onboarding applications — in one place.',
+    pr_perm_none: 'No permission to manage providers in this session.',
+    pr_card_bonds_title: 'Links & requests (organization)',
+    pr_card_bonds_hint:
+      'Invites sent, REQUESTED after the technician accepts in the app, and active links for this organization.',
+    pr_card_bonds_hint_global: 'Pick an organization above to load links (platform mode).',
+    pr_bonds_tenant_lbl: 'Organization (tenant)',
+    pr_bonds_refresh: 'Refresh',
+    pr_th_provider: 'Provider',
+    pr_th_type: 'Type',
+    pr_th_state: 'Status',
+    pr_th_requested: 'Requested at',
+    pr_th_actions: 'Actions',
+    pr_activate: 'Activate',
+    pr_confirm_activate: 'Activate this partnership for the organization?',
+    pr_kyc_pending: 'KYC pending',
+    pr_rel_partner: 'Partnership',
+    pr_rel_dedicated: 'Dedicated',
+    pr_select_tenant_first: 'Select an organization (tenant) to continue.',
+    pr_loading: 'Loading…',
+    pr_bonds_count: '{n} link(s) shown.',
+    pr_candidates_count: '{n} provider(s) in the candidate list.',
+    pr_candidates_filter_empty: 'No rows match the filter.',
+    pr_card_invite_title: 'Invite partnership or dedicated link',
+    pr_invite_intro_html:
+      'Send a <strong>partnership</strong> (multi-company) or <strong>dedicated</strong> (full-time) invite. Requires provider-first on the tenant and a global provider account.',
+    pr_lbl_invite_email: 'Provider email *',
+    pr_ph_invite_email: 'tech@example.com',
+    pr_lbl_candidates: 'Providers available for partnership',
+    pr_candidates_help:
+      'Accounts with a global provider profile without an active/pending dedicated link at another company (or yours). Click a row to fill the email field.',
+    pr_candidates_filter_ph: 'Filter by name or email…',
+    pr_lbl_invite_tenant: 'Tenant (company) *',
+    pr_invite_tenant_hint: 'Required in platform mode. In organization mode the current context is used automatically.',
+    pr_lbl_type: 'Link type *',
+    pr_invite_opt_partner: 'Partnership (multi-company)',
+    pr_invite_opt_dedicated: 'Dedicated link (full time)',
+    pr_type_hint: 'When activated as dedicated, other active partnerships may be turned off automatically.',
+    pr_lbl_note: 'Message (optional)',
+    pr_ph_note: 'E.g. Full-time operation in SP.',
+    pr_invite_submit: 'Create invite',
+    pr_no_perm_invite: 'No permission to create invites in this session.',
+    pr_alert_email: 'Enter the provider email.',
+    pr_alert_tenant: 'Select the tenant (company).',
+    pr_alert_session: 'Session expired or no API response. Sign in again.',
+    pr_invite_created_title: 'Invite created.',
+    pr_invite_created_body: 'Type: {type} · Email: {email}',
+    pr_invite_email_ok: 'Email to provider: sent ({p}). Check spam.',
+    pr_invite_email_skip: 'Email: not sent ({p}). {r}',
+    pr_invite_email_fail: 'Email: failed — {e}',
+    pr_invite_push_ok: 'Mobile notification: {n} accepted by Expo.{err} Open the app → Organizations & partnerships.',
+    pr_invite_push_partial: 'Push: {n} token(s) registered, 0 delivered.{e}',
+    pr_invite_push_none: 'Push: no Expo tokens (the technician must open the app with notifications on).',
+    pr_card_apps_title: 'Applications (onboarding)',
+    pr_apps_sub:
+      'Summary of the latest rows. For email invites to the form, full filters and approval, open the dedicated list.',
+    pr_apps_see_all: 'Open full list',
+    pr_apps_refresh: 'Refresh',
+    pr_apps_summary: 'Total from API: {n} (showing up to 12).',
+    pr_apps_empty: 'No applications in this context.',
+    pr_apps_th_email: 'Email',
+    pr_apps_th_tenant: 'Tenant',
+    pr_apps_th_status: 'Status',
+    pr_apps_th_updated: 'Updated',
     ue_prefLocaleDefault: '(Device / tenant default)',
   },
 };
@@ -1516,7 +1661,9 @@ export function applyUsersListPageI18n() {
   const ex = document.getElementById('export-users-btn');
   if (ex) ex.title = t('ul_exportTitle');
   setT('ul-export-btn-txt', 'ul_exportBtn');
-  setT('ul-tech-signup-txt', 'ul_techSignup');
+  setT('ul-prestadores-hub-txt', 'ul_prestadoresHub');
+  const phl = document.getElementById('ul-prestadores-hub-link');
+  if (phl) phl.title = t('ul_prestadoresHubTitle');
   setT('ul-new-user-btn-txt', 'ul_newUser');
   setT('users-table-title', 'ul_tableTitle');
   setT('ul-cols-label', 'ul_colsExtra');
@@ -1858,4 +2005,64 @@ export function applyUserEditStaticPageI18n() {
       else if (v === 'de-DE') op.textContent = t('localeDe');
     });
   }
+}
+
+/** Textos estáticos da página hub Prestadores / Providers. */
+export function applyPrestadoresPageI18n() {
+  if (typeof document === 'undefined') return;
+  const setT = (id, key) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = t(key);
+  };
+  const setH = (id, key) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = t(key);
+  };
+  setT('pr-bc-panel', 'pr_bc_panel');
+  setT('pr-bc-here', 'pr_bc_here');
+  setT('pr-hero-title', 'pr_hero_title');
+  setT('pr-hero-sub', 'pr_hero_sub');
+  setT('pr-card-bonds-title', 'pr_card_bonds_title');
+  setT('pr-bonds-tenant-lbl', 'pr_bonds_tenant_lbl');
+  setT('pr-bonds-refresh-txt', 'pr_bonds_refresh');
+  setT('pr-th-provider', 'pr_th_provider');
+  setT('pr-th-type', 'pr_th_type');
+  setT('pr-th-state', 'pr_th_state');
+  setT('pr-th-requested', 'pr_th_requested');
+  setT('pr-th-actions', 'pr_th_actions');
+  setT('pr-card-invite-title', 'pr_card_invite_title');
+  setH('pr-invite-intro', 'pr_invite_intro_html');
+  setT('pr-lbl-invite-email', 'pr_lbl_invite_email');
+  const pie = document.getElementById('pr-invite-email');
+  if (pie) pie.placeholder = t('pr_ph_invite_email');
+  setT('pr-lbl-candidates', 'pr_lbl_candidates');
+  const pch = document.getElementById('pr-candidates-help');
+  if (pch) pch.textContent = t('pr_candidates_help');
+  const pcf = document.getElementById('pr-candidates-filter');
+  if (pcf) pcf.placeholder = t('pr_candidates_filter_ph');
+  setT('pr-lbl-invite-tenant', 'pr_lbl_invite_tenant');
+  const pith = document.getElementById('pr-invite-tenant-hint');
+  if (pith) pith.textContent = t('pr_invite_tenant_hint');
+  setT('pr-lbl-type', 'pr_lbl_type');
+  const ptype = document.getElementById('pr-invite-type');
+  if (ptype) {
+    const op = ptype.querySelector('option[value="PARTNER"]');
+    if (op) op.textContent = t('pr_invite_opt_partner');
+    const od = ptype.querySelector('option[value="DEDICATED"]');
+    if (od) od.textContent = t('pr_invite_opt_dedicated');
+  }
+  const pth = document.getElementById('pr-type-hint');
+  if (pth) pth.textContent = t('pr_type_hint');
+  setT('pr-lbl-note', 'pr_lbl_note');
+  const pn = document.getElementById('pr-invite-note');
+  if (pn) pn.placeholder = t('pr_ph_note');
+  setT('pr-invite-submit-txt', 'pr_invite_submit');
+  setT('pr-card-apps-title', 'pr_card_apps_title');
+  setT('pr-apps-sub', 'pr_apps_sub');
+  setT('pr-apps-see-all-txt', 'pr_apps_see_all');
+  setT('pr-apps-refresh-txt', 'pr_apps_refresh');
+  setT('pr-apps-th-email', 'pr_apps_th_email');
+  setT('pr-apps-th-tenant', 'pr_apps_th_tenant');
+  setT('pr-apps-th-status', 'pr_apps_th_status');
+  setT('pr-apps-th-updated', 'pr_apps_th_updated');
 }

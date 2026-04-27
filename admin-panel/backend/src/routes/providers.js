@@ -16,6 +16,10 @@ const {
 } = require('../lib/providerTechnicianAffiliationSync');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 const { sendExpoPushToMany } = require('../services/expoPush');
+const {
+  onboardingStatusInclude,
+  resolveMergedProviderIdentityForUserId,
+} = require('../lib/providerIdentityMerge');
 
 const publicRouter = express.Router();
 const adminRouter = express.Router();
@@ -106,42 +110,8 @@ async function findOrCreateEditableOnboardingApp(providerIdentityId, inviteToken
   });
 }
 
-const onboardingStatusInclude = {
-  applications: {
-    orderBy: { updatedAt: 'desc' },
-    take: 1,
-  },
-  affiliations: {
-    orderBy: [{ updatedAt: 'desc' }],
-    include: {
-      tenant: {
-        select: { id: true, name: true, slug: true, status: true, kind: true },
-      },
-    },
-  },
-};
-
-/**
- * `ProviderIdentity` está ligado a um `User` concreto; o JWT do app pode referenciar
- * outro `User` do mesmo `AppAccount` (e-mail técnico vs canónico). Resolve a PI
- * correcta para listar convites e afiliações.
- */
-async function resolveProviderIdentityForAppUserId(userId) {
-  let providerIdentity = await prisma.providerIdentity.findUnique({
-    where: { userId: String(userId) },
-    include: onboardingStatusInclude,
-  });
-  if (providerIdentity) return providerIdentity;
-  const sessionUser = await prisma.user.findUnique({
-    where: { id: String(userId) },
-    select: { appAccountId: true },
-  });
-  if (!sessionUser?.appAccountId) return null;
-  return prisma.providerIdentity.findFirst({
-    where: { user: { appAccountId: String(sessionUser.appAccountId) } },
-    orderBy: { updatedAt: 'desc' },
-    include: onboardingStatusInclude,
-  });
+async function resolveProviderIdentityForAppUserId(userId, jwtEmailNorm = '') {
+  return resolveMergedProviderIdentityForUserId(prisma, userId, jwtEmailNorm);
 }
 
 /** Convite de parceria pertence à sessão se for o mesmo User ou o mesmo AppAccount. */
@@ -189,14 +159,15 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
     // Não usar `ensureProviderFirstEnabledOr403(req.user.tenantId)` aqui: o JWT traz o tenant
     // «principal» do utilizador; o convite vem de outra empresa com provider-first ativo.
     // Bloquear pela sessão impedia ver afiliações INVITED na app (Organizações e parcerias).
-    let providerIdentity = await resolveProviderIdentityForAppUserId(req.user.id);
+    const emailNormSession = normalizeEmail(req.user.email || '');
+    let providerIdentity = await resolveProviderIdentityForAppUserId(req.user.id, emailNormSession);
     const sessionTid = String(req.user.tenantId || '').trim();
     if (
       sessionTid &&
       (!providerIdentity || !(providerIdentity.affiliations && providerIdentity.affiliations.length))
     ) {
       await maybeBackfillAffiliationForActiveTechnician(req.user.id, sessionTid);
-      providerIdentity = await resolveProviderIdentityForAppUserId(req.user.id);
+      providerIdentity = await resolveProviderIdentityForAppUserId(req.user.id, emailNormSession);
     }
     if (!providerIdentity) {
       return res.json({

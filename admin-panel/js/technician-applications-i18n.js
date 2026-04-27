@@ -6,14 +6,14 @@ import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-r
 
 const M = {
   'pt-BR': {
-    tp_pageTitle: 'BrSpark Admin, Cadastro de prestadores',
+    tp_pageTitle: 'BrSpark Admin — Prestadores · Candidaturas',
     tp_bc_panel: 'Painel',
-    tp_bc_users: 'Usuários',
-    tp_bc_here: 'Cadastro de prestadores',
-    tp_hero_title: 'Cadastro de prestadores',
+    tp_bc_prestadores: 'Prestadores',
+    tp_bc_here: 'Candidaturas',
+    tp_hero_title: 'Candidaturas (onboarding)',
     tp_hero_sub_html:
-      'Convites, revisão e aprovação do formulário global. Em <a href="users.html" style="color:var(--accent);font-weight:600">Usuários</a>, «Prestador pendente» vem do <em>perfil técnico</em>. Esta lista mostra quem tem <em>candidatura</em> (convite ou pedido pelo app). Perfis pendentes <em>sem</em> formulário aparecem como «Perfil sem candidatura», use «Criar convite» para enviar o link.',
-    tp_back_users: 'Voltar aos usuários',
+      'Convites, revisão e aprovação do formulário global. O hub <a href="prestadores.html" style="color:var(--accent);font-weight:600">Prestadores</a> concentra parcerias e vínculos; aqui ficam as <em>candidaturas</em> e perfis «Perfil sem candidatura». Use «Convidar por e-mail» para enviar o link.',
+    tp_back_prestadores: 'Voltar a Prestadores',
     tp_filter_state: 'Estado',
     tp_search_lbl: 'Busca',
     tp_search_ph: 'E-mail, nome do tenant ou nome do usuário (órfãos)…',
@@ -107,14 +107,14 @@ const M = {
     tp_st_rejected: 'Recusado',
   },
   'en-US': {
-    tp_pageTitle: 'BrSpark Admin, Technician signup',
+    tp_pageTitle: 'BrSpark Admin — Providers · Applications',
     tp_bc_panel: 'Home',
-    tp_bc_users: 'Users',
-    tp_bc_here: 'Technician signup',
-    tp_hero_title: 'Technician signup',
+    tp_bc_prestadores: 'Providers',
+    tp_bc_here: 'Applications',
+    tp_hero_title: 'Applications (onboarding)',
     tp_hero_sub_html:
-      'Invites, review and approval of the global form. In <a href="users.html" style="color:var(--accent);font-weight:600">Users</a>, “Pending provider” comes from the <em>technician profile</em>. This list shows who has an <em>application</em> (invite or in-app request). Pending profiles <em>without</em> a form show as “Profile without application”, use “Create invite” to send the link.',
-    tp_back_users: 'Back to users',
+      'Invites, review and approval of the global form. The <a href="prestadores.html" style="color:var(--accent);font-weight:600">Providers</a> hub covers partnerships and links; this screen lists <em>applications</em> and “Profile without application”. Use “Invite by email” to send the link.',
+    tp_back_prestadores: 'Back to Providers',
     tp_filter_state: 'Status',
     tp_search_lbl: 'Search',
     tp_search_ph: 'Email, tenant name, or user name (orphan profiles)…',
@@ -267,12 +267,12 @@ export function applyTechnicianApplicationsPageI18n() {
     if (el) el.textContent = tpT(key);
   };
   set('tp-bc-panel', 'tp_bc_panel');
-  set('tp-bc-users', 'tp_bc_users');
+  set('tp-bc-prestadores', 'tp_bc_prestadores');
   set('tp-bc-here', 'tp_bc_here');
   set('tp-hero-title', 'tp_hero_title');
   const hero = document.getElementById('tp-hero-sub');
   if (hero) hero.innerHTML = tpT('tp_hero_sub_html');
-  set('tp-back-users', 'tp_back_users');
+  set('tp-back-prestadores', 'tp_back_prestadores');
   const fl = document.getElementById('tp-filter-state-lbl');
   if (fl) {
     fl.innerHTML = `<ion-icon name="funnel-outline" aria-hidden="true"></ion-icon> ${tpT('tp_filter_state')}`;

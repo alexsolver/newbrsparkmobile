@@ -35,6 +35,7 @@ const { validateAppPasswordPolicy } = require('../lib/appPasswordPolicy');
 const { validatePanelRoleForTenantKind, setUnifiedPasswordHashForEmail } = require('../lib/appAccountAuth');
 const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 const { syncActiveAffiliationFromTechnicianStatus } = require('../lib/providerTechnicianAffiliationSync');
+const { resolveMergedProviderIdentityForUserId, normalizeEmail: normalizeEmailForPi } = require('../lib/providerIdentityMerge');
 
 const MAX_AVATAR_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_DOC_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -1220,29 +1221,23 @@ router.get('/:id/provider-affiliations', async (req, res) => {
     const user = await findScopedUserOrNull(req, id, { select: { id: true, email: true, role: true } });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
 
-    const providerIdentity = await prisma.providerIdentity.findUnique({
-      where: { userId: id },
-      select: {
-        id: true,
-        globalStatus: true,
-        kycStatus: true,
-        updatedAt: true,
-        affiliations: {
-          orderBy: { updatedAt: 'desc' },
-          include: {
-            tenant: { select: { id: true, name: true, email: true, kind: true } },
-          },
-        },
-      },
-    });
-
-    if (!providerIdentity) {
+    const emailNorm = normalizeEmailForPi(user.email || '');
+    const providerIdentityFull = await resolveMergedProviderIdentityForUserId(prisma, id, emailNorm);
+    if (!providerIdentityFull) {
       return res.json({ providerIdentity: null, affiliations: [] });
     }
 
+    const providerIdentity = {
+      id: providerIdentityFull.id,
+      globalStatus: providerIdentityFull.globalStatus,
+      kycStatus: providerIdentityFull.kycStatus,
+      updatedAt: providerIdentityFull.updatedAt,
+      affiliations: providerIdentityFull.affiliations || [],
+    };
+
     const rows = (providerIdentity.affiliations || []).filter((row) => {
-      const kind = String(row.tenant?.kind || 'COMPANY').toUpperCase();
-      if (kind !== 'COMPANY') return false;
+      const kind = String(row.tenant?.kind || '').toUpperCase();
+      if (kind === 'CLIENT' || kind === 'PROVIDER') return false;
       return assertTenantAccess(req.authorization, row.tenantId);
     });
 

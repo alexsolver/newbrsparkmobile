@@ -479,6 +479,7 @@ router.get('/:id/providers', async (req, res) => {
       data: rows.map((row) => ({
         id: row.id,
         status: row.status,
+        relationshipType: row.relationshipType || 'PARTNER',
         note: row.note,
         invitedAt: row.invitedAt,
         requestedAt: row.requestedAt,

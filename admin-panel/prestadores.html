@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Prestadores</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .prest-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 1100px) {
+      .prest-grid { grid-template-columns: 1fr; }
+    }
+    .prest-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px;
+    }
+    .prest-card h2 {
+      font-size: 15px;
+      font-weight: 800;
+      margin: 0 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+    }
+    .prest-card .prest-sub {
+      font-size: 12px;
+      color: var(--text3);
+      line-height: 1.45;
+      margin: 0 0 14px;
+    }
+    .prest-apps-card { margin-top: 20px; }
+    .prest-candidates-list {
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-top: 8px;
+      background: var(--surface);
+    }
+    .prest-table-wrap {
+      overflow: auto;
+      max-height: 360px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .prest-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600" id="pr-bc-panel">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span id="pr-bc-here">Prestadores</span>
+      </nav>
+    </div>
+    <div class="page-body">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title" id="pr-hero-title">Prestadores</h1>
+        <p class="page-hero-sub" id="pr-hero-sub"></p>
+      </header>
+
+      <p id="pr-perm-banner" class="prest-sub" style="display:none;padding:12px 14px;border-radius:10px;background:var(--amber-dim);color:var(--text);border:1px solid var(--border);margin-bottom:16px"></p>
+
+      <div class="prest-grid">
+        <section class="prest-card" id="pr-section-bonds" aria-labelledby="pr-card-bonds-title">
+          <h2 id="pr-card-bonds-title">Vínculos e pedidos</h2>
+          <p class="prest-sub" id="pr-bonds-hint"></p>
+          <div class="form-group" id="pr-wrap-bonds-tenant" style="display:none;margin-bottom:12px">
+            <label class="form-label" for="pr-bonds-tenant" id="pr-bonds-tenant-lbl">Organização</label>
+            <select class="form-control" id="pr-bonds-tenant"></select>
+          </div>
+          <div class="prest-toolbar">
+            <button type="button" class="btn btn-outline btn-sm" id="pr-bonds-refresh">
+              <ion-icon name="refresh-outline" style="font-size:16px;vertical-align:-2px" aria-hidden="true"></ion-icon>
+              <span id="pr-bonds-refresh-txt">Atualizar</span>
+            </button>
+          </div>
+          <p id="pr-bonds-status" style="font-size:12px;color:var(--text2);margin-bottom:8px"></p>
+          <div class="prest-table-wrap">
+            <table class="data-table" style="width:100%;font-size:12px">
+              <thead>
+                <tr>
+                  <th id="pr-th-provider">Prestador</th>
+                  <th id="pr-th-type">Tipo</th>
+                  <th id="pr-th-state">Estado</th>
+                  <th id="pr-th-requested">Pedido em</th>
+                  <th id="pr-th-actions"></th>
+                </tr>
+              </thead>
+              <tbody id="pr-bonds-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="prest-card" id="pr-section-invite" aria-labelledby="pr-card-invite-title">
+          <h2 id="pr-card-invite-title">Convidar parceria ou vínculo dedicado</h2>
+          <div id="pr-invite-intro" class="prest-sub" style="padding:12px 14px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);margin-bottom:14px"></div>
+          <div class="form-group">
+            <label class="form-label" for="pr-invite-email" id="pr-lbl-invite-email">E-mail do prestador *</label>
+            <input type="email" class="form-control" id="pr-invite-email" placeholder="tecnico@exemplo.com" autocomplete="email" />
+          </div>
+          <div class="form-group" id="pr-candidates-wrap">
+            <label class="form-label" for="pr-candidates-filter" id="pr-lbl-candidates">Prestadores disponíveis</label>
+            <p id="pr-candidates-help" class="prest-sub" style="margin-top:0"></p>
+            <input type="search" class="form-control" id="pr-candidates-filter" placeholder="" autocomplete="off" />
+            <div id="pr-candidates-list" class="prest-candidates-list"></div>
+            <p id="pr-candidates-status" style="font-size:11px;color:var(--text3);margin-top:6px"></p>
+          </div>
+          <div class="form-group" id="pr-wrap-invite-tenant" style="display:none">
+            <label class="form-label" for="pr-invite-tenant" id="pr-lbl-invite-tenant">Tenant (empresa) *</label>
+            <select class="form-control" id="pr-invite-tenant"></select>
+            <p id="pr-invite-tenant-hint" class="prest-sub" style="margin-top:6px"></p>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="pr-invite-type" id="pr-lbl-type">Tipo de vínculo *</label>
+            <select class="form-control" id="pr-invite-type">
+              <option value="PARTNER">Parceria (multi-empresa)</option>
+              <option value="DEDICATED">Vínculo dedicado (full time)</option>
+            </select>
+            <p id="pr-type-hint" class="prest-sub" style="margin-top:6px"></p>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="pr-invite-note" id="pr-lbl-note">Mensagem (opcional)</label>
+            <textarea class="form-control" id="pr-invite-note" rows="3" placeholder=""></textarea>
+          </div>
+          <button type="button" class="btn btn-primary" id="pr-invite-submit">
+            <span id="pr-invite-submit-txt">Criar convite</span>
+          </button>
+        </section>
+      </div>
+
+      <section class="prest-card prest-apps-card" id="pr-section-apps" aria-labelledby="pr-card-apps-title">
+        <h2 id="pr-card-apps-title">Candidaturas (onboarding)</h2>
+        <p class="prest-sub" id="pr-apps-sub"></p>
+        <div class="prest-toolbar" style="margin-top:4px">
+          <button type="button" class="btn btn-outline btn-sm" id="pr-apps-refresh">
+            <ion-icon name="refresh-outline" style="font-size:16px;vertical-align:-2px" aria-hidden="true"></ion-icon>
+            <span id="pr-apps-refresh-txt">Atualizar</span>
+          </button>
+          <a href="technician-applications.html" class="btn btn-primary btn-sm" id="pr-apps-see-all" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+            <span id="pr-apps-see-all-txt">Abrir lista completa</span>
+            <ion-icon name="arrow-forward-outline" style="font-size:16px;vertical-align:-2px" aria-hidden="true"></ion-icon>
+          </a>
+        </div>
+        <p id="pr-apps-status" style="font-size:12px;color:var(--text2);margin-bottom:8px"></p>
+        <div class="prest-table-wrap" style="max-height:280px">
+          <table class="data-table" style="width:100%;font-size:12px">
+            <thead>
+              <tr>
+                <th id="pr-apps-th-email">E-mail</th>
+                <th id="pr-apps-th-tenant">Tenant</th>
+                <th id="pr-apps-th-status">Estado</th>
+                <th id="pr-apps-th-updated">Atualizado</th>
+              </tr>
+            </thead>
+            <tbody id="pr-tech-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/prestadores-page.js"></script>
+<script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+</body>
+</html>

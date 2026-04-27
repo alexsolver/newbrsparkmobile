@@ -32,11 +32,13 @@ export default function ProviderAffiliationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<ProviderAffiliation[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   /** Só o primeiro foco usa ecrã de loading completo; voltas ao separador actualizam em silêncio (convites novos). */
   const firstFocusRef = useRef(true);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     const j = await ProviderAffiliationsApi.getMeStatus();
     setRows(j.affiliations || []);
   }, []);
@@ -48,8 +50,12 @@ export default function ProviderAffiliationsScreen() {
       if (isFirst) setLoading(true);
       firstFocusRef.current = false;
       load()
-        .catch(() => {
-          if (!cancelled) setRows([]);
+        .catch((e: unknown) => {
+          if (!cancelled) {
+            setRows([]);
+            const msg = e instanceof Error ? e.message : String(e);
+            setLoadError(msg || 'Não foi possível carregar os vínculos.');
+          }
         })
         .finally(() => {
           if (!cancelled && isFirst) setLoading(false);
@@ -230,6 +236,25 @@ export default function ProviderAffiliationsScreen() {
         <Text style={{ fontSize: 12, color: '#64748B', marginTop: 6, lineHeight: 18 }}>
           Aqui você vê seus vínculos com empresas, incluindo dedicação (full time) e parcerias.
         </Text>
+        {loadError ? (
+          <View
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderRadius: 12,
+              backgroundColor: '#FEF2F2',
+              borderWidth: 1,
+              borderColor: '#FECACA',
+            }}
+          >
+            <Text style={{ fontSize: 12, color: '#991B1B', fontWeight: '700', lineHeight: 18 }}>
+              {loadError}
+            </Text>
+            <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 6, lineHeight: 16 }}>
+              Puxe para atualizar ou confirme a ligação à internet. Se o erro persistir, termine sessão e entre de novo.
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {loading ? (

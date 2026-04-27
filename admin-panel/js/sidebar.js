@@ -280,9 +280,9 @@ export const NAV_ITEMS = [
   { page: 'tenants.html', icon: 'business-outline', labelKey: 'nav_tenants', sectionKey: 'nav_sec_mgmt' },
   { page: 'users.html', icon: 'people-outline', labelKey: 'nav_users', sectionKey: null },
   {
-    page: 'technician-applications.html',
-    icon: 'person-add-outline',
-    labelKey: 'nav_tech_signup',
+    page: 'prestadores.html',
+    icon: 'people-circle-outline',
+    labelKey: 'nav_prestadores',
     sectionKey: null,
   },
   { page: 'checklists.html', icon: 'list-circle-outline', labelKey: 'nav_forms_builder', sectionKey: 'nav_sec_ops' },
@@ -325,6 +325,7 @@ export const TENANT_ADMIN_PANEL_PAGES = new Set([
   'tenants.html',
   'users.html',
   'user-edit.html',
+  'prestadores.html',
   'technician-applications.html',
   'checklists.html',
   'operations.html',
@@ -355,6 +356,7 @@ export const MANAGER_PANEL_PAGES = new Set([
   'locations.html',
   'notifications.html',
   'chat.html',
+  'prestadores.html',
   'technician-applications.html',
   'work-time.html',
 ]);
@@ -597,7 +599,7 @@ export function renderSidebar(alertCount = 3) {
     const active =
       pageKey === itemKey ||
       (pageKey === 'user-edit' && item.page === 'users.html') ||
-      (pageKey === 'technician-applications' && item.page === 'technician-applications.html')
+      ((pageKey === 'technician-applications' || pageKey === 'prestadores') && item.page === 'prestadores.html')
         ? 'active'
         : '';
     const lab = navLabelForRole(item, role);
