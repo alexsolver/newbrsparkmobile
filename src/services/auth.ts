@@ -219,7 +219,12 @@ export interface User {
       menuChipInactiveBorder?: string;
       logoLightUrl?: string;
       logoDarkUrl?: string;
-      loginBackgroundUrl?: string;
+      /** Logo só do ecrã de login; vazio = mesmo que logos globais. */
+      loginPageLogoUrl?: string;
+      /** Cor sólida do bloco de topo do login; vazio = fundo padrão. */
+      loginBackgroundColor?: string;
+      /** Fundo da barra global (logo + alertas + avatar). */
+      appHeaderBackgroundColor?: string;
       brandingVersion?: number;
       updatedAt?: string | null;
     };

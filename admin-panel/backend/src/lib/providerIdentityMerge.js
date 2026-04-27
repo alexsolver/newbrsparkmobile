@@ -14,6 +14,8 @@ const onboardingStatusInclude = {
       tenant: {
         select: { id: true, name: true, slug: true, status: true, kind: true, email: true },
       },
+      /** Por linha: o painel não pode usar só o KYC da PI «base» fundida (cada vínculo tem o seu providerIdentityId). */
+      providerIdentity: { select: { id: true, kycStatus: true } },
     },
   },
 };
@@ -22,6 +24,28 @@ function normalizeEmail(raw) {
   return String(raw || '')
     .trim()
     .toLowerCase();
+}
+
+const up = (s) => String(s || '').toUpperCase().trim();
+
+/**
+ * Várias `ProviderIdentity` no mesmo `AppAccount`: a «base» escolhida por mais afiliações
+ * pode ter KYC ainda PENDING enquanto outra linha (ex.: a que o admin aprovou) está APPROVED.
+ * Para a app e o painel, o KYC do utilizador segue a melhor situação entre todas.
+ */
+function pickMergedKycAndGlobalStatus(identities) {
+  if (!identities || !identities.length) return {};
+  if (identities.some((i) => up(i.kycStatus) === 'APPROVED')) {
+    const row = identities.find((i) => up(i.kycStatus) === 'APPROVED');
+    return { kycStatus: 'APPROVED', globalStatus: row?.globalStatus || 'VERIFIED' };
+  }
+  if (identities.every((i) => up(i.kycStatus) === 'REJECTED')) {
+    return { kycStatus: 'REJECTED', globalStatus: identities[0].globalStatus };
+  }
+  const sorted = [...identities].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+  return { kycStatus: sorted[0].kycStatus, globalStatus: sorted[0].globalStatus };
 }
 
 /**
@@ -84,8 +108,10 @@ async function resolveMergedProviderIdentityForUserId(prisma, userId, jwtEmailNo
       })[0] || identities[0];
     const appsSource =
       identities.find((pi) => (pi.applications && pi.applications.length > 0)) || pickBase;
+    const kycLayer = pickMergedKycAndGlobalStatus(identities);
     return {
       ...pickBase,
+      ...kycLayer,
       affiliations: mergedAffiliations,
       applications: appsSource.applications || [],
     };

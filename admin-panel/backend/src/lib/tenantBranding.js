@@ -24,7 +24,12 @@ const BRANDING_DEFAULTS = Object.freeze({
   menuChipInactiveBorder: '',
   logoLightUrl: '',
   logoDarkUrl: '',
-  loginBackgroundUrl: '',
+  /** Logo só da página de login (app); vazio = mesmo que logos gerais. */
+  loginPageLogoUrl: '',
+  /** Fundo sólido do bloco de topo do login (app) — vazio = fundo padrão do tema. */
+  loginBackgroundColor: '',
+  /** Fundo da barra global (logo + alertas + avatar). */
+  appHeaderBackgroundColor: '',
   liveActivityBadgeKey: '',
   brandingVersion: 0,
   updatedAt: null,
@@ -96,13 +101,19 @@ function readBrandingPermissionsFromPlanFeatures(planFeatures) {
   return sanitizeBrandingPermissions({ ...BRANDING_PERMISSION_DEFAULTS, ...raw });
 }
 
-function stripEmptyStringKeys(obj) {
-  if (!isPlainObject(obj)) return {};
-  const o = { ...obj };
-  for (const k of Object.keys(o)) {
-    if (o[k] === '') delete o[k];
+/**
+ * Espelho CMS (`cmsBrandingMirror`) + `features.branding` do tenant.
+ * Cada chave presente em `tenantBranding` substitui o mirror — **incluindo `''`**
+ * (ex.: slogan limpo no painel deve apagar o slogan vindo do CMS; antes
+ * `stripEmptyStringKeys` removia a chave e o mirror «ganhava»).
+ */
+function overlayTenantBrandingOnMirror(mirror, tenantBranding) {
+  const m = isPlainObject(mirror) ? { ...mirror } : {};
+  const t = isPlainObject(tenantBranding) ? tenantBranding : {};
+  for (const key of Object.keys(t)) {
+    m[key] = t[key];
   }
-  return o;
+  return m;
 }
 
 /** iOS ATS bloqueia `http://` na App Store; o mesmo asset em `https://` responde 200 em produção. */
@@ -174,7 +185,11 @@ function sanitizeTenantBranding(raw, permissions) {
     menuChipInactiveBorder: ent.allowColors ? asHexColor(src.menuChipInactiveBorder) : '',
     logoLightUrl: ent.allowLogo ? asOptionalUrl(src.logoLightUrl) : '',
     logoDarkUrl: ent.allowLogo ? asOptionalUrl(src.logoDarkUrl) : '',
-    loginBackgroundUrl: ent.allowLoginScreen ? asOptionalUrl(src.loginBackgroundUrl) : '',
+    loginPageLogoUrl: ent.allowLogo ? asOptionalUrl(src.loginPageLogoUrl) : '',
+    loginBackgroundColor: ent.allowLoginScreen ? asHexColor(src.loginBackgroundColor) : '',
+    appHeaderBackgroundColor: ent.allowColors ? asHexColor(src.appHeaderBackgroundColor) : '',
+    /** Legado: imagem de fundo removida; forçar remoção no JSON do tenant. */
+    loginBackgroundUrl: '',
     liveActivityBadgeKey: asLiveActivityBadgeKey(src.liveActivityBadgeKey),
     brandingVersion: Number.isFinite(Number(src.brandingVersion)) ? Number(src.brandingVersion) : 0,
     updatedAt: src.updatedAt ? new Date(src.updatedAt).toISOString() : null,
@@ -187,7 +202,7 @@ function buildEffectiveTenantBranding({ tenantName, planFeatures, tenantFeatures
   const mirror = isPlainObject(tenantFeatures?.cmsBrandingMirror) ? tenantFeatures.cmsBrandingMirror : {};
   const tenantBrandingRaw =
     isPlainObject(tenantFeatures) && isPlainObject(tenantFeatures.branding) ? tenantFeatures.branding : {};
-  const mergedRaw = { ...mirror, ...stripEmptyStringKeys(tenantBrandingRaw) };
+  const mergedRaw = overlayTenantBrandingOnMirror(mirror, tenantBrandingRaw);
   const saved = sanitizeTenantBranding(mergedRaw, permissions);
   const effective = {
     ...BRANDING_DEFAULTS,
@@ -199,7 +214,9 @@ function buildEffectiveTenantBranding({ tenantName, planFeatures, tenantFeatures
     logoDarkUrl: absolutizePublicMediaUrlForMobile(
       saved.logoDarkUrl || saved.logoLightUrl || '',
     ),
-    loginBackgroundUrl: absolutizePublicMediaUrlForMobile(saved.loginBackgroundUrl || ''),
+    loginPageLogoUrl: absolutizePublicMediaUrlForMobile(saved.loginPageLogoUrl || ''),
+    /** Legado: imagem de fundo deixou de ser usada no app; manter vazio. */
+    loginBackgroundUrl: '',
   };
   return {
     permissions,

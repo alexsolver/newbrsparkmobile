@@ -17,6 +17,7 @@ const {
   resolveScopedTenantId,
 } = require('../lib/authorization');
 const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
+const { resolveMergedProviderIdentityForUserId, normalizeEmail } = require('../lib/providerIdentityMerge');
 
 function auditFromReq(req, action, resource, tenantId = null, metadata = undefined) {
   const { adminId, userId } = auditActor(req);
@@ -342,7 +343,9 @@ router.put('/:id/branding', async (req, res) => {
       'surfaceColor',
       'logoLightUrl',
       'logoDarkUrl',
-      'loginBackgroundUrl',
+      'loginPageLogoUrl',
+      'loginBackgroundColor',
+      'appHeaderBackgroundColor',
     ].some((k) => JSON.stringify(prevSaved?.[k]) !== JSON.stringify(sanitized?.[k]));
     if (!resolved.permissions.enabled && changedRestrictedBrandingKeys) {
       return res.status(403).json({
@@ -475,6 +478,27 @@ router.get('/:id/providers', async (req, res) => {
         },
       },
     });
+    const userIds = [
+      ...new Set(rows.map((r) => r.providerIdentity?.user?.id).filter(Boolean).map((id) => String(id))),
+    ];
+    const mergedKycByUserId = new Map();
+    await Promise.all(
+      userIds.map(async (uid) => {
+        const first = rows.find((r) => r.providerIdentity?.user?.id && String(r.providerIdentity.user.id) === uid);
+        const email = first?.providerIdentity?.user?.email || '';
+        const merged = await resolveMergedProviderIdentityForUserId(prisma, uid, normalizeEmail(email));
+        mergedKycByUserId.set(uid, String(merged?.kycStatus || '').toUpperCase().trim());
+      }),
+    );
+    const activationKycOkForRow = (row) => {
+      const line = String(row.providerIdentity?.kycStatus || '')
+        .toUpperCase()
+        .trim();
+      if (line === 'REJECTED') return false;
+      const uid = String(row.providerIdentity?.user?.id || '');
+      const m = mergedKycByUserId.get(uid) || '';
+      return line === 'APPROVED' || m === 'APPROVED';
+    };
     return res.json({
       data: rows.map((row) => ({
         id: row.id,
@@ -484,6 +508,7 @@ router.get('/:id/providers', async (req, res) => {
         invitedAt: row.invitedAt,
         requestedAt: row.requestedAt,
         activatedAt: row.activatedAt,
+        activationKycOk: activationKycOkForRow(row),
         providerIdentity: {
           id: row.providerIdentity.id,
           globalStatus: row.providerIdentity.globalStatus,

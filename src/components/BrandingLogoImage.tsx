@@ -8,6 +8,8 @@ export type BrandingLogoImageProps = {
   style: StyleProp<ImageStyle>;
   resizeMode?: ImageResizeMode;
   accessibilityLabel?: string;
+  /** `login` = asset opcional só no login; senão o logo geral da marca. */
+  variant?: 'default' | 'login';
 };
 
 /**
@@ -18,25 +20,28 @@ export function BrandingLogoImage({
   style,
   resizeMode = 'contain',
   accessibilityLabel,
+  variant = 'default',
 }: BrandingLogoImageProps) {
-  const { resolvedLogoUrl } = useTheme();
+  const { resolvedLogoUrl, resolvedLoginPageLogoUrl } = useTheme();
+  const primaryUri =
+    variant === 'login' ? resolvedLoginPageLogoUrl || resolvedLogoUrl : resolvedLogoUrl;
   const [uriFailed, setUriFailed] = useState(false);
 
   useEffect(() => {
     setUriFailed(false);
-  }, [resolvedLogoUrl]);
+  }, [primaryUri, variant]);
 
-  const useUri = Boolean(resolvedLogoUrl) && !uriFailed;
+  const useUri = Boolean(primaryUri) && !uriFailed;
 
   return (
     <Image
       style={style}
       resizeMode={resizeMode}
       accessibilityLabel={accessibilityLabel}
-      source={useUri ? { uri: resolvedLogoUrl as string } : FALLBACK_LOGO}
+      source={useUri ? { uri: primaryUri as string } : FALLBACK_LOGO}
       defaultSource={FALLBACK_LOGO}
       onError={() => {
-        if (resolvedLogoUrl) setUriFailed(true);
+        if (primaryUri) setUriFailed(true);
       }}
     />
   );

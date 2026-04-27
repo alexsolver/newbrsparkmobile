@@ -318,13 +318,14 @@ export default function OnboardingScreen() {
             <View style={s.slideContent}>
               <View style={s.heroLogoWrap}>
                 <BrandingLogoImage
+                  variant="login"
                   style={s.heroLogoImg}
                   resizeMode="contain"
                   accessibilityLabel={t('consentFlow.a11yLogo')}
                 />
               </View>
               <Text style={[s.heroBrandName, { color: C.primary }]}>{appDisplayName}</Text>
-              <Text style={[s.heroBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text>
+              {appTagline ? <Text style={[s.heroBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text> : null}
               <Text style={s.heroTitle}>{t('consentFlow.welcomeTitle')}</Text>
               <Text style={s.heroSubtitle}>{t('consentFlow.welcomeTechBody')}</Text>
               <View style={s.collectGrid}>
@@ -359,13 +360,14 @@ export default function OnboardingScreen() {
           <View style={s.slideContent}>
             <View style={s.heroLogoWrap}>
               <BrandingLogoImage
+                variant="login"
                 style={s.heroLogoImg}
                 resizeMode="contain"
                 accessibilityLabel={t('consentFlow.a11yLogo')}
               />
             </View>
             <Text style={[s.heroBrandName, { color: C.primary }]}>{appDisplayName}</Text>
-            <Text style={[s.heroBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text>
+            {appTagline ? <Text style={[s.heroBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text> : null}
             <Text style={s.heroTitle}>{t('consentFlow.welcomeTitle')}</Text>
             <Text style={s.heroSubtitle}>{t('consentFlow.welcomeClientBody')}</Text>
             <View style={s.collectGrid}>

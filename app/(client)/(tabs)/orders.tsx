@@ -154,7 +154,7 @@ export default function OrdersScreen() {
                 <Text style={styles.brandName}>{appDisplayName}</Text>
               </View>
             ) : null}
-            <Text style={styles.brandTagline} numberOfLines={1}>{appTagline}</Text>
+            {appTagline ? <Text style={styles.brandTagline} numberOfLines={1}>{appTagline}</Text> : null}
           </View>
           <Text style={[styles.title, { color: C.primary }]}>{t('orders.myRequests')}</Text>
           <Text style={styles.subtitle}>{orders.length} {t('orders.ordersCount')}</Text>

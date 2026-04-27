@@ -1098,6 +1098,9 @@ export default function ProfileScreen() {
           }
         }
 
+        // Após switchWorkspace/createWorkspace o RouteGuard pode ainda ver persona antiga; alinhar papel e dar um frame ao React antes do replace.
+        await setUserRole(target === 'CLIENT' ? 'CLIENT' : 'TECHNICIAN');
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         router.replace(getPersonaHomeHref(target === 'CLIENT' ? 'client' : 'provider') as any);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -1133,7 +1136,7 @@ export default function ProfileScreen() {
         {/* ─── Profile Summary Card ─── */}
         <View style={styles.profileHeaderCard}>
           <Text style={[styles.headerBrandName, { color: C.accent }]}>{appDisplayName}</Text>
-          <Text style={[styles.headerBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text>
+          {appTagline ? <Text style={[styles.headerBrandTagline, { color: C.textSecondary }]}>{appTagline}</Text> : null}
           <TouchableOpacity onPress={pickAvatar} activeOpacity={0.8} style={styles.headerAvatarWrap}>
             {displayAvatarUri ? (
               <Image

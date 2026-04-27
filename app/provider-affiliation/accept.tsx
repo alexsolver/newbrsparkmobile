@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from 'react-native';
 import { useGlobalSearchParams, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ProviderAffiliationsApi, ProviderAffiliation } from '../../src/services/providerAffiliations';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -25,6 +26,7 @@ function consequenceBullets(type: string) {
 
 export default function ProviderAffiliationAcceptScreen() {
   const { user, loading } = useAuth();
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
   const params = useGlobalSearchParams<{ token?: string }>();
@@ -57,23 +59,28 @@ export default function ProviderAffiliationAcceptScreen() {
       .finally(() => setInviteLoading(false));
   }, [token, user, loading, router]);
 
-  const handleAccept = async () => {
+  const doAccept = async () => {
     if (!token) return;
     try {
       setBusy(true);
       const accepted = await ProviderAffiliationsApi.acceptInvite(token);
       setInvite((prev) => ({ ...(prev || ({} as ProviderAffiliation)), ...accepted }));
-      Alert.alert(
-        'Convite aceito',
-        'Pronto. Agora a empresa precisa confirmar a ativação para você começar a operar.'
-      );
+      Alert.alert(t('profile.affiliationsAcceptDoneTitle'), t('profile.affiliationsAcceptDoneBody'));
       router.replace('/profile/affiliations' as any);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert('Não foi possível aceitar', msg);
+      Alert.alert(t('profile.affiliationsAcceptErrorTitle'), msg);
     } finally {
       setBusy(false);
     }
+  };
+
+  const handlePressAccept = () => {
+    if (!token || !invite) return;
+    Alert.alert(t('profile.affiliationsConsentTitle'), t('profile.affiliationsConsentBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('profile.affiliationsConsentConfirm'), onPress: () => void doAccept() },
+    ]);
   };
 
   const title = invite ? relationshipTitle(invite.relationshipType) : 'Convite';
@@ -112,7 +119,7 @@ export default function ProviderAffiliationAcceptScreen() {
         )}
 
         <TouchableOpacity
-          onPress={handleAccept}
+          onPress={handlePressAccept}
           disabled={busy || inviteLoading || !invite}
           style={{
             backgroundColor: '#16A34A',

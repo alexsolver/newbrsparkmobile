@@ -166,11 +166,18 @@ async function handleUePaffAffiliationAction(actBtn) {
   const affId = actBtn.getAttribute('data-aff');
   const act = actBtn.getAttribute('data-act');
   if (!affId || !act) return;
-  if (act === 'activate' && actBtn.getAttribute('data-ue-paff-kyc-block') === '1') {
-    const msg = t('ue_paffActivateNeedKyc');
-    setUePaffInlineError(msg);
-    alert(msg);
-    return;
+  if (act === 'activate') {
+    const blockKyc = actBtn.getAttribute('data-ue-paff-kyc-block') === '1';
+    const blockPf = actBtn.getAttribute('data-ue-paff-pf-block') === '1';
+    if (blockKyc || blockPf) {
+      const parts = [];
+      if (blockKyc) parts.push(t('ue_paffActivateNeedKyc'));
+      if (blockPf) parts.push(t('ue_paffActivateNeedProviderFirst'));
+      const msg = parts.join('\n\n');
+      setUePaffInlineError(msg);
+      alert(msg);
+      return;
+    }
   }
   if (act === 'end' && !confirm(t('ue_paffEndConfirm'))) return;
   clearUePaffInlineError();
@@ -333,7 +340,6 @@ function paintProviderAffiliationsSection(payload) {
 
   const pi = payload?.providerIdentity;
   const rows = Array.isArray(payload?.affiliations) ? payload.affiliations : [];
-  const kycOk = pi && String(pi.kycStatus || '').toUpperCase() === 'APPROVED';
 
   if (kycBox) {
     if (pi) {
@@ -375,12 +381,44 @@ function paintProviderAffiliationsSection(payload) {
         .join('<br/>');
       const note = row.note ? esc(String(row.note).slice(0, 160)) + (String(row.note).length > 160 ? '…' : '') : '—';
       const canAct = !isUserEditReadonly();
+      const lineKyc = String(row.providerIdentityKycStatus || '')
+        .toUpperCase()
+        .trim();
+      const mergedKyc = String(pi?.kycStatus || '')
+        .toUpperCase()
+        .trim();
+      /** Vínculo pode estar noutra PI do mesmo AppAccount: não usar só `lineKyc` (ex.: PENDING) quando o KYC aprovado está na identidade fundida. */
+      const rowKycOk =
+        lineKyc !== 'REJECTED' && (lineKyc === 'APPROVED' || mergedKyc === 'APPROVED');
+      const pfOk = row.providerFirstNetworkEnabled !== false;
+      const blockKyc = !rowKycOk;
+      const blockPf = !pfOk;
       let actions = '';
       if (canAct && pi && (st === 'INVITED' || st === 'REQUESTED')) {
         /** Não usar `disabled`: o browser não dispara clique — parece «botão morto» (igual ao convite). */
-        const extraCls = kycOk ? '' : ' ue-paff-act--need-kyc';
-        const blockAttr = kycOk ? '' : ` data-ue-paff-kyc-block="1" title="${esc(t('ue_paffActivateNeedKyc'))}"`;
-        actions += `<button type="button" class="btn btn-sm btn-primary ue-paff-act${extraCls}" data-aff="${esc(row.id)}" data-act="activate"${blockAttr}>${esc(t('ue_paffBtnActivate'))}</button> `;
+        let extraCls = '';
+        let blockAttr = '';
+        if (blockKyc) {
+          extraCls += ' ue-paff-act--need-kyc';
+          blockAttr += ` data-ue-paff-kyc-block="1"`;
+        }
+        if (blockPf) {
+          extraCls += ' ue-paff-act--need-pf';
+          blockAttr += ` data-ue-paff-pf-block="1"`;
+        }
+        const titleParts = [];
+        if (blockKyc) titleParts.push(t('ue_paffActivateNeedKyc'));
+        if (blockPf) titleParts.push(t('ue_paffActivateNeedProviderFirst'));
+        const titleAttr = titleParts.length ? ` title="${esc(titleParts.join(' — '))}"` : '';
+        actions += `<button type="button" class="btn btn-sm btn-primary ue-paff-act${extraCls}" data-aff="${esc(row.id)}" data-act="activate"${blockAttr}${titleAttr}>${esc(t('ue_paffBtnActivate'))}</button> `;
+      }
+      if (canAct && pi && (st === 'INVITED' || st === 'REQUESTED') && (blockKyc || blockPf)) {
+        const hintParts = [];
+        if (blockKyc) hintParts.push(t('ue_paffHintKycShort'));
+        if (blockPf) hintParts.push(t('ue_paffHintPfShort'));
+        actions += `<div class="ue-paff-row-hint" role="note">${hintParts
+          .map((h) => `<div>${esc(h)}</div>`)
+          .join('')}</div>`;
       }
       if (canAct && (st === 'ACTIVE' || st === 'INVITED' || st === 'REQUESTED' || st === 'SUSPENDED')) {
         actions += `<button type="button" class="btn btn-sm btn-secondary ue-paff-act" data-aff="${esc(row.id)}" data-act="end">${esc(t('ue_paffBtnEnd'))}</button>`;
@@ -392,7 +430,7 @@ function paintProviderAffiliationsSection(payload) {
         <td>${esc(providerAffStatusLabel(st))}</td>
         <td style="font-size:12px;line-height:1.35">${dates || '—'}</td>
         <td style="font-size:12px;max-width:220px;word-break:break-word">${note}</td>
-        <td style="white-space:nowrap">${actions}</td>
+        <td class="ue-paff-td-actions">${actions}</td>
       </tr>`;
     })
     .join('');

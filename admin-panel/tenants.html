@@ -159,12 +159,29 @@
         </div>
       </div>
       <div class="form-group tenant-branding-modal__field">
-        <label class="form-label">Imagem de topo/login (URL)</label>
-        <input class="form-control" id="tenant-branding-login-bg" placeholder="https://..." />
-        <div class="tenant-branding-modal__upload-row">
-          <input class="tenant-branding-modal__file-input" type="file" id="tenant-branding-login-bg-file" accept="image/*" />
-          <button type="button" class="btn btn-ghost btn-sm" id="tenant-branding-login-bg-upload">Upload</button>
+        <label class="form-label">Fundo do topo (login) — cor sólida (opcional)</label>
+        <div class="tenant-branding-modal__color-row">
+          <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-login-hero" placeholder="ex.: #F1F5F9 ou vazio" />
+          <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-login-hero-picker" value="#F1F5F9" aria-label="Fundo do bloco de login" />
         </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.4;">Vazio = fundo padrão do app (só o logo e o slogan, sem franja). Não se usa imagem de fundo.</div>
+      </div>
+      <div class="form-group tenant-branding-modal__field">
+        <label class="form-label">Logo da página de login (URL)</label>
+        <input class="form-control" id="tenant-branding-login-page-logo" placeholder="https://… ou /uploads/…" />
+        <div class="tenant-branding-modal__upload-row">
+          <input class="tenant-branding-modal__file-input" type="file" id="tenant-branding-login-page-logo-file" accept="image/*" />
+          <button type="button" class="btn btn-ghost btn-sm" id="tenant-branding-login-page-logo-upload">Upload</button>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.4;">Opcional. Vazio = mesmo logo que “claro/escuro” na barra e no restante do app.</div>
+      </div>
+      <div class="form-group tenant-branding-modal__field">
+        <label class="form-label">Fundo do cabeçalho principal (avatar + alertas)</label>
+        <div class="tenant-branding-modal__color-row">
+          <input class="form-control tenant-branding-modal__color-text" id="tenant-branding-app-header-bg" placeholder="vazio = branco padrão" />
+          <input class="tenant-branding-modal__color-picker" type="color" id="tenant-branding-app-header-bg-picker" value="#FFFFFF" aria-label="Fundo do cabeçalho do app" />
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:6px;line-height:1.4;">Barra no topo com logo, sino de notificações e foto de perfil. Vazio = fundo claro padrão.</div>
       </div>
       <div class="form-group tenant-branding-modal__field" id="tenant-branding-live-activity-box" style="display:none;">
         <label class="form-label">Ícone global da Live Activity (iOS)</label>
@@ -264,13 +281,17 @@
             <div class="tenant-branding-preview-phone">
               <div class="tenant-branding-preview-phone-bar">9:41</div>
               <div id="tenant-branding-preview-login" class="tenant-branding-preview-login">
-                <img id="tenant-branding-preview-login-logo" alt="" class="tenant-branding-preview-login-logo-img" />
-                <div id="tenant-branding-preview-login-logo-ph" class="tenant-branding-preview-login-logo-ph" aria-hidden="true">Logo</div>
-                <div id="tenant-branding-preview-name" class="tenant-branding-preview-login-name">BrSpark</div>
-                <div id="tenant-branding-preview-tagline" class="tenant-branding-preview-login-tag">Precisou, resolveu.</div>
-                <div class="tenant-branding-preview-fake-input" data-fake="email"></div>
-                <div class="tenant-branding-preview-fake-input" data-fake="pass" style="margin-top:8px;"></div>
-                <button type="button" id="tenant-branding-preview-login-btn" class="tenant-branding-preview-login-btn">Entrar</button>
+                <div id="tenant-branding-preview-login-hero" class="tenant-branding-preview-login-hero">
+                  <img id="tenant-branding-preview-login-logo" alt="" class="tenant-branding-preview-login-logo-img" />
+                  <div id="tenant-branding-preview-login-logo-ph" class="tenant-branding-preview-login-logo-ph" aria-hidden="true">Logo</div>
+                  <div id="tenant-branding-preview-name" class="tenant-branding-preview-login-name">BrSpark</div>
+                  <div id="tenant-branding-preview-tagline" class="tenant-branding-preview-login-tag">Precisou, resolveu.</div>
+                </div>
+                <div class="tenant-branding-preview-login-body">
+                  <div class="tenant-branding-preview-fake-input" data-fake="email"></div>
+                  <div class="tenant-branding-preview-fake-input" data-fake="pass" style="margin-top:8px;"></div>
+                  <button type="button" id="tenant-branding-preview-login-btn" class="tenant-branding-preview-login-btn">Entrar</button>
+                </div>
               </div>
             </div>
           </div>
@@ -961,6 +982,21 @@
     renderBrandingValidation();
   }
 
+  function pickPreviewTaglineOnLoginHex(bgHex) {
+    const s = String(bgHex || '').trim();
+    if (!s || !/^#([0-9A-Fa-f]{6})$/i.test(s)) {
+      return null;
+    }
+    const m = s.match(/^#([0-9A-Fa-f]{6})/i);
+    const h = m[1];
+    const r = parseInt(h.slice(0, 2), 16) / 255;
+    const g = parseInt(h.slice(2, 4), 16) / 255;
+    const b = parseInt(h.slice(4, 6), 16) / 255;
+    const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    return L > 0.55 ? '#334155' : 'rgba(255,255,255,0.9)';
+  }
+
   function setBrandingPreview() {
     const name = document.getElementById('tenant-branding-app-name').value.trim() || 'BrSpark';
     const tagline = document.getElementById('tenant-branding-tagline').value.trim() || 'Precisou, resolveu.';
@@ -973,27 +1009,29 @@
     const surface = document.getElementById('tenant-branding-surface').value.trim() || '#F8FAFC';
     const logoLight = document.getElementById('tenant-branding-logo-light').value.trim();
     const logoDark = document.getElementById('tenant-branding-logo-dark').value.trim();
-    const logoForPreview = logoLight || logoDark;
-    const loginBg = document.getElementById('tenant-branding-login-bg').value.trim();
+    const loginPageLogo = document.getElementById('tenant-branding-login-page-logo').value.trim();
+    /** Mesma ordem que `BrandingLogoImage` variant="login": logo só do login, senão claro/escuro. */
+    const logoForPreview = loginPageLogo || logoLight || logoDark;
+    const loginBgHex = document.getElementById('tenant-branding-login-hero').value.trim();
 
     const loginRoot = document.getElementById('tenant-branding-preview-login');
+    const loginHero = document.getElementById('tenant-branding-preview-login-hero');
     const nameEl = document.getElementById('tenant-branding-preview-name');
     const tagEl = document.getElementById('tenant-branding-preview-tagline');
     nameEl.textContent = name;
     tagEl.textContent = tagline;
 
-    if (loginBg) {
-      const u = brandingPreviewEscCssUrl(loginBg);
-      loginRoot.style.backgroundColor = 'transparent';
-      loginRoot.style.backgroundImage = `linear-gradient(180deg, rgba(15,23,42,0.38) 0%, rgba(15,23,42,0.78) 100%), url("${u}")`;
-      loginRoot.style.backgroundSize = 'cover, cover';
-      loginRoot.style.backgroundPosition = 'center, center';
-      loginRoot.dataset.onPhoto = '1';
-      tagEl.style.color = 'rgba(255,255,255,0.9)';
+    loginRoot.style.backgroundImage = 'none';
+    const onHero = isHexColor(loginBgHex) ? pickPreviewTaglineOnLoginHex(loginBgHex) : null;
+    if (onHero) {
+      loginRoot.classList.add('tenant-branding-preview-login--has-hero');
+      loginHero.style.backgroundColor = String(loginBgHex).toUpperCase();
+      loginRoot.style.backgroundColor = '#ffffff';
+      tagEl.style.color = onHero;
     } else {
-      loginRoot.style.backgroundImage = 'none';
-      loginRoot.style.backgroundColor = surface;
-      delete loginRoot.dataset.onPhoto;
+      loginRoot.classList.remove('tenant-branding-preview-login--has-hero');
+      loginHero.style.backgroundColor = 'transparent';
+      loginRoot.style.backgroundColor = '#ffffff';
       tagEl.style.color = secondary;
     }
     /* O ecrã de login no app não mostra o nome por texto — só logo (e slogan). O nome aparece noutros sítios (ex.: cabeçalho da prévia). */
@@ -1122,6 +1160,8 @@
     syncBrandingColorPicker('tenant-branding-accent', 'tenant-branding-accent-picker', '#14B8A6');
     syncBrandingColorPicker('tenant-branding-secondary', 'tenant-branding-secondary-picker', '#334155');
     syncBrandingColorPicker('tenant-branding-surface', 'tenant-branding-surface-picker', '#F8FAFC');
+    syncBrandingColorPicker('tenant-branding-login-hero', 'tenant-branding-login-hero-picker', '#F1F5F9');
+    syncBrandingColorPicker('tenant-branding-app-header-bg', 'tenant-branding-app-header-bg-picker', '#FFFFFF');
     syncBrandingColorPicker('tenant-branding-menu-chip-active-bg', 'tenant-branding-menu-chip-active-bg-picker', '#14B8A6');
     syncBrandingColorPicker('tenant-branding-menu-chip-active-fg', 'tenant-branding-menu-chip-active-fg-picker', '#FFFFFF');
     syncBrandingColorPicker('tenant-branding-menu-chip-inactive-bg', 'tenant-branding-menu-chip-inactive-bg-picker', '#FFFFFF');
@@ -1157,6 +1197,14 @@
       const v = document.getElementById(id).value.trim();
       if (v && !isHexColor(v)) issues.push(`Cor inválida em «${id}». Use #RRGGBB ou deixe vazio.`);
     });
+    const loginHero = document.getElementById('tenant-branding-login-hero').value.trim();
+    if (loginHero && !isHexColor(loginHero)) {
+      issues.push('Cor de fundo do login inválida. Use #RRGGBB ou deixe vazio.');
+    }
+    const appHdrBg = document.getElementById('tenant-branding-app-header-bg').value.trim();
+    if (appHdrBg && !isHexColor(appHdrBg)) {
+      issues.push('Cor do cabeçalho principal inválida. Use #RRGGBB ou deixe vazio.');
+    }
     return issues;
   }
 
@@ -1198,7 +1246,9 @@
     'tenant-branding-surface',
     'tenant-branding-logo-light',
     'tenant-branding-logo-dark',
-    'tenant-branding-login-bg',
+    'tenant-branding-login-hero',
+    'tenant-branding-login-page-logo',
+    'tenant-branding-app-header-bg',
     'tenant-branding-menu-chip-active-bg',
     'tenant-branding-menu-chip-active-fg',
     'tenant-branding-menu-chip-inactive-bg',
@@ -1220,6 +1270,8 @@
   bindBrandingColorPair('tenant-branding-accent', 'tenant-branding-accent-picker', '#14B8A6');
   bindBrandingColorPair('tenant-branding-secondary', 'tenant-branding-secondary-picker', '#334155');
   bindBrandingColorPair('tenant-branding-surface', 'tenant-branding-surface-picker', '#F8FAFC');
+  bindBrandingColorPair('tenant-branding-login-hero', 'tenant-branding-login-hero-picker', '#F1F5F9');
+  bindBrandingColorPair('tenant-branding-app-header-bg', 'tenant-branding-app-header-bg-picker', '#FFFFFF');
   bindBrandingColorPair('tenant-branding-menu-chip-active-bg', 'tenant-branding-menu-chip-active-bg-picker', '#14B8A6');
   bindBrandingColorPair('tenant-branding-menu-chip-active-fg', 'tenant-branding-menu-chip-active-fg-picker', '#FFFFFF');
   bindBrandingColorPair('tenant-branding-menu-chip-inactive-bg', 'tenant-branding-menu-chip-inactive-bg-picker', '#FFFFFF');
@@ -1274,7 +1326,8 @@
 
   document.getElementById('tenant-branding-logo-light-upload').onclick = () => uploadBrandingAsset('logo-light');
   document.getElementById('tenant-branding-logo-dark-upload').onclick = () => uploadBrandingAsset('logo-dark');
-  document.getElementById('tenant-branding-login-bg-upload').onclick = () => uploadBrandingAsset('login-bg');
+  document.getElementById('tenant-branding-login-page-logo-upload').onclick = () =>
+    uploadBrandingAsset('login-page-logo');
 
   window.openBrandingModal = async (tenantId) => {
     try {
@@ -1307,7 +1360,9 @@
       document.getElementById('tenant-branding-tagline').value = branding.tagline || '';
       document.getElementById('tenant-branding-logo-light').value = branding.logoLightUrl || '';
       document.getElementById('tenant-branding-logo-dark').value = branding.logoDarkUrl || '';
-      document.getElementById('tenant-branding-login-bg').value = branding.loginBackgroundUrl || '';
+      document.getElementById('tenant-branding-login-hero').value = branding.loginBackgroundColor || '';
+      document.getElementById('tenant-branding-login-page-logo').value = branding.loginPageLogoUrl || '';
+      document.getElementById('tenant-branding-app-header-bg').value = branding.appHeaderBackgroundColor || '';
       document.getElementById('tenant-branding-live-activity-badge').value = branding.liveActivityBadgeKey || 'brspark-badge';
       document.getElementById('tenant-branding-primary').value = branding.primaryColor || '';
       document.getElementById('tenant-branding-accent').value = branding.accentColor || '';
@@ -1375,7 +1430,9 @@
         tagline: document.getElementById('tenant-branding-tagline').value.trim(),
         logoLightUrl: document.getElementById('tenant-branding-logo-light').value.trim(),
         logoDarkUrl: document.getElementById('tenant-branding-logo-dark').value.trim(),
-        loginBackgroundUrl: document.getElementById('tenant-branding-login-bg').value.trim(),
+        loginBackgroundColor: document.getElementById('tenant-branding-login-hero').value.trim(),
+        loginPageLogoUrl: document.getElementById('tenant-branding-login-page-logo').value.trim(),
+        appHeaderBackgroundColor: document.getElementById('tenant-branding-app-header-bg').value.trim(),
         liveActivityBadgeKey: document.getElementById('tenant-branding-live-activity-badge').value,
         primaryColor: document.getElementById('tenant-branding-primary').value.trim(),
         accentColor: document.getElementById('tenant-branding-accent').value.trim(),

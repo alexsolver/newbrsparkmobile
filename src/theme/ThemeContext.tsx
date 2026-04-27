@@ -23,7 +23,9 @@ type TenantBranding = {
   menuChipInactiveBorder?: string;
   logoLightUrl?: string;
   logoDarkUrl?: string;
-  loginBackgroundUrl?: string;
+  loginPageLogoUrl?: string;
+  loginBackgroundColor?: string;
+  appHeaderBackgroundColor?: string;
   brandingVersion?: number;
 };
 
@@ -32,6 +34,8 @@ type BrandingLogoCache = {
   darkRemoteUrl: string | null;
   lightLocalUri: string | null;
   darkLocalUri: string | null;
+  loginPageRemoteUrl: string | null;
+  loginPageLocalUri: string | null;
   updatedAt: number;
 };
 
@@ -59,7 +63,8 @@ function channelToLinear(v: number): number {
   return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
 }
 
-function getContrastText(hex: string, dark = '#0F172A', light = '#FFFFFF'): string {
+/** Contraste legível sobre `hex` (ex.: ícone sobre `surfaceLow` no botão voltar do header). */
+export function getContrastText(hex: string, dark = '#0F172A', light = '#FFFFFF'): string {
   const rgb = hexToRgb(hex);
   if (!rgb) return light;
   const lum =
@@ -77,7 +82,18 @@ interface ThemeCtx {
   appDisplayName: string;
   appTagline: string;
   resolvedLogoUrl: string | null;
-  loginBackgroundUrl: string | null;
+  /** Hex #RRGGBB quando a marca define fundo de topo do login; `null` = bloco padrão (só logo centrado). */
+  loginScreenHeroBackgroundColor: string | null;
+  /** Cor do slogan nesse bloco (contraste com `loginScreenHeroBackgroundColor`). */
+  loginHeroTaglineColor: string;
+  /** URI (cache ou remoto) do logo só no login; `null` = usar `resolvedLogoUrl`. */
+  resolvedLoginPageLogoUrl: string | null;
+  /** Fundo da barra global no app (fallback = cartão branco do tema). */
+  appHeaderBarBackgroundColor: string;
+  /** Ícones / texto principal na barra (títulos, sino ativo, seta). */
+  appHeaderBarForegroundColor: string;
+  /** Estados “muted” na barra (ex.: sino outline). */
+  appHeaderBarSecondaryForegroundColor: string;
 }
 
 const ThemeContext = createContext<ThemeCtx>({
@@ -86,9 +102,14 @@ const ThemeContext = createContext<ThemeCtx>({
   toggleDarkMode: async () => {},
   branding: null,
   appDisplayName: 'BrSpark',
-  appTagline: 'Precisou, resolveu.',
+  appTagline: '',
   resolvedLogoUrl: null,
-  loginBackgroundUrl: null,
+  loginScreenHeroBackgroundColor: null,
+  loginHeroTaglineColor: lightColors.textSecondary,
+  resolvedLoginPageLogoUrl: null,
+  appHeaderBarBackgroundColor: lightColors.cardWhite,
+  appHeaderBarForegroundColor: lightColors.slate,
+  appHeaderBarSecondaryForegroundColor: lightColors.textSecondary,
 });
 
 function resolveTenantPalette(base: ColorPalette, branding: TenantBranding | null): ColorPalette {
@@ -271,8 +292,18 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
       .then((raw) => {
         if (!raw) return;
         try {
-          const parsed = JSON.parse(raw) as BrandingLogoCache;
-          if (parsed && typeof parsed === 'object') setLogoCache(parsed);
+          const parsed = JSON.parse(raw) as Partial<BrandingLogoCache>;
+          if (parsed && typeof parsed === 'object') {
+            setLogoCache({
+              lightRemoteUrl: parsed.lightRemoteUrl ?? null,
+              darkRemoteUrl: parsed.darkRemoteUrl ?? null,
+              lightLocalUri: parsed.lightLocalUri ?? null,
+              darkLocalUri: parsed.darkLocalUri ?? null,
+              loginPageRemoteUrl: parsed.loginPageRemoteUrl ?? null,
+              loginPageLocalUri: parsed.loginPageLocalUri ?? null,
+              updatedAt: parsed.updatedAt ?? 0,
+            });
+          }
         } catch {
           /* ignore */
         }
@@ -287,7 +318,7 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
 
   /** Cores / logótipo / fundo: só com white-label ligado no plano + tenant. */
   const liveBranding = user?.tenant?.branding?.enabled ? user.tenant.branding : null;
-  /** Nome e slogan: o backend preenche `effective` mesmo com `enabled: false` (ex.: nome da org). */
+  /** Nome: o backend preenche `effective` mesmo com `enabled: false` (ex.: nome da org). Slogan só com marca ativa. */
   const serverTenantBranding = user?.tenant?.branding;
   const branding =
     liveBranding && Number(liveBranding.brandingVersion || 0) >= Number(brandingCache?.brandingVersion || 0)
@@ -319,16 +350,19 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
       if (!branding?.enabled) return;
       const lightRemote = resolveBrandingUrl(branding.logoLightUrl || branding.logoDarkUrl || null);
       const darkRemote = resolveBrandingUrl(branding.logoDarkUrl || branding.logoLightUrl || null);
-      if (!lightRemote && !darkRemote) return;
+      const loginPageRemote = resolveBrandingUrl(branding.loginPageLogoUrl || null);
+
+      if (!lightRemote && !darkRemote && !loginPageRemote) return;
 
       const current = logoCache || {
         lightRemoteUrl: null,
         darkRemoteUrl: null,
         lightLocalUri: null,
         darkLocalUri: null,
+        loginPageRemoteUrl: null,
+        loginPageLocalUri: null,
         updatedAt: 0,
       };
-      let next: BrandingLogoCache = { ...current };
 
       const ensureLogoCached = async (
         remoteUrl: string | null,
@@ -356,16 +390,42 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
         }
       };
 
-      const [lightLocal, darkLocal] = await Promise.all([
+      const ensureLoginPageCached = async (remoteUrl: string | null): Promise<string | null> => {
+        if (!remoteUrl) return null;
+        const currRemote = current.loginPageRemoteUrl;
+        const currLocal = current.loginPageLocalUri;
+        if (currRemote === remoteUrl && currLocal) {
+          try {
+            const info = await FileSystem.getInfoAsync(currLocal);
+            if (info.exists) return currLocal;
+          } catch {
+            /* ignore */
+          }
+        }
+        try {
+          const baseDir = `${FileSystem.documentDirectory || FileSystem.cacheDirectory}branding-cache/`;
+          await FileSystem.makeDirectoryAsync(baseDir, { intermediates: true });
+          const file = `${baseDir}login_page_${hashString(remoteUrl)}.png`;
+          await FileSystem.downloadAsync(remoteUrl, file);
+          return file;
+        } catch {
+          return currLocal || null;
+        }
+      };
+
+      const [lightLocal, darkLocal, loginPageLocal] = await Promise.all([
         ensureLogoCached(lightRemote, 'light'),
         ensureLogoCached(darkRemote, 'dark'),
+        ensureLoginPageCached(loginPageRemote),
       ]);
 
-      next = {
+      const next: BrandingLogoCache = {
         lightRemoteUrl: lightRemote || null,
         darkRemoteUrl: darkRemote || null,
         lightLocalUri: lightLocal || null,
         darkLocalUri: darkLocal || null,
+        loginPageRemoteUrl: loginPageRemote || null,
+        loginPageLocalUri: loginPageLocal || null,
         updatedAt: Date.now(),
       };
 
@@ -391,9 +451,14 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
           '',
       ).trim() || 'BrSpark'
     : (branding?.enabled && String(branding.appDisplayName || '').trim()) || 'BrSpark';
+  /** Slogan só com white-label ativo; vazio no painel/CMS não mostra (evita mirror CMS + payload legado). */
   const appTagline = user
-    ? String(serverTenantBranding?.tagline || '').trim() || 'Precisou, resolveu.'
-    : (branding?.enabled && String(branding.tagline || '').trim()) || 'Precisou, resolveu.';
+    ? serverTenantBranding?.enabled
+      ? String(serverTenantBranding?.tagline || '').trim()
+      : ''
+    : branding?.enabled
+      ? String(branding.tagline || '').trim()
+      : '';
 
   /** Remoto resolvido (mesma lógica que o efeito de cache) — fallback quando `downloadAsync` falha no aparelho. */
   const brandingLogoRemoteLight = useMemo(() => {
@@ -405,6 +470,11 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     if (!branding?.enabled) return null;
     return resolveBrandingUrl(branding.logoDarkUrl || branding.logoLightUrl || null);
   }, [branding?.enabled, branding?.logoLightUrl, branding?.logoDarkUrl]);
+
+  const brandingLoginPageRemote = useMemo(() => {
+    if (!branding?.enabled) return null;
+    return resolveBrandingUrl(branding.loginPageLogoUrl || null);
+  }, [branding?.enabled, branding?.loginPageLogoUrl]);
 
   const resolvedLogoUrl =
     branding?.enabled
@@ -420,8 +490,40 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
           brandingLogoRemoteDark ||
           null
       : null;
-  const loginBackgroundUrl =
-    branding?.enabled && branding.loginBackgroundUrl ? resolveBrandingUrl(branding.loginBackgroundUrl) : null;
+
+  const resolvedLoginPageLogoUrl = branding?.enabled
+    ? logoCache?.loginPageLocalUri || brandingLoginPageRemote || null
+    : null;
+
+  const customAppHeaderBg = useMemo(() => {
+    if (!branding?.enabled) return null;
+    const c = String(branding.appHeaderBackgroundColor || '').trim();
+    if (!c || !/^#([0-9A-Fa-f]{6})$/.test(c)) return null;
+    return c.toUpperCase();
+  }, [branding]);
+
+  const appHeaderBarBackgroundColor = customAppHeaderBg ?? palette.cardWhite;
+  const appHeaderBarForegroundColor = useMemo(
+    () => (customAppHeaderBg ? getContrastText(customAppHeaderBg) : palette.slate),
+    [customAppHeaderBg, palette.slate],
+  );
+  const appHeaderBarSecondaryForegroundColor = useMemo(() => {
+    if (!customAppHeaderBg) return palette.textSecondary;
+    const fg = getContrastText(customAppHeaderBg);
+    return fg === '#FFFFFF' || fg === '#ffffff' ? 'rgba(255,255,255,0.82)' : 'rgba(15,23,42,0.62)';
+  }, [customAppHeaderBg, palette.textSecondary]);
+
+  const loginScreenHeroBackgroundColor = useMemo(() => {
+    if (!branding?.enabled) return null;
+    const c = String(branding.loginBackgroundColor || '').trim();
+    if (!c || !/^#([0-9A-Fa-f]{6})$/.test(c)) return null;
+    return c.toUpperCase();
+  }, [branding]);
+
+  const loginHeroTaglineColor = useMemo(() => {
+    if (!loginScreenHeroBackgroundColor) return palette.textSecondary;
+    return getContrastText(loginScreenHeroBackgroundColor);
+  }, [loginScreenHeroBackgroundColor, palette.textSecondary]);
 
   return (
     <ThemeContext.Provider
@@ -433,7 +535,12 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
         appDisplayName,
         appTagline,
         resolvedLogoUrl,
-        loginBackgroundUrl,
+        resolvedLoginPageLogoUrl,
+        loginScreenHeroBackgroundColor,
+        loginHeroTaglineColor,
+        appHeaderBarBackgroundColor,
+        appHeaderBarForegroundColor,
+        appHeaderBarSecondaryForegroundColor,
       }}
     >
       {children}

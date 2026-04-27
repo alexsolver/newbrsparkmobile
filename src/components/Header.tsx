@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { BrandingLogoImage } from './BrandingLogoImage';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, getContrastText } from '../theme/ThemeContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useSegments, useLocalSearchParams, usePathname } from 'expo-router';
 import { useAppContext, checkGuardBeforeBack } from '../context/AppContext';
@@ -143,7 +143,13 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   const pathname = usePathname() || '';
   const { t } = useTranslation();
   const params = useLocalSearchParams();
-  const { colors: C, appDisplayName } = useTheme();
+  const {
+    colors: C,
+    appDisplayName,
+    appHeaderBarBackgroundColor,
+    appHeaderBarForegroundColor,
+    appHeaderBarSecondaryForegroundColor,
+  } = useTheme();
   const { user } = useAuth();
 
   const renderHeaderBrand = (compact: boolean) => {
@@ -368,7 +374,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
         <Ionicons
           name={notifFocused ? 'notifications' : 'notifications-outline'}
           size={24}
-          color={notifFocused ? C.slate : C.textSecondary}
+          color={notifFocused ? appHeaderBarForegroundColor : appHeaderBarSecondaryForegroundColor}
         />
         {notifUnread > 0 && (
           <View
@@ -401,7 +407,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
       <SafeAreaView
         edges={['top']}
         style={{
-          backgroundColor: C.cardWhite,
+          backgroundColor: appHeaderBarBackgroundColor,
           borderBottomWidth: 1,
           borderBottomColor: C.border,
           zIndex: 30,
@@ -431,7 +437,11 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
                 alignItems: 'center',
               }}
             >
-              <Ionicons name={(leftIcon as any) || 'arrow-back'} size={22} color={C.slate} />
+              <Ionicons
+                name={(leftIcon as any) || 'arrow-back'}
+                size={22}
+                color={getContrastText(C.surfaceLow)}
+              />
             </TouchableOpacity>
 
             <View
@@ -455,7 +465,7 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
                   style={{
                     fontSize: fontSize.lg,
                     fontWeight: fontWeight.black,
-                    color: C.slate,
+                    color: appHeaderBarForegroundColor,
                     letterSpacing: -0.5,
                   }}
                 >
@@ -469,7 +479,13 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
                   style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.border, flexShrink: 0 }}
                 />
                 <Text
-                  style={{ flex: 1, minWidth: 0, fontSize: fontSize.sm, fontWeight: fontWeight.black, color: C.slate }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: fontSize.sm,
+                    fontWeight: fontWeight.black,
+                    color: appHeaderBarForegroundColor,
+                  }}
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
@@ -481,7 +497,12 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
                 <Text
                   numberOfLines={1}
                   ellipsizeMode="tail"
-                  style={{ fontSize: fontSize.lg, fontWeight: fontWeight.black, color: C.slate, letterSpacing: -0.5 }}
+                  style={{
+                    fontSize: fontSize.lg,
+                    fontWeight: fontWeight.black,
+                    color: appHeaderBarForegroundColor,
+                    letterSpacing: -0.5,
+                  }}
                 >
                   {t('profile.settingsScreenTitle')}
                 </Text>
@@ -521,7 +542,10 @@ export function Header({ showAssetTools = false, title, leftIcon, onLeftPress }:
   return (
     <SafeAreaView
       edges={['top']}
-      style={[styles.safeArea, { backgroundColor: C.cardWhite, zIndex: 30, elevation: 30 }]}
+      style={[
+        styles.safeArea,
+        { backgroundColor: appHeaderBarBackgroundColor, zIndex: 30, elevation: 30 },
+      ]}
     >
       <View style={[styles.container, { borderBottomColor: C.border, height: 64 }]}>
         {/* Esquerda: logo fixo — não participa do “centro” absoluto para não ser tapado pelo seletor */}

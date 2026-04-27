@@ -208,7 +208,7 @@ export default function ProviderCatalogScreen() {
             {companyName}
           </Text>
           <Text style={[styles.screenSubTitle, { color: C.textSecondary }]} numberOfLines={1}>
-            {appDisplayName} · {appTagline}
+            {appTagline ? `${appDisplayName} · ${appTagline}` : appDisplayName}
           </Text>
         </View>
         <View style={{ width: 40 }} />

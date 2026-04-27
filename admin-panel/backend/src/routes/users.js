@@ -36,6 +36,7 @@ const { validatePanelRoleForTenantKind, setUnifiedPasswordHashForEmail } = requi
 const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 const { syncActiveAffiliationFromTechnicianStatus } = require('../lib/providerTechnicianAffiliationSync');
 const { resolveMergedProviderIdentityForUserId, normalizeEmail: normalizeEmailForPi } = require('../lib/providerIdentityMerge');
+const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
 
 const MAX_AVATAR_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_DOC_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -1241,6 +1242,14 @@ router.get('/:id/provider-affiliations', async (req, res) => {
       return assertTenantAccess(req.authorization, row.tenantId);
     });
 
+    const tenantIdsForPf = [...new Set(rows.map((r) => String(r.tenantId || '').trim()).filter(Boolean))];
+    const providerFirstByTenant = {};
+    await Promise.all(
+      tenantIdsForPf.map(async (tid) => {
+        providerFirstByTenant[tid] = await isProviderFirstNetworkEnabled(tid);
+      }),
+    );
+
     const latestOnboarding = await prisma.providerOnboardingApplication.findFirst({
       where: { providerIdentityId: providerIdentityFull.id },
       orderBy: { updatedAt: 'desc' },
@@ -1273,6 +1282,8 @@ router.get('/:id/provider-affiliations', async (req, res) => {
         requestedAt: row.requestedAt,
         activatedAt: row.activatedAt,
         endedAt: row.endedAt,
+        providerIdentityKycStatus: row.providerIdentity?.kycStatus ?? null,
+        providerFirstNetworkEnabled: !!providerFirstByTenant[String(row.tenantId || '').trim()],
       })),
     });
   } catch (err) {

@@ -249,19 +249,26 @@ async function loadBondsTable() {
         const reqAt = r.requestedAt
           ? new Date(r.requestedAt).toLocaleString(getAdminUiLocale())
           : '—';
-        const kycOk = String(r.providerIdentity?.kycStatus || '').toUpperCase() === 'APPROVED';
+        const kycOk =
+          typeof r.activationKycOk === 'boolean'
+            ? r.activationKycOk
+            : String(r.providerIdentity?.kycStatus || '').toUpperCase() === 'APPROVED';
         const userId = String(u.id || '').trim();
+        const fichaVinculos = userId
+          ? `<a class="pr-ficha-aff" href="user-edit.html?id=${encodeURIComponent(userId)}#sec-provider-affiliations" style="font-size:11px;color:var(--blue);text-decoration:none;margin-top:4px;display:inline-block">${escAttr(t('pr_open_user_affiliations'))}</a>`
+          : '';
         const kycShortcut = userId
           ? `<a class="btn btn-sm btn-outline" href="user-edit.html?id=${encodeURIComponent(userId)}" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-top:6px">${escAttr(t('pr_kyc_open_user'))}</a>`
           : '';
-        const actBtn =
-          st === 'REQUESTED' && kycOk
+        const pendenteBlock = `${fichaVinculos ? `<div>${fichaVinculos}</div>` : ''}<div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px"><span style="font-size:11px;color:var(--text3)">${escAttr(t('pr_kyc_pending'))}</span>${kycShortcut}</div>`;
+        const needsAdminActivate = st === 'REQUESTED' || st === 'INVITED';
+        const actBtn = needsAdminActivate
+          ? kycOk
             ? `<button type="button" class="btn btn-sm btn-primary pr-tp-act" data-aff="${escAttr(r.id)}">${escAttr(t('pr_activate'))}</button>`
-            : st === 'REQUESTED' && !kycOk
-              ? `<div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px"><span style="font-size:11px;color:var(--text3)">${escAttr(t('pr_kyc_pending'))}</span>${kycShortcut}</div>`
-              : '—';
+            : pendenteBlock
+          : '—';
         return `<tr>
-            <td><strong>${escAttr(name)}</strong><div style="font-size:11px;color:var(--text3);margin-top:2px">${escAttr(em)}</div></td>
+            <td><strong>${escAttr(name)}</strong><div style="font-size:11px;color:var(--text3);margin-top:2px">${escAttr(em)}</div>${fichaVinculos ? `<div style="margin-top:4px">${fichaVinculos}</div>` : ''}</td>
             <td>${escAttr(rel)}</td>
             <td><code>${escAttr(st)}</code></td>
             <td style="white-space:nowrap">${escAttr(reqAt)}</td>

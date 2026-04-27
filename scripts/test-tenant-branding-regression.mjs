@@ -39,7 +39,7 @@ function run() {
       surfaceColor: '#f8fafc',
       logoLightUrl: 'https://cdn.example.com/light.png',
       logoDarkUrl: '/uploads/branding/dark.png',
-      loginBackgroundUrl: 'https://cdn.example.com/login.jpg',
+      loginBackgroundColor: '#0f1722',
       brandingVersion: 7,
     },
     permissionsEnabledAll,
@@ -49,6 +49,7 @@ function run() {
   assert.equal(sanitized.primaryColor, '#0F766E');
   assert.equal(sanitized.accentColor, '#14B8A6');
   assert.equal(sanitized.logoDarkUrl, '/uploads/branding/dark.png');
+  assert.equal(sanitized.loginBackgroundColor, '#0F1722');
   assert.equal(sanitized.brandingVersion, 7);
 
   const stripped = sanitizeTenantBranding(
@@ -140,6 +141,26 @@ function run() {
     permissionsEnabledAll,
   );
   assert.equal(noIssues.length, 0);
+
+  const mirrorCleared = buildEffectiveTenantBranding({
+    tenantName: 'Acme Mirror',
+    planFeatures: planEnabledAll,
+    tenantFeatures: {
+      cmsBrandingMirror: { tagline: 'Slogan vindo só do CMS' },
+      branding: {
+        enabled: true,
+        appDisplayName: 'Acme Mirror',
+        tagline: '',
+        logoLightUrl: 'https://cdn.example.com/light.png',
+        primaryColor: '#0F766E',
+      },
+    },
+  });
+  assert.equal(
+    mirrorCleared.effective.tagline,
+    '',
+    'tagline vazio no tenant deve limpar o slogan do cmsBrandingMirror',
+  );
 }
 
 run();

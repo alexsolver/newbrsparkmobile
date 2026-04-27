@@ -234,8 +234,8 @@ export default function NotificationsScreen() {
               ? t('notificationHub.allCaughtUp')
               : unread === 1
                 ? t('notificationHub.unreadOne', { count: unread })
-                : t('notificationHub.unreadMany', { count: unread })}{' '}
-            · {appTagline}
+                : t('notificationHub.unreadMany', { count: unread })}
+            {appTagline ? ` · ${appTagline}` : ''}
           </Text>
         </View>
         <View style={styles.headerActions}>

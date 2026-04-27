@@ -59,8 +59,14 @@ function createRegisterStyles(C: ColorPalette) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.cardWhite },
     container: { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 40 },
-    logoBlock: { alignItems: 'center', paddingTop: 12, paddingBottom: 8 },
-    logoImage: { width: 220, height: 80, marginBottom: 6 },
+    logoBlock: { width: '100%', alignItems: 'center', paddingTop: 12, paddingBottom: 8 },
+    logoImage: {
+      alignSelf: 'center',
+      width: '94%',
+      maxWidth: 320,
+      aspectRatio: 220 / 80,
+      marginBottom: 6,
+    },
     logoSub: { fontSize: 12, color: C.textSecondary, fontWeight: '600', letterSpacing: 0.5 },
     tabs: {
       flexDirection: 'row',
@@ -616,8 +622,8 @@ export default function RegisterOnboardingScreen() {
           </TouchableOpacity>
 
           <View style={styles.logoBlock}>
-            <BrandingLogoImage style={styles.logoImage} resizeMode="contain" />
-            <Text style={styles.logoSub}>{appTagline}</Text>
+            <BrandingLogoImage variant="login" style={styles.logoImage} resizeMode="contain" />
+            {appTagline ? <Text style={styles.logoSub}>{appTagline}</Text> : null}
           </View>
 
           <View style={styles.tabs}>

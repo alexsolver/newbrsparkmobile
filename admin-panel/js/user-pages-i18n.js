@@ -475,6 +475,11 @@ const M = {
     ue_paffBtnEnd: 'Encerrar',
     ue_paffEndConfirm: 'Encerrar este vínculo com a empresa? O prestador deixa de operar nessa tenant.',
     ue_paffActivateNeedKyc: 'KYC global tem de estar aprovado para ativar.',
+    ue_paffActivateNeedProviderFirst:
+      'O fluxo «prestador na rede» tem de estar ativo na empresa destino (feature flag). Ative em Sistema / flags ou peça à plataforma.',
+    ue_paffHintKycShort: 'Bloqueio KYC: aprove o onboarding global (caixa acima) ou o KYC desta identidade ainda não está APPROVED.',
+    ue_paffHintPfShort:
+      'Bloqueio «prestador na rede»: a flag provider_first_network tem de estar ativa no tenant desta linha (ex.: Lan Solver). Sistema → feature flags dessa org.',
     ue_paffGenericErr: 'Operação falhou.',
     ue_paffTenantPick: '(escolher empresa)',
     ue_paffTenantCurrent: '(organização atual)',
@@ -641,7 +646,7 @@ const M = {
     pr_perm_none: 'Sem permissão para gestão de prestadores nesta sessão.',
     pr_card_bonds_title: 'Vínculos e pedidos (organização)',
     pr_card_bonds_hint:
-      'Convites enviados, pedidos REQUESTED após o prestador aceitar no app, e vínculos activos nesta organização.',
+      'Convites, pedidos «Solicitado» ou «Convidado» e vínculos activos. Para aprovar: botão «Activar» nesta tabela (recomendado) ou a ficha do utilizador — secção «Vínculos com empresas» (link em cada linha).',
     pr_card_bonds_hint_global: 'Escolha a organização acima para carregar os vínculos (modo plataforma).',
     pr_bonds_tenant_lbl: 'Organização (tenant)',
     pr_bonds_refresh: 'Atualizar',
@@ -654,6 +659,7 @@ const M = {
     pr_confirm_activate: 'Activar esta parceria na organização?',
     pr_kyc_pending: 'KYC pendente',
     pr_kyc_open_user: 'Abrir ficha (cadastro / KYC)',
+    pr_open_user_affiliations: 'Ficha → vínculos com empresas',
     pr_rel_partner: 'Parceria',
     pr_rel_dedicated: 'Dedicado',
     pr_select_tenant_first: 'Seleccione a organização (tenant) para continuar.',
@@ -1170,6 +1176,11 @@ const M = {
     ue_paffBtnEnd: 'End',
     ue_paffEndConfirm: 'End this company link? The provider will no longer operate under that tenant.',
     ue_paffActivateNeedKyc: 'Global KYC must be approved before activation.',
+    ue_paffActivateNeedProviderFirst:
+      'The “provider-first network” flow must be enabled for the target company (feature flag). Enable it under System / flags or ask platform support.',
+    ue_paffHintKycShort: 'KYC: approve global onboarding (section above) or this link’s identity is not APPROVED yet.',
+    ue_paffHintPfShort:
+      'Provider network: the provider_first_network flag must be ON for the tenant in this row (e.g. Lan Solver). System / feature flags for that org.',
     ue_paffGenericErr: 'Operation failed.',
     ue_paffTenantPick: '(pick a company)',
     ue_paffTenantCurrent: '(current organization)',
@@ -1334,7 +1345,7 @@ const M = {
     pr_perm_none: 'No permission to manage providers in this session.',
     pr_card_bonds_title: 'Links & requests (organization)',
     pr_card_bonds_hint:
-      'Invites sent, REQUESTED after the technician accepts in the app, and active links for this organization.',
+      'Invites, REQUESTED or INVITED rows, and active links. To approve: use Activate in this table (recommended) or the user profile → Company links section (per-row link).',
     pr_card_bonds_hint_global: 'Pick an organization above to load links (platform mode).',
     pr_bonds_tenant_lbl: 'Organization (tenant)',
     pr_bonds_refresh: 'Refresh',
@@ -1347,6 +1358,7 @@ const M = {
     pr_confirm_activate: 'Activate this partnership for the organization?',
     pr_kyc_pending: 'KYC pending',
     pr_kyc_open_user: 'Open profile (signup / KYC)',
+    pr_open_user_affiliations: 'Profile → company links',
     pr_rel_partner: 'Partnership',
     pr_rel_dedicated: 'Dedicated',
     pr_select_tenant_first: 'Select an organization (tenant) to continue.',

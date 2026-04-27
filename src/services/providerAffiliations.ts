@@ -25,6 +25,7 @@ export type ProviderAffiliation = {
   requestedAt?: string | null;
   activatedAt?: string | null;
   endedAt?: string | null;
+  suspendedAt?: string | null;
 };
 
 export const ProviderAffiliationsApi = {
@@ -60,6 +61,38 @@ export const ProviderAffiliationsApi = {
     const r = await apiFetch(`/api/providers/me/affiliations/${safe}/accept`, { method: 'POST' });
     const j = await r.json();
     if (!r.ok) throw new Error(j?.error || 'Não foi possível aceitar o convite.');
+    return (j?.affiliation || null) as ProviderAffiliation;
+  },
+
+  async declineByAffiliationId(affiliationId: string): Promise<ProviderAffiliation> {
+    const safe = encodeURIComponent(String(affiliationId || '').trim());
+    const r = await apiFetch(`/api/providers/me/affiliations/${safe}/decline`, { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j?.error || 'Não foi possível recusar o convite.');
+    return (j?.affiliation || null) as ProviderAffiliation;
+  },
+
+  async suspendByAffiliationId(affiliationId: string): Promise<ProviderAffiliation> {
+    const safe = encodeURIComponent(String(affiliationId || '').trim());
+    const r = await apiFetch(`/api/providers/me/affiliations/${safe}/suspend`, { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j?.error || 'Não foi possível suspender o vínculo.');
+    return (j?.affiliation || null) as ProviderAffiliation;
+  },
+
+  async resumeByAffiliationId(affiliationId: string): Promise<ProviderAffiliation> {
+    const safe = encodeURIComponent(String(affiliationId || '').trim());
+    const r = await apiFetch(`/api/providers/me/affiliations/${safe}/resume`, { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j?.error || 'Não foi possível reativar o vínculo.');
+    return (j?.affiliation || null) as ProviderAffiliation;
+  },
+
+  async endByAffiliationId(affiliationId: string): Promise<ProviderAffiliation> {
+    const safe = encodeURIComponent(String(affiliationId || '').trim());
+    const r = await apiFetch(`/api/providers/me/affiliations/${safe}/end`, { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j?.error || 'Não foi possível encerrar o vínculo.');
     return (j?.affiliation || null) as ProviderAffiliation;
   },
 };

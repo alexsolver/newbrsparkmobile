@@ -2,36 +2,40 @@
 
 /**
  * App móvel: com afiliação DEDICATED + ACTIVE, o contexto operacional é a tenant empresa
- * (mesmo que o registo `User` permaneça na org de prestador). Sem dedicado, usa-se `User.tenantId`.
+ * (branding, OS, etc.), mesmo que o `User` «casa» seja a org prestador. Sem dedicado, usa-se `User.tenantId`.
+ *
+ * Importante: o mesmo e-mail (`AppAccount`) pode ter **várias** `ProviderIdentity` (vários `User`).
+ * O dedicado ativo pode estar noutra PI; por isso, com `appAccountId`, procuramos a afiliação em **todas**
+ * as identidades do grupo. Sem `appAccountId`, mantém-se só a PI do `userId`.
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} userId
- * @returns {Promise<string>}
+ * @returns {Promise<string|null>}
  */
 async function resolveAppEffectiveTenantId(prisma, userId) {
   const uid = String(userId || '').trim();
   if (!uid) return null;
   const row = await prisma.user.findUnique({
     where: { id: uid },
-    select: { tenantId: true },
+    select: { tenantId: true, appAccountId: true },
   });
   if (!row?.tenantId) return null;
   const homeTid = String(row.tenantId);
+  const appAccountId = row.appAccountId ? String(row.appAccountId) : null;
 
-  const pi = await prisma.providerIdentity.findUnique({
-    where: { userId: uid },
-    select: {
-      affiliations: {
-        where: {
-          status: 'ACTIVE',
-          relationshipType: 'DEDICATED',
-        },
-        take: 1,
-        select: { tenantId: true },
-      },
-    },
+  const whereDedicated = {
+    status: 'ACTIVE',
+    relationshipType: 'DEDICATED',
+    ...(appAccountId
+      ? { providerIdentity: { user: { appAccountId } } }
+      : { providerIdentity: { userId: uid } }),
+  };
+
+  const aff = await prisma.providerTenantAffiliation.findFirst({
+    where: whereDedicated,
+    orderBy: { updatedAt: 'desc' },
+    select: { tenantId: true },
   });
-  const aff = pi?.affiliations?.[0];
   const dedicatedTid = aff?.tenantId ? String(aff.tenantId).trim() : '';
   if (!dedicatedTid) return homeTid;
   if (dedicatedTid === homeTid) return homeTid;

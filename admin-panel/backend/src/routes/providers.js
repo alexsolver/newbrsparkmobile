@@ -131,6 +131,51 @@ async function sessionUserMayActAsProviderForAffiliation(reqUserId, providerIden
   return String(sessionU.appAccountId) === String(ownerU.appAccountId);
 }
 
+/** Carrega afiliação e valida sessão + provider-first no tenant; `res` já respondido em caso de erro. */
+async function loadMeAffiliationRow(req, res, id) {
+  const sid = String(id || '').trim();
+  if (!sid) {
+    res.status(400).json({ error: 'Identificador inválido.' });
+    return null;
+  }
+  const row = await prisma.providerTenantAffiliation.findFirst({
+    where: { id: sid },
+    include: {
+      providerIdentity: { include: { user: { select: { id: true, email: true } } } },
+      tenant: { select: { id: true, name: true, slug: true } },
+    },
+  });
+  if (!row) {
+    res.status(404).json({ error: 'Vínculo não encontrado.' });
+    return null;
+  }
+  if (!(await sessionUserMayActAsProviderForAffiliation(req.user.id, row.providerIdentity.userId))) {
+    res.status(403).json({
+      error: 'Este vínculo não pertence à conta autenticada.',
+      code: 'AFFILIATION_EMAIL_MISMATCH',
+    });
+    return null;
+  }
+  if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return null;
+  return row;
+}
+
+function affiliationPayloadFromRow(row, extra = {}) {
+  return {
+    id: row.id,
+    status: row.status,
+    relationshipType: row.relationshipType || 'PARTNER',
+    note: row.note,
+    tenant: row.tenant,
+    invitedAt: row.invitedAt,
+    requestedAt: row.requestedAt,
+    activatedAt: row.activatedAt,
+    endedAt: row.endedAt,
+    suspendedAt: row.suspendedAt,
+    ...extra,
+  };
+}
+
 /** Prestador ACTIVE no painel sem linha em ProviderTenantAffiliation — preenche ao abrir a app. */
 async function maybeBackfillAffiliationForActiveTechnician(userId, tenantId) {
   const uid = String(userId || '').trim();
@@ -214,6 +259,7 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
         requestedAt: row.requestedAt,
         activatedAt: row.activatedAt,
         endedAt: row.endedAt,
+        suspendedAt: row.suspendedAt,
       })),
     });
   } catch (err) {
@@ -268,6 +314,105 @@ publicRouter.post('/me/affiliations/:id/accept', authUser, async (req, res) => {
         requestedAt: updated.requestedAt,
       },
     });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/providers/me/affiliations/:id/decline — convite INVITED → REJECTED
+publicRouter.post('/me/affiliations/:id/decline', authUser, async (req, res) => {
+  try {
+    const row = await loadMeAffiliationRow(req, res, req.params.id);
+    if (!row) return;
+    const st = String(row.status || '').toUpperCase();
+    if (st !== 'INVITED') {
+      return res.status(409).json({
+        error: 'Só é possível recusar um convite pendente.',
+        code: 'AFFILIATION_INVALID_STATE',
+      });
+    }
+    const now = new Date();
+    const updated = await prisma.providerTenantAffiliation.update({
+      where: { id: row.id },
+      data: {
+        status: 'REJECTED',
+        invitationToken: null,
+        endedAt: now,
+      },
+    });
+    return res.json({ ok: true, affiliation: affiliationPayloadFromRow({ ...row, ...updated }) });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/providers/me/affiliations/:id/suspend — ACTIVE → SUSPENDED
+publicRouter.post('/me/affiliations/:id/suspend', authUser, async (req, res) => {
+  try {
+    const row = await loadMeAffiliationRow(req, res, req.params.id);
+    if (!row) return;
+    const st = String(row.status || '').toUpperCase();
+    if (st !== 'ACTIVE') {
+      return res.status(409).json({
+        error: 'Só é possível suspender um vínculo ativo.',
+        code: 'AFFILIATION_INVALID_STATE',
+      });
+    }
+    const now = new Date();
+    const updated = await prisma.providerTenantAffiliation.update({
+      where: { id: row.id },
+      data: { status: 'SUSPENDED', suspendedAt: now },
+    });
+    return res.json({ ok: true, affiliation: affiliationPayloadFromRow({ ...row, ...updated }) });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/providers/me/affiliations/:id/resume — SUSPENDED → ACTIVE
+publicRouter.post('/me/affiliations/:id/resume', authUser, async (req, res) => {
+  try {
+    const row = await loadMeAffiliationRow(req, res, req.params.id);
+    if (!row) return;
+    const st = String(row.status || '').toUpperCase();
+    if (st !== 'SUSPENDED') {
+      return res.status(409).json({
+        error: 'Só é possível reativar um vínculo suspenso.',
+        code: 'AFFILIATION_INVALID_STATE',
+      });
+    }
+    const updated = await prisma.providerTenantAffiliation.update({
+      where: { id: row.id },
+      data: { status: 'ACTIVE', suspendedAt: null },
+    });
+    return res.json({ ok: true, affiliation: affiliationPayloadFromRow({ ...row, ...updated }) });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/providers/me/affiliations/:id/end — pedido ou operação encerrada pelo prestador
+publicRouter.post('/me/affiliations/:id/end', authUser, async (req, res) => {
+  try {
+    const row = await loadMeAffiliationRow(req, res, req.params.id);
+    if (!row) return;
+    const st = String(row.status || '').toUpperCase();
+    if (!['REQUESTED', 'ACTIVE', 'SUSPENDED'].includes(st)) {
+      return res.status(409).json({
+        error: 'Este vínculo não pode ser encerrado no estado atual.',
+        code: 'AFFILIATION_INVALID_STATE',
+      });
+    }
+    const now = new Date();
+    const updated = await prisma.providerTenantAffiliation.update({
+      where: { id: row.id },
+      data: {
+        status: 'INACTIVE',
+        endedAt: now,
+        suspendedAt: null,
+      },
+    });
+    return res.json({ ok: true, affiliation: affiliationPayloadFromRow({ ...row, ...updated }) });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -744,13 +889,35 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
     const row = await prisma.providerTenantAffiliation.findUnique({
       where: { id },
       include: {
-        providerIdentity: { select: { id: true, kycStatus: true } },
+        providerIdentity: {
+          select: {
+            id: true,
+            kycStatus: true,
+            userId: true,
+            user: { select: { email: true } },
+          },
+        },
       },
     });
     if (!row) return res.status(404).json({ error: 'Parceria não encontrada.' });
     if (!canAccessTenant(req, row.tenantId)) return res.status(403).json({ error: 'Sem permissão para este tenant.' });
     if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
-    if (String(row.providerIdentity.kycStatus) !== 'APPROVED') {
+    const lineKyc = String(row.providerIdentity?.kycStatus || '')
+      .toUpperCase()
+      .trim();
+    if (lineKyc === 'REJECTED') {
+      return res.status(409).json({
+        error: 'KYC deste vínculo está rejeitado — não pode ativar.',
+        code: 'KYC_REJECTED',
+      });
+    }
+    const uid = String(row.providerIdentity?.userId || '').trim();
+    const emailNorm = normalizeEmail(row.providerIdentity?.user?.email || '');
+    const mergedPi = uid ? await resolveMergedProviderIdentityForUserId(prisma, uid, emailNorm) : null;
+    const mergedKyc = String(mergedPi?.kycStatus || '')
+      .toUpperCase()
+      .trim();
+    if (lineKyc !== 'APPROVED' && mergedKyc !== 'APPROVED') {
       return res.status(409).json({
         error: 'KYC global ainda não aprovado para este prestador.',
         code: 'KYC_NOT_APPROVED',

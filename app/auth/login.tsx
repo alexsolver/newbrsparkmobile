@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, KeyboardAvoidingView, Platform, Alert, ImageBackground,
+  ScrollView, KeyboardAvoidingView, Platform, Alert,
   ActivityIndicator, Linking, Modal, Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
 
@@ -30,22 +30,31 @@ function createLoginStyles(C: ColorPalette) {
     heroBg: {
       marginHorizontal: -28,
       marginBottom: 10,
-      minHeight: 130,
-      justifyContent: 'flex-end',
+      minHeight: 168,
+      justifyContent: 'center',
       backgroundColor: C.surfaceLow,
       borderBottomLeftRadius: 26,
       borderBottomRightRadius: 26,
       overflow: 'hidden',
     },
-    heroOverlay: {
+    heroContent: {
+      width: '100%',
       paddingHorizontal: 28,
-      paddingTop: 14,
-      paddingBottom: 14,
-      backgroundColor: 'rgba(15,23,42,0.35)',
+      paddingTop: 16,
+      paddingBottom: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
 
-    logoBlock: { alignItems: 'center', paddingTop: 20, paddingBottom: 8 },
-    logoImage: { width: 220, height: 80, marginBottom: 6 },
+    logoBlock: { width: '100%', alignItems: 'center', paddingTop: 20, paddingBottom: 8 },
+    /** Caixa ~38% maior que 220×80; largura adapta à tela (`contain` no asset). */
+    logoImage: {
+      alignSelf: 'center',
+      width: '94%',
+      maxWidth: 320,
+      aspectRatio: 220 / 80,
+      marginBottom: 6,
+    },
     logoSub: {
       fontSize: 12, color: C.textSecondary, fontWeight: '600',
       letterSpacing: 0.5,
@@ -254,7 +263,7 @@ export default function LoginScreen() {
       : undefined;
   const { login, loginWithOAuth, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
   const { t, i18n } = useTranslation();
-  const { colors: C, appTagline, loginBackgroundUrl } = useTheme();
+  const { colors: C, appTagline, loginScreenHeroBackgroundColor, loginHeroTaglineColor } = useTheme();
   const styles = useMemo(() => createLoginStyles(C), [C]);
 
   const [loading, setLoading] = useState(false);
@@ -538,17 +547,19 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {loginBackgroundUrl ? (
-            <ImageBackground source={{ uri: loginBackgroundUrl }} style={styles.heroBg} resizeMode="cover">
-              <View style={styles.heroOverlay}>
-                <BrandingLogoImage style={styles.logoImage} resizeMode="contain" />
-                <Text style={[styles.logoSub, { color: '#fff' }]}>{appTagline}</Text>
+          {loginScreenHeroBackgroundColor ? (
+            <View style={[styles.heroBg, { backgroundColor: loginScreenHeroBackgroundColor }]}>
+              <View style={styles.heroContent}>
+                <BrandingLogoImage variant="login" style={styles.logoImage} resizeMode="contain" />
+                {appTagline ? (
+                  <Text style={[styles.logoSub, { color: loginHeroTaglineColor, opacity: 0.9 }]}>{appTagline}</Text>
+                ) : null}
               </View>
-            </ImageBackground>
+            </View>
           ) : (
             <View style={styles.logoBlock}>
-              <BrandingLogoImage style={styles.logoImage} resizeMode="contain" />
-              <Text style={styles.logoSub}>{appTagline}</Text>
+              <BrandingLogoImage variant="login" style={styles.logoImage} resizeMode="contain" />
+              {appTagline ? <Text style={styles.logoSub}>{appTagline}</Text> : null}
             </View>
           )}
 
