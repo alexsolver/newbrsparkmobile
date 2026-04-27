@@ -3678,6 +3678,13 @@ html.ue-readonly-mode .ue-readonly-banner {
   border-style: dashed;
 }
 
+/* Ativar com KYC ainda não aprovado: clicável para mostrar alerta (evita `disabled` sem feedback). */
+button.ue-paff-act.ue-paff-act--need-kyc {
+  cursor: pointer;
+  border-style: dashed;
+  opacity: 0.92;
+}
+
 textarea.ue-rbac-readonly-field {
   cursor: not-allowed;
   opacity: 0.92;

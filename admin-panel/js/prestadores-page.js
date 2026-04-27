@@ -215,11 +215,15 @@ async function loadBondsTable() {
           ? new Date(r.requestedAt).toLocaleString(getAdminUiLocale())
           : '—';
         const kycOk = String(r.providerIdentity?.kycStatus || '').toUpperCase() === 'APPROVED';
+        const userId = String(u.id || '').trim();
+        const kycShortcut = userId
+          ? `<a class="btn btn-sm btn-outline" href="user-edit.html?id=${encodeURIComponent(userId)}" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-top:6px">${escAttr(t('pr_kyc_open_user'))}</a>`
+          : '';
         const actBtn =
           st === 'REQUESTED' && kycOk
             ? `<button type="button" class="btn btn-sm btn-primary pr-tp-act" data-aff="${escAttr(r.id)}">${escAttr(t('pr_activate'))}</button>`
             : st === 'REQUESTED' && !kycOk
-              ? `<span style="font-size:11px;color:var(--text3)">${escAttr(t('pr_kyc_pending'))}</span>`
+              ? `<div style="display:flex;flex-direction:column;align-items:flex-start;gap:2px"><span style="font-size:11px;color:var(--text3)">${escAttr(t('pr_kyc_pending'))}</span>${kycShortcut}</div>`
               : '—';
         return `<tr>
             <td><strong>${escAttr(name)}</strong><div style="font-size:11px;color:var(--text3);margin-top:2px">${escAttr(em)}</div></td>

@@ -143,6 +143,7 @@ export const USER_PAGES_ES_MERGE = {
   ul_techSignup: "Técnico signup",
   ul_prestadoresHub: "Proveedores",
   ul_prestadoresHubTitle: "Invitaciones de asociación, vínculos en la organización y solicitudes (onboarding)",
+  pr_kyc_open_user: "Abrir ficha (registro / KYC)",
   ul_newUser: "New usuario",
   ul_tableTitle: "Usuario list",
   ul_thUser: "User",

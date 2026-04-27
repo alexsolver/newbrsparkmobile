@@ -182,8 +182,10 @@ function paintProviderAffiliationsSection(payload) {
       const canAct = !isUserEditReadonly();
       let actions = '';
       if (canAct && pi && (st === 'INVITED' || st === 'REQUESTED')) {
-        const dis = kycOk ? '' : ' disabled title="' + esc(t('ue_paffActivateNeedKyc')) + '"';
-        actions += `<button type="button" class="btn btn-sm btn-primary ue-paff-act" data-aff="${esc(row.id)}" data-act="activate"${dis}>${esc(t('ue_paffBtnActivate'))}</button> `;
+        /** Não usar `disabled`: o browser não dispara clique — parece «botão morto» (igual ao convite). */
+        const extraCls = kycOk ? '' : ' ue-paff-act--need-kyc';
+        const blockAttr = kycOk ? '' : ` data-ue-paff-kyc-block="1" title="${esc(t('ue_paffActivateNeedKyc'))}"`;
+        actions += `<button type="button" class="btn btn-sm btn-primary ue-paff-act${extraCls}" data-aff="${esc(row.id)}" data-act="activate"${blockAttr}>${esc(t('ue_paffBtnActivate'))}</button> `;
       }
       if (canAct && (st === 'ACTIVE' || st === 'INVITED' || st === 'REQUESTED' || st === 'SUSPENDED')) {
         actions += `<button type="button" class="btn btn-sm btn-secondary ue-paff-act" data-aff="${esc(row.id)}" data-act="end">${esc(t('ue_paffBtnEnd'))}</button>`;
@@ -206,6 +208,10 @@ function paintProviderAffiliationsSection(payload) {
       const affId = btn.getAttribute('data-aff');
       const act = btn.getAttribute('data-act');
       if (!affId || !act) return;
+      if (act === 'activate' && btn.getAttribute('data-ue-paff-kyc-block') === '1') {
+        alert(t('ue_paffActivateNeedKyc'));
+        return;
+      }
       if (act === 'end' && !confirm(t('ue_paffEndConfirm'))) return;
       const noteEl = document.getElementById('ue-paff-note');
       const note = noteEl ? String(noteEl.value || '').trim() : '';
@@ -214,16 +220,21 @@ function paintProviderAffiliationsSection(payload) {
           ? `/providers/affiliations/${encodeURIComponent(affId)}/activate`
           : `/providers/affiliations/${encodeURIComponent(affId)}/end`;
       const body = note ? { note } : {};
-      const res = await CONFIG.post(path, body).catch(() => null);
-      if (res?.error) {
-        alert(res.error);
-        return;
+      try {
+        const res = await CONFIG.post(path, body).catch(() => null);
+        if (res?.error) {
+          alert(res.error);
+          return;
+        }
+        if (!res?.ok) {
+          alert(res?.error || t('ue_paffGenericErr'));
+          return;
+        }
+        await refreshUserEditProviderAffiliations();
+      } catch (e) {
+        console.error('[ue-paff-act]', e);
+        alert(e?.message || t('ue_paffGenericErr'));
       }
-      if (!res?.ok) {
-        alert(res?.error || t('ue_paffGenericErr'));
-        return;
-      }
-      await refreshUserEditProviderAffiliations();
     });
   });
 

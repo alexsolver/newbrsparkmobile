@@ -68,6 +68,7 @@ export const USER_PAGES_DE_MERGE = {
   ul_techSignup: 'Techniker-Registrierung',
   ul_prestadoresHub: 'Anbieter',
   ul_prestadoresHubTitle: 'Partnerschaftseinladungen, Organisationsverknüpfungen und Bewerbungen (Onboarding)',
+  pr_kyc_open_user: 'Profil öffnen (Onboarding / KYC)',
   ul_newUser: 'Neuer Benutzer',
   ul_tableTitle: 'Benutzerliste',
   ul_cancel: 'Abbrechen',
