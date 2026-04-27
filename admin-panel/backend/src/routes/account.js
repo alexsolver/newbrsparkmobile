@@ -37,6 +37,7 @@ const {
   startEmailPurposeChallenge,
 } = require('../lib/otpLoginService');
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
+const { hasActiveDedicatedAffiliationForAppUser } = require('../lib/providerOnboardingGuards');
 const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
 const { createPersonalClientTenantAndUserInTransaction } = require('../lib/registerPersonalClientTenant');
 const {
@@ -2155,6 +2156,14 @@ router.post('/me/technician', authUser, async (req, res) => {
     if (existing && String(existing.status || '').toUpperCase() === 'ACTIVE') {
       return res.status(400).json({
         error: 'Sua conta já está habilitada como prestador.',
+      });
+    }
+
+    if (await hasActiveDedicatedAffiliationForAppUser(prisma, req.user.id)) {
+      return res.status(409).json({
+        error:
+          'Já existe um vínculo dedicado ativo com uma empresa. Não é necessário iniciar novo pedido «Quero ser prestador» por este fluxo.',
+        code: 'TECH_REQUEST_SKIP_DEDICATED_ACTIVE',
       });
     }
 

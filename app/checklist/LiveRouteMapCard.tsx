@@ -1435,8 +1435,16 @@ export default function LiveRouteMapCard({
   const suppressTemplatePolyline =
     !!(route && route.length === 2 && dynamicRoute && dynamicRoute.length >= 2);
 
-  /** Sem verde ao longo da OSRM: só a polilinha azul tracejada inteira (KML/trecho mantêm split verde). */
-  const dynamicRouteSplit = null;
+  /**
+   * Polilinha OSRM à frente: à medida que o GPS avança ao longo da linha (`routePaintArcM`),
+   * o trecho já percorrido deixa de ser desenhado (comportamento tipo navegação).
+   */
+  const osrmPolylineCoords = useMemo(() => {
+    if (!dynamicRoute || dynamicRoute.length < 2) return null;
+    if (routePaintArcM <= 0) return dynamicRoute;
+    const { remaining } = splitPolylineByArcM(dynamicRoute, routePaintArcM);
+    return remaining.length >= 2 ? remaining : null;
+  }, [dynamicRoute, routePaintArcM]);
 
   const templateRouteSplit = useMemo<{ covered: number[][]; remaining: number[][] } | null>(() => {
     if (zoneType === 'segment' || zoneType === 'polygon') return null;
@@ -2563,7 +2571,7 @@ export default function LiveRouteMapCard({
                 <Text style={styles.hintStrong}>verde</Text> = trecho já percorrido na referência; linha{' '}
                 <Text style={styles.hintStrong}>laranja</Text> = trajeto planejado que ainda falta; linha{' '}
                 <Text style={styles.hintStrong}>azul</Text> = percurso GPS registrado; a linha de navegação (OSRM)
-                aparece em azul tracejado. A cobertura de patrulha estima quanto do
+                aparece em azul tracejado e mostra só o que falta — o trecho já percorrido ao longo dessa linha some. A cobertura de patrulha estima quanto do
                 trajeto planejado foi percorrido dentro do corredor (tolerância definida no despacho).
                 {'\n\n'}
                 <Text style={styles.hintStrong}>Waze / outra app:</Text> aceite localização "sempre" ou "em segundo plano"
@@ -2733,40 +2741,51 @@ export default function LiveRouteMapCard({
             </>
           )}
           
-          {/* Percurso dinâmico (reta imediata + geometria OSRM quando disponível); trecho já percorrido a verde */}
-          {dynamicRoute && dynamicRoute.length >= 2 && (
-             <>
-               <Polyline
-                 coordinates={dynamicRoute.map((c) => ({ latitude: c[0], longitude: c[1] }))}
-                 strokeColor="#2563eb"
-                 strokeWidth={2}
-                 lineDashPattern={Platform.OS === 'android' ? undefined : [8, 6]}
-                 zIndex={1000}
-                 geodesic={false}
-               />
-               {!(reimbursementMode && reimbMapPin) && (
-                 <Marker
-                   coordinate={{
-                     latitude: dynamicRoute[dynamicRoute.length - 1][0],
-                     longitude: dynamicRoute[dynamicRoute.length - 1][1],
-                   }}
-                   title="Destino"
-                   description="Toque para aproximar"
-                   onPress={() =>
-                     focusOnLatLng(
-                       dynamicRoute[dynamicRoute.length - 1][0],
-                       dynamicRoute[dynamicRoute.length - 1][1],
-                       20
-                     )
-                   }
-                 >
-                   <View style={{ width: 28, height: 28, backgroundColor: '#dc2626', borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
-                     <FontAwesome5 name="flag-checkered" size={12} color="#fff" />
-                   </View>
-                 </Marker>
-               )}
-             </>
-          )}
+          {/* Percurso dinâmico OSRM: só o trecho por percorrer (linha some atrás); marcador de destino mantém-se mesmo sem linha */}
+          {osrmPolylineCoords && osrmPolylineCoords.length >= 2 ? (
+            <Polyline
+              coordinates={osrmPolylineCoords.map((c) => ({ latitude: c[0], longitude: c[1] }))}
+              strokeColor="#2563eb"
+              strokeWidth={2}
+              lineDashPattern={Platform.OS === 'android' ? undefined : [8, 6]}
+              zIndex={1000}
+              geodesic={false}
+            />
+          ) : null}
+          {dynamicRoute &&
+            dynamicRoute.length >= 2 &&
+            !(reimbursementMode && reimbMapPin) && (
+              <Marker
+                coordinate={{
+                  latitude: dynamicRoute[dynamicRoute.length - 1][0],
+                  longitude: dynamicRoute[dynamicRoute.length - 1][1],
+                }}
+                title="Destino"
+                description="Toque para aproximar"
+                onPress={() =>
+                  focusOnLatLng(
+                    dynamicRoute[dynamicRoute.length - 1][0],
+                    dynamicRoute[dynamicRoute.length - 1][1],
+                    20
+                  )
+                }
+              >
+                <View
+                  style={{
+                    width: 28,
+                    height: 28,
+                    backgroundColor: '#dc2626',
+                    borderRadius: 14,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderWidth: 2,
+                    borderColor: '#fff',
+                  }}
+                >
+                  <FontAwesome5 name="flag-checkered" size={12} color="#fff" />
+                </View>
+              </Marker>
+            )}
 
           {reimbursementMode &&
             onCommitReimbursementOptionalDestination &&

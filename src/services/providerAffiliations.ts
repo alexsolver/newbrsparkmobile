@@ -36,14 +36,21 @@ export type ProviderAffiliation = {
 };
 
 export const ProviderAffiliationsApi = {
-  async getMeStatus(): Promise<{ affiliations: ProviderAffiliation[] }> {
+  async getMeStatus(): Promise<{
+    affiliations: ProviderAffiliation[];
+    /** Backend: DEDICATED+ACTIVE — não oferecer autoatendimento de onboarding / «Quero ser prestador». */
+    skipSelfServiceOnboarding?: boolean;
+  }> {
     const r = await apiFetch(`/api/providers/me/onboarding/status?_=${Date.now()}`, {
       method: 'GET',
       headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j?.error || 'Falha ao carregar status do prestador.');
-    return { affiliations: (j?.affiliations || []) as ProviderAffiliation[] };
+    return {
+      affiliations: (j?.affiliations || []) as ProviderAffiliation[],
+      skipSelfServiceOnboarding: !!j?.skipSelfServiceOnboarding,
+    };
   },
 
   async previewInvite(token: string): Promise<ProviderAffiliation> {

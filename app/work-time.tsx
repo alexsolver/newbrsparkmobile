@@ -39,7 +39,7 @@ import {
   type WorkTimePunchRow,
   type WorkTimePunchType,
 } from '../src/services/workTimeService';
-import { mergePendingWithServerPunches } from '../src/services/workTimePunchesCache';
+import { mergePendingWithServerPunches, readWorkTimePunchesCacheForUser } from '../src/services/workTimePunchesCache';
 import { MODE_SEGMENT_COLORS } from '../src/theme/colors';
 import type { ColorPalette } from '../src/theme/colors';
 import { fontSize, fontWeight, radius, space } from '../src/theme/layout';
@@ -232,11 +232,10 @@ export default function WorkTimeScreen() {
 
   const loadAll = useCallback(async () => {
     try {
-      try {
-        await pushWorkTimePunchOutbox();
-      } catch (e) {
+      /** Não bloquear UI/rede: envio da fila pode incluir verify-face + POST por item e demorar minutos. */
+      void pushWorkTimePunchOutbox().catch((e) => {
         console.warn('[work-time] fila de ponto (envio):', e);
-      }
+      });
       const pending = await getWorkTimeOutboxForDisplay();
       const session = user ? { id: user.id, tenantId: user.tenantId } : null;
 
@@ -329,16 +328,33 @@ export default function WorkTimeScreen() {
         /* ignore */
       }
     }
-  }, [user?.id, user?.tenantId]);
+  }, [user?.id, user?.tenantId, accountRole]);
 
   const onMount = useCallback(async () => {
     setLoading(true);
+    const session = user ? { id: user.id, tenantId: user.tenantId } : null;
+    try {
+      const [cachedMe, pending, cachedPunches] = await Promise.all([
+        readWorkTimeMeCacheForUser(session),
+        getWorkTimeOutboxForDisplay(),
+        readWorkTimePunchesCacheForUser(session),
+      ]);
+      if (cachedMe?.ok) {
+        setMe(cachedMe);
+        setPunches(mergePendingWithServerPunches(pending, cachedPunches));
+        setLoading(false);
+      }
+    } catch (e) {
+      console.warn('[work-time] hidratar cache local:', e);
+    }
     try {
       await loadAll();
+    } catch (e) {
+      console.warn('[work-time] onMount:', e);
     } finally {
       setLoading(false);
     }
-  }, [loadAll]);
+  }, [loadAll, user?.id, user?.tenantId]);
 
   React.useEffect(() => {
     void onMount().catch((e) => console.warn('[work-time] onMount:', e));
@@ -663,13 +679,16 @@ export default function WorkTimeScreen() {
                 <Ionicons name="lock-closed-outline" size={26} color={C.status.warning.fg} style={{ marginBottom: space.sm }} />
                 <Text style={[styles.messageTitle, { color: C.status.warning.fg }]}>{t('workTime.moduleOffTitle')}</Text>
                 <Text style={[styles.messageBody, { color: C.status.warning.fg, marginTop: space.xs }]}>
-                  {!me.featureFlagEnabled
-                    ? t('workTime.hintFlagOff')
-                    : !me.settings.moduleEnabled
-                      ? t('workTime.hintTenantModuleOff')
-                      : !me.userWorkTimeEnabled
-                        ? t('workTime.hintUserOff')
-                        : t('workTime.hintRoleClient')}
+                  {(() => {
+                    /** Tab visível = política (flag+módulo+papel) OK; batidas exigem também userWorkTimeEnabled. Não usar só `settings.moduleEnabled`: é só da tenant empresa no payload; com dedicado o gate efectivo pode estar OK na API mas este campo false. */
+                    if (me.showWorkTimeInApp && !me.canRegisterPunch) {
+                      return t('workTime.hintUserOff');
+                    }
+                    if (!me.featureFlagEnabled) return t('workTime.hintFlagOff');
+                    if (String(me.role || '').toUpperCase() === 'USER') return t('workTime.hintRoleClient');
+                    if (!me.showWorkTimeInApp) return t('workTime.hintTenantModuleOff');
+                    return t('workTime.hintUserOff');
+                  })()}
                 </Text>
                 {tabShowsButCannotPunchYet ? (
                   <Text style={[styles.messageBody, { color: C.status.warning.fg, marginTop: space.sm, fontWeight: '700' }]}>
@@ -1104,13 +1123,13 @@ function createStyles(C: ColorPalette, themeDark: boolean) {
     },
     /** Coluna principal: ações fixas no topo + lista a rolar. */
     mainColumn: { flex: 1 },
+    scrollFlex: { flex: 1 },
     punchBlockedSticky: {
       paddingHorizontal: space.md,
       paddingTop: space.sm,
-      paddingBottom: space.xs,
+      paddingBottom: space.sm,
       borderBottomWidth: StyleSheet.hairlineWidth,
     },
-    scrollFlex: { flex: 1 },
     stickyActionsTop: {
       paddingHorizontal: space.md,
       paddingTop: space.sm,

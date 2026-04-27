@@ -103,42 +103,12 @@ function CustomTabBar({
 
   const refreshWorkTimeTab = useCallback(async () => {
     if (tabBarVariant === 'client') {
-      // #region agent log
-      fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '12817a' },
-        body: JSON.stringify({
-          sessionId: '12817a',
-          runId: 'pre-fix',
-          hypothesisId: 'H3',
-          location: 'MainTabsLayout.tsx:refreshWorkTimeTab',
-          message: 'workTime tab skipped: client tabBar',
-          data: { tabBarVariant, mode },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       setShowWorkTimeTab(false);
       setWorkTimeTabBrazilPj(false);
       setWorkTimeJourneyPhase('idle_out');
       return;
     }
     if (!user?.id || String(user.role || '').toUpperCase() === 'USER') {
-      // #region agent log
-      fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '12817a' },
-        body: JSON.stringify({
-          sessionId: '12817a',
-          runId: 'pre-fix',
-          hypothesisId: 'H2',
-          location: 'MainTabsLayout.tsx:refreshWorkTimeTab',
-          message: 'workTime tab skipped: no user or role USER',
-          data: { hasUserId: !!user?.id, role: user?.role ? String(user.role).toUpperCase() : null, mode },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       setShowWorkTimeTab(false);
       setWorkTimeTabBrazilPj(false);
       setWorkTimeJourneyPhase('idle_out');
@@ -147,132 +117,85 @@ function CustomTabBar({
     const session = { id: user.id, tenantId: user.tenantId };
     try {
       try {
-        try {
-          await pushWorkTimePunchOutbox();
-        } catch (pushErr) {
+        void pushWorkTimePunchOutbox().catch((pushErr) => {
           console.warn('[TabBar] pushWorkTimePunchOutbox:', pushErr);
-        }
-      let d: Awaited<ReturnType<typeof fetchWorkTimeMe>> | null = null;
-      let meSource: 'network_ok' | 'network_err' | 'network_throw' | 'cache' | 'none' = 'none';
-      try {
-        d = await fetchWorkTimeMe();
-        if (d && d.ok) meSource = 'network_ok';
-        else if (d) meSource = 'network_err';
-      } catch {
-        d = null;
-        meSource = 'network_throw';
-      }
-      if (!d || !d.ok) {
-        let diskMe: Awaited<ReturnType<typeof readWorkTimeMeCacheForUser>> = null;
+        });
+        let d: Awaited<ReturnType<typeof fetchWorkTimeMe>> | null = null;
+        let meSource: 'network_ok' | 'network_err' | 'network_throw' | 'cache' | 'none' = 'none';
         try {
-          diskMe = await readWorkTimeMeCacheForUser(session);
+          d = await fetchWorkTimeMe();
+          if (d && d.ok) meSource = 'network_ok';
+          else if (d) meSource = 'network_err';
         } catch {
-          diskMe = null;
+          d = null;
+          meSource = 'network_throw';
         }
-        if (diskMe?.ok) {
-          d = diskMe;
-          meSource = 'cache';
-        }
-      }
-      const show = !!(d && d.ok && d.showWorkTimeInApp);
-      if (meSource === 'network_ok' && d && d.ok) {
-        try {
-          await writeWorkTimeMeCache(d);
-        } catch {
-          /* cache best-effort */
-        }
-      }
-      setShowWorkTimeTab(show);
-      setWorkTimeTabBrazilPj(!!(show && d && d.ok && d.workTimeBrazilRegime === 'PJ'));
-      // #region agent log
-      {
-        const ok = d && d.ok;
-        const me = ok ? d : null;
-        fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '12817a' },
-          body: JSON.stringify({
-            sessionId: '12817a',
-            runId: 'pre-fix',
-            hypothesisId: 'H1',
-            location: 'MainTabsLayout.tsx:refreshWorkTimeTab:afterMe',
-            message: 'workTime /me decision for tab visibility',
-            data: {
-              meSource,
-              show,
-              mode,
-              tabBarVariant,
-              meOk: !!ok,
-              showWorkTimeInApp: me ? me.showWorkTimeInApp : null,
-              err: !ok && d && 'error' in d ? String((d as { error?: string }).error) : null,
-              featureFlagEnabled: me?.featureFlagEnabled,
-              userWorkTimeEnabled: me?.userWorkTimeEnabled,
-              moduleEnabled: me?.settings?.moduleEnabled,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-      }
-      // #endregion
-      if (!show || mode !== 'PROVIDER') {
-        // #region agent log
-        fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '12817a' },
-          body: JSON.stringify({
-            sessionId: '12817a',
-            runId: 'pre-fix',
-            hypothesisId: 'H5',
-            location: 'MainTabsLayout.tsx:refreshWorkTimeTab:noShowOrMode',
-            message: 'workTime tab not shown or mode not PROVIDER',
-            data: { show, mode, showJourneyReset: true },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-        setWorkTimeJourneyPhase('idle_out');
-        return;
-      }
-      /** Batidas/outbox não devem esconder o separador se `/me` já autorizou o ponto. */
-      try {
-        const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
-        const pending = await getWorkTimeOutboxForDisplay();
-        const merged = mergePendingWithServerPunches(pending, rows);
-        setWorkTimeJourneyPhase(computeJourneyUiState(merged).phase);
-      } catch (journeyErr) {
-        console.warn('[TabBar] refreshWorkTimeTab (batidas/aura):', journeyErr);
-        setWorkTimeJourneyPhase('idle_out');
-      }
-    } catch (outerErr) {
-      let cached: Awaited<ReturnType<typeof readWorkTimeMeCacheForUser>> = null;
-      try {
-        cached = await readWorkTimeMeCacheForUser(session);
-      } catch {
-        cached = null;
-      }
-      if (cached?.ok && cached.showWorkTimeInApp && mode === 'PROVIDER') {
-        setShowWorkTimeTab(true);
-        setWorkTimeTabBrazilPj(cached.workTimeBrazilRegime === 'PJ');
-        try {
-          await pushWorkTimePunchOutbox();
-          const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
-          const pending = await getWorkTimeOutboxForDisplay();
-          setWorkTimeJourneyPhase(computeJourneyUiState(mergePendingWithServerPunches(pending, rows)).phase);
-        } catch {
+        if (!d || !d.ok) {
+          let diskMe: Awaited<ReturnType<typeof readWorkTimeMeCacheForUser>> = null;
           try {
-            const pending = await getWorkTimeOutboxForDisplay();
-            const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
-            setWorkTimeJourneyPhase(computeJourneyUiState(mergePendingWithServerPunches(pending, rows)).phase);
+            diskMe = await readWorkTimeMeCacheForUser(session);
           } catch {
-            setWorkTimeJourneyPhase('idle_out');
+            diskMe = null;
+          }
+          if (diskMe?.ok) {
+            d = diskMe;
+            meSource = 'cache';
           }
         }
-        return;
+        const show = !!(d && d.ok && d.showWorkTimeInApp);
+        if (meSource === 'network_ok' && d && d.ok) {
+          try {
+            await writeWorkTimeMeCache(d);
+          } catch {
+            /* cache best-effort */
+          }
+        }
+        setShowWorkTimeTab(show);
+        setWorkTimeTabBrazilPj(!!(show && d && d.ok && d.workTimeBrazilRegime === 'PJ'));
+        if (!show || mode !== 'PROVIDER') {
+          setWorkTimeJourneyPhase('idle_out');
+          return;
+        }
+        /** Batidas/outbox não devem esconder o separador se `/me` já autorizou o ponto. */
+        try {
+          const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
+          const pending = await getWorkTimeOutboxForDisplay();
+          const merged = mergePendingWithServerPunches(pending, rows);
+          setWorkTimeJourneyPhase(computeJourneyUiState(merged).phase);
+        } catch (journeyErr) {
+          console.warn('[TabBar] refreshWorkTimeTab (batidas/aura):', journeyErr);
+          setWorkTimeJourneyPhase('idle_out');
+        }
+      } catch (outerErr) {
+        let cached: Awaited<ReturnType<typeof readWorkTimeMeCacheForUser>> = null;
+        try {
+          cached = await readWorkTimeMeCacheForUser(session);
+        } catch {
+          cached = null;
+        }
+        if (cached?.ok && cached.showWorkTimeInApp && mode === 'PROVIDER') {
+          setShowWorkTimeTab(true);
+          setWorkTimeTabBrazilPj(cached.workTimeBrazilRegime === 'PJ');
+          try {
+            void pushWorkTimePunchOutbox().catch((e) => console.warn('[TabBar] pushWorkTimePunchOutbox (recuperação):', e));
+            const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
+            const pending = await getWorkTimeOutboxForDisplay();
+            setWorkTimeJourneyPhase(computeJourneyUiState(mergePendingWithServerPunches(pending, rows)).phase);
+          } catch {
+            try {
+              const pending = await getWorkTimeOutboxForDisplay();
+              const rows = await fetchWorkTimePunchesWithLocalFallback(session, 31);
+              setWorkTimeJourneyPhase(computeJourneyUiState(mergePendingWithServerPunches(pending, rows)).phase);
+            } catch {
+              setWorkTimeJourneyPhase('idle_out');
+            }
+          }
+          return;
+        }
+        setShowWorkTimeTab(false);
+        setWorkTimeTabBrazilPj(false);
+        setWorkTimeJourneyPhase('idle_out');
       }
-      setShowWorkTimeTab(false);
-      setWorkTimeTabBrazilPj(false);
-      setWorkTimeJourneyPhase('idle_out');
-    }
     } catch (fatal) {
       console.warn('[TabBar] refreshWorkTimeTab (fatal):', fatal);
       setShowWorkTimeTab(false);

@@ -3184,6 +3184,11 @@ export async function bootUserEditPage() {
 
   const fWt = document.getElementById('f-work-time');
   if (fWt) fWt.checked = !!u.workTimeTrackingEnabled;
+  const wtInternalId = document.getElementById('ue-wt-internal-id');
+  if (wtInternalId && u.id) {
+    wtInternalId.textContent =
+      'ID no servidor (mesmo que a sessão do app usa): ' + String(u.id);
+  }
 
   const rClt = document.getElementById('wt-br-r-clt');
   const rPj = document.getElementById('wt-br-r-pj');

@@ -92,3 +92,13 @@ test('getWorkTimeEffectiveForUser: sem DEDICATED fica na tenant casa', async () 
   assert.equal(out.tenantId, homeT);
   assert.equal(out.settings.moduleEnabled, true);
 });
+
+test('getWorkTimeEffectiveForUser: DEDICATED — módulo só na tenant casa ainda permite tab+batidas', async () => {
+  const db = buildMockDb({ withDedicated: true, homeModuleOn: true, corpModuleOn: false });
+  const out = await getWorkTimeEffectiveForUser('u1', db);
+  assert.equal(out.ok, true);
+  assert.equal(out.tenantId, corpT);
+  assert.equal(out.settings.moduleEnabled, false);
+  assert.equal(out.showWorkTimeInApp, true);
+  assert.equal(out.canRegisterPunch, true);
+});

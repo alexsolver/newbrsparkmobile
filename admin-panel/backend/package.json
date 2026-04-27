@@ -25,7 +25,8 @@
     "directory:clear-legacy": "node scripts/clear-service-providers.js",
     "compliance:seed": "node scripts/seed-compliance-ptbr.js",
     "compliance:publish-privacy": "node scripts/publish-compliance-privacy-policy.js",
-    "db:reset": "echo '🚫 db:reset foi desabilitado para proteger dados. Use db:migrate para migrações seguras.'"
+    "db:reset": "echo '🚫 db:reset foi desabilitado para proteger dados. Use db:migrate para migrações seguras.'",
+    "diag:app-account-users": "node scripts/listAppAccountSiblingUsers.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",

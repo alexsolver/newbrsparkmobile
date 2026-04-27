@@ -26,6 +26,7 @@ const {
 const { endSiblingAffiliationsSameTenantAppAccount } = require('../lib/providerAffiliationSiblingEnd');
 const { invalidateAppEffectiveTenantIdCache } = require('../lib/appLoginEffectiveTenant');
 const { parseDedicatedExclusiveFromTenantScheduleJson } = require('../lib/dedicatedExclusiveTime');
+const { hasActiveDedicatedAffiliationForAppUser } = require('../lib/providerOnboardingGuards');
 
 const publicRouter = express.Router();
 const adminRouter = express.Router();
@@ -38,6 +39,18 @@ const ONBOARDING_INVITE_BASE_URL =
   String(process.env.PROVIDER_GLOBAL_ONBOARDING_URL_BASE || 'brsparkmobile://provider-onboarding').trim();
 
 const AFFILIATION_RELATIONSHIP_TYPES = new Set(['PARTNER', 'DEDICATED']);
+
+const ONBOARDING_DEDICATED_ACTIVE_MSG =
+  'Já existe um vínculo dedicado ativo. Não é necessário abrir ou submeter candidatura de onboarding por este fluxo.';
+
+function respondOnboardingBlockedIfDedicated(res, hasDedicated) {
+  if (!hasDedicated) return false;
+  res.status(409).json({
+    error: ONBOARDING_DEDICATED_ACTIVE_MSG,
+    code: 'ONBOARDING_SKIP_DEDICATED_ACTIVE',
+  });
+  return true;
+}
 
 function normalizeEmail(raw) {
   return String(raw || '')
@@ -278,6 +291,11 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
     );
     if (aligned.persistedCount > 0) invalidateAppEffectiveTenantIdCache(req.user.id);
 
+    const skipSelfServiceOnboarding = await hasActiveDedicatedAffiliationForAppUser(
+      prisma,
+      req.user.id
+    );
+
     return res.json({
       providerIdentity: {
         id: providerIdentity.id,
@@ -295,6 +313,8 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
             updatedAt: latest.updatedAt,
           }
         : null,
+      /** `true` quando já existe DEDICATED+ACTIVE: o autoatendimento de onboarding global não deve ser oferecido. */
+      skipSelfServiceOnboarding,
       affiliations: aligned.rows.map((row) => affiliationPayloadFromRow(row)),
     });
   } catch (err) {
@@ -504,6 +524,15 @@ publicRouter.post('/me/onboarding/start', authUser, express.json(), async (req, 
       }
     }
 
+    if (
+      respondOnboardingBlockedIfDedicated(
+        res,
+        await hasActiveDedicatedAffiliationForAppUser(prisma, req.user.id)
+      )
+    ) {
+      return;
+    }
+
     const app = await findOrCreateEditableOnboardingApp(providerIdentity.id, inviteToken || null);
     return res.json({
       ok: true,
@@ -530,6 +559,14 @@ publicRouter.patch('/me/onboarding/draft', authUser, express.json(), async (req,
       return res.status(400).json({ error: 'Envie responsesJson com objeto válido.' });
     }
     const providerIdentity = await ensureProviderIdentityForUser(req.user.id);
+    if (
+      respondOnboardingBlockedIfDedicated(
+        res,
+        await hasActiveDedicatedAffiliationForAppUser(prisma, req.user.id)
+      )
+    ) {
+      return;
+    }
     const editable = await findOrCreateEditableOnboardingApp(providerIdentity.id, null);
     const nextResponses = mergeJsonResponses(editable.responsesJson, patch);
     const updated = await prisma.providerOnboardingApplication.update({
@@ -554,6 +591,14 @@ publicRouter.post('/me/onboarding/submit', authUser, express.json(), async (req,
   try {
     if (!(await ensureProviderFirstEnabledOr403(res, req.user.tenantId))) return;
     const providerIdentity = await ensureProviderIdentityForUser(req.user.id);
+    if (
+      respondOnboardingBlockedIfDedicated(
+        res,
+        await hasActiveDedicatedAffiliationForAppUser(prisma, req.user.id)
+      )
+    ) {
+      return;
+    }
     const editable = await findOrCreateEditableOnboardingApp(providerIdentity.id, null);
     if (editable.status === 'SUBMITTED') return res.json({ ok: true, status: 'SUBMITTED' });
     const updated = await prisma.providerOnboardingApplication.update({

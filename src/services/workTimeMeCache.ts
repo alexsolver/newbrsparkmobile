@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { WorkTimeMeOk } from './workTimeService';
 
-const WORK_TIME_ME_CACHE_KEY = '@brspark_work_time_me_snapshot_v1';
+const WORK_TIME_ME_CACHE_KEY = '@brspark_work_time_me_snapshot_v2';
+const WORK_TIME_ME_CACHE_KEY_LEGACY_V1 = '@brspark_work_time_me_snapshot_v1';
+void AsyncStorage.removeItem(WORK_TIME_ME_CACHE_KEY_LEGACY_V1);
 
 export function parseWorkTimeMeCache(raw: string | null): WorkTimeMeOk | null {
   if (!raw) return null;
@@ -23,7 +25,8 @@ export async function readWorkTimeMeCacheForUser(session: { id: string; tenantId
   try {
     const raw = await AsyncStorage.getItem(WORK_TIME_ME_CACHE_KEY);
     const parsed = parseWorkTimeMeCache(raw);
-    if (!parsed || parsed.userId !== session.id || parsed.tenantId !== session.tenantId) return null;
+    if (!parsed || parsed.userId !== session.id) return null;
+    /* JWT `session.tenantId` e `parsed.tenantId` do /me (tenant efetiva) podem divergir; validar só userId. Online substitui por uma rede fresca. */
     return parsed;
   } catch {
     return null;

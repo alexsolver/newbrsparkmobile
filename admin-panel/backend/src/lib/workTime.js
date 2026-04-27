@@ -121,11 +121,18 @@ async function getWorkTimeEffectiveForUser(userId, db = prisma) {
 
   const resolvedEff = await resolveAppEffectiveTenantId(db, userId);
   const scopeTenantId = resolvedEff && String(resolvedEff).trim() ? String(resolvedEff).trim() : String(user.tenantId);
+  const homeTenantId = String(user.tenantId).trim();
+  /** Com afiliação DEDICATED+ACTIVE, o operador costuma configurar flag/módulo na org «casa»; a tenant efetiva é a empresa. OR com a casa evita batidas bloqueadas indevidamente. */
+  const dedicatedContext = homeTenantId.length > 0 && scopeTenantId !== homeTenantId;
 
-  const flagOn = await isWorkTimeFeatureFlagEnabled(scopeTenantId, db);
+  const flagScope = await isWorkTimeFeatureFlagEnabled(scopeTenantId, db);
+  const flagHome = dedicatedContext ? await isWorkTimeFeatureFlagEnabled(homeTenantId, db) : false;
+  const flagOn = flagScope || flagHome;
   const settings = await ensureWorkTimeSettings(scopeTenantId, db);
+  const settingsHome = dedicatedContext ? await ensureWorkTimeSettings(homeTenantId, db) : null;
   const enrolled = faceEnrollmentOk(user);
-  const moduleOn = !!settings.moduleEnabled;
+  const moduleOn =
+    !!settings.moduleEnabled || !!(settingsHome && settingsHome.moduleEnabled);
   const userOn = !!user.workTimeTrackingEnabled;
   const eligibleRole = canAccountAccessWorkTime(user.role);
   /** Módulo disponível para este papel (tab / entrada no ecrã); batidas exigem `userOn`. */

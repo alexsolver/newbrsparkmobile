@@ -1122,6 +1122,23 @@ tbody td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 .form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(249,115,22,0.15); }
 .form-control::placeholder { color: var(--text3); }
 
+/* Modal «Janelas dedicadas» (ficha utilizador): sem largura mínima na 1.ª coluna, o <select> do dia
+   recorta o texto e só fica visível a seta do controlo nativo. */
+#ue-paff-ded-overlay #ue-paff-ded-tbody td:first-child,
+#ue-paff-ded-overlay thead th:first-child {
+  min-width: 9.75rem;
+  width: 36%;
+  vertical-align: middle;
+}
+#ue-paff-ded-overlay .ue-ded-wd {
+  min-width: 8.5rem;
+  width: 100%;
+  max-width: 100%;
+  color: var(--text);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
 /* ── Toggle / Switch ─────────────────────────────────────── */
 .toggle-wrap { display: flex; align-items: center; gap: 10px; }
 .toggle {

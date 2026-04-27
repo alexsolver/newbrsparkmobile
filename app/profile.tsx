@@ -45,6 +45,7 @@ import { shareUserLocalDataJson } from '../src/utils/exportUserLocalData';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
 import { usePersona } from '../src/context/PersonaContext';
+import { ProviderAffiliationsApi } from '../src/services/providerAffiliations';
 
 const REGION_KEY   = '@brspark_region';
 const LANGUAGE_KEY = '@brspark_language';
@@ -209,6 +210,9 @@ export default function ProfileScreen() {
     status?: string;
     revisionNote?: string | null;
   } | null>(null);
+
+  /** Quando o backend indica DEDICATED+ACTIVE, esconde o CTA «Quero ser prestador». */
+  const [skipSelfServiceOnboarding, setSkipSelfServiceOnboarding] = useState(false);
 
   const canManageDirectoryHero = userHasCapability(user, 'mobile.admin.quickActions');
 
@@ -414,6 +418,29 @@ export default function ProfileScreen() {
       setTechRegResume({ open: false, submittedAwaitingReview: false });
     }
   }, [user]);
+
+  const refreshSkipSelfServiceOnboarding = useCallback(async () => {
+    if (!user?.id) {
+      setSkipSelfServiceOnboarding(false);
+      return;
+    }
+    try {
+      const s = await ProviderAffiliationsApi.getMeStatus();
+      setSkipSelfServiceOnboarding(!!s.skipSelfServiceOnboarding);
+    } catch {
+      setSkipSelfServiceOnboarding(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    void refreshSkipSelfServiceOnboarding();
+  }, [refreshSkipSelfServiceOnboarding]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshSkipSelfServiceOnboarding();
+    }, [refreshSkipSelfServiceOnboarding]),
+  );
 
   const [profile, setProfile] = useState({
     name: user?.name || 'User',
@@ -1019,7 +1046,7 @@ export default function ProfileScreen() {
     const k = String(user?.tenant?.kind || 'COMPANY').toUpperCase();
     const tenantIsWorkspaceSplit = k === 'CLIENT' || k === 'PROVIDER';
     return {
-      showBecomeProviderCta: b2c && !tenantIsWorkspaceSplit,
+      showBecomeProviderCta: b2c && !tenantIsWorkspaceSplit && !skipSelfServiceOnboarding,
       showProviderModeToggles:
         tenantIsWorkspaceSplit ||
         (!b2c &&
@@ -1027,7 +1054,7 @@ export default function ProfileScreen() {
             isTechnicianProfileActive(user) ||
             canUseProviderMode(user))),
     };
-  }, [user]);
+  }, [user, skipSelfServiceOnboarding]);
 
   const faceReenrollBioCount = useMemo(
     () => countBiometricFaceEnrollmentPhotos(user?.faceEnrollmentPhotos),
