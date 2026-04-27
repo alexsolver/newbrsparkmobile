@@ -387,6 +387,7 @@ publicRouter.post('/me/affiliations/:id/resume', authUser, async (req, res) => {
       where: { id: row.id },
       data: { status: 'ACTIVE', suspendedAt: null },
     });
+    invalidateAppEffectiveTenantIdCache(req.user.id);
     return res.json({ ok: true, affiliation: affiliationPayloadFromRow({ ...row, ...updated }) });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -426,6 +427,7 @@ publicRouter.post('/me/affiliations/:id/end', authUser, async (req, res) => {
       }
       return u;
     });
+    invalidateAppEffectiveTenantIdCache(req.user.id);
     return res.json({ ok: true, affiliation: affiliationPayloadFromRow({ ...row, ...updated }) });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -984,6 +986,7 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
       })
       .catch(() => {});
 
+    invalidateAppEffectiveTenantIdCache(uid);
     return res.json({
       ok: true,
       affiliation: {
@@ -1032,6 +1035,7 @@ adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
       }
       return u;
     });
+    invalidateAppEffectiveTenantIdCache(String(row.providerIdentity?.userId || '').trim());
     return res.json({
       ok: true,
       affiliation: {
