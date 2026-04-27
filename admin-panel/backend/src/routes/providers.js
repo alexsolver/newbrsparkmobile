@@ -20,6 +20,9 @@ const {
   onboardingStatusInclude,
   resolveMergedProviderIdentityForUserId,
 } = require('../lib/providerIdentityMerge');
+const { endSiblingAffiliationsSameTenantAppAccount } = require('../lib/providerAffiliationSiblingEnd');
+const { invalidateAppEffectiveTenantIdCache } = require('../lib/appLoginEffectiveTenant');
+const { parseDedicatedExclusiveFromTenantScheduleJson } = require('../lib/dedicatedExclusiveTime');
 
 const publicRouter = express.Router();
 const adminRouter = express.Router();
@@ -141,7 +144,7 @@ async function loadMeAffiliationRow(req, res, id) {
   const row = await prisma.providerTenantAffiliation.findFirst({
     where: { id: sid },
     include: {
-      providerIdentity: { include: { user: { select: { id: true, email: true } } } },
+      providerIdentity: { include: { user: { select: { id: true, email: true, appAccountId: true } } } },
       tenant: { select: { id: true, name: true, slug: true } },
     },
   });
@@ -160,6 +163,12 @@ async function loadMeAffiliationRow(req, res, id) {
   return row;
 }
 
+function dedicatedExclusiveForAppPayload(row) {
+  const parsed = parseDedicatedExclusiveFromTenantScheduleJson(row?.tenantScheduleJson);
+  if (!parsed) return null;
+  return { timezone: parsed.timezone, weeklyWindows: parsed.weeklyWindows };
+}
+
 function affiliationPayloadFromRow(row, extra = {}) {
   return {
     id: row.id,
@@ -172,6 +181,7 @@ function affiliationPayloadFromRow(row, extra = {}) {
     activatedAt: row.activatedAt,
     endedAt: row.endedAt,
     suspendedAt: row.suspendedAt,
+    dedicatedExclusive: dedicatedExclusiveForAppPayload(row),
     ...extra,
   };
 }
@@ -249,18 +259,7 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
             updatedAt: latest.updatedAt,
           }
         : null,
-      affiliations: affiliationsForApp.map((row) => ({
-        id: row.id,
-        status: row.status,
-        relationshipType: row.relationshipType || 'PARTNER',
-        note: row.note,
-        tenant: row.tenant,
-        invitedAt: row.invitedAt,
-        requestedAt: row.requestedAt,
-        activatedAt: row.activatedAt,
-        endedAt: row.endedAt,
-        suspendedAt: row.suspendedAt,
-      })),
+      affiliations: affiliationsForApp.map((row) => affiliationPayloadFromRow(row)),
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -304,6 +303,7 @@ publicRouter.post('/me/affiliations/:id/accept', authUser, async (req, res) => {
         invitationToken: null,
       },
     });
+    invalidateAppEffectiveTenantIdCache(req.user.id);
     return res.json({
       ok: true,
       affiliation: {
@@ -340,6 +340,7 @@ publicRouter.post('/me/affiliations/:id/decline', authUser, async (req, res) => 
         endedAt: now,
       },
     });
+    invalidateAppEffectiveTenantIdCache(req.user.id);
     return res.json({ ok: true, affiliation: affiliationPayloadFromRow({ ...row, ...updated }) });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -363,6 +364,7 @@ publicRouter.post('/me/affiliations/:id/suspend', authUser, async (req, res) => 
       where: { id: row.id },
       data: { status: 'SUSPENDED', suspendedAt: now },
     });
+    invalidateAppEffectiveTenantIdCache(req.user.id);
     return res.json({ ok: true, affiliation: affiliationPayloadFromRow({ ...row, ...updated }) });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -404,13 +406,25 @@ publicRouter.post('/me/affiliations/:id/end', authUser, async (req, res) => {
       });
     }
     const now = new Date();
-    const updated = await prisma.providerTenantAffiliation.update({
-      where: { id: row.id },
-      data: {
-        status: 'INACTIVE',
-        endedAt: now,
-        suspendedAt: null,
-      },
+    const appAccountId = row.providerIdentity?.user?.appAccountId || null;
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.providerTenantAffiliation.update({
+        where: { id: row.id },
+        data: {
+          status: 'INACTIVE',
+          endedAt: now,
+          suspendedAt: null,
+        },
+      });
+      if (appAccountId) {
+        await endSiblingAffiliationsSameTenantAppAccount(tx, {
+          tenantId: row.tenantId,
+          excludeAffiliationId: row.id,
+          appAccountId,
+          now,
+        });
+      }
+      return u;
     });
     return res.json({ ok: true, affiliation: affiliationPayloadFromRow({ ...row, ...updated }) });
   } catch (err) {
@@ -989,18 +1003,34 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
 adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
   try {
     const id = String(req.params.id || '').trim();
-    const row = await prisma.providerTenantAffiliation.findUnique({ where: { id } });
+    const row = await prisma.providerTenantAffiliation.findUnique({
+      where: { id },
+      include: { providerIdentity: { include: { user: { select: { appAccountId: true } } } } },
+    });
     if (!row) return res.status(404).json({ error: 'Parceria não encontrada.' });
     if (!canAccessTenant(req, row.tenantId)) return res.status(403).json({ error: 'Sem permissão para este tenant.' });
     if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
     const note = String(req.body?.note || '').trim();
-    const updated = await prisma.providerTenantAffiliation.update({
-      where: { id: row.id },
-      data: {
-        status: 'INACTIVE',
-        endedAt: new Date(),
-        note: note || row.note || null,
-      },
+    const now = new Date();
+    const appAccountId = row.providerIdentity?.user?.appAccountId || null;
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.providerTenantAffiliation.update({
+        where: { id: row.id },
+        data: {
+          status: 'INACTIVE',
+          endedAt: now,
+          note: note || row.note || null,
+        },
+      });
+      if (appAccountId) {
+        await endSiblingAffiliationsSameTenantAppAccount(tx, {
+          tenantId: row.tenantId,
+          excludeAffiliationId: row.id,
+          appAccountId,
+          now,
+        });
+      }
+      return u;
     });
     return res.json({
       ok: true,

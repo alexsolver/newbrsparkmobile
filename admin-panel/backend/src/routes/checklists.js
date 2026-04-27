@@ -36,6 +36,10 @@ const {
 } = require('../lib/fieldTaskExecutionAccess');
 const { preserveDispatchClientContactMetadata } = require('../lib/technicianClientChatGate');
 const { notifyBroadcastLosers } = require('../lib/fieldTaskBroadcastNotify');
+const {
+    filterBroadcastCandidatesExcludingDedicatedAt,
+    isAppUserInDedicatedExclusiveAt,
+} = require('../lib/providerDedicatedExclusiveService');
 const { resolveFieldTaskContextTenantIdForDispatch, FIELD_TASK_CONTEXT_TENANT_KEY } = require('../lib/fieldTaskExecutionTenantScope');
 const {
     TRANSIT_ETA_DISPLAY_SNAPSHOT_AT,
@@ -1104,6 +1108,20 @@ router.post('/executions/:taskId/claim', authUser, async (req, res) => {
             if (!candidates.includes(email)) {
                 return { err: 403, body: { error: 'O seu utilizador não está convidado a esta OS.' } };
             }
+            const dedicatedNow = await isAppUserInDedicatedExclusiveAt(tx, uid, new Date());
+            const dedicatedSlot =
+                ex.scheduledStartAt != null &&
+                (await isAppUserInDedicatedExclusiveAt(tx, uid, new Date(ex.scheduledStartAt)));
+            if (dedicatedNow || dedicatedSlot) {
+                return {
+                    err: 403,
+                    body: {
+                        error:
+                            'Indisponível para aceitar ofertas partner neste horário (janela dedicada exclusiva com uma empresa).',
+                        code: 'DEDICATED_PARTNER_EXCLUSIVE',
+                    },
+                };
+            }
             const st = String(ex.status || '').toUpperCase();
             if (['COMPLETED', 'SYNCED', 'CANCELLED', 'CANCELED', 'REJECTED'].includes(st)) {
                 return { err: 409, body: { error: 'OS já encerrada.' } };
@@ -1691,7 +1709,17 @@ router.post('/dispatch', async (req, res) => {
         const parsedLocationRadius = rawLocationRadius !== null && Number.isFinite(rawLocationRadius) ? rawLocationRadius : null;
 
         const osNumber = await allocateNextFtOsNumber(prisma);
-        const broadcastList = normalizeBroadcastCandidateEmails(resolvedList);
+        let broadcastList = normalizeBroadcastCandidateEmails(resolvedList);
+        if (isBroadcast) {
+            broadcastList = await filterBroadcastCandidatesExcludingDedicatedAt(prisma, broadcastList, scheduledStart);
+            if (broadcastList.length < 2) {
+                return res.status(400).json({
+                    error:
+                        'Após excluir prestadores em janela dedicada exclusiva no horário agendado da OS, faltam candidatos para o modo «primeiro a aceitar» (mínimo 2).',
+                    code: 'BROADCAST_DEDICATED_EXCLUSIVITY',
+                });
+            }
+        }
         const baseDispatchMeta = preserveDispatchClientContactMetadata(
             {},
             { ...(typeof payload.metadata === 'object' && payload.metadata && !Array.isArray(payload.metadata) ? payload.metadata : {}) }
@@ -1770,7 +1798,8 @@ router.post('/dispatch', async (req, res) => {
             }
             if (pushBody.length > 180) pushBody = `${pushBody.slice(0, 177)}…`;
 
-            for (const emailRaw of resolvedList) {
+            const pushTargets = isBroadcast ? broadcastList : resolvedList;
+            for (const emailRaw of pushTargets) {
                 await sendFieldTaskActivityPushToAssignee(prisma, {
                     ownerEmail: String(emailRaw || '').trim(),
                     templateTenantId: loadedTemplate?.tenantId ?? null,

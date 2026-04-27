@@ -16,6 +16,7 @@ import { adminIntlLocale } from './admin-i18n-resolve.js';
 
 /** Atualizado em `bootUserEditPage` para acionar indicador «não guardado» */
 const dirtyHooks = { mark: () => {}, refreshWorkspace: () => {} };
+let ueSkillsWidgetBound = false;
 /** Definido em `bootUserEditPage` — atualiza a secção de ponto após alterar a galeria facial. */
 let bumpUserRefFaceState = null;
 /** Tenant com `locale.countryCode === 'BR'` — mostra vínculo CLT/PJ no registro de horas. */
@@ -158,6 +159,149 @@ function clearUePaffInlineError() {
   errEl.textContent = '';
 }
 
+const UE_PAFF_DED_WD = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+let uePaffDedCtx = { userId: '', affId: '' };
+
+function closeUePaffDedicatedExclusiveModal() {
+  const ov = document.getElementById('ue-paff-ded-overlay');
+  if (ov) ov.classList.remove('open');
+}
+
+function normalizeTimeHmForInput(v) {
+  const s = String(v || '').trim();
+  const m = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(s);
+  if (!m) return '08:00';
+  const h = Math.min(23, Math.max(0, Number(m[1])));
+  const mm = Math.min(59, Math.max(0, Number(m[2])));
+  return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+function uePaffDedRowHtml(weekday, start, end) {
+  const wd0 = UE_PAFF_DED_WD.includes(weekday) ? weekday : 'mon';
+  const opts = UE_PAFF_DED_WD.map(
+    (w) => `<option value="${w}"${w === wd0 ? ' selected' : ''}>${esc(t(`ue_paffDedDay_${w}`))}</option>`,
+  ).join('');
+  const st = normalizeTimeHmForInput(start);
+  const en = normalizeTimeHmForInput(end);
+  return `<tr data-ue-ded-row>
+    <td><select class="form-control form-control-sm ue-ded-wd">${opts}</select></td>
+    <td><input class="form-control form-control-sm ue-ded-start" type="time" value="${esc(st)}" /></td>
+    <td><input class="form-control form-control-sm ue-ded-end" type="time" value="${esc(en)}" /></td>
+    <td><button type="button" class="btn btn-sm btn-outline ue-ded-rm">${esc(t('ue_paffDedRemove'))}</button></td>
+  </tr>`;
+}
+
+function ensureUePaffDedModalBound() {
+  if (window.__brsparkUePaffDedBound) return;
+  window.__brsparkUePaffDedBound = true;
+  document.getElementById('ue-paff-ded-close')?.addEventListener('click', () => closeUePaffDedicatedExclusiveModal());
+  document.getElementById('ue-paff-ded-cancel')?.addEventListener('click', () => closeUePaffDedicatedExclusiveModal());
+  document.getElementById('ue-paff-ded-overlay')?.addEventListener('click', (ev) => {
+    if (ev.target && ev.target.id === 'ue-paff-ded-overlay') closeUePaffDedicatedExclusiveModal();
+  });
+  document.getElementById('ue-paff-ded-tbody')?.addEventListener('click', (ev) => {
+    const b = ev.target.closest?.('.ue-ded-rm');
+    if (!b) return;
+    ev.preventDefault();
+    b.closest('tr')?.remove();
+  });
+  document.getElementById('ue-paff-ded-add')?.addEventListener('click', () => {
+    const tb = document.getElementById('ue-paff-ded-tbody');
+    if (!tb) return;
+    tb.insertAdjacentHTML('beforeend', uePaffDedRowHtml('mon', '08:00', '18:00'));
+  });
+  document.getElementById('ue-paff-ded-save')?.addEventListener('click', () => void saveUePaffDedicatedExclusiveModal());
+}
+
+async function saveUePaffDedicatedExclusiveModal() {
+  const tzEl = document.getElementById('ue-paff-ded-tz');
+  const tb = document.getElementById('ue-paff-ded-tbody');
+  if (!tzEl || !tb) return;
+  const weeklyWindows = [];
+  for (const tr of tb.querySelectorAll('tr[data-ue-ded-row]')) {
+    const wd = tr.querySelector('.ue-ded-wd')?.value;
+    const st = tr.querySelector('.ue-ded-start')?.value;
+    const en = tr.querySelector('.ue-ded-end')?.value;
+    if (wd && st && en) weeklyWindows.push({ weekday: wd, start: st, end: en });
+  }
+  const body = { timezone: String(tzEl.value || 'UTC').trim(), weeklyWindows };
+  const res = await CONFIG.patch(
+    `/users/${encodeURIComponent(uePaffDedCtx.userId)}/provider-affiliations/${encodeURIComponent(uePaffDedCtx.affId)}/dedicated-exclusive`,
+    body,
+  ).catch(() => null);
+  if (res?.error) {
+    alert(res.error);
+    return;
+  }
+  if (!res?.ok) {
+    alert(t('ue_paffGenericErr'));
+    return;
+  }
+  closeUePaffDedicatedExclusiveModal();
+  await refreshUserEditProviderAffiliations();
+  alert(t('ue_paffDedicatedSaved'));
+}
+
+async function openUePaffDedicatedExclusiveModal(affId) {
+  ensureUePaffDedModalBound();
+  const uid = String(uePaffLastUserId || '').trim();
+  if (!uid || !affId) return;
+  const hint = document.getElementById('ue-paff-ded-hint');
+  const tzEl = document.getElementById('ue-paff-ded-tz');
+  const tb = document.getElementById('ue-paff-ded-tbody');
+  const thDay = document.getElementById('ue-paff-ded-th-day');
+  const thStart = document.getElementById('ue-paff-ded-th-start');
+  const thEnd = document.getElementById('ue-paff-ded-th-end');
+  const thAct = document.getElementById('ue-paff-ded-th-act');
+  const title = document.getElementById('ue-paff-ded-title');
+  const lblTz = document.getElementById('ue-paff-ded-lbl-tz');
+  if (title) title.textContent = t('ue_paffDedicatedModalTitle');
+  if (hint) hint.textContent = t('ue_paffDedHint');
+  if (lblTz) lblTz.textContent = t('ue_paffDedLblTz');
+  if (thDay) thDay.textContent = t('ue_paffDedThDay');
+  if (thStart) thStart.textContent = t('ue_paffDedThStart');
+  if (thEnd) thEnd.textContent = t('ue_paffDedThEnd');
+  if (thAct) thAct.textContent = t('ue_paffDedThAct');
+  const addBtn = document.getElementById('ue-paff-ded-add');
+  if (addBtn) addBtn.textContent = t('ue_paffDedAddLine');
+  const data = await CONFIG.get(`/users/${encodeURIComponent(uid)}/provider-affiliations`).catch(() => null);
+  if (!data || data.error) {
+    alert(data?.error || t('ue_paffLoadErr'));
+    return;
+  }
+  const row = (data.affiliations || []).find((r) => String(r.id) === String(affId));
+  if (!row) {
+    alert(t('ue_paffDedicatedNotFound'));
+    return;
+  }
+  if (String(row.relationshipType || '').toUpperCase() !== 'DEDICATED') {
+    alert(t('ue_paffDedicatedNeedRel'));
+    return;
+  }
+  uePaffDedCtx = { userId: uid, affId: String(affId) };
+  const raw = parseJsonSafe(row.tenantScheduleJson, {});
+  const block = raw && typeof raw === 'object' ? raw.dedicatedExclusive : null;
+  const tz = block && block.timezone ? String(block.timezone).trim() : 'America/Sao_Paulo';
+  const wins = Array.isArray(block?.weeklyWindows) ? block.weeklyWindows : [];
+  if (tzEl) tzEl.value = tz;
+  if (tb) {
+    tb.innerHTML = wins.length
+      ? wins
+          .map((w) =>
+            uePaffDedRowHtml(
+              String(w.weekday || 'mon')
+                .toLowerCase()
+                .slice(0, 3),
+              w.start,
+              w.end,
+            ),
+          )
+          .join('')
+      : uePaffDedRowHtml('mon', '08:00', '18:00');
+  }
+  document.getElementById('ue-paff-ded-overlay')?.classList.add('open');
+}
+
 async function handleUePaffAffiliationAction(actBtn) {
   if (isUserEditReadonly()) {
     setUePaffInlineError(t('ue_paffReadonlyBlock'));
@@ -166,6 +310,10 @@ async function handleUePaffAffiliationAction(actBtn) {
   const affId = actBtn.getAttribute('data-aff');
   const act = actBtn.getAttribute('data-act');
   if (!affId || !act) return;
+  if (act === 'dedicated-windows') {
+    await openUePaffDedicatedExclusiveModal(affId);
+    return;
+  }
   if (act === 'activate') {
     const blockKyc = actBtn.getAttribute('data-ue-paff-kyc-block') === '1';
     const blockPf = actBtn.getAttribute('data-ue-paff-pf-block') === '1';
@@ -411,6 +559,11 @@ function paintProviderAffiliationsSection(payload) {
         if (blockPf) titleParts.push(t('ue_paffActivateNeedProviderFirst'));
         const titleAttr = titleParts.length ? ` title="${esc(titleParts.join(' — '))}"` : '';
         actions += `<button type="button" class="btn btn-sm btn-primary ue-paff-act${extraCls}" data-aff="${esc(row.id)}" data-act="activate"${blockAttr}${titleAttr}>${esc(t('ue_paffBtnActivate'))}</button> `;
+      }
+      if (canAct && pi && st === 'ACTIVE' && rel === 'DEDICATED') {
+        actions += `<button type="button" class="btn btn-sm btn-outline ue-paff-act" data-aff="${esc(
+          row.id,
+        )}" data-act="dedicated-windows">${esc(t('ue_paffDedicatedWindowsBtn'))}</button> `;
       }
       if (canAct && pi && (st === 'INVITED' || st === 'REQUESTED') && (blockKyc || blockPf)) {
         const hintParts = [];
@@ -1081,7 +1234,29 @@ function slotFromRaw(s) {
     start,
     end,
     locationIds: Array.isArray(s.locationIds) ? [...s.locationIds] : [],
+    serviceAreaCircles: parseServiceAreaCirclesFromSlotRaw(s.serviceAreaCircles),
   };
+}
+
+function parseServiceAreaCirclesFromSlotRaw(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const c of raw) {
+    if (!c || typeof c !== 'object') continue;
+    const lat = Number(c.latitude);
+    const lng = Number(c.longitude);
+    let r = Number(c.radiusKm);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(r)) continue;
+    r = Math.min(500, Math.max(0.5, r));
+    out.push({
+      id: String(c.id || rid()),
+      latitude: lat,
+      longitude: lng,
+      radiusKm: r,
+    });
+    if (out.length >= 20) break;
+  }
+  return out;
 }
 
 /** Legado: dia = { enabled, start, end } | novo: dia = [{ ...turnos }] */
@@ -1090,42 +1265,530 @@ function normalizeDayToSlots(raw) {
     const slots = raw.map((s) => slotFromRaw(s));
     return slots.length
       ? slots
-      : [{ id: rid(), enabled: false, start: '08:00', end: '18:00', locationIds: [] }];
+      : [{ id: rid(), enabled: false, start: '08:00', end: '18:00', locationIds: [], serviceAreaCircles: [] }];
   }
   if (raw && typeof raw === 'object') {
     return [slotFromRaw(raw)];
   }
-  return [{ id: rid(), enabled: false, start: '08:00', end: '18:00', locationIds: [] }];
+  return [{ id: rid(), enabled: false, start: '08:00', end: '18:00', locationIds: [], serviceAreaCircles: [] }];
 }
 
-function slotRowHtml(slot, locOptsHtml) {
+function slotRowHtml(slot) {
   const locIds = Array.isArray(slot.locationIds) ? slot.locationIds : [];
   const locAttr = esc(locIds.join('|'));
+  const circles = Array.isArray(slot.serviceAreaCircles) ? slot.serviceAreaCircles : [];
+  const circlesAttr = encodeURIComponent(JSON.stringify(circles));
   const en = slot.enabled;
-  return `<div class="sched-slot" data-slot-id="${esc(slot.id)}" style="display:grid;grid-template-columns:auto 1fr 1fr minmax(168px,1.5fr) auto;gap:8px;align-items:start;margin-bottom:8px">
+  return `<div class="sched-slot" data-slot-id="${esc(slot.id)}" data-sch-loc-ids="${locAttr}" data-sch-circles="${circlesAttr}" style="display:grid;grid-template-columns:auto minmax(88px,1fr) minmax(88px,1fr) minmax(140px,2.2fr) auto;gap:8px;align-items:start;margin-bottom:8px">
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding-top:8px;white-space:nowrap"><input type="checkbox" class="sch-en" ${en ? 'checked' : ''}/> ${esc(t('ue_schActiveLbl'))}</label>
     <div><span style="font-size:10px;color:var(--text3)">${esc(t('ue_schStart'))}</span><input type="time" class="form-control sch-start" value="${esc(slot.start || '08:00')}" style="padding:6px;font-size:12px;width:100%" /></div>
     <div><span style="font-size:10px;color:var(--text3)">${esc(t('ue_schEnd'))}</span><input type="time" class="form-control sch-end" value="${esc(slot.end || '18:00')}" style="padding:6px;font-size:12px;width:100%" /></div>
-    <div><span style="font-size:10px;color:var(--text3)">${esc(t('ue_schLocsInSlot'))}</span><select class="form-control sch-locs" multiple size="2" style="padding:4px;font-size:11px;width:100%" title="${esc(t('ue_schLocsTitle'))}" data-initial-sch-locs="${locAttr}">${locOptsHtml}</select>
-    <span style="font-size:10px;color:var(--text3)">${esc(t('ue_schLocsHintShort'))}</span></div>
+    <div class="sch-locs-cell" style="display:flex;flex-direction:column;gap:8px;min-width:0">
+      <span style="font-size:10px;color:var(--text3)">${esc(t('ue_schLocsInSlot'))}</span>
+      <div class="sch-locs-chips"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <button type="button" class="btn btn-sm btn-secondary sch-locs-open-map">${esc(t('ue_schLocsMapBtn'))}</button>
+        <span style="font-size:10px;color:var(--text3)">${esc(t('ue_schLocsHintShort'))}</span>
+      </div>
+      <div class="sch-slot-circles-summary" style="font-size:10px;color:var(--text3)"></div>
+    </div>
     <button type="button" class="btn btn-sm btn-ghost sch-rm-slot" style="margin-top:18px" title="${esc(t('ue_schRemoveTitle'))}">✕</button>
   </div>`;
+}
+
+function getSchSlotLocIdsFromEl(slotEl) {
+  if (!slotEl) return [];
+  const raw = slotEl.getAttribute('data-sch-loc-ids') || '';
+  return raw.split('|').map((s) => s.trim()).filter(Boolean);
+}
+
+function setSchSlotLocIdsOnEl(slotEl, ids) {
+  const uniq = [...new Set((Array.isArray(ids) ? ids : []).map(String))];
+  slotEl.setAttribute('data-sch-loc-ids', uniq.join('|'));
+  renderSchSlotLocsChips(slotEl);
+}
+
+function getSchSlotCirclesFromEl(slotEl) {
+  if (!slotEl) return [];
+  try {
+    const raw = slotEl.getAttribute('data-sch-circles');
+    if (!raw) return [];
+    const arr = JSON.parse(decodeURIComponent(raw));
+    return Array.isArray(arr) ? parseServiceAreaCirclesFromSlotRaw(arr) : [];
+  } catch {
+    return [];
+  }
+}
+
+function setSchSlotCirclesOnEl(slotEl, circles) {
+  if (!slotEl) return;
+  const normalized = parseServiceAreaCirclesFromSlotRaw(Array.isArray(circles) ? circles : []);
+  slotEl.setAttribute('data-sch-circles', encodeURIComponent(JSON.stringify(normalized)));
+  renderSchSlotCirclesSummary(slotEl);
+}
+
+function renderSchSlotCirclesSummary(slotEl) {
+  const el = slotEl?.querySelector?.('.sch-slot-circles-summary');
+  if (!el) return;
+  const n = getSchSlotCirclesFromEl(slotEl).length;
+  el.textContent = n ? t('ue_schSlotCirclesSummary', { n: String(n) }) : '';
+}
+
+function renderSchSlotLocsChips(slotEl) {
+  const chips = slotEl?.querySelector('.sch-locs-chips');
+  if (!chips) return;
+  chips.replaceChildren();
+  const ids = getSchSlotLocIdsFromEl(slotEl);
+  if (!ids.length) {
+    const sp = document.createElement('span');
+    sp.className = 'ue-skills-empty sch-locs-empty';
+    sp.textContent = t('ue_schLocsEmpty');
+    chips.appendChild(sp);
+  } else {
+  for (const id of ids) {
+    const loc = cachedLocations.find((l) => String(l.id) === String(id));
+    const label = loc ? serviceLocationLabel(loc) : id;
+    const wrap = document.createElement('span');
+    wrap.className = 'ue-skill-chip sch-loc-chip';
+    const txt = document.createElement('span');
+    txt.textContent = label;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ue-skill-chip-remove sch-loc-chip-rm';
+    btn.textContent = '×';
+    btn.setAttribute('aria-label', t('ue_schLocRemove'));
+    btn.onclick = () => {
+      if (isUserEditReadonly()) return;
+      setSchSlotLocIdsOnEl(
+        slotEl,
+        getSchSlotLocIdsFromEl(slotEl).filter((x) => x !== id),
+      );
+      markDirty();
+    };
+    wrap.appendChild(txt);
+    wrap.appendChild(btn);
+    chips.appendChild(wrap);
+  }
+  }
+  renderSchSlotCirclesSummary(slotEl);
+}
+
+function syncSchSlotsLocsUi(root) {
+  if (!root) return;
+  root.querySelectorAll('.sched-slot').forEach((el) => {
+    renderSchSlotLocsChips(el);
+    renderSchSlotCirclesSummary(el);
+  });
+}
+
+let schSlotLocsModalMap = null;
+let schSlotLocsModalTileLayer = null;
+let schSlotLocsModalMarkers = [];
+let schSlotLocsModalPin = null;
+let schSlotLocsModalDraft = new Set();
+/** Rascunho de círculos { id, latitude, longitude, radiusKm } no modal do turno */
+let schSlotLocsModalCircles = [];
+/** { id, circle: L.Circle, marker: L.Marker } — limpar antes de redesenhar o mapa */
+let schSlotLocsModalCircleLayers = [];
+let schSlotLocsModalSlotEl = null;
+let schSlotLocsModalSearch = '';
+let schSlotLocsModalBound = false;
+const SCH_SLOT_MAX_CIRCLES = 20;
+
+function getFilteredSchSlotModalLocations() {
+  const q = String(schSlotLocsModalSearch || '').trim().toLowerCase();
+  if (!q) return cachedLocations;
+  return cachedLocations.filter((location) => serviceLocationSearchText(location).includes(q));
+}
+
+function closeSchSlotLocsModal() {
+  document.getElementById('sch-slot-locs-modal')?.classList.remove('open');
+  schSlotLocsModalSlotEl = null;
+  schSlotLocsModalCircles = [];
+}
+
+function ensureSchSlotLocsModalMap() {
+  const L = getLeafletGlobal();
+  const el = document.getElementById('sch-slot-locs-map');
+  if (!L || !el) return null;
+  if (!schSlotLocsModalMap) {
+    schSlotLocsModalMap = L.map(el, { zoomControl: true, attributionControl: true }).setView([-15.788, -47.879], 5);
+    schSlotLocsModalTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+      maxZoom: 19,
+    }).addTo(schSlotLocsModalMap);
+  }
+  setTimeout(() => schSlotLocsModalMap?.invalidateSize(), 0);
+  return schSlotLocsModalMap;
+}
+
+function toggleSchSlotLocsDraft(id) {
+  const sid = String(id || '');
+  if (!sid) return;
+  if (schSlotLocsModalDraft.has(sid)) schSlotLocsModalDraft.delete(sid);
+  else schSlotLocsModalDraft.add(sid);
+  refreshSchSlotModalMeta();
+  renderSchSlotLocsModalList();
+  renderSchSlotLocsModalMap();
+}
+
+function refreshSchSlotModalMeta() {
+  const metaEl = document.getElementById('sch-slot-locs-meta');
+  if (!metaEl) return;
+  const rows = getFilteredSchSlotModalLocations();
+  metaEl.textContent = t('ue_schSlotLocsMeta', {
+    bases: String(rows.length),
+    selected: String(schSlotLocsModalDraft.size),
+    circles: String(schSlotLocsModalCircles.length),
+  });
+}
+
+function renderSchSlotCirclesModalList() {
+  const wrap = document.getElementById('sch-slot-locs-circles-list');
+  if (!wrap) return;
+  if (!schSlotLocsModalCircles.length) {
+    wrap.innerHTML = `<div class="ue-coverage-empty">${esc(t('ue_schSlotCirclesModalEmpty'))}</div>`;
+    return;
+  }
+  wrap.innerHTML = schSlotLocsModalCircles
+    .map(
+      (c, i) => `<div class="sch-slot-circle-row" data-circle-id="${esc(c.id)}" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px;margin-bottom:6px;border:1px solid var(--border);border-radius:10px;background:var(--surface)">
+      <span style="font-weight:800;font-size:12px">#${i + 1}</span>
+      <label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px;white-space:nowrap">${esc(t('ue_schSlotCircleRadius'))}
+        <input type="number" class="form-control sch-slot-circle-r" min="0.5" max="500" step="0.5" value="${esc(String(c.radiusKm))}" style="width:88px;padding:4px 8px" data-circle-id="${esc(c.id)}" />
+        <span>km</span>
+      </label>
+      <span style="font-size:10px;color:var(--text3)">${Number(c.latitude).toFixed(4)}, ${Number(c.longitude).toFixed(4)}</span>
+      <button type="button" class="btn btn-sm btn-ghost sch-slot-circle-rm" data-circle-id="${esc(c.id)}">${esc(t('ue_schSlotCircleRemove'))}</button>
+    </div>`,
+    )
+    .join('');
+  wrap.querySelectorAll('.sch-slot-circle-r').forEach((inp) => {
+    inp.addEventListener('change', () => {
+      const id = inp.getAttribute('data-circle-id');
+      const v = Number(inp.value);
+      const c = schSlotLocsModalCircles.find((x) => String(x.id) === String(id));
+      if (!c || !Number.isFinite(v)) return;
+      c.radiusKm = Math.min(500, Math.max(0.5, v));
+      const layer = schSlotLocsModalCircleLayers.find((l) => String(l.id) === String(id));
+      if (layer?.circle) layer.circle.setRadius(c.radiusKm * 1000);
+      refreshSchSlotModalMeta();
+    });
+  });
+  wrap.querySelectorAll('.sch-slot-circle-rm').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-circle-id');
+      schSlotLocsModalCircles = schSlotLocsModalCircles.filter((x) => String(x.id) !== String(id));
+      renderSchSlotCirclesModalList();
+      refreshSchSlotModalMeta();
+      renderSchSlotLocsModalMap();
+    });
+  });
+}
+
+function addSchSlotModalCircle() {
+  if (isUserEditReadonly()) return;
+  if (schSlotLocsModalCircles.length >= SCH_SLOT_MAX_CIRCLES) {
+    alert(t('ue_schSlotCirclesMax'));
+    return;
+  }
+  const map = ensureSchSlotLocsModalMap();
+  let lat;
+  let lng;
+  if (schSlotLocsModalPin) {
+    const ll = schSlotLocsModalPin.getLatLng();
+    lat = ll.lat;
+    lng = ll.lng;
+  } else if (map) {
+    const c = map.getCenter();
+    lat = c.lat;
+    lng = c.lng;
+  } else {
+    return;
+  }
+  schSlotLocsModalCircles.push({ id: rid(), latitude: lat, longitude: lng, radiusKm: 10 });
+  renderSchSlotCirclesModalList();
+  refreshSchSlotModalMeta();
+  renderSchSlotLocsModalMap();
+}
+
+function renderSchSlotLocsModalList() {
+  const listEl = document.getElementById('sch-slot-locs-list');
+  if (!listEl) return;
+  refreshSchSlotModalMeta();
+  const rows = getFilteredSchSlotModalLocations();
+  listEl.innerHTML = rows.length
+    ? rows
+        .map((location) => {
+          const id = String(location.id);
+          const active = schSlotLocsModalDraft.has(id);
+          const disabled = !isValidLocationCoordinate(location) ? ' ue-coverage-list-row--disabled' : '';
+          return `<button type="button" class="ue-coverage-list-row${active ? ' is-active' : ''}${disabled}" data-sch-slot-loc="${esc(id)}">
+            <span class="ue-coverage-list-row__title">${esc(serviceLocationLabel(location))}</span>
+            <span class="ue-coverage-list-row__meta">${esc(location.address || 'Sem endereço cadastrado')}${!isValidLocationCoordinate(location) ? ' · sem coordenadas' : ''}</span>
+          </button>`;
+        })
+        .join('')
+    : '<div class="ue-coverage-empty">Nenhuma base encontrada.</div>';
+  listEl.querySelectorAll('[data-sch-slot-loc]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleSchSlotLocsDraft(btn.getAttribute('data-sch-slot-loc') || ''));
+  });
+}
+
+function clearSchSlotModalCircleLayers(map) {
+  if (!map) return;
+  schSlotLocsModalCircleLayers.forEach(({ circle, marker }) => {
+    try {
+      circle.remove();
+    } catch {
+      /* */
+    }
+    try {
+      marker.remove();
+    } catch {
+      /* */
+    }
+  });
+  schSlotLocsModalCircleLayers = [];
+}
+
+function refitSchSlotModalMapBounds(L, map) {
+  if (!L || !map) return;
+  const b = L.latLngBounds([]);
+  let any = false;
+  schSlotLocsModalMarkers.forEach((m) => {
+    b.extend(m.getLatLng());
+    any = true;
+  });
+  schSlotLocsModalCircleLayers.forEach(({ circle }) => {
+    try {
+      b.extend(circle.getBounds());
+      any = true;
+    } catch {
+      /* */
+    }
+  });
+  if (!any && schSlotLocsModalPin) {
+    b.extend(schSlotLocsModalPin.getLatLng());
+    any = true;
+  }
+  if (any) {
+    try {
+      map.fitBounds(b, { padding: [28, 28], maxZoom: 14 });
+    } catch {
+      const c = b.getCenter();
+      map.setView(c, 12);
+    }
+  } else {
+    fitLeafletMapToPoints(map, []);
+  }
+}
+
+function renderSchSlotLocsModalMap() {
+  const L = getLeafletGlobal();
+  const map = ensureSchSlotLocsModalMap();
+  if (!L || !map) return;
+  clearSchSlotModalCircleLayers(map);
+  schSlotLocsModalMarkers.forEach((m) => m.remove());
+  schSlotLocsModalMarkers = [];
+  const mapRows = (cachedLocations || []).filter((location) => isValidLocationCoordinate(location));
+  mapRows.forEach((location) => {
+    const lat = Number(location.latitude);
+    const lng = Number(location.longitude);
+    const active = schSlotLocsModalDraft.has(String(location.id));
+    const marker = L.marker([lat, lng]).addTo(map);
+    marker.bindPopup(`<strong>${esc(serviceLocationLabel(location))}</strong>`);
+    marker.on('click', () => toggleSchSlotLocsDraft(String(location.id)));
+    if (active) marker.openPopup();
+    schSlotLocsModalMarkers.push(marker);
+  });
+  schSlotLocsModalCircles.forEach((c) => {
+    const lat = Number(c.latitude);
+    const lng = Number(c.longitude);
+    let rKm = Number(c.radiusKm);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(rKm)) return;
+    rKm = Math.min(500, Math.max(0.5, rKm));
+    const circle = L.circle([lat, lng], {
+      radius: rKm * 1000,
+      color: '#e97316',
+      weight: 2,
+      fillColor: '#e97316',
+      fillOpacity: 0.14,
+    }).addTo(map);
+    const centerMarker = L.marker([lat, lng], { draggable: !isUserEditReadonly() }).addTo(map);
+    centerMarker.bindTooltip(t('ue_schSlotCircleDragHint'), { permanent: false });
+    centerMarker.on('dragend', () => {
+      const ll = centerMarker.getLatLng();
+      c.latitude = ll.lat;
+      c.longitude = ll.lng;
+      circle.setLatLng(ll);
+      renderSchSlotCirclesModalList();
+    });
+    schSlotLocsModalCircleLayers.push({ id: c.id, circle, marker: centerMarker });
+  });
+  if (schSlotLocsModalPin) {
+    try {
+      schSlotLocsModalPin.bringToFront();
+    } catch {
+      /* */
+    }
+  }
+  refitSchSlotModalMapBounds(L, map);
+}
+
+function moveSchSlotModalPin(lat, lng, zoom = 13) {
+  const L = getLeafletGlobal();
+  const map = ensureSchSlotLocsModalMap();
+  if (!L || !map || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  map.setView([lat, lng], zoom);
+  if (schSlotLocsModalPin) {
+    schSlotLocsModalPin.setLatLng([lat, lng]);
+  } else {
+    schSlotLocsModalPin = L.marker([lat, lng], { draggable: !isUserEditReadonly() }).addTo(map);
+    schSlotLocsModalPin.bindPopup('<strong>Referência</strong><br>Centro da cidade ou GPS');
+    schSlotLocsModalPin.on('dragend', () => {
+      const ll = schSlotLocsModalPin.getLatLng();
+      map.panTo(ll);
+    });
+  }
+  try {
+    schSlotLocsModalPin?.bringToFront?.();
+  } catch {
+    /* */
+  }
+}
+
+async function nominatimSchSlotCity(query) {
+  const q = String(query || '').trim();
+  if (!q) return null;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!res.ok) return null;
+  const arr = await res.json().catch(() => []);
+  const first = Array.isArray(arr) && arr[0];
+  if (!first || first.lat == null || first.lon == null) return null;
+  const lat = Number(first.lat);
+  const lng = Number(first.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+function openSchSlotLocsModal(slotEl) {
+  if (isUserEditReadonly() || !slotEl) return;
+  schSlotLocsModalSlotEl = slotEl;
+  schSlotLocsModalDraft = new Set(getSchSlotLocIdsFromEl(slotEl));
+  schSlotLocsModalCircles = getSchSlotCirclesFromEl(slotEl).map((c) => ({ ...c }));
+  schSlotLocsModalSearch = '';
+  const sInp = document.getElementById('sch-slot-locs-search');
+  if (sInp) sInp.value = '';
+  const cInp = document.getElementById('sch-slot-locs-city');
+  if (cInp) cInp.value = '';
+  if (schSlotLocsModalPin) {
+    try {
+      schSlotLocsModalPin.remove();
+    } catch {
+      /* */
+    }
+    schSlotLocsModalPin = null;
+  }
+  renderSchSlotCirclesModalList();
+  renderSchSlotLocsModalList();
+  renderSchSlotLocsModalMap();
+  document.getElementById('sch-slot-locs-modal')?.classList.add('open');
+  setTimeout(() => {
+    schSlotLocsModalMap?.invalidateSize();
+    const selected = [...schSlotLocsModalDraft]
+      .map((id) => cachedLocations.find((l) => String(l.id) === String(id)))
+      .filter((l) => l && isValidLocationCoordinate(l));
+    if (selected.length) {
+      const avLat = selected.reduce((s, l) => s + Number(l.latitude), 0) / selected.length;
+      const avLng = selected.reduce((s, l) => s + Number(l.longitude), 0) / selected.length;
+      moveSchSlotModalPin(avLat, avLng, 11);
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => moveSchSlotModalPin(pos.coords.latitude, pos.coords.longitude, 13),
+        () => {},
+        { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 },
+      );
+    }
+  }, 220);
+}
+
+function applySchSlotLocsModal() {
+  if (!schSlotLocsModalSlotEl) return;
+  setSchSlotLocIdsOnEl(schSlotLocsModalSlotEl, [...schSlotLocsModalDraft]);
+  setSchSlotCirclesOnEl(schSlotLocsModalSlotEl, schSlotLocsModalCircles);
+  closeSchSlotLocsModal();
+  markDirty();
+}
+
+function bindSchSlotLocsModalUx() {
+  if (schSlotLocsModalBound) return;
+  schSlotLocsModalBound = true;
+  const modal = document.getElementById('sch-slot-locs-modal');
+  document.getElementById('sch-slot-locs-close')?.addEventListener('click', closeSchSlotLocsModal);
+  document.getElementById('sch-slot-locs-cancel')?.addEventListener('click', closeSchSlotLocsModal);
+  document.getElementById('sch-slot-locs-apply')?.addEventListener('click', () => applySchSlotLocsModal());
+  modal?.addEventListener('click', (ev) => {
+    if (ev.target === modal) closeSchSlotLocsModal();
+  });
+  document.getElementById('sch-slot-locs-search')?.addEventListener('input', () => {
+    schSlotLocsModalSearch = document.getElementById('sch-slot-locs-search')?.value || '';
+    renderSchSlotLocsModalList();
+    renderSchSlotLocsModalMap();
+  });
+  document.getElementById('sch-slot-locs-geocode')?.addEventListener('click', async () => {
+    const inp = document.getElementById('sch-slot-locs-city');
+    const q = inp?.value || '';
+    try {
+      const hit = await nominatimSchSlotCity(q);
+      if (!hit) {
+        alert(t('ue_schSlotLocsGeocodeFail'));
+        return;
+      }
+      moveSchSlotModalPin(hit.lat, hit.lng, 12);
+    } catch {
+      alert(t('ue_schSlotLocsGeocodeFail'));
+    }
+  });
+  document.getElementById('sch-slot-locs-gps')?.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      alert(t('ue_schSlotLocsGpsNo'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        moveSchSlotModalPin(pos.coords.latitude, pos.coords.longitude, 14);
+      },
+      () => {
+        alert(t('ue_schSlotLocsGpsDenied'));
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+    );
+  });
+  document.getElementById('sch-slot-locs-add-circle')?.addEventListener('click', () => addSchSlotModalCircle());
 }
 
 function bindScheduleSlotUI(locations) {
   const root = document.getElementById('schedule-rows');
   if (!root || root.dataset.schBound === '1') return;
   root.dataset.schBound = '1';
+  bindSchSlotLocsModalUx();
   root.addEventListener('click', (e) => {
+    const mapBtn = e.target.closest('.sch-locs-open-map');
+    if (mapBtn) {
+      const slotEl = mapBtn.closest('.sched-slot');
+      if (slotEl) openSchSlotLocsModal(slotEl);
+      return;
+    }
     const addBtn = e.target.closest('.sch-add-slot');
     if (addBtn) {
       const day = addBtn.getAttribute('data-day');
       const container = root.querySelector(`.sched-slots[data-day="${day}"]`);
       if (!container) return;
-      const slot = { id: rid(), enabled: true, start: '08:00', end: '18:00', locationIds: [] };
-      const optH = getLocationMultiselectOptionsHtml(locations);
-      container.insertAdjacentHTML('beforeend', slotRowHtml(slot, optH));
-      syncSchLocsMultiselectSelections(container.lastElementChild);
+      const slot = { id: rid(), enabled: true, start: '08:00', end: '18:00', locationIds: [], serviceAreaCircles: [] };
+      container.insertAdjacentHTML('beforeend', slotRowHtml(slot));
+      syncSchSlotsLocsUi(container.lastElementChild);
       return;
     }
     const rm = e.target.closest('.sch-rm-slot');
@@ -1136,10 +1799,9 @@ function bindScheduleSlotUI(locations) {
       slotEl.remove();
       const container = dayWrap.querySelector('.sched-slots');
       if (container && !container.querySelector('.sched-slot')) {
-        const slot = { id: rid(), enabled: false, start: '08:00', end: '18:00', locationIds: [] };
-        const optH = getLocationMultiselectOptionsHtml(locations);
-        container.innerHTML = slotRowHtml(slot, optH);
-        syncSchLocsMultiselectSelections(container);
+        const slot = { id: rid(), enabled: false, start: '08:00', end: '18:00', locationIds: [], serviceAreaCircles: [] };
+        container.innerHTML = slotRowHtml(slot);
+        syncSchSlotsLocsUi(container);
       }
     }
   });
@@ -1147,14 +1809,13 @@ function bindScheduleSlotUI(locations) {
 
 function renderSchedule(workScheduleJson, locations) {
   const locs = Array.isArray(locations) ? locations : [];
-  const locOpts = getLocationMultiselectOptionsHtml(locs);
   const w = parseJsonSafe(workScheduleJson, {});
   const wrap = document.getElementById('schedule-rows');
   if (!wrap) return;
   const DAYS = weekdaysForLocale();
   wrap.innerHTML = DAYS.map(({ key, label }) => {
     const slots = normalizeDayToSlots(w[key]);
-    const slotsHtml = slots.map((s) => slotRowHtml(s, locOpts)).join('');
+    const slotsHtml = slots.map((s) => slotRowHtml(s)).join('');
     return `<div class="sched-day" data-day="${key}" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
         <span style="font-weight:700;font-size:13px;min-width:92px">${label}</span>
@@ -1163,7 +1824,7 @@ function renderSchedule(workScheduleJson, locations) {
       <div class="sched-slots" data-day="${key}">${slotsHtml}</div>
     </div>`;
   }).join('');
-  syncSchLocsMultiselectSelections(wrap);
+  syncSchSlotsLocsUi(wrap);
   bindScheduleSlotUI(locs);
 }
 
@@ -1176,19 +1837,20 @@ function collectSchedule() {
       const en = slotEl.querySelector('.sch-en')?.checked;
       const start = slotEl.querySelector('.sch-start')?.value || '08:00';
       const end = slotEl.querySelector('.sch-end')?.value || '18:00';
-      const sel = slotEl.querySelector('.sch-locs');
-      const locationIds = sel ? [...sel.selectedOptions].map((x) => x.value) : [];
+      const locationIds = getSchSlotLocIdsFromEl(slotEl);
+      const serviceAreaCircles = getSchSlotCirclesFromEl(slotEl);
       slots.push({
         id: slotEl.dataset.slotId || rid(),
         enabled: !!en,
         start,
         end,
         locationIds,
+        serviceAreaCircles,
       });
     });
     o[key] = slots.length
       ? slots
-      : [{ id: rid(), enabled: false, start: '08:00', end: '18:00', locationIds: [] }];
+      : [{ id: rid(), enabled: false, start: '08:00', end: '18:00', locationIds: [], serviceAreaCircles: [] }];
   });
   return o;
 }
@@ -1649,16 +2311,6 @@ function syncDocLocsMultiselectSelections(root) {
   });
 }
 
-function syncSchLocsMultiselectSelections(root) {
-  if (!root) return;
-  root.querySelectorAll('select.sch-locs').forEach((sel) => {
-    const raw = sel.getAttribute('data-initial-sch-locs') || '';
-    const ids = new Set(raw.split('|').map((s) => s.trim()).filter(Boolean));
-    [...sel.options].forEach((o) => {
-      o.selected = ids.has(o.value);
-    });
-  });
-}
 
 let faceEnrollmentList = [];
 let faceUserId = '';
@@ -1748,12 +2400,116 @@ async function removeFacePhoto(photoId) {
   }
 }
 
-function buildUserPatchPayload() {
-  const skillsRaw = document.getElementById('t-skills')?.value || '';
-  const skillsJson = skillsRaw
-    .split(/[,;\n]/)
-    .map((s) => s.trim())
+function normalizeSkillToken(raw) {
+  return String(raw || '')
+    .replace(/[,;\n\t]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function getSkillsChipsRoot() {
+  return document.getElementById('t-skills-chips');
+}
+
+function getSkillsAddInput() {
+  return document.getElementById('t-skills-add');
+}
+
+/** Lista atual de habilidades (ordem dos chips). */
+function getSkillsFromDom() {
+  const root = getSkillsChipsRoot();
+  if (!root) return [];
+  return [...root.querySelectorAll('.ue-skill-chip')]
+    .map((el) => normalizeSkillToken(el.dataset.skill || ''))
     .filter(Boolean);
+}
+
+function renderSkillChips(skills) {
+  const root = getSkillsChipsRoot();
+  if (!root) return;
+  const list = Array.isArray(skills) ? [...skills] : [];
+  const uniq = [];
+  const seen = new Set();
+  for (const s of list) {
+    const n = normalizeSkillToken(s);
+    if (!n) continue;
+    const key = n.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniq.push(n);
+  }
+  root.replaceChildren();
+  if (!uniq.length) {
+    const sp = document.createElement('span');
+    sp.className = 'ue-skills-empty';
+    sp.id = 't-skills-empty';
+    sp.textContent = t('ue_skillsEmpty');
+    root.appendChild(sp);
+    return;
+  }
+  for (const skill of uniq) {
+    const wrap = document.createElement('span');
+    wrap.className = 'ue-skill-chip';
+    wrap.dataset.skill = skill;
+    const txt = document.createElement('span');
+    txt.textContent = skill;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ue-skill-chip-remove';
+    btn.textContent = '×';
+    btn.setAttribute('aria-label', t('ue_skillRemove'));
+    btn.onclick = () => {
+      if (isUserEditReadonly()) return;
+      const next = getSkillsFromDom().filter((x) => x !== skill);
+      renderSkillChips(next);
+      markDirty();
+    };
+    wrap.appendChild(txt);
+    wrap.appendChild(btn);
+    root.appendChild(wrap);
+  }
+}
+
+function addSkillFromAddInput() {
+  if (isUserEditReadonly()) return;
+  const inp = getSkillsAddInput();
+  if (!inp) return;
+  const parts = String(inp.value || '')
+    .split(/[,;\n]/)
+    .map((x) => normalizeSkillToken(x))
+    .filter(Boolean);
+  if (!parts.length) return;
+  let cur = getSkillsFromDom();
+  let added = false;
+  for (const token of parts) {
+    if (cur.some((x) => x.toLowerCase() === token.toLowerCase())) continue;
+    cur = [...cur, token];
+    added = true;
+  }
+  if (added) {
+    renderSkillChips(cur);
+    markDirty();
+  }
+  inp.value = '';
+}
+
+function bindSkillsWidgetOnce() {
+  if (ueSkillsWidgetBound) return;
+  const addBtn = document.getElementById('t-skills-add-btn');
+  const inp = getSkillsAddInput();
+  if (!addBtn || !inp) return;
+  ueSkillsWidgetBound = true;
+  addBtn.addEventListener('click', () => addSkillFromAddInput());
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addSkillFromAddInput();
+    }
+  });
+}
+
+function buildUserPatchPayload() {
+  const skillsJson = getSkillsFromDom();
   const coverageLat = Number(document.getElementById('t-coverage-lat')?.value);
   const coverageLng = Number(document.getElementById('t-coverage-lng')?.value);
   const coverageRadiusKm = Number(document.getElementById('t-coverage-radius-km')?.value);
@@ -2293,6 +3049,7 @@ export async function bootUserEditPage() {
   applyUserEditStaticPageI18n();
   setupUserEditProgressiveSections();
   bindCoverageUx();
+  bindSkillsWidgetOnce();
   const backList = document.getElementById('ue-back-list');
   if (backList) backList.href = 'users.html?resume=1';
 
@@ -2699,8 +3456,18 @@ export async function bootUserEditPage() {
     document.getElementById('t-cft').value = tp.cft || '';
     document.getElementById('t-specialty').value = tp.specialty || '';
     document.getElementById('t-score').value = String(tp.score ?? 5);
-    const skills = parseJsonSafe(tp.skillsJson, []);
-    document.getElementById('t-skills').value = Array.isArray(skills) ? skills.join(', ') : '';
+    let skills = parseJsonSafe(tp.skillsJson, []);
+    if (typeof skills === 'string') {
+      skills = String(skills)
+        .split(/[,;\n]/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+    } else if (!Array.isArray(skills)) {
+      skills = [];
+    }
+    renderSkillChips(skills);
+    const tskIn = getSkillsAddInput();
+    if (tskIn) tskIn.value = '';
     renderSchedule(tp.workScheduleJson, cachedLocations);
     const cov = parseJsonSafe(tp.serviceCoverageGeoJson, null);
     const homeBase = cov && typeof cov === 'object' ? cov.homeBase || null : null;
@@ -2715,6 +3482,9 @@ export async function bootUserEditPage() {
     syncCoverageHiddenSelect(Array.isArray(svc) ? svc : []);
     renderDocRows('tbody-docs-pro', parseJsonSafe(tp.professionalDocuments, []), cachedLocations, u.id);
   } else {
+    renderSkillChips([]);
+    const tskIn0 = getSkillsAddInput();
+    if (tskIn0) tskIn0.value = '';
     renderSchedule({}, cachedLocations);
     document.getElementById('t-coverage-lat').value = '';
     document.getElementById('t-coverage-lng').value = '';

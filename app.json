@@ -65,7 +65,7 @@
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
       "package": "com.brspark",
-      "versionCode": 3
+      "versionCode": 4
     },
     "extra": {
       "eas": {

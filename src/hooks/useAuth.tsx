@@ -230,6 +230,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let loadingFinished = false;
+    const finishBootstrapLoading = () => {
+      if (cancelled || loadingFinished) return;
+      loadingFinished = true;
+      setLoading(false);
+    };
+
+    /** Rede lenta ou refresh pendurado não devem bloquear a UI além de ~48s (ver timeout no refresh + apiFetch). */
+    const deadline = setTimeout(() => {
+      if (cancelled) return;
+      console.warn('[Auth] Arranque: prazo máximo da sessão — a libertar o ecrã de loading.');
+      finishBootstrapLoading();
+    }, 48_000);
+
     (async () => {
       try {
         const localUser = await AuthService.getUser();
@@ -295,11 +309,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         if (!cancelled) _setUserRole('CLIENT');
       } finally {
-        if (!cancelled) setLoading(false);
+        clearTimeout(deadline);
+        finishBootstrapLoading();
       }
     })();
+
     return () => {
       cancelled = true;
+      clearTimeout(deadline);
     };
   }, [runAvatarWarm]);
 

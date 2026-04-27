@@ -4,7 +4,7 @@ function defaultEmptySchedule() {
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
   const o = {};
   for (const d of days) {
-    o[d] = [{ id: `s_${d}_0`, enabled: false, start: '08:00', end: '18:00', locationIds: [] }];
+    o[d] = [{ id: `s_${d}_0`, enabled: false, start: '08:00', end: '18:00', locationIds: [], serviceAreaCircles: [] }];
   }
   return o;
 }

@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ProviderAffiliationsApi, ProviderAffiliation } from '../../src/services/providerAffiliations';
 
+const DED_WD_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+
 function isDedicated(a: ProviderAffiliation) {
   return String(a.relationshipType || '').toUpperCase() === 'DEDICATED';
 }
@@ -16,6 +18,14 @@ function cardAccent(a: ProviderAffiliation) {
 
 function statusKey(a: ProviderAffiliation): string {
   return String(a.status || '').toUpperCase() || '—';
+}
+
+function dedicatedWeekdayLabel(t: (k: string) => string, weekday: string): string {
+  const w = String(weekday || '')
+    .toLowerCase()
+    .slice(0, 3);
+  if (!DED_WD_KEYS.includes(w as (typeof DED_WD_KEYS)[number])) return w || '—';
+  return t(`profile.affiliationsDedDay_${w}`);
 }
 
 export default function ProviderAffiliationsScreen() {
@@ -283,6 +293,40 @@ export default function ProviderAffiliationsScreen() {
 
           {a.note ? (
             <Text style={{ fontSize: 12, color: '#334155', marginTop: 10, lineHeight: 18 }}>{a.note}</Text>
+          ) : null}
+
+          {isDedicated(a) && a.dedicatedExclusive?.weeklyWindows?.length ? (
+            <View
+              style={{
+                marginTop: 10,
+                backgroundColor: '#FFFBEB',
+                borderRadius: 12,
+                padding: 12,
+                borderWidth: 1,
+                borderColor: '#FDE68A',
+              }}
+            >
+              <Text style={{ fontSize: 12, color: '#92400E', fontWeight: '900' }}>
+                {t('profile.affiliationsDedicatedWindowsTitle')}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#A16207', marginTop: 4, lineHeight: 16 }}>
+                {t('profile.affiliationsDedicatedWindowsHint')}
+              </Text>
+              <Text style={{ fontSize: 11, color: '#713F12', marginTop: 6, fontWeight: '700' }}>
+                {t('profile.affiliationsDedicatedWindowsTimezone', { tz: a.dedicatedExclusive.timezone })}
+              </Text>
+              <View style={{ marginTop: 8, gap: 4 }}>
+                {a.dedicatedExclusive.weeklyWindows.map((w, i) => (
+                  <Text key={`${w.weekday}-${w.start}-${w.end}-${i}`} style={{ fontSize: 12, color: '#422006', lineHeight: 18 }}>
+                    {t('profile.affiliationsDedicatedSlot', {
+                      day: dedicatedWeekdayLabel(t, w.weekday),
+                      start: w.start,
+                      end: w.end,
+                    })}
+                  </Text>
+                ))}
+              </View>
+            </View>
           ) : null}
 
           {st === 'REQUESTED' ? (

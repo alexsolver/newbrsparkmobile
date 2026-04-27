@@ -212,8 +212,11 @@ export function BroadcastOfferRootBridge() {
             res.status === 409 &&
             (codeNorm === 'CLAIM_LOST' ||
               /não está mais disponível|outro.+(técnico|prestador).+já aceitou|claim_lost/i.test(errStr));
+          const isDedicatedExclusive = res.status === 403 && codeNorm === 'DEDICATED_PARTNER_EXCLUSIVE';
           if (!res.ok) {
-            if (isClaimLost) {
+            if (isDedicatedExclusive) {
+              /* Janela dedicada exclusiva: sem alerta (política de silêncio operacional). */
+            } else if (isClaimLost) {
               Alert.alert(getBroadcastOsUnavailableTitle(), getBroadcastOsUnavailableSubtitle());
             } else {
               const detail =

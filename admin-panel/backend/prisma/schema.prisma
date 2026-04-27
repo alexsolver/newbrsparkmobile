@@ -613,7 +613,7 @@ model TechnicianProfile {
   score     Float    @default(5.0)
   cft       String?  // Conselho Federal dos Técnicos
   specialty String?
-  /// Horários: { mon: [{ id, enabled, start, end, locationIds[] }], ... } — vários turnos/dia; legado: mon: { enabled, start, end }
+  /// Horários: { mon: [{ id, enabled, start, end, locationIds[], serviceAreaCircles?: [{ id, latitude, longitude, radiusKm }] }], ... } — vários turnos/dia; legado: mon: { enabled, start, end }
   workScheduleJson Json?
   /// Lista de competências / tags
   skillsJson       Json?

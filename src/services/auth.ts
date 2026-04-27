@@ -414,11 +414,19 @@ async function refreshAccessTokenOnce(): Promise<boolean> {
     try {
       const rt = await getRefreshTokenSecure();
       if (!rt) return false;
-      const res = await fetch(`${API_BASE}/api/session/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: rt }),
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), REFRESH_TOKEN_FETCH_TIMEOUT_MS);
+      let res: Response;
+      try {
+        res = await fetch(`${API_BASE}/api/session/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: rt }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
       if (!res.ok) {
         if (res.status === 401) await clearRefreshTokenSecure();
         return false;
@@ -1364,6 +1372,9 @@ export async function handleUnauthorizedMaybeSessionInvalidated(res: Response): 
 
 /** Timeout por defeito em pedidos autenticados (evita ecrã preso em «Conectando…» sem rede). */
 const DEFAULT_API_FETCH_TIMEOUT_MS = 18_000;
+
+/** O refresh usa `fetch` directo (sem `apiFetch`); sem abort o arranque pode ficar preso para sempre em rede avariada. */
+const REFRESH_TOKEN_FETCH_TIMEOUT_MS = 18_000;
 
 export type ApiFetchOptions = RequestInit & { timeoutMs?: number; skipTokenRefresh?: boolean };
 

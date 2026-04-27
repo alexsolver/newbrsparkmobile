@@ -46,7 +46,11 @@ export async function evaluateGpsIntegrityGate(): Promise<
   }
 
   if (Platform.OS === 'ios') {
-    if (await isIosSoftwareSimulatedLocation()) {
+    const simulated = await Promise.race([
+      isIosSoftwareSimulatedLocation(),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
+    ]);
+    if (simulated) {
       return { ok: false, reason: 'ios_simulated' };
     }
     try {

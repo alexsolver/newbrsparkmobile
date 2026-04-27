@@ -1,6 +1,43 @@
 'use strict';
 
 /**
+ * Cache curto: `resolveAppEffectiveTenantId` corre no middleware `authUser` **em cada** pedido à API
+ * (lista OS, sync, etc.). Sem cache, são 2–3 round-trips PostgreSQL por pedido — multiplica latência.
+ * TTL curto: mudança de dedicado passa a refletir em poucos segundos sem invalidação explícita.
+ */
+const EFFECTIVE_TENANT_CACHE_MS = Math.max(
+  0,
+  Math.min(120_000, Number(process.env.APP_EFFECTIVE_TENANT_CACHE_MS || 6000) || 6000),
+);
+/** @type {Map<string, { exp: number, value: string }>} */
+const effectiveTenantCache = new Map();
+
+function effectiveTenantCacheGet(userId) {
+  if (EFFECTIVE_TENANT_CACHE_MS <= 0) return null;
+  const uid = String(userId || '').trim();
+  if (!uid) return null;
+  const row = effectiveTenantCache.get(uid);
+  if (!row || Date.now() >= row.exp) {
+    if (row) effectiveTenantCache.delete(uid);
+    return null;
+  }
+  return row.value;
+}
+
+function effectiveTenantCacheSet(userId, value) {
+  if (EFFECTIVE_TENANT_CACHE_MS <= 0) return;
+  const uid = String(userId || '').trim();
+  if (!uid) return;
+  effectiveTenantCache.set(uid, { exp: Date.now() + EFFECTIVE_TENANT_CACHE_MS, value: String(value) });
+}
+
+/** Chamadas de escrita em afiliações (opcional): limpar cache deste utilizador. */
+function invalidateAppEffectiveTenantIdCache(userId) {
+  const uid = String(userId || '').trim();
+  if (uid) effectiveTenantCache.delete(uid);
+}
+
+/**
  * App móvel: com afiliação DEDICATED + ACTIVE, o contexto operacional é a tenant empresa
  * (branding, OS, etc.), mesmo que o `User` «casa» seja a org prestador. Sem dedicado, usa-se `User.tenantId`.
  *
@@ -15,6 +52,9 @@
 async function resolveAppEffectiveTenantId(prisma, userId) {
   const uid = String(userId || '').trim();
   if (!uid) return null;
+  const hit = effectiveTenantCacheGet(uid);
+  if (hit != null) return hit;
+
   const row = await prisma.user.findUnique({
     where: { id: uid },
     select: { tenantId: true, appAccountId: true },
@@ -37,18 +77,34 @@ async function resolveAppEffectiveTenantId(prisma, userId) {
     select: { tenantId: true },
   });
   const dedicatedTid = aff?.tenantId ? String(aff.tenantId).trim() : '';
-  if (!dedicatedTid) return homeTid;
-  if (dedicatedTid === homeTid) return homeTid;
+  if (!dedicatedTid) {
+    effectiveTenantCacheSet(uid, homeTid);
+    return homeTid;
+  }
+  if (dedicatedTid === homeTid) {
+    effectiveTenantCacheSet(uid, homeTid);
+    return homeTid;
+  }
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: dedicatedTid },
     select: { id: true, kind: true, status: true },
   });
-  if (!tenant) return homeTid;
+  if (!tenant) {
+    effectiveTenantCacheSet(uid, homeTid);
+    return homeTid;
+  }
   const st = String(tenant.status || '').toUpperCase();
-  if (st === 'SUSPENDED' || st === 'CANCELLED') return homeTid;
+  if (st === 'SUSPENDED' || st === 'CANCELLED') {
+    effectiveTenantCacheSet(uid, homeTid);
+    return homeTid;
+  }
   const k = String(tenant.kind || 'COMPANY').toUpperCase();
-  if (k !== 'COMPANY') return homeTid;
+  if (k !== 'COMPANY') {
+    effectiveTenantCacheSet(uid, homeTid);
+    return homeTid;
+  }
+  effectiveTenantCacheSet(uid, dedicatedTid);
   return dedicatedTid;
 }
 
@@ -100,6 +156,7 @@ async function assertAppLoginAllowedForEffectiveTenant(prisma, user) {
 
 module.exports = {
   resolveAppEffectiveTenantId,
+  invalidateAppEffectiveTenantIdCache,
   loadTenantForAppJwtPayload,
   buildPresentationUserForApp,
   assertAppLoginAllowedForEffectiveTenant,

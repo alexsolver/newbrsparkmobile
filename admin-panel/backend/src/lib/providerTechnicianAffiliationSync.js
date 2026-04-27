@@ -22,8 +22,9 @@ async function ensureProviderIdentityForUserId(client, userId, profileSource = '
 
 /**
  * Quando o perfil técnico está ACTIVE na tenant empresa e provider-first está activo,
- * garante `ProviderTenantAffiliation` ACTIVE — senão a app «Organizações e parcerias» fica vazia
- * apesar do prestador estar ativo no painel.
+ * cria `ProviderTenantAffiliation` ACTIVE em falta (backfill) — senão a app «Organizações e parcerias»
+ * pode ficar vazia apesar do prestador estar ativo no painel.
+ * Não altera linhas já existentes (encerramento/suspensão/convite no painel ou na app prevalecem).
  *
  * @param {import('@prisma/client').PrismaClient} client
  * @param {{ userId: string, tenantId: string, tenantKind?: string|null }} opts
@@ -41,15 +42,37 @@ async function syncActiveAffiliationFromTechnicianStatus(client, opts) {
   if (!enabled) return { skipped: 'provider_first_off' };
 
   const pi = await ensureProviderIdentityForUserId(client, uid, 'technician_active_tenant_sync');
-  const now = new Date();
-  const row = await client.providerTenantAffiliation.upsert({
-    where: {
-      tenantId_providerIdentityId: {
-        tenantId: tid,
-        providerIdentityId: pi.id,
-      },
+  const whereKey = {
+    tenantId_providerIdentityId: {
+      tenantId: tid,
+      providerIdentityId: pi.id,
     },
-    create: {
+  };
+  const existing = await client.providerTenantAffiliation.findUnique({
+    where: whereKey,
+    select: { id: true, status: true },
+  });
+  const st = String(existing?.status || '').toUpperCase();
+  // Não reabrir vínculos já encerrados/recusados/suspensos nem avançar convites pelo sync do técnico.
+  if (existing) {
+    if (st === 'INACTIVE' || st === 'REJECTED') {
+      return { skipped: 'affiliation_ended', affiliationId: existing.id };
+    }
+    if (st === 'SUSPENDED') {
+      return { skipped: 'affiliation_suspended', affiliationId: existing.id };
+    }
+    if (st === 'INVITED' || st === 'REQUESTED') {
+      return { skipped: 'affiliation_pending_flow', affiliationId: existing.id };
+    }
+    if (st === 'ACTIVE') {
+      return { ok: true, affiliationId: existing.id };
+    }
+    return { skipped: 'affiliation_unknown_status', affiliationId: existing.id, status: st };
+  }
+
+  const now = new Date();
+  const row = await client.providerTenantAffiliation.create({
+    data: {
       tenantId: tid,
       providerIdentityId: pi.id,
       status: 'ACTIVE',
@@ -58,12 +81,6 @@ async function syncActiveAffiliationFromTechnicianStatus(client, opts) {
       requestedAt: now,
       activatedAt: now,
       note: 'Sincronizado ao ativar prestador na tenant (painel).',
-    },
-    update: {
-      status: 'ACTIVE',
-      endedAt: null,
-      activatedAt: now,
-      requestedAt: now,
     },
   });
   return { ok: true, affiliationId: row.id };

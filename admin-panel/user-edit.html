@@ -293,10 +293,17 @@
                   </div>
                 </section>
                 <section class="ue-task-card ue-task-card--wide">
-                  <div class="ue-inline-kicker">Capacidade</div>
+                  <div class="ue-inline-kicker" id="ue-tech-skills-kicker"></div>
                   <h3 class="ue-task-card__title">Habilidades operacionais</h3>
-                  <div class="form-group" style="margin-bottom:0"><label class="form-label" id="ue-lbl-t-skills">Habilidades (tags separadas por vírgula)</label>
-                    <input class="form-control" id="t-skills" placeholder="Ar condicionado, Elétrica, Hidráulica…" />
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label" id="ue-lbl-t-skills" for="t-skills-add"></label>
+                    <div id="t-skills-widget" class="ue-skills-widget">
+                      <div id="t-skills-chips" class="ue-skills-chips" aria-live="polite"></div>
+                      <div class="ue-skills-add-row">
+                        <input type="text" class="form-control" id="t-skills-add" autocomplete="off" />
+                        <button type="button" class="btn btn-sm btn-secondary" id="t-skills-add-btn"></button>
+                      </div>
+                    </div>
                   </div>
                 </section>
               </div>
@@ -563,6 +570,42 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="ue-paff-ded-overlay">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <span class="modal-title" id="ue-paff-ded-title">Janelas dedicadas (exclusividade partner)</span>
+      <button type="button" class="modal-close" id="ue-paff-ded-close" aria-label="Fechar">
+        <ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon>
+      </button>
+    </div>
+    <div class="modal-body" style="font-size:13px;line-height:1.45;color:var(--text2)">
+      <p id="ue-paff-ded-hint" class="hint-box" style="margin-bottom:12px"></p>
+      <div class="form-group">
+        <label class="form-label" for="ue-paff-ded-tz" id="ue-paff-ded-lbl-tz">Fuso horário (IANA)</label>
+        <input type="text" class="form-control" id="ue-paff-ded-tz" placeholder="America/Sao_Paulo" maxlength="80" autocomplete="off" />
+      </div>
+      <div style="overflow-x:auto;margin-top:8px">
+        <table class="table" style="font-size:12px;margin:0">
+          <thead>
+            <tr>
+              <th id="ue-paff-ded-th-day">Dia</th>
+              <th id="ue-paff-ded-th-start">Início</th>
+              <th id="ue-paff-ded-th-end">Fim</th>
+              <th id="ue-paff-ded-th-act"></th>
+            </tr>
+          </thead>
+          <tbody id="ue-paff-ded-tbody"></tbody>
+        </table>
+      </div>
+      <button type="button" class="btn btn-sm btn-secondary" id="ue-paff-ded-add" style="margin-top:10px">+ Linha</button>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" id="ue-paff-ded-cancel">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="ue-paff-ded-save">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="role-matrix-modal">
   <div class="modal" style="max-width:560px">
     <div class="modal-header"><span class="modal-title" id="role-matrix-title">Papéis</span><button type="button" class="modal-close" data-close-matrix><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
@@ -597,6 +640,49 @@
     <div class="modal-footer">
       <button type="button" class="btn btn-ghost" id="coverage-bases-cancel">Cancelar</button>
       <button type="button" class="btn btn-primary" id="coverage-bases-apply">Aplicar seleção</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="sch-slot-locs-modal">
+  <div class="modal modal-lg ue-coverage-modal">
+    <div class="modal-header">
+      <span class="modal-title" id="sch-slot-locs-title">Regiões do turno</span>
+      <button type="button" class="modal-close" id="sch-slot-locs-close" aria-label="Fechar">
+        <ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="sch-slot-locs-help" class="ue-inline-status" style="margin-top:0;line-height:1.45"></p>
+      <div class="ue-coverage-modal-toolbar" style="margin-top:10px">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;width:100%">
+          <input type="search" class="form-control" id="sch-slot-locs-city" style="flex:1 1 200px;min-width:0" autocomplete="off" />
+          <button type="button" class="btn btn-sm btn-secondary" id="sch-slot-locs-geocode"></button>
+          <button type="button" class="btn btn-sm btn-outline" id="sch-slot-locs-gps"></button>
+        </div>
+        <div class="search-wrap search-wrap--toolbar ue-coverage-modal-search" style="margin-top:10px">
+          <span class="search-icon"><ion-icon name="search-outline" style="font-size:16px;vertical-align:middle"></ion-icon></span>
+          <input type="search" id="sch-slot-locs-search" autocomplete="off" />
+        </div>
+        <div id="sch-slot-locs-meta" class="ue-inline-status" style="margin-top:8px"></div>
+      </div>
+      <div class="ue-coverage-modal-layout">
+        <div class="sch-slot-locs-sidebar" style="display:flex;flex-direction:column;gap:10px;min-width:0;min-height:0">
+          <div class="sch-slot-circles-block" style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px">
+              <span id="sch-slot-locs-circles-title" style="font-weight:800;font-size:12px;color:var(--text)"></span>
+              <button type="button" class="btn btn-sm btn-primary" id="sch-slot-locs-add-circle"></button>
+            </div>
+            <div id="sch-slot-locs-circles-list" class="ue-coverage-modal-list" style="max-height:200px;overflow-y:auto;padding:6px"></div>
+          </div>
+          <div id="sch-slot-locs-list" class="ue-coverage-modal-list" style="flex:1;min-height:160px;max-height:300px;overflow-y:auto"></div>
+        </div>
+        <div id="sch-slot-locs-map" class="ue-coverage-modal-map" aria-label="Mapa bases do turno"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" id="sch-slot-locs-cancel"></button>
+      <button type="button" class="btn btn-primary" id="sch-slot-locs-apply"></button>
     </div>
   </div>
 </div>

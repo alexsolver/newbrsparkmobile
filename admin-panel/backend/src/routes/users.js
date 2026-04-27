@@ -37,6 +37,11 @@ const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 const { syncActiveAffiliationFromTechnicianStatus } = require('../lib/providerTechnicianAffiliationSync');
 const { resolveMergedProviderIdentityForUserId, normalizeEmail: normalizeEmailForPi } = require('../lib/providerIdentityMerge');
 const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
+const {
+  validateDedicatedExclusivePayload,
+  buildTenantScheduleJsonDedicatedExclusive,
+} = require('../lib/dedicatedExclusiveTime');
+const { assertNoDedicatedOverlapForProviderIdentity } = require('../lib/providerDedicatedExclusiveService');
 
 const MAX_AVATAR_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_DOC_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -1282,12 +1287,88 @@ router.get('/:id/provider-affiliations', async (req, res) => {
         requestedAt: row.requestedAt,
         activatedAt: row.activatedAt,
         endedAt: row.endedAt,
+        tenantScheduleJson: row.tenantScheduleJson ?? null,
         providerIdentityKycStatus: row.providerIdentity?.kycStatus ?? null,
         providerFirstNetworkEnabled: !!providerFirstByTenant[String(row.tenantId || '').trim()],
       })),
     });
   } catch (err) {
     console.error('GET /users/:id/provider-affiliations', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/users/:id/provider-affiliations/:affiliationId/dedicated-exclusive
+// Janelas de exclusividade partner (tempo) em vínculo DEDICATED+ACTIVE — acordadas com o prestador.
+router.patch('/:id/provider-affiliations/:affiliationId/dedicated-exclusive', express.json({ limit: '64kb' }), async (req, res) => {
+  try {
+    const userId = String(req.params.id || '').trim();
+    const affiliationId = String(req.params.affiliationId || '').trim();
+    const user = await findScopedUserOrNull(req, userId, { select: { id: true, email: true, role: true } });
+    if (!user) return res.status(404).json({ error: 'Utilizador não encontrado.' });
+
+    const val = validateDedicatedExclusivePayload(req.body);
+    if (!val.ok) return res.status(400).json({ error: val.error });
+
+    const aff = await prisma.providerTenantAffiliation.findFirst({
+      where: { id: affiliationId, providerIdentity: { userId: user.id } },
+      include: { providerIdentity: { select: { id: true } } },
+    });
+    if (!aff) return res.status(404).json({ error: 'Afiliação não encontrada para este utilizador.' });
+
+    if (!assertTenantAccess(req.authorization, aff.tenantId)) {
+      return res.status(403).json({ error: 'Sem permissão para esta organização.' });
+    }
+    const rel = String(aff.relationshipType || '').toUpperCase();
+    if (rel !== 'DEDICATED') {
+      return res.status(400).json({ error: 'Janelas dedicadas exclusivas só se aplicam a vínculos DEDICATED.' });
+    }
+
+    const nextJson = buildTenantScheduleJsonDedicatedExclusive(aff.tenantScheduleJson, val.timezone, val.weeklyWindows);
+    const overlap = await assertNoDedicatedOverlapForProviderIdentity(
+      prisma,
+      aff.providerIdentityId,
+      nextJson,
+      affiliationId,
+    );
+    if (!overlap.ok) {
+      return res.status(409).json({ error: overlap.error, code: 'DEDICATED_OVERLAP' });
+    }
+
+    const updated = await prisma.providerTenantAffiliation.update({
+      where: { id: affiliationId },
+      data: { tenantScheduleJson: nextJson },
+      include: {
+        tenant: { select: { id: true, name: true, slug: true, kind: true } },
+      },
+    });
+
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: aff.tenantId,
+          action: 'PROVIDER_AFFILIATION_DEDICATED_WINDOWS',
+          resource: user.email,
+          category: 'ADMIN',
+          metadata: { userId: user.id, affiliationId },
+        },
+      })
+      .catch(() => {});
+
+    res.json({
+      ok: true,
+      affiliation: {
+        id: updated.id,
+        tenantId: updated.tenantId,
+        tenant: updated.tenant,
+        status: updated.status,
+        relationshipType: updated.relationshipType,
+        tenantScheduleJson: updated.tenantScheduleJson,
+      },
+    });
+  } catch (err) {
+    console.error('PATCH /users/:id/provider-affiliations/:affiliationId/dedicated-exclusive', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -16,6 +16,7 @@ const {
   assertProviderTenantAllowsCreate,
 } = require('../lib/tenantAssetSyncPolicy');
 const { prismaWhereExecutionBelongsToAppFieldTaskScope } = require('../lib/fieldTaskExecutionTenantScope');
+const { isAppUserInDedicatedExclusiveAt } = require('../lib/providerDedicatedExclusiveService');
 
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
@@ -715,10 +716,25 @@ router.get('/tasks', async (req, res) => {
       merged.push(e);
     }
 
-    const userTasks = merged.map(mapChecklistExecutionToSyncTask);
+    let suppressPartnerBroadcast = false;
+    try {
+      suppressPartnerBroadcast = await isAppUserInDedicatedExclusiveAt(prisma, req.user.id, new Date());
+    } catch (e) {
+      console.warn('[sync/tasks] dedicated exclusive', e && e.message);
+    }
+
+    const userTasks = merged.map(mapChecklistExecutionToSyncTask).map((task) => {
+      if (!suppressPartnerBroadcast || !task.broadcastClaimPending) return task;
+      const next = { ...task, broadcastClaimPending: false, broadcastClaimExpiresAt: null };
+      if (next.metadata && typeof next.metadata === 'object') {
+        next.metadata = { ...next.metadata };
+        delete next.metadata.broadcastClaimExpiresAt;
+      }
+      return next;
+    });
 
     console.log(
-      `[sync/tasks] ✅ ${ownerEmail} → OS ativas ${activeOs.length} + RT ativas ${activeRt.length} + concl./sync OS ${doneOs.length} + RT ${doneRt.length} + RT cancel. ${cancelledRt.length} → ${userTasks.length} no payload`
+      `[sync/tasks] ✅ ${ownerEmail} → OS ativas ${activeOs.length} + RT ativas ${activeRt.length} + concl./sync OS ${doneOs.length} + RT ${doneRt.length} + RT cancel. ${cancelledRt.length} → ${userTasks.length} no payload${suppressPartnerBroadcast ? ' (ofertas broadcast partner suprimidas — janela dedicada)' : ''}`
     );
     res.json(userTasks);
   } catch (err) {

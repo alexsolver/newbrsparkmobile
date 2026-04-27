@@ -2617,7 +2617,14 @@ export default function TechRegistrationScreen() {
           Ative os dias em que você pode receber serviços e ajuste o intervalo (formato 24 h, ex.: 08:00 e 18:00).
         </Text>
         {DAYS.map(({ key, label }) => {
-          const slot = schedule[key]?.[0] || { enabled: false, start: '08:00', end: '18:00' };
+          const slot = schedule[key]?.[0] || {
+            id: rid(),
+            enabled: false,
+            start: '08:00',
+            end: '18:00',
+            locationIds: [],
+            serviceAreaCircles: [],
+          };
           const startTrim = String(slot.start || '').trim();
           const endTrim = String(slot.end || '').trim();
           const touch = timeTouchByDay[key] || {};

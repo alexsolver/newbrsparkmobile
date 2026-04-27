@@ -28,6 +28,63 @@ function normalizeEmail(raw) {
 
 const up = (s) => String(s || '').toUpperCase().trim();
 
+/** Menor = estado «mais restritivo» para o mesmo tenant (ex.: INACTIVE prevalece sobre ACTIVE). */
+function affiliationStatusRank(st) {
+  const u = String(st || '').toUpperCase();
+  if (u === 'REJECTED') return 0;
+  if (u === 'INACTIVE') return 1;
+  if (u === 'SUSPENDED') return 2;
+  if (u === 'REQUESTED') return 3;
+  if (u === 'INVITED') return 4;
+  if (u === 'ACTIVE') return 5;
+  return 99;
+}
+
+function affiliationRelationshipRank(rt) {
+  const u = String(rt || '').toUpperCase();
+  if (u === 'DEDICATED') return 0;
+  if (u === 'PARTNER') return 1;
+  return 2;
+}
+
+/**
+ * Mesmo `tenantId` pode aparecer em mais do que uma `ProviderTenantAffiliation` (vários User/PI
+ * no mesmo AppAccount). Para leitura fundida, uma linha canónica por tenant — o estado mais
+ * restritivo — alinha app e painel.
+ *
+ * @param {unknown[]} affiliations
+ */
+function dedupeAffiliationsByTenantId(affiliations) {
+  if (!Array.isArray(affiliations) || affiliations.length <= 1) return affiliations || [];
+  const byTenant = new Map();
+  const withoutTenant = [];
+  for (const aff of affiliations) {
+    const tid = String(aff.tenantId || aff.tenant?.id || '').trim();
+    if (!tid) {
+      withoutTenant.push(aff);
+      continue;
+    }
+    if (!byTenant.has(tid)) byTenant.set(tid, []);
+    byTenant.get(tid).push(aff);
+  }
+  const out = [...withoutTenant];
+  for (const group of byTenant.values()) {
+    if (group.length === 1) {
+      out.push(group[0]);
+      continue;
+    }
+    const pick = [...group].sort((a, b) => {
+      const sr = affiliationStatusRank(a.status) - affiliationStatusRank(b.status);
+      if (sr !== 0) return sr;
+      const rr = affiliationRelationshipRank(a.relationshipType) - affiliationRelationshipRank(b.relationshipType);
+      if (rr !== 0) return rr;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    })[0];
+    out.push(pick);
+  }
+  return out.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
 /**
  * Várias `ProviderIdentity` no mesmo `AppAccount`: a «base» escolhida por mais afiliações
  * pode ter KYC ainda PENDING enquanto outra linha (ex.: a que o admin aprovou) está APPROVED.
@@ -95,8 +152,10 @@ async function resolveMergedProviderIdentityForUserId(prisma, userId, jwtEmailNo
         if (!mergedAffById.has(aff.id)) mergedAffById.set(aff.id, aff);
       }
     }
-    const mergedAffiliations = Array.from(mergedAffById.values()).sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    const mergedAffiliations = dedupeAffiliationsByTenantId(
+      Array.from(mergedAffById.values()).sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      ),
     );
     if (identities.length === 1) return identities[0];
 
@@ -127,4 +186,5 @@ module.exports = {
   onboardingStatusInclude,
   resolveMergedProviderIdentityForUserId,
   normalizeEmail,
+  dedupeAffiliationsByTenantId,
 };

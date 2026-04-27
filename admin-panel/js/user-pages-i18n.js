@@ -487,11 +487,36 @@ const M = {
     ue_paffNeedEmail: 'Esta ficha não tem e-mail — não é possível convidar.',
     ue_paffInviteOk: 'Convite registado. O prestador deve aceitar no app (deep link abaixo, se existir).',
     ue_paffInviteErr: 'Não foi possível criar o convite.',
+    ue_paffDedicatedWindowsBtn: 'Janelas dedicadas',
+    ue_paffDedicatedModalTitle: 'Exclusividade partner (tempo)',
+    ue_paffDedHint:
+      'Neste horário, em cada semana, o prestador deixa de aparecer em ofertas partner (broadcast) e na sincronização. Ordens atribuídas directamente pela empresa (sem leilão) continuam possíveis. Acordar sempre com o prestador.',
+    ue_paffDedLblTz: 'Fuso horário (IANA)',
+    ue_paffDedThDay: 'Dia',
+    ue_paffDedThStart: 'Início',
+    ue_paffDedThEnd: 'Fim',
+    ue_paffDedThAct: ' ',
+    ue_paffDedAddLine: '+ Linha',
+    ue_paffDedRemove: 'Remover',
+    ue_paffDedicatedSaved: 'Janelas dedicadas guardadas.',
+    ue_paffDedicatedNotFound: 'Vínculo não encontrado.',
+    ue_paffDedicatedNeedRel: 'Só vínculos DEDICATED podem ter janelas de exclusividade partner.',
+    ue_paffDedDay_mon: 'Segunda',
+    ue_paffDedDay_tue: 'Terça',
+    ue_paffDedDay_wed: 'Quarta',
+    ue_paffDedDay_thu: 'Quinta',
+    ue_paffDedDay_fri: 'Sexta',
+    ue_paffDedDay_sat: 'Sábado',
+    ue_paffDedDay_sun: 'Domingo',
     ue_lblScore: 'Score interno',
     ue_lblCft: 'CFT / registro profissional',
     ue_lblSpecialty: 'Especialidade principal',
-    ue_lblSkills: 'Habilidades (tags separadas por vírgula)',
-    ue_phSkills: 'Ar condicionado, Elétrica, Hidráulica…',
+    ue_kickerSkills: 'Habilidades',
+    ue_lblSkills: 'Itens na lista',
+    ue_phSkills: 'Nova habilidade (ex.: Elétrica)',
+    ue_skillsAddBtn: 'Adicionar',
+    ue_skillsEmpty: 'Nenhuma habilidade. Escreva abaixo e use Adicionar ou Enter.',
+    ue_skillRemove: 'Remover habilidade',
     ue_secDocsP: 'Documentos pessoais, escopo por base (multi-location)',
     ue_secDocsPro: 'Documentos profissionais (certificações, ASO, NR, etc.)',
     ue_btnAddDoc: '+ Adicionar documento',
@@ -520,7 +545,32 @@ const M = {
     ue_schEnd: 'Fim',
     ue_schLocsInSlot: 'Regiões neste turno',
     ue_schLocsTitle: 'Vazio = não fixa base neste turno',
-    ue_schLocsHintShort: 'Ctrl/Cmd + clique',
+    ue_schLocsHintShort: 'Mapa ou lista — várias bases por turno.',
+    ue_schLocsEmpty: 'Nenhuma base neste turno.',
+    ue_schLocRemove: 'Remover base',
+    ue_schLocsMapBtn: 'Áreas no mapa',
+    ue_schSlotLocsTitle: 'Bases atendidas neste turno',
+    ue_schSlotLocsHelp_html:
+      'Use <strong>Minha posição</strong> ou <strong>Ir</strong> com o nome da cidade para centrar o mapa. Clique nas bases no mapa ou na lista para marcar várias. Sem seleção, o turno não fixa base (mantém o universo de «Regiões atendidas»). Pode ainda definir <strong>várias áreas circulares</strong> (km) com <strong>+ Área</strong>: o círculo surge no alfinete ou no centro do mapa; arraste o marcador laranja do centro ou edite o raio na lista.',
+    ue_schSlotLocsMeta: '{{bases}} base(s) · {{selected}} selecionada(s) · {{circles}} área(s) por raio (km)',
+    ue_schSlotCirclesTitle: 'Áreas por raio (km)',
+    ue_schSlotCirclesAddBtn: '+ Área',
+    ue_schSlotCirclesAddTitle: 'Adicionar círculo no alfinete ou no centro do mapa (raio editável na lista).',
+    ue_schSlotCirclesModalEmpty: 'Nenhuma área por raio. Use + Área.',
+    ue_schSlotCircleRadius: 'Raio',
+    ue_schSlotCircleRemove: 'Remover',
+    ue_schSlotCircleDragHint: 'Arraste o centro; o raio (km) edita-se na lista à esquerda.',
+    ue_schSlotCirclesMax: 'Máximo de 20 áreas por raio neste turno.',
+    ue_schSlotCirclesSummary: '{{n}} área(s) por raio (km)',
+    ue_schSlotLocsCityPh: 'Cidade ou endereço (ex.: Curitiba, PR)',
+    ue_schSlotLocsGoCity: 'Ir',
+    ue_schSlotLocsGps: 'Minha posição (GPS)',
+    ue_schSlotLocsSearchPh: 'Filtrar bases por nome, tipo ou endereço…',
+    ue_schSlotLocsApply: 'Aplicar ao turno',
+    ue_schSlotLocsCancel: 'Cancelar',
+    ue_schSlotLocsGeocodeFail: 'Não foi possível localizar esse texto. Tente cidade e UF.',
+    ue_schSlotLocsGpsNo: 'Este navegador não expõe geolocalização.',
+    ue_schSlotLocsGpsDenied: 'Permissão de localização negada ou indisponível.',
     ue_schRemoveTitle: 'Remover turno',
     ue_schAddSlotBtn: '+ Turno neste dia',
     ue_scheduleIntro_html:
@@ -1188,11 +1238,36 @@ const M = {
     ue_paffNeedEmail: 'This profile has no email — cannot send an invite.',
     ue_paffInviteOk: 'Invite recorded. The provider should accept in the app (deep link below, if any).',
     ue_paffInviteErr: 'Could not create the invite.',
+    ue_paffDedicatedWindowsBtn: 'Dedicated windows',
+    ue_paffDedicatedModalTitle: 'Partner exclusivity (time)',
+    ue_paffDedHint:
+      'During these weekly windows, the provider is hidden from partner broadcast offers and sync. Direct assignments from the company (non-auction) remain possible. Always align with the provider.',
+    ue_paffDedLblTz: 'IANA timezone',
+    ue_paffDedThDay: 'Day',
+    ue_paffDedThStart: 'Start',
+    ue_paffDedThEnd: 'End',
+    ue_paffDedThAct: ' ',
+    ue_paffDedAddLine: '+ Row',
+    ue_paffDedRemove: 'Remove',
+    ue_paffDedicatedSaved: 'Dedicated windows saved.',
+    ue_paffDedicatedNotFound: 'Affiliation not found.',
+    ue_paffDedicatedNeedRel: 'Only DEDICATED affiliations can define partner exclusivity windows.',
+    ue_paffDedDay_mon: 'Monday',
+    ue_paffDedDay_tue: 'Tuesday',
+    ue_paffDedDay_wed: 'Wednesday',
+    ue_paffDedDay_thu: 'Thursday',
+    ue_paffDedDay_fri: 'Friday',
+    ue_paffDedDay_sat: 'Saturday',
+    ue_paffDedDay_sun: 'Sunday',
     ue_lblScore: 'Internal score',
     ue_lblCft: 'Professional registration',
     ue_lblSpecialty: 'Main specialty',
-    ue_lblSkills: 'Skills (comma-separated tags)',
-    ue_phSkills: 'HVAC, Electrical, Plumbing…',
+    ue_kickerSkills: 'Skills',
+    ue_lblSkills: 'List items',
+    ue_phSkills: 'New skill (e.g. Electrical)',
+    ue_skillsAddBtn: 'Add',
+    ue_skillsEmpty: 'No skills yet. Type below and press Add or Enter.',
+    ue_skillRemove: 'Remove skill',
     ue_secDocsP: 'Personal documents, per site (multi-location)',
     ue_secDocsPro: 'Professional documents (certs, medical fitness, safety, etc.)',
     ue_btnAddDoc: '+ Add document',
@@ -1221,7 +1296,32 @@ const M = {
     ue_schEnd: 'End',
     ue_schLocsInSlot: 'Regions in this shift',
     ue_schLocsTitle: 'Empty = no fixed site for this shift',
-    ue_schLocsHintShort: 'Ctrl/Cmd + click',
+    ue_schLocsHintShort: 'Map or list — multiple sites per shift.',
+    ue_schLocsEmpty: 'No site on this shift.',
+    ue_schLocRemove: 'Remove site',
+    ue_schLocsMapBtn: 'Areas on map',
+    ue_schSlotLocsTitle: 'Sites served in this shift',
+    ue_schSlotLocsHelp_html:
+      'Use <strong>My location</strong> or <strong>Go</strong> with a city name to center the map. Click sites on the map or list to select several. With none selected, the shift does not pin a site (still limited by «Service areas»). You can also add <strong>multiple circular areas</strong> (km) with <strong>+ Area</strong>: the circle is placed at the pin or map center; drag the orange center marker or edit the radius in the list.',
+    ue_schSlotLocsMeta: '{{bases}} site(s) · {{selected}} selected · {{circles}} radius area(s) (km)',
+    ue_schSlotCirclesTitle: 'Areas by radius (km)',
+    ue_schSlotCirclesAddBtn: '+ Area',
+    ue_schSlotCirclesAddTitle: 'Add circle at pin or map center (radius editable in the list).',
+    ue_schSlotCirclesModalEmpty: 'No radius areas yet. Use + Area.',
+    ue_schSlotCircleRadius: 'Radius',
+    ue_schSlotCircleRemove: 'Remove',
+    ue_schSlotCircleDragHint: 'Drag the center; radius (km) is edited in the list.',
+    ue_schSlotCirclesMax: 'Maximum 20 radius areas per shift.',
+    ue_schSlotCirclesSummary: '{{n}} radius area(s) (km)',
+    ue_schSlotLocsCityPh: 'City or address (e.g. Austin, TX)',
+    ue_schSlotLocsGoCity: 'Go',
+    ue_schSlotLocsGps: 'My location (GPS)',
+    ue_schSlotLocsSearchPh: 'Filter sites by name, type or address…',
+    ue_schSlotLocsApply: 'Apply to shift',
+    ue_schSlotLocsCancel: 'Cancel',
+    ue_schSlotLocsGeocodeFail: 'Could not find that place. Try city and state.',
+    ue_schSlotLocsGpsNo: 'Geolocation is not available in this browser.',
+    ue_schSlotLocsGpsDenied: 'Location permission denied or unavailable.',
     ue_schRemoveTitle: 'Remove shift',
     ue_schAddSlotBtn: '+ Shift on this day',
     ue_scheduleIntro_html:
@@ -1570,8 +1670,20 @@ export function setAdminUiLocale(code) {
   }
 }
 
-export function t(key) {
-  return adminResolve(M, getAdminUiLocale(), key);
+/**
+ * Resolve texto; `vars` opcional substitui placeholders `{{chave}}` (com espaços opcionais).
+ * Ex.: `t('ue_schSlotCirclesSummary', { n: '3' })` → «3 área(s) por raio (km)».
+ */
+export function t(key, vars) {
+  let s = adminResolve(M, getAdminUiLocale(), key);
+  if (vars != null && typeof vars === 'object' && !Array.isArray(vars)) {
+    for (const [k, val] of Object.entries(vars)) {
+      const safeKey = String(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`\\{\\{\\s*${safeKey}\\s*\\}\\}`, 'g');
+      s = s.replace(re, String(val));
+    }
+  }
+  return s;
 }
 
 export { adminDocumentLang, adminIntlLocale };
@@ -1980,6 +2092,7 @@ export function applyUserEditStaticPageI18n() {
   setT('ue-paff-th-note', 'ue_paffThNote');
   setT('ue-paff-th-actions', 'ue_paffThActions');
   setH('ue-tech-intro', 'ue_techIntro');
+  setT('ue-tech-skills-kicker', 'ue_kickerSkills');
   setT('ue-lbl-t-status', 'ue_lblTechStatus');
   const ts = document.getElementById('t-status');
   if (ts) {
@@ -1993,8 +2106,9 @@ export function applyUserEditStaticPageI18n() {
   setT('ue-lbl-t-cft', 'ue_lblCft');
   setT('ue-lbl-t-specialty', 'ue_lblSpecialty');
   setT('ue-lbl-t-skills', 'ue_lblSkills');
-  const tsk = document.getElementById('t-skills');
-  if (tsk) tsk.placeholder = t('ue_phSkills');
+  setT('t-skills-add-btn', 'ue_skillsAddBtn');
+  const tska = document.getElementById('t-skills-add');
+  if (tska) tska.placeholder = t('ue_phSkills');
   setT('ue-sec-docs-p-title', 'ue_secDocsP');
   setT('ue-sec-docs-pro-title', 'ue_secDocsPro');
   setT('btn-add-doc-p', 'ue_btnAddDoc');
@@ -2008,6 +2122,22 @@ export function applyUserEditStaticPageI18n() {
   });
   setT('ue-sec-schedule-title', 'ue_secSchedule');
   setH('ue-schedule-intro', 'ue_scheduleIntro_html');
+  setT('sch-slot-locs-title', 'ue_schSlotLocsTitle');
+  setH('sch-slot-locs-help', 'ue_schSlotLocsHelp_html');
+  setT('sch-slot-locs-geocode', 'ue_schSlotLocsGoCity');
+  setT('sch-slot-locs-gps', 'ue_schSlotLocsGps');
+  const schCityInp = document.getElementById('sch-slot-locs-city');
+  if (schCityInp) schCityInp.placeholder = t('ue_schSlotLocsCityPh');
+  const schSlotSearch = document.getElementById('sch-slot-locs-search');
+  if (schSlotSearch) schSlotSearch.placeholder = t('ue_schSlotLocsSearchPh');
+  setT('sch-slot-locs-apply', 'ue_schSlotLocsApply');
+  setT('sch-slot-locs-cancel', 'ue_schSlotLocsCancel');
+  setT('sch-slot-locs-circles-title', 'ue_schSlotCirclesTitle');
+  const schAddCircle = document.getElementById('sch-slot-locs-add-circle');
+  if (schAddCircle) {
+    schAddCircle.textContent = t('ue_schSlotCirclesAddBtn');
+    schAddCircle.title = t('ue_schSlotCirclesAddTitle');
+  }
   setT('ue-sec-regions-title', 'ue_secRegions');
   setH('ue-regions-intro', 'ue_regionsIntro');
   setT('sec-audit-desc', 'ue_auditDesc');

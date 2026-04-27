@@ -15,6 +15,12 @@ export type ProviderAffiliationTenant = {
   slug?: string | null;
 };
 
+/** Janelas de exclusividade partner (leitura — definidas pela empresa no painel). */
+export type DedicatedExclusiveSchedule = {
+  timezone: string;
+  weeklyWindows: { weekday: string; start: string; end: string }[];
+};
+
 export type ProviderAffiliation = {
   id: string;
   status: ProviderAffiliationStatus;
@@ -26,6 +32,7 @@ export type ProviderAffiliation = {
   activatedAt?: string | null;
   endedAt?: string | null;
   suspendedAt?: string | null;
+  dedicatedExclusive?: DedicatedExclusiveSchedule | null;
 };
 
 export const ProviderAffiliationsApi = {

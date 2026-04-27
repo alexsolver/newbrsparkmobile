@@ -1,6 +1,7 @@
 /**
  * Prestador ACTIVE: edita horário semanal, bases (Location) e cobertura geográfica.
  * Dados: PUT /api/me (AuthService.patchMe) + refreshUser.
+ * Ao focar o ecrã: refreshUser + getUser para alinhar com alterações feitas no painel.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -15,8 +16,10 @@ import {
   Alert,
   Platform,
   Modal,
+  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
-import MapView, { Circle, Marker } from 'react-native-maps';
+import MapView, { Circle, Marker, type Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,15 +31,77 @@ import { AuthService, isTechnicianProfileActive, type User } from '../../src/ser
 import {
   TECH_SCHEDULE_DAY_ORDER,
   type TechScheduleDayKey,
+  type TechScheduleSlot,
+  type TechServiceAreaCircle,
   defaultSchedule,
   parseScheduleFromProfileJson,
   findFirstInvalidEnabledTime,
   isValidHhMm,
+  rid,
 } from '../../src/lib/technicianScheduleForm';
+
+const MAX_SLOT_SERVICE_CIRCLES = 20;
+
+/** Entrada no campo de raio (vírgula ou ponto) — no máx. um separador decimal. */
+function sanitizeRadiusKmInput(raw: string): string {
+  let out = '';
+  let sep = false;
+  for (const ch of String(raw).replace(/[^0-9.,]/g, '')) {
+    if (ch === '.' || ch === ',') {
+      if (sep) continue;
+      sep = true;
+      out += ',';
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+function formatRadiusKmForField(km: number): string {
+  const n = Math.round(Number(km) * 100_000) / 100_000;
+  if (!Number.isFinite(n)) return '10';
+  return String(n).replace('.', ',');
+}
+
+/** Devolve km válido ou null se ainda incompleto / inválido (não forçar clamp aqui). */
+function parseRadiusKmDisplay(s: string): number | null {
+  const t = String(s).trim().replace(',', '.');
+  if (t === '' || t === '.') return null;
+  const v = Number(t);
+  if (!Number.isFinite(v)) return null;
+  return v;
+}
+
+function clampSlotCircle(c: TechServiceAreaCircle): TechServiceAreaCircle {
+  const r = Number(c.radiusKm);
+  return {
+    id: c.id,
+    latitude: c.latitude,
+    longitude: c.longitude,
+    radiusKm: Math.min(500, Math.max(0.5, Number.isFinite(r) ? r : 10)),
+  };
+}
+
+/** Raio no mapa enquanto edita o texto (estados parciais como "15," não quebram o círculo). */
+function previewRadiusKmForCircle(c: TechServiceAreaCircle, textById: Record<string, string>): number {
+  const raw = textById[c.id];
+  if (raw === undefined) return clampSlotCircle(c).radiusKm;
+  const v = parseRadiusKmDisplay(raw);
+  if (v == null) return clampSlotCircle(c).radiusKm;
+  return Math.min(500, Math.max(0.5, v));
+}
 
 type DayKey = TechScheduleDayKey;
 
-type BaseRow = { id: string; name: string; type?: string; address?: string | null };
+type BaseRow = {
+  id: string;
+  name: string;
+  type?: string;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+};
 
 export default function ScheduleRegionsScreen() {
   const { colors: C } = useTheme();
@@ -44,7 +109,6 @@ export default function ScheduleRegionsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   const { user, refreshUser } = useAuth();
-  const hydratedRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -62,9 +126,21 @@ export default function ScheduleRegionsScreen() {
     latitudeDelta: number;
     longitudeDelta: number;
   } | null>(null);
-  /** Erros de horário só após blur no campo ou após tentativa de guardar com horário inválido. */
-  const [timeTouchByDay, setTimeTouchByDay] = useState<Record<string, { s?: boolean; e?: boolean }>>({});
+  /** Erros de horário só após blur no campo ou após tentativa de guardar com horário inválido. Chave `dia-índice`. */
+  const [timeTouchSlots, setTimeTouchSlots] = useState<Record<string, { s?: boolean; e?: boolean }>>({});
   const [showAllTimeErrors, setShowAllTimeErrors] = useState(false);
+  const [slotLocsModal, setSlotLocsModal] = useState<{ day: DayKey; slotIndex: number } | null>(null);
+  const [slotLocsDraft, setSlotLocsDraft] = useState<string[]>([]);
+  const [slotLocsCity, setSlotLocsCity] = useState('');
+  const [slotLocsFilter, setSlotLocsFilter] = useState('');
+  const [slotMapRegion, setSlotMapRegion] = useState<Region | null>(null);
+  /** Alfinete de referência (GPS ou cidade); arrastar só move o alfinete. */
+  const [slotRefPin, setSlotRefPin] = useState<{ latitude: number; longitude: number } | null>(null);
+  /** Rascunho de áreas por raio (km) no modal do turno — alinhado a `serviceAreaCircles` no servidor */
+  const [slotCirclesDraft, setSlotCirclesDraft] = useState<TechServiceAreaCircle[]>([]);
+  /** Texto do campo de raio por id (vírgula no teclado PT) — evita input controlado só por número. */
+  const [slotCircleRadiusTextById, setSlotCircleRadiusTextById] = useState<Record<string, string>>({});
+  const slotMapRef = useRef<MapView | null>(null);
 
   const dayLabelFixed = (k: DayKey) => {
     const key = `day${k[0].toUpperCase()}${k.slice(1)}` as
@@ -103,7 +179,7 @@ export default function ScheduleRegionsScreen() {
       );
       const n = gc && typeof gc === 'object' ? (gc as { notes?: string | null }).notes : null;
       setServiceCoverageNotes(n ? String(n) : '');
-      setTimeTouchByDay({});
+      setTimeTouchSlots({});
       setShowAllTimeErrors(false);
     },
     []
@@ -135,10 +211,6 @@ export default function ScheduleRegionsScreen() {
   }, [user, coverageCenter, coverageRadiusMeters, serviceCoverageRadiusKm, serviceCoverageNotes]);
 
   useEffect(() => {
-    hydratedRef.current = false;
-  }, [user?.id]);
-
-  useEffect(() => {
     if (showAllTimeErrors && !findFirstInvalidEnabledTime(schedule)) {
       setShowAllTimeErrors(false);
     }
@@ -151,25 +223,24 @@ export default function ScheduleRegionsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!user || !isTechnicianProfileActive(user)) {
-        Alert.alert(t('common.error'), t('profile.scheduleRegions.errorNotTech'), [
-          { text: t('common.ok'), onPress: () => router.back() },
-        ]);
-        return;
-      }
       setLoading(true);
       (async () => {
         try {
-          if (!hydratedRef.current) {
-            hydrateFromUser(user);
-            hydratedRef.current = true;
+          await refreshUser();
+          const fresh = await AuthService.getUser();
+          if (!fresh || !isTechnicianProfileActive(fresh)) {
+            Alert.alert(t('common.error'), t('profile.scheduleRegions.errorNotTech'), [
+              { text: t('common.ok'), onPress: () => router.back() },
+            ]);
+            return;
           }
+          hydrateFromUser(fresh);
           await loadBases();
         } finally {
           setLoading(false);
         }
       })();
-    }, [user, loadBases, hydrateFromUser, t, router])
+    }, [loadBases, hydrateFromUser, refreshUser, t, router])
   );
 
   const openRegionsMap = async () => {
@@ -221,6 +292,221 @@ export default function ScheduleRegionsScreen() {
     }
   };
 
+  const slotTouchKey = useCallback((day: DayKey, slot: TechScheduleSlot) => `${day}:${slot.id}`, []);
+
+  const centerSlotMapCamera = useCallback((lat: number, lng: number, delta = 0.22) => {
+    const r: Region = { latitude: lat, longitude: lng, latitudeDelta: delta, longitudeDelta: delta };
+    setSlotMapRegion(r);
+    setTimeout(() => slotMapRef.current?.animateToRegion(r, 380), 80);
+  }, []);
+
+  const addSlotForDay = useCallback((day: DayKey) => {
+    setSchedule((prev) => ({
+      ...prev,
+      [day]: [
+        ...(prev[day] || []),
+        { id: rid(), enabled: true, start: '08:00', end: '18:00', locationIds: [], serviceAreaCircles: [] },
+      ],
+    }));
+  }, []);
+
+  const removeSlotForDay = useCallback((day: DayKey, slotIndex: number, slotId: string) => {
+    setSchedule((prev) => {
+      const slots = [...(prev[day] || [])];
+      if (slots.length <= 1) return prev;
+      slots.splice(slotIndex, 1);
+      return { ...prev, [day]: slots };
+    });
+    setTimeTouchSlots((p) => {
+      const n = { ...p };
+      delete n[`${day}:${slotId}`];
+      return n;
+    });
+  }, []);
+
+  const openSlotLocsModal = useCallback(
+    (day: DayKey, slotIndex: number) => {
+      const slot = schedule[day]?.[slotIndex];
+      if (!slot) return;
+      setSlotLocsDraft([...(slot.locationIds || [])]);
+      const circles = (slot.serviceAreaCircles || []).map((c) => clampSlotCircle(c));
+      setSlotCirclesDraft(circles);
+      const texts: Record<string, string> = {};
+      for (const c of circles) texts[c.id] = formatRadiusKmForField(c.radiusKm);
+      setSlotCircleRadiusTextById(texts);
+      setSlotLocsCity('');
+      setSlotLocsFilter('');
+      setSlotRefPin(null);
+      setSlotMapRegion(null);
+      setSlotLocsModal({ day, slotIndex });
+      void (async () => {
+        const ids = slot.locationIds || [];
+        const locs = bases.filter(
+          (b) =>
+            ids.includes(b.id) &&
+            b.latitude != null &&
+            b.longitude != null &&
+            Number.isFinite(Number(b.latitude)) &&
+            Number.isFinite(Number(b.longitude))
+        );
+        if (locs.length) {
+          const lat = locs.reduce((s, b) => s + Number(b.latitude), 0) / locs.length;
+          const lng = locs.reduce((s, b) => s + Number(b.longitude), 0) / locs.length;
+          setSlotMapRegion({ latitude: lat, longitude: lng, latitudeDelta: 0.35, longitudeDelta: 0.35 });
+          setSlotRefPin({ latitude: lat, longitude: lng });
+          return;
+        }
+        try {
+          const perm = await Location.requestForegroundPermissionsAsync();
+          if (perm.status === 'granted') {
+            const p = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+            const lat = p.coords.latitude;
+            const lng = p.coords.longitude;
+            setSlotMapRegion({ latitude: lat, longitude: lng, latitudeDelta: 0.25, longitudeDelta: 0.25 });
+            setSlotRefPin({ latitude: lat, longitude: lng });
+            return;
+          }
+        } catch {
+          /* */
+        }
+        setSlotMapRegion({ latitude: -14.235, longitude: -51.9253, latitudeDelta: 8, longitudeDelta: 8 });
+      })();
+    },
+    [schedule, bases]
+  );
+
+  const closeSlotLocsModal = useCallback(() => {
+    setSlotLocsModal(null);
+    setSlotLocsDraft([]);
+    setSlotCirclesDraft([]);
+    setSlotCircleRadiusTextById({});
+    setSlotMapRegion(null);
+    setSlotRefPin(null);
+    setSlotLocsCity('');
+    setSlotLocsFilter('');
+  }, []);
+
+  const applySlotLocsModal = useCallback(() => {
+    if (!slotLocsModal) return;
+    const { day, slotIndex } = slotLocsModal;
+    const normalizedCircles = slotCirclesDraft
+      .map((c) => {
+        const raw = slotCircleRadiusTextById[c.id];
+        const parsed = raw !== undefined ? parseRadiusKmDisplay(raw) : null;
+        const nextR = parsed != null ? parsed : c.radiusKm;
+        return clampSlotCircle({ ...c, radiusKm: nextR });
+      })
+      .slice(0, MAX_SLOT_SERVICE_CIRCLES);
+    setSchedule((prev) => {
+      const n = { ...prev };
+      const slots = [...(n[day] || [])];
+      const cur = slots[slotIndex];
+      if (!cur) return prev;
+      slots[slotIndex] = { ...cur, locationIds: [...slotLocsDraft], serviceAreaCircles: normalizedCircles };
+      n[day] = slots;
+      return n;
+    });
+    closeSlotLocsModal();
+  }, [slotLocsModal, slotLocsDraft, slotCirclesDraft, slotCircleRadiusTextById, closeSlotLocsModal]);
+
+  const addSlotCircleAtRef = useCallback(() => {
+    if (slotCirclesDraft.length >= MAX_SLOT_SERVICE_CIRCLES) {
+      Alert.alert(t('common.error'), t('profile.scheduleRegions.slotCirclesMax'));
+      return;
+    }
+    const p =
+      slotRefPin ||
+      (slotMapRegion
+        ? { latitude: slotMapRegion.latitude, longitude: slotMapRegion.longitude }
+        : null);
+    if (!p) return;
+    const nid = rid();
+    setSlotCirclesDraft((prev) => [...prev, { id: nid, latitude: p.latitude, longitude: p.longitude, radiusKm: 10 }]);
+    setSlotCircleRadiusTextById((prev) => ({ ...prev, [nid]: '10' }));
+  }, [slotCirclesDraft.length, slotRefPin, slotMapRegion, t]);
+
+  const removeSlotCircle = useCallback((id: string) => {
+    setSlotCirclesDraft((prev) => prev.filter((c) => c.id !== id));
+    setSlotCircleRadiusTextById((prev) => {
+      const n = { ...prev };
+      delete n[id];
+      return n;
+    });
+  }, []);
+
+  const updateSlotCircleCenter = useCallback((id: string, latitude: number, longitude: number) => {
+    setSlotCirclesDraft((prev) => prev.map((c) => (c.id === id ? { ...c, latitude, longitude } : c)));
+  }, []);
+
+  const onSlotCircleRadiusTextChange = useCallback((id: string, text: string) => {
+    const next = sanitizeRadiusKmInput(text);
+    setSlotCircleRadiusTextById((prev) => ({ ...prev, [id]: next }));
+    const parsed = parseRadiusKmDisplay(next);
+    if (parsed == null) return;
+    setSlotCirclesDraft((prev) =>
+      prev.map((c) => (c.id === id ? clampSlotCircle({ ...c, radiusKm: parsed }) : c))
+    );
+  }, []);
+
+  const goSlotCityGeocode = useCallback(async () => {
+    const q = slotLocsCity.trim();
+    if (!q) {
+      Alert.alert(t('common.error'), t('profile.scheduleRegions.slotLocsCityEmpty'));
+      return;
+    }
+    try {
+      const geo = await Location.geocodeAsync(`${q}, Brasil`);
+      const hit = geo?.[0];
+      if (
+        !hit ||
+        hit.latitude == null ||
+        hit.longitude == null ||
+        !Number.isFinite(hit.latitude) ||
+        !Number.isFinite(hit.longitude)
+      ) {
+        Alert.alert(t('common.error'), t('profile.scheduleRegions.slotLocsGeocodeError'));
+        return;
+      }
+      setSlotRefPin({ latitude: hit.latitude, longitude: hit.longitude });
+      centerSlotMapCamera(hit.latitude, hit.longitude, 0.18);
+    } catch {
+      Alert.alert(t('common.error'), t('profile.scheduleRegions.slotLocsGeocodeError'));
+    }
+  }, [slotLocsCity, centerSlotMapCamera, t]);
+
+  const goSlotGps = useCallback(async () => {
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert(t('common.error'), t('profile.scheduleRegions.slotLocsGpsDenied'));
+        return;
+      }
+      const p = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const lat = p.coords.latitude;
+      const lng = p.coords.longitude;
+      setSlotRefPin({ latitude: lat, longitude: lng });
+      centerSlotMapCamera(lat, lng, 0.14);
+    } catch {
+      Alert.alert(t('common.error'), t('profile.scheduleRegions.slotLocsGpsError'));
+    }
+  }, [centerSlotMapCamera, t]);
+
+  const toggleSlotDraftLoc = useCallback((id: string) => {
+    setSlotLocsDraft((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }, []);
+
+  const basesForSlotModal = useMemo(() => {
+    const f = slotLocsFilter.trim().toLowerCase();
+    if (!f) return bases;
+    return bases.filter(
+      (b) =>
+        b.name.toLowerCase().includes(f) ||
+        String(b.address || '')
+          .toLowerCase()
+          .includes(f)
+    );
+  }, [bases, slotLocsFilter]);
+
   const onSave = async () => {
     if (!user || !isTechnicianProfileActive(user)) return;
     const inv = findFirstInvalidEnabledTime(schedule);
@@ -236,7 +522,10 @@ export default function ScheduleRegionsScreen() {
         | 'daySun';
       const dayL = t(`profile.scheduleRegions.${k}`);
       const partL = inv.part === 'start' ? t('profile.scheduleRegions.startLabel') : t('profile.scheduleRegions.endLabel');
-      Alert.alert(t('common.error'), t('profile.scheduleRegions.invalidTime', { day: dayL, part: partL }));
+      Alert.alert(
+        t('common.error'),
+        t('profile.scheduleRegions.invalidTime', { day: dayL, part: partL, shift: inv.slotIndex + 1 })
+      );
       return;
     }
     setSaving(true);
@@ -248,11 +537,10 @@ export default function ScheduleRegionsScreen() {
       });
       if (merged) {
         hydrateFromUser(merged);
-        hydratedRef.current = true;
       }
       await refreshUser();
       setShowAllTimeErrors(false);
-      setTimeTouchByDay({});
+      setTimeTouchSlots({});
       Alert.alert(t('common.success'), t('profile.scheduleRegions.saveSuccess'));
     } catch (e: any) {
       Alert.alert(t('common.error'), e?.message || t('profile.scheduleRegions.errorSave'));
@@ -335,6 +623,151 @@ export default function ScheduleRegionsScreen() {
           paddingHorizontal: 16,
           paddingBottom: 8,
         },
+        dayHeaderRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 8,
+          marginBottom: 10,
+        },
+        dayName: { fontWeight: '800', fontSize: 15, color: C.slate },
+        addSlotBtn: {
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          borderRadius: 10,
+          backgroundColor: C.accent,
+        },
+        addSlotBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+        slotCard: {
+          marginTop: 10,
+          paddingTop: 12,
+          borderTopWidth: 1,
+          borderTopColor: C.border,
+        },
+        slotTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        removeSlotBtn: {
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: C.border,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: C.cardWhite,
+        },
+        slotLocsRow: { marginTop: 10, gap: 8 },
+        locChipsScroll: { flexGrow: 0 },
+        locChip: {
+          paddingVertical: 6,
+          paddingHorizontal: 10,
+          borderRadius: 999,
+          borderWidth: 1,
+          marginRight: 8,
+          maxWidth: 200,
+        },
+        locChipText: { fontSize: 12, fontWeight: '700', color: C.slate },
+        slotMapOpenBtn: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: C.accent,
+          backgroundColor: C.cardWhite,
+        },
+        slotModalRoot: { flex: 1, backgroundColor: C.cardWhite },
+        slotModalActions: {
+          flexDirection: 'row',
+          gap: 10,
+          paddingHorizontal: 16,
+          paddingTop: 10,
+          paddingBottom: 8,
+          borderTopWidth: 1,
+          borderTopColor: C.border,
+        },
+        slotModalBtnSecondary: {
+          flex: 1,
+          paddingVertical: 12,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: C.border,
+          alignItems: 'center',
+          backgroundColor: C.surfaceLow,
+        },
+        slotModalBtnPrimary: {
+          flex: 1,
+          paddingVertical: 12,
+          borderRadius: 12,
+          alignItems: 'center',
+          backgroundColor: C.accent,
+        },
+        slotModalBtnPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+        slotModalBtnSecondaryText: { color: C.slate, fontWeight: '800', fontSize: 15 },
+        slotCityRow: { flexDirection: 'row', gap: 8, alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 },
+        slotCityInput: {
+          flex: 1,
+          borderWidth: 1,
+          borderColor: C.border,
+          borderRadius: 10,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          fontSize: 15,
+          color: C.slate,
+          backgroundColor: C.cardWhite,
+        },
+        slotMiniBtn: {
+          paddingVertical: 10,
+          paddingHorizontal: 14,
+          borderRadius: 10,
+          backgroundColor: C.accent,
+        },
+        slotMiniBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+        slotGpsBtn: {
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: C.border,
+          backgroundColor: C.surfaceLow,
+        },
+        slotCirclesToolbar: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 16,
+          marginBottom: 8,
+          gap: 10,
+        },
+        slotCirclesList: { maxHeight: 140, paddingHorizontal: 16, marginBottom: 8 },
+        slotCircleRow: {
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 8,
+          paddingVertical: 8,
+          paddingHorizontal: 10,
+          marginBottom: 6,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: C.border,
+          backgroundColor: C.cardWhite,
+        },
+        slotCircleRadiusInput: {
+          width: 96,
+          borderWidth: 1,
+          borderColor: C.border,
+          borderRadius: 8,
+          paddingHorizontal: 8,
+          paddingVertical: 6,
+          fontSize: 14,
+          color: C.slate,
+          backgroundColor: C.surfaceLow,
+        },
+        slotCircleRm: { paddingVertical: 6, paddingHorizontal: 8 },
       }),
     [C]
   );
@@ -371,78 +804,177 @@ export default function ScheduleRegionsScreen() {
           <Text style={styles.secTitle}>{t('profile.scheduleRegions.sectionSchedule')}</Text>
           <Text style={styles.hint}>{t('profile.scheduleRegions.sectionScheduleHint')}</Text>
           {TECH_SCHEDULE_DAY_ORDER.map((key) => {
-            const slot = schedule[key]?.[0] || { enabled: false, start: '08:00', end: '18:00' };
-            const startTrim = String(slot.start || '').trim();
-            const endTrim = String(slot.end || '').trim();
-            const touch = timeTouchByDay[key] || {};
-            const startErr =
-              slot.enabled && !isValidHhMm(startTrim) && (touch.s || showAllTimeErrors);
-            const endErr =
-              slot.enabled && !isValidHhMm(endTrim) && (touch.e || showAllTimeErrors);
-            const timeHint = startErr || endErr ? t('common.timeFormat24Hint') : null;
+            const slots = schedule[key] || [];
             return (
               <View key={key} style={styles.dayCard}>
-                <View style={styles.dayRow}>
-                  <Text style={{ fontWeight: '800', fontSize: 15, color: C.slate }}>{dayLabelFixed(key)}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={{ fontSize: 13, color: C.textSecondary }}>{t('profile.scheduleRegions.dayAvailable')}</Text>
-                    <Switch
-                      value={slot.enabled}
-                      onValueChange={(v) => {
-                        const n = { ...schedule };
-                        n[key] = [{ ...slot, enabled: v }];
-                        setSchedule(n);
-                      }}
-                      trackColor={{ false: C.border, true: `${C.accent}88` }}
-                      thumbColor={slot.enabled ? C.accent : '#f4f4f5'}
-                    />
-                  </View>
+                <View style={styles.dayHeaderRow}>
+                  <Text style={styles.dayName}>{dayLabelFixed(key)}</Text>
+                  <TouchableOpacity style={styles.addSlotBtn} onPress={() => addSlotForDay(key)} activeOpacity={0.85}>
+                    <Text style={styles.addSlotBtnText}>{t('profile.scheduleRegions.addShiftOnDay')}</Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={[styles.row2, { opacity: slot.enabled ? 1 : 0.45 }]}>
-                  <View style={styles.flex1}>
-                    <Text style={[styles.label, startErr && { color: '#B91C1C' }]}>{t('profile.scheduleRegions.startLabel')}</Text>
-                    <TextInput
-                      style={[styles.input, startErr && { borderColor: '#DC2626', borderWidth: 2 }]}
-                      value={slot.start}
-                      editable={slot.enabled}
-                      onChangeText={(txt) => {
-                        const n = { ...schedule };
-                        n[key] = [{ ...slot, start: txt }];
-                        setSchedule(n);
-                      }}
-                      onBlur={() =>
-                        setTimeTouchByDay((p) => ({
-                          ...p,
-                          [key]: { ...p[key], s: true },
-                        }))
-                      }
-                      placeholder={t('profile.scheduleRegions.timePlaceholder')}
-                    />
-                  </View>
-                  <View style={styles.flex1}>
-                    <Text style={[styles.label, endErr && { color: '#B91C1C' }]}>{t('profile.scheduleRegions.endLabel')}</Text>
-                    <TextInput
-                      style={[styles.input, endErr && { borderColor: '#DC2626', borderWidth: 2 }]}
-                      value={slot.end}
-                      editable={slot.enabled}
-                      onChangeText={(txt) => {
-                        const n = { ...schedule };
-                        n[key] = [{ ...slot, end: txt }];
-                        setSchedule(n);
-                      }}
-                      onBlur={() =>
-                        setTimeTouchByDay((p) => ({
-                          ...p,
-                          [key]: { ...p[key], e: true },
-                        }))
-                      }
-                      placeholder="18:00"
-                    />
-                  </View>
-                </View>
-                {timeHint ? (
-                  <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 6, lineHeight: 16, fontWeight: '600' }}>{timeHint}</Text>
-                ) : null}
+                {slots.map((slot, idx) => {
+                  const startTrim = String(slot.start || '').trim();
+                  const endTrim = String(slot.end || '').trim();
+                  const tk = slotTouchKey(key, slot);
+                  const touch = timeTouchSlots[tk] || {};
+                  const startErr =
+                    slot.enabled && !isValidHhMm(startTrim) && (touch.s || showAllTimeErrors);
+                  const endErr = slot.enabled && !isValidHhMm(endTrim) && (touch.e || showAllTimeErrors);
+                  const timeHint = startErr || endErr ? t('common.timeFormat24Hint') : null;
+                  return (
+                    <View key={slot.id} style={idx === 0 ? { marginTop: 0 } : styles.slotCard}>
+                      <View style={styles.slotTopRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                          <Text style={{ fontSize: 13, color: C.textSecondary }}>{t('profile.scheduleRegions.activeLabel')}</Text>
+                          <Switch
+                            value={slot.enabled}
+                            onValueChange={(v) => {
+                              setSchedule((prev) => {
+                                const n = { ...prev };
+                                const list = [...(n[key] || [])];
+                                list[idx] = { ...slot, enabled: v };
+                                n[key] = list;
+                                return n;
+                              });
+                            }}
+                            trackColor={{ false: C.border, true: `${C.accent}88` }}
+                            thumbColor={slot.enabled ? C.accent : '#f4f4f5'}
+                          />
+                        </View>
+                        {slots.length > 1 ? (
+                          <TouchableOpacity
+                            style={styles.removeSlotBtn}
+                            onPress={() => removeSlotForDay(key, idx, slot.id)}
+                            accessibilityLabel={t('profile.scheduleRegions.removeShift')}
+                          >
+                            <Ionicons name="close" size={20} color={C.slate} />
+                          </TouchableOpacity>
+                        ) : (
+                          <View style={{ width: 36 }} />
+                        )}
+                      </View>
+                      <View style={[styles.row2, { opacity: slot.enabled ? 1 : 0.45 }]}>
+                        <View style={styles.flex1}>
+                          <Text style={[styles.label, startErr && { color: '#B91C1C' }]}>
+                            {t('profile.scheduleRegions.startLabel')}
+                          </Text>
+                          <TextInput
+                            style={[styles.input, startErr && { borderColor: '#DC2626', borderWidth: 2 }]}
+                            value={slot.start}
+                            editable={slot.enabled}
+                            onChangeText={(txt) => {
+                              setSchedule((prev) => {
+                                const n = { ...prev };
+                                const list = [...(n[key] || [])];
+                                list[idx] = { ...slot, start: txt };
+                                n[key] = list;
+                                return n;
+                              });
+                            }}
+                            onBlur={() =>
+                              setTimeTouchSlots((p) => ({
+                                ...p,
+                                [tk]: { ...p[tk], s: true },
+                              }))
+                            }
+                            placeholder={t('profile.scheduleRegions.timePlaceholder')}
+                          />
+                        </View>
+                        <View style={styles.flex1}>
+                          <Text style={[styles.label, endErr && { color: '#B91C1C' }]}>
+                            {t('profile.scheduleRegions.endLabel')}
+                          </Text>
+                          <TextInput
+                            style={[styles.input, endErr && { borderColor: '#DC2626', borderWidth: 2 }]}
+                            value={slot.end}
+                            editable={slot.enabled}
+                            onChangeText={(txt) => {
+                              setSchedule((prev) => {
+                                const n = { ...prev };
+                                const list = [...(n[key] || [])];
+                                list[idx] = { ...slot, end: txt };
+                                n[key] = list;
+                                return n;
+                              });
+                            }}
+                            onBlur={() =>
+                              setTimeTouchSlots((p) => ({
+                                ...p,
+                                [tk]: { ...p[tk], e: true },
+                              }))
+                            }
+                            placeholder="18:00"
+                          />
+                        </View>
+                      </View>
+                      {timeHint ? (
+                        <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 6, lineHeight: 16, fontWeight: '600' }}>
+                          {timeHint}
+                        </Text>
+                      ) : null}
+                      <Text style={[styles.label, { marginTop: 10 }]}>{t('profile.scheduleRegions.slotBasesLabel')}</Text>
+                      <Text style={{ fontSize: 11, color: C.textSecondary, marginBottom: 6, lineHeight: 16 }}>
+                        {t('profile.scheduleRegions.slotBasesHint')}
+                      </Text>
+                      <View style={styles.slotLocsRow}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.locChipsScroll}>
+                          {(slot.locationIds || []).length === 0 ? (
+                            <Text style={{ fontSize: 12, color: C.textLight, alignSelf: 'center', paddingVertical: 6 }}>
+                              {t('profile.scheduleRegions.slotBasesEmpty')}
+                            </Text>
+                          ) : (
+                            (slot.locationIds || []).map((locId) => {
+                              const b = bases.find((x) => x.id === locId);
+                              return (
+                                <TouchableOpacity
+                                  key={locId}
+                                  onPress={() => {
+                                    setSchedule((prev) => {
+                                      const n = { ...prev };
+                                      const list = [...(n[key] || [])];
+                                      const cur = list[idx];
+                                      if (!cur) return prev;
+                                      list[idx] = {
+                                        ...cur,
+                                        locationIds: (cur.locationIds || []).filter((x) => x !== locId),
+                                      };
+                                      n[key] = list;
+                                      return n;
+                                    });
+                                  }}
+                                  style={[styles.locChip, { borderColor: C.accent, backgroundColor: `${C.accent}18` }]}
+                                  activeOpacity={0.75}
+                                >
+                                  <Text style={styles.locChipText} numberOfLines={1}>
+                                    {(b?.name || locId) + ' ×'}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
+                        </ScrollView>
+                        <TouchableOpacity
+                          style={styles.slotMapOpenBtn}
+                          onPress={() => openSlotLocsModal(key, idx)}
+                          activeOpacity={0.85}
+                        >
+                          <Ionicons name="map-outline" size={18} color={C.accent} />
+                          <Text style={{ color: C.accent, fontWeight: '800', fontSize: 13 }}>
+                            {t('profile.scheduleRegions.slotLocsMapButton')}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                      {(slot.serviceAreaCircles?.length ?? 0) > 0 ? (
+                        <Text style={{ fontSize: 11, color: C.textSecondary, marginTop: 4 }}>
+                          {t('profile.scheduleRegions.slotCirclesSummary', {
+                            n: String(slot.serviceAreaCircles?.length ?? 0),
+                          })}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                })}
               </View>
             );
           })}
@@ -587,6 +1119,224 @@ export default function ScheduleRegionsScreen() {
             </View>
           )}
         </View>
+      </Modal>
+
+      <Modal visible={!!slotLocsModal} animationType="slide" onRequestClose={closeSlotLocsModal}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 6 : 0}
+        >
+        <View style={[styles.slotModalRoot, { paddingTop: insets.top + 8 }]}>
+          <View style={styles.mapModalHeader}>
+            <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate, flex: 1 }}>
+              {t('profile.scheduleRegions.slotLocsModalTitle')}
+            </Text>
+            <TouchableOpacity onPress={closeSlotLocsModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+              <Ionicons name="close" size={26} color={C.slate} />
+            </TouchableOpacity>
+          </View>
+          <Text style={{ fontSize: 12, color: C.textSecondary, paddingHorizontal: 16, marginBottom: 8, lineHeight: 18 }}>
+            {t('profile.scheduleRegions.slotLocsMapHelp')}
+          </Text>
+          <TextInput
+            style={[styles.input, { marginHorizontal: 16, marginBottom: 8 }]}
+            value={slotLocsFilter}
+            onChangeText={setSlotLocsFilter}
+            placeholder={t('profile.scheduleRegions.slotLocsFilterPlaceholder')}
+          />
+          <ScrollView
+            style={{ maxHeight: 96, paddingHorizontal: 16 }}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+          >
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {basesForSlotModal.map((b) => {
+                const on = slotLocsDraft.includes(b.id);
+                return (
+                  <TouchableOpacity
+                    key={b.id}
+                    onPress={() => toggleSlotDraftLoc(b.id)}
+                    style={[
+                      styles.baseChip,
+                      {
+                        borderColor: on ? C.accent : C.border,
+                        backgroundColor: on ? `${C.accent}20` : C.cardWhite,
+                        marginBottom: 8,
+                      },
+                    ]}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: C.slate }} numberOfLines={2}>
+                      {b.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+          <View style={styles.slotCityRow}>
+            <TextInput
+              style={styles.slotCityInput}
+              value={slotLocsCity}
+              onChangeText={setSlotLocsCity}
+              placeholder={t('profile.scheduleRegions.slotLocsCityPlaceholder')}
+              onSubmitEditing={() => void goSlotCityGeocode()}
+              returnKeyType="search"
+            />
+            <TouchableOpacity style={styles.slotMiniBtn} onPress={() => void goSlotCityGeocode()}>
+              <Text style={styles.slotMiniBtnText}>{t('profile.scheduleRegions.slotLocsGoCity')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.slotGpsBtn}
+              onPress={() => void goSlotGps()}
+              accessibilityLabel={t('profile.scheduleRegions.slotLocsGps')}
+            >
+              <Ionicons name="navigate" size={20} color={C.accent} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.slotCirclesToolbar}>
+            <Text style={{ fontSize: 13, fontWeight: '800', color: C.slate, flex: 1 }}>
+              {t('profile.scheduleRegions.slotCirclesTitle')}
+            </Text>
+            <TouchableOpacity style={styles.addSlotBtn} onPress={addSlotCircleAtRef} activeOpacity={0.85}>
+              <Text style={styles.addSlotBtnText}>{t('profile.scheduleRegions.slotCirclesAdd')}</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.slotCirclesList} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+            {slotCirclesDraft.length === 0 ? (
+              <Text style={{ fontSize: 12, color: C.textSecondary, lineHeight: 18 }}>
+                {t('profile.scheduleRegions.slotCirclesEmpty')}
+              </Text>
+            ) : (
+              slotCirclesDraft.map((c, i) => (
+                <View key={c.id} style={styles.slotCircleRow}>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: C.slate }}>#{i + 1}</Text>
+                  <Text style={{ fontSize: 11, color: C.textSecondary }}>{t('profile.scheduleRegions.slotCircleRadiusKm')}</Text>
+                  <TextInput
+                    style={styles.slotCircleRadiusInput}
+                    value={slotCircleRadiusTextById[c.id] ?? formatRadiusKmForField(c.radiusKm)}
+                    onChangeText={(txt) => onSlotCircleRadiusTextChange(c.id, txt)}
+                    onEndEditing={(e) => {
+                      const raw = sanitizeRadiusKmInput(e.nativeEvent.text);
+                      const parsed = parseRadiusKmDisplay(raw);
+                      setSlotCirclesDraft((prev) =>
+                        prev.map((x) => {
+                          if (x.id !== c.id) return x;
+                          const nextR = parsed != null ? parsed : x.radiusKm;
+                          return clampSlotCircle({ ...x, radiusKm: nextR });
+                        })
+                      );
+                      const km =
+                        parsed != null ? clampSlotCircle({ ...c, radiusKm: parsed }).radiusKm : clampSlotCircle(c).radiusKm;
+                      setSlotCircleRadiusTextById((prev) => ({ ...prev, [c.id]: formatRadiusKmForField(km) }));
+                    }}
+                    keyboardType="decimal-pad"
+                    returnKeyType="done"
+                    blurOnSubmit
+                    editable
+                  />
+                  <Text style={{ fontSize: 11, color: C.textSecondary }}>km</Text>
+                  <TouchableOpacity style={styles.slotCircleRm} onPress={() => removeSlotCircle(c.id)} hitSlop={8}>
+                    <Ionicons name="trash-outline" size={20} color="#B91C1C" />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </ScrollView>
+          <View
+            style={{
+              flex: 1,
+              minHeight: 240,
+              marginHorizontal: 16,
+              marginBottom: 8,
+              borderRadius: 12,
+              overflow: 'hidden',
+              borderWidth: 1,
+              borderColor: C.border,
+            }}
+          >
+            {slotMapRegion ? (
+              <MapView
+                ref={(r) => {
+                  slotMapRef.current = r;
+                }}
+                style={{ flex: 1 }}
+                initialRegion={slotMapRegion}
+                showsUserLocation
+              >
+                {bases.map((b) => {
+                  if (
+                    b.latitude == null ||
+                    b.longitude == null ||
+                    !Number.isFinite(Number(b.latitude)) ||
+                    !Number.isFinite(Number(b.longitude))
+                  ) {
+                    return null;
+                  }
+                  const sel = slotLocsDraft.includes(b.id);
+                  return (
+                    <Marker
+                      key={b.id}
+                      coordinate={{ latitude: Number(b.latitude), longitude: Number(b.longitude) }}
+                      title={b.name}
+                      pinColor={sel ? 'orange' : '#9CA3AF'}
+                      onPress={() => toggleSlotDraftLoc(b.id)}
+                    />
+                  );
+                })}
+                {slotCirclesDraft.map((c) => (
+                  <Circle
+                    key={`slot-circ-${c.id}`}
+                    center={{ latitude: c.latitude, longitude: c.longitude }}
+                    radius={previewRadiusKmForCircle(c, slotCircleRadiusTextById) * 1000}
+                    strokeColor={C.accent}
+                    fillColor={`${C.accent}26`}
+                    strokeWidth={2}
+                  />
+                ))}
+                {slotCirclesDraft.map((c) => (
+                  <Marker
+                    key={`slot-cm-${c.id}`}
+                    coordinate={{ latitude: c.latitude, longitude: c.longitude }}
+                    draggable
+                    pinColor="#ea580c"
+                    onDragEnd={(e) =>
+                      updateSlotCircleCenter(c.id, e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)
+                    }
+                  />
+                ))}
+                {slotRefPin ? (
+                  <Marker
+                    coordinate={slotRefPin}
+                    draggable
+                    pinColor="red"
+                    onDragEnd={(e) => setSlotRefPin(e.nativeEvent.coordinate)}
+                  />
+                ) : null}
+              </MapView>
+            ) : (
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+                <ActivityIndicator color={C.accent} size="large" />
+              </View>
+            )}
+          </View>
+          <View style={[styles.slotModalActions, { paddingBottom: 12 + insets.bottom }]}>
+            <TouchableOpacity style={styles.slotModalBtnSecondary} onPress={closeSlotLocsModal}>
+              <Text style={styles.slotModalBtnSecondaryText}>{t('profile.scheduleRegions.slotLocsCancel')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.slotModalBtnPrimary}
+              onPress={() => {
+                Keyboard.dismiss();
+                applySlotLocsModal();
+              }}
+            >
+              <Text style={styles.slotModalBtnPrimaryText}>{t('profile.scheduleRegions.slotLocsApply')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
