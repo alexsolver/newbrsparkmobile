@@ -1,0 +1,4 @@
+{"sessionId":"fcbd01","hypothesisId":"H_INV_UE","location":"user-edit-page.js:onUePaffInvite","message":"paff_invite_click","data":{"readonly":false,"disabled":false},"timestamp":1777233717331}
+{"sessionId":"fcbd01","hypothesisId":"H_INV_1","location":"users.html:modalClick","message":"aff_invite_submit_hit","data":{"nodeType":1},"timestamp":1777234793092}
+{"sessionId":"fcbd01","hypothesisId":"H_INV_2","location":"users.html:runAffiliationInviteSubmit","message":"invite_submit_start","data":{"canManage":true},"timestamp":1777234793092}
+{"sessionId":"fcbd01","hypothesisId":"H_INV_3","location":"users.html:afterPost","message":"invite_post_result","data":{"hasOut":true,"hasErr":false,"ok":true},"timestamp":1777234794214}

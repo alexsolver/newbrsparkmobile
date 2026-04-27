@@ -1,9 +1,26 @@
 'use strict';
 
 const { resolveAppEffectiveTenantId } = require('./appLoginEffectiveTenant');
+const { resolveFieldTaskOwnerEmailCandidatesForAppUser } = require('./userEmailUnique');
 
 /** Papéis que podem receber OS/FT e RT (exclui apenas cliente final). Alinhado a `UserRole` no Prisma. */
 const FIELD_TASK_ASSIGNEE_ROLES = ['PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN'];
+
+function normalizeRole(role) {
+  return String(role || '').trim().toUpperCase();
+}
+
+/** Técnico de empresa: `USER` com `TechnicianProfile` ACTIVE recebe OS como prestador de campo. */
+function isActiveTechnicianUserRole(role, technicianStatus) {
+  return normalizeRole(role) === 'USER' && normalizeRole(technicianStatus) === 'ACTIVE';
+}
+
+function userRowEligibleForFieldTasks(row) {
+  if (!row) return false;
+  const r = normalizeRole(row.role);
+  if (FIELD_TASK_ASSIGNEE_ROLES.includes(r)) return true;
+  return isActiveTechnicianUserRole(r, row.technicianProfile?.status);
+}
 
 /**
  * Prestador «clássico» = usuário ativo com TechnicianProfile em estado ACTIVE.
@@ -73,16 +90,21 @@ async function canReceiveFieldTasksForAppSession(db, opts) {
   const tid = String(opts?.effectiveTenantId || '').trim();
   if (!userId || !email || !tid) return false;
 
+  /**
+   * O JWT do app usa `AppAccount.emailNorm` (canónico); a linha `User` pode ter e-mail sintético
+   * (`+brspark.ws.…`) noutro workspace. Não exigir `User.email === ownerEmail` — validar contra
+   * candidatos de sync (`resolveFieldTaskOwnerEmailCandidatesForAppUser`).
+   */
   const u = await db.user.findFirst({
-    where: {
-      id: userId,
-      isActive: true,
-      email: { equals: email, mode: 'insensitive' },
-      role: { in: FIELD_TASK_ASSIGNEE_ROLES },
-    },
-    select: { id: true },
+    where: { id: userId, isActive: true },
+    select: { id: true, role: true, technicianProfile: { select: { status: true } } },
   });
-  if (!u) return false;
+  if (!u || !userRowEligibleForFieldTasks(u)) return false;
+
+  const candidates = await resolveFieldTaskOwnerEmailCandidatesForAppUser(db, userId);
+  const en = email.toLowerCase();
+  const emailOk = candidates.some((c) => String(c || '').trim().toLowerCase() === en);
+  if (!emailOk) return false;
 
   const eff = await resolveAppEffectiveTenantId(db, userId);
   return String(eff || '').trim() === tid;
@@ -91,6 +113,8 @@ async function canReceiveFieldTasksForAppSession(db, opts) {
 module.exports = {
   FIELD_TASK_ASSIGNEE_ROLES,
   isActiveTechnicianForEmail,
+  isActiveTechnicianUserRole,
+  userRowEligibleForFieldTasks,
   resolveFieldTaskAssigneeEmail,
   canReceiveFieldTasksForEmail,
   canReceiveFieldTasksForAppSession,

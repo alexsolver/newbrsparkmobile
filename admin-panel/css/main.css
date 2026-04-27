@@ -3671,6 +3671,13 @@ html.ue-readonly-mode .ue-readonly-banner {
   background: var(--blue-dim);
 }
 
+/* Vínculos prestador: convite visível sem ProviderIdentity; clique explica o requisito (evita `disabled` opaco).
+   Usar pointer — cursor: help parecia «?» e parecia erro em vez de botão clicável. */
+#ue-paff-invite-btn.ue-paff-invite--no-pi {
+  cursor: pointer;
+  border-style: dashed;
+}
+
 textarea.ue-rbac-readonly-field {
   cursor: not-allowed;
   opacity: 0.92;

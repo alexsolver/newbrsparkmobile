@@ -1257,6 +1257,10 @@
     "privacySectionTitle": "Datenschutz",
     "affiliationsCardTitle": "Organisationen & Partnerschaften",
     "affiliationsCardSub": "Dedizierte Bindung und Partnerschaften mit Unternehmen",
+    "affiliationsInvitePendingTitle": "Ausstehende Einladung",
+    "affiliationsInviteTapHint": "Tippen Sie auf diese Karte, um anzunehmen. Sie können auch den Link in der E-Mail oder Benachrichtigung nutzen.",
+    "affiliationsAcceptErrorTitle": "Einladung",
+    "affiliationsAcceptErrorBody": "Die Einladung konnte nicht angenommen werden. Bitte erneut versuchen oder den E-Mail-Link nutzen.",
     "workScheduleCardTitle": "Zeiten & Regionen",
     "workScheduleCardSub": "Wöchentliche Verfügbarkeit, Standorte und Einsatzgebiet auf der Karte — hier bearbeiten und speichern",
     "workScheduleActiveTechTitle": "Zeiten & Regionen",
@@ -1371,7 +1375,10 @@
     "catSync": "Synchronisation",
     "catAlert": "Alarm",
     "catInfo": "Info",
-    "catEvaluation": "Leistung"
+    "catEvaluation": "Leistung",
+    "affInviteTitle": "Einladung (Partnerschaft)",
+    "affInviteBody": "«{{name}}» hat Sie eingeladen. Tippen Sie auf Organisationen & Partnerschaften, um anzunehmen.",
+    "affInviteBodyShort": "Neue Firmeneinladung im Netz. Öffnen Sie Organisationen & Partnerschaften."
   },
   "calendar": {
     "title": "Kalender",

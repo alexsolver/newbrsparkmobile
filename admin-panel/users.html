@@ -327,6 +327,24 @@
         <label class="form-label" for="aff-invite-email">E-mail do prestador *</label>
         <input type="email" class="form-control" id="aff-invite-email" placeholder="tecnico@exemplo.com" autocomplete="email" />
       </div>
+      <div class="form-group" id="aff-invite-candidates-wrap">
+        <label class="form-label" for="aff-invite-candidates-filter">Prestadores disponíveis para parceria</label>
+        <p style="font-size:11px;color:var(--text3);margin:0 0 8px;line-height:1.45">
+          Lista contas com cadastro global de prestador <strong>sem vínculo dedicado activo ou pendente</strong> noutra empresa (nem dedicado activo/pendente na sua).
+        </p>
+        <input
+          type="search"
+          class="form-control"
+          id="aff-invite-candidates-filter"
+          placeholder="Filtrar por nome ou e-mail…"
+          autocomplete="off"
+        />
+        <div
+          id="aff-invite-candidates-list"
+          style="max-height:240px;overflow:auto;border:1px solid var(--border);border-radius:10px;margin-top:8px;background:var(--surface)"
+        ></div>
+        <p id="aff-invite-candidates-status" style="font-size:11px;color:var(--text3);margin-top:6px"></p>
+      </div>
       <div class="form-group" id="wrap-aff-invite-tenant" style="display:none">
         <label class="form-label" for="aff-invite-tenant">Tenant (empresa) *</label>
         <select class="form-control" id="aff-invite-tenant"></select>
@@ -351,7 +369,8 @@
     </div>
     <div class="modal-footer">
       <button type="button" class="btn btn-ghost" data-ul-aff-invite-close>Cancelar</button>
-      <button type="button" class="btn btn-primary" id="aff-invite-submit">Criar convite</button>
+      <!-- span: em iOS o target do clique costuma ser o texto; nó Text não participa bem em alguns fluxos -->
+      <button type="button" class="btn btn-primary" id="aff-invite-submit"><span>Criar convite</span></button>
     </div>
   </div>
 </div>
@@ -395,10 +414,11 @@
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
-  import { CONFIG, applyPanelSessionBootstrap, persistAdminSessionBundleFromSessionStorage, getPanelCapabilities } from './js/config.js';
+  import { CONFIG, applyPanelSessionBootstrap, persistAdminSessionBundleFromSessionStorage, getEffectivePanelCapabilities } from './js/config.js';
   import { getAdminUiLocale, setAdminUiLocale, t, applyUsersListPageI18n, syncUsersListFiltersToggle } from './js/user-pages-i18n.js';
   await initPage();
-  const panelCaps = new Set(getPanelCapabilities());
+  /** Inclui capacidades inferidas do JWT (SAAS / admin legado) — evita `canManageTenantUsers` falso com sessão só em sessionStorage vazio. */
+  const panelCaps = new Set(getEffectivePanelCapabilities());
   const isPlatformAdmin = panelCaps.has('platform.users.write');
   const canImpersonateAny = panelCaps.has('platform.users.impersonate');
   const canImpersonateOwnTenant = panelCaps.has('tenant.users.impersonate.self');
@@ -461,6 +481,67 @@
       .join('');
   }
 
+  /** Prestadores elegíveis (GET /api/users/partnership-candidates) — preenchido ao abrir o modal. */
+  let affInvitePartnershipCandidates = [];
+
+  async function loadPartnershipCandidatesForAffInviteModal() {
+    const listEl = document.getElementById('aff-invite-candidates-list');
+    const statusEl = document.getElementById('aff-invite-candidates-status');
+    const filterEl = document.getElementById('aff-invite-candidates-filter');
+    if (filterEl) filterEl.value = '';
+    affInvitePartnershipCandidates = [];
+    if (!listEl || !statusEl) return;
+    listEl.innerHTML = '';
+    statusEl.textContent = 'A carregar…';
+    const tid = panelTenantId() || String(document.getElementById('aff-invite-tenant')?.value || '').trim();
+    if (!tid) {
+      statusEl.textContent = 'Selecione o tenant (empresa) para listar prestadores.';
+      return;
+    }
+    try {
+      const out = await CONFIG.get(`/users/partnership-candidates?tenantId=${encodeURIComponent(tid)}`);
+      const rows = Array.isArray(out?.data) ? out.data : Array.isArray(out) ? out : [];
+      affInvitePartnershipCandidates = rows;
+      statusEl.textContent = rows.length ? `${rows.length} prestador(es) disponível(is).` : 'Nenhum prestador disponível (todos com dedicado activo noutra empresa ou na sua).';
+      renderAffInviteCandidatesList('');
+    } catch (e) {
+      console.error('[partnership-candidates]', e);
+      statusEl.textContent = e?.message || 'Não foi possível carregar a lista.';
+    }
+  }
+
+  function renderAffInviteCandidatesList(q) {
+    const listEl = document.getElementById('aff-invite-candidates-list');
+    if (!listEl) return;
+    const needle = String(q || '').trim().toLowerCase();
+    const rows = affInvitePartnershipCandidates.filter((r) => {
+      if (!needle) return true;
+      const em = String(r.email || '').toLowerCase();
+      const nm = String(r.name || '').toLowerCase();
+      const ct = String(r.city || '').toLowerCase();
+      return em.includes(needle) || nm.includes(needle) || ct.includes(needle);
+    });
+    if (!rows.length) {
+      listEl.innerHTML = `<div style="padding:12px 14px;font-size:12px;color:var(--text3)">${
+        affInvitePartnershipCandidates.length ? 'Nenhum resultado para o filtro.' : '—'
+      }</div>`;
+      return;
+    }
+    listEl.innerHTML = rows
+      .map((r) => {
+        const em = escAttr(r.email || '');
+        const nm = escAttr(r.name || '—');
+        const ct = r.city ? escAttr(String(r.city)) : '';
+        const sub = ct ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">${ct}</div>` : '';
+        return `<button type="button" class="aff-invite-cand-row" data-aff-email="${em}" style="display:block;width:100%;text-align:left;padding:10px 14px;border:none;border-bottom:1px solid var(--border);background:transparent;cursor:pointer;font-size:13px;color:var(--text)">
+          <div style="font-weight:800">${nm}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">${em}</div>
+          ${sub}
+        </button>`;
+      })
+      .join('');
+  }
+
   const affInviteBtn = document.getElementById('ul-open-affiliation-invite-btn');
   if (affInviteBtn) {
     affInviteBtn.hidden = !canManageTenantUsers;
@@ -470,15 +551,40 @@
       document.getElementById('aff-invite-type').value = 'PARTNER';
       await loadTenantsForAffInvite();
       openModal('affiliation-invite-modal');
+      await loadPartnershipCandidatesForAffInviteModal();
     });
   }
+
+  document.getElementById('aff-invite-candidates-filter')?.addEventListener('input', (e) => {
+    renderAffInviteCandidatesList(e.target?.value || '');
+  });
+
+  document.getElementById('aff-invite-tenant')?.addEventListener('change', () => {
+    if (document.getElementById('affiliation-invite-modal')?.classList.contains('open')) {
+      void loadPartnershipCandidatesForAffInviteModal();
+    }
+  });
+
+  document.getElementById('aff-invite-candidates-list')?.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest('button[data-aff-email]') : null;
+    if (!btn) return;
+    const em = btn.getAttribute('data-aff-email');
+    if (!em) return;
+    const input = document.getElementById('aff-invite-email');
+    if (input) input.value = em;
+  });
 
   document.querySelectorAll('[data-ul-aff-invite-close]').forEach((b) => {
     b.addEventListener('click', () => closeModal('affiliation-invite-modal'));
   });
 
-  document.getElementById('aff-invite-submit')?.addEventListener('click', async () => {
-    if (!canManageTenantUsers) return;
+  const affInviteModalEl = document.getElementById('affiliation-invite-modal');
+  async function runAffiliationInviteSubmit() {
+    if (!canManageTenantUsers) {
+      alert('Sem permissão para criar convites nesta sessão.');
+      return;
+    }
+    const submitBtn = document.getElementById('aff-invite-submit');
     const email = String(document.getElementById('aff-invite-email')?.value || '').trim();
     if (!email) {
       alert('Informe o e-mail do prestador.');
@@ -494,20 +600,66 @@
       alert('Selecione o tenant (empresa).');
       return;
     }
-    const out = await CONFIG.post('/providers/affiliations/invite', {
-      email,
-      tenantId,
-      relationshipType,
-      note: note || undefined,
-    });
-    if (out?.error) {
-      alert(out.error);
-      return;
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      const out = await CONFIG.post('/providers/affiliations/invite', {
+        email,
+        tenantId,
+        relationshipType,
+        note: note || undefined,
+      });
+      if (!out) {
+        alert('Sessão expirada ou sem resposta da API. Entre de novo.');
+        return;
+      }
+      if (out.error) {
+        alert(out.error);
+        return;
+      }
+      closeModal('affiliation-invite-modal');
+      const acceptUrl = out.acceptUrl || '';
+      const n = out.notify || {};
+      const skipReason = n.emailSkippedReason ? String(n.emailSkippedReason).slice(0, 260) : '';
+      const emailLine =
+        n.emailSent === true
+          ? `\n\nE-mail ao prestador: enviado (${n.emailProvider || 'ok'}). Verifique spam.`
+          : n.emailSkipped
+            ? `\n\nE-mail: não enviado (${n.emailProvider || '—'}). ${skipReason || 'Configure Microsoft Graph, MailerSend ou Nylas no servidor.'}`
+            : n.emailError
+              ? `\n\nE-mail: falhou — ${String(n.emailError).slice(0, 200)}`
+              : '';
+      const pushTok = typeof n.pushTokenCount === 'number' ? n.pushTokenCount : null;
+      const pushErrExpo = n.pushFirstError ? String(n.pushFirstError).slice(0, 160) : '';
+      const pushLine =
+        typeof n.pushSent === 'number'
+          ? n.pushSent > 0
+            ? `\n\nNotificação no telemóvel: ${n.pushSent} aceite(s) pela Expo.${n.pushErrors ? ` Falhas: ${n.pushErrors}.` : ''} Abra a app → Organizações e parcerias.`
+            : pushTok && pushTok > 0
+              ? `\n\nPush: ${pushTok} token(s) registado(s), 0 entregues.${pushErrExpo ? ` Expo: ${pushErrExpo}` : ' Verifique credenciais / tokens inválidos.'}`
+              : '\n\nPush: nenhum token Expo (o prestador tem de abrir a app com notificações activas).'
+          : '';
+      alert(
+        `Convite criado.\n\nTipo: ${relationshipType}\nE-mail: ${email}\n\nLink para o prestador:\n${acceptUrl}${emailLine}${pushLine}`,
+      );
+    } catch (err) {
+      console.error('[aff-invite-submit]', err);
+      alert(err?.message || String(err) || 'Erro ao criar convite.');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
-    closeModal('affiliation-invite-modal');
-    const acceptUrl = out.acceptUrl || '';
-    alert(`Convite criado.\\n\\nTipo: ${relationshipType}\\nE-mail: ${email}\\n\\nLink para o prestador:\\n${acceptUrl}`);
-  });
+  }
+
+  if (affInviteModalEl && affInviteModalEl.dataset.brsparkAffInviteSubmitBound !== '1') {
+    affInviteModalEl.dataset.brsparkAffInviteSubmitBound = '1';
+    affInviteModalEl.addEventListener('click', (e) => {
+      const t = e.target;
+      const from = t && t.nodeType === 1 ? t : t && t.parentElement ? t.parentElement : null;
+      const hit = from && from.closest ? from.closest('#aff-invite-submit') : null;
+      if (!hit || hit.id !== 'aff-invite-submit') return;
+      e.preventDefault();
+      void runAffiliationInviteSubmit();
+    });
+  }
 
   function syncNewUserTenantFieldsLayout() {
     const multi = document.getElementById('new-tenant-multi-wrap');

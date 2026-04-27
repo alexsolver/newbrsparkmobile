@@ -3,7 +3,7 @@ import { AuthService } from './auth';
 import { CostService } from './costService';
 import { InsuranceService } from './insuranceService';
 import { AgendaEvent } from '../types/agenda';
-import { overlayExecutionStatusOutboxOnTasks } from './syncService';
+import { overlayExecutionStatusOutboxOnTasks, pullTasks } from './syncService';
 import { NotificationService } from './notifications';
 import i18n from '../i18n';
 import { taskRowIsRoutineTask } from '../lib/routineTaskQueueUi';
@@ -31,6 +31,10 @@ export function isProviderScopeAgendaEvent(ev: AgendaEvent): boolean {
 }
 
 const AGENDA_OVERLAP_SIG_KEY = '@brspark_agenda_overlap_sig';
+
+/** Evita martelar `/api/sync/tasks` em focos rápidos (tabs / re-renders). */
+const providerPullTasksThrottle = new Map<string, number>();
+const PROVIDER_PULL_TASKS_MIN_INTERVAL_MS = 3500;
 
 function parseChecklistAgendaInterval(ev: AgendaEvent): { start: number; end: number } | null {
   if (ev.source !== 'CHECKLIST' || !ev.agendaStartAt || !ev.agendaEndAt) return null;
@@ -120,11 +124,25 @@ export const AgendaService = {
   // ─── 2. Unified Aggregator (Passivo + Ativo) ───
   async getUnifiedAgenda(ownerEmail?: string, scope: AgendaScope = 'ALL'): Promise<AgendaEvent[]> {
     if (!ownerEmail) return [];
-    
+
+    if (scope === 'PROVIDER') {
+      const em = String(ownerEmail).trim().toLowerCase();
+      const now = Date.now();
+      const prev = providerPullTasksThrottle.get(em) || 0;
+      if (now - prev >= PROVIDER_PULL_TASKS_MIN_INTERVAL_MS) {
+        providerPullTasksThrottle.set(em, now);
+        try {
+          await pullTasks(ownerEmail);
+        } catch (e) {
+          console.warn('[AgendaService] pullTasks antes da agenda (modo prestador):', e);
+        }
+      }
+    }
+
     // 1. Get manually added events (Bookings, Maintenance, Tasks)
     let localEvents = await this.getLocalEvents(ownerEmail);
-    
-    // 1.5. Pull Tasks (Vistorias) Despachadas via Sync Background
+
+    // 1.5. OS/FT em cache local (preenchido por pullTasks acima ou por fullSync / home)
     try {
       const cloudData = await loadFtCloudTasks();
       if (Array.isArray(cloudData) && cloudData.length > 0) {

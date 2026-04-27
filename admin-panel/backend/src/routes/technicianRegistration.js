@@ -36,6 +36,7 @@ const {
 const authUser = require('../middleware/authUser');
 const optionalAuthUser = require('../middleware/optionalAuthUser');
 const { assertTenantAccess, resolveScopedTenantId } = require('../lib/authorization');
+const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
 
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
@@ -540,6 +541,33 @@ function sanitizeTechRegFaceEnrollmentPhotosIfAiProfile(raw) {
   return { next, changed: true };
 }
 
+function normTechRegEmail(s) {
+  return String(s || '').trim().toLowerCase();
+}
+
+/**
+ * Candidatura de prestador: `invitedEmail` costuma ser o e-mail canónico (JWT / pedido no perfil),
+ * mas `User.email` na BD pode ser sintético em workspaces (ex. +brspark.ws.). Exige tenant da sessão
+ * alinhado ao da candidatura.
+ */
+async function techRegSessionMatchesInvite(prisma, appUser, app, jwtTenantId) {
+  if (!appUser || !app) return false;
+  const inv = normTechRegEmail(app.invitedEmail);
+  if (!inv) return false;
+  const appTid = String(app.tenantId || '').trim();
+  const sessionTid = String(jwtTenantId || '').trim();
+  const rowTid = String(appUser.tenantId || '').trim();
+  /** JWT pode trazer tenant «efectivo»; a linha User o tenant do registo — um dos dois deve ser o da candidatura. */
+  const tenantOk =
+    (sessionTid && sessionTid === appTid) || (rowTid && rowTid === appTid);
+  if (!tenantOk) return false;
+  const raw = normTechRegEmail(appUser.email);
+  const canon = await resolveCanonicalEmailNormForUser(prisma, appUser);
+  if (raw === inv || canon === inv) return true;
+  if (app.candidateUserId && String(app.candidateUserId) === String(appUser.id)) return true;
+  return false;
+}
+
 function validateSubmitPayload(app, body) {
   const merged = mergeJsonResponses(app.responsesJson, body.responsesJson || body.responses || {});
   const email = String(merged.email || app.invitedEmail || '')
@@ -575,12 +603,22 @@ async function bindTechRegistrationCandidate(req, res, next) {
       where: { inviteToken: req.params.token },
     });
     if (!app) return res.status(404).json({ error: 'Convite inválido.' });
-    if (!req.user?.email) return res.status(401).json({ error: 'Faça login no app com o e-mail do convite.' });
-    const a = String(req.user.email).trim().toLowerCase();
-    const b = String(app.invitedEmail).trim().toLowerCase();
-    if (a !== b) {
+    if (!req.user?.id) return res.status(401).json({ error: 'Faça login no app com o e-mail do convite.' });
+    const dbUser = await prisma.user.findUnique({
+      where: { id: String(req.user.id) },
+      select: {
+        id: true,
+        email: true,
+        tenantId: true,
+        appAccountId: true,
+        appAccount: { select: { emailNorm: true } },
+      },
+    });
+    if (!dbUser) return res.status(401).json({ error: 'Utilizador inválido.' });
+    const ok = await techRegSessionMatchesInvite(prisma, dbUser, app, req.user.tenantId);
+    if (!ok) {
       return res.status(403).json({
-        error: 'Este convite foi enviado para outro e-mail. Use a conta BrSpark com o mesmo e-mail do convite.',
+        error: 'Este convite foi enviado para outro e-mail ou outra organização. Use a conta BrSpark com o mesmo e-mail do convite e o espaço Prestador correto.',
       });
     }
     req.techRegApp = app;
@@ -732,11 +770,7 @@ publicRouter.get('/:token', optionalAuthUser, async (req, res) => {
       });
     }
     const u = req.appUser;
-    const emailOk =
-      u &&
-      String(u.email || '')
-        .trim()
-        .toLowerCase() === String(app.invitedEmail).trim().toLowerCase();
+    const emailOk = await techRegSessionMatchesInvite(prisma, u, app, req.appJwtTenantId);
     if (!emailOk) {
       return res.json({
         requiresAuth: true,

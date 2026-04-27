@@ -25,6 +25,7 @@ import {
   stopTechTaskLiveActivityForTask,
 } from '../services/techTaskLiveActivity';
 import { emitTrackingClientChatPing } from '../lib/trackingClientChatPing';
+import { NotificationService } from '../services/notifications';
 
 function getRejectReasonFromPush(): string {
   return i18n.t('appAlerts.push.rejectReasonFromDevice');
@@ -125,6 +126,38 @@ async function handleNotificationResponse(
     } catch {
       Alert.alert(i18n.t('appAlerts.push.ratingTitle'), i18n.t('appAlerts.push.ratingOpenError'));
     }
+    return;
+  }
+
+  /** Convite de vínculo (organizações e parcerias) — regista na central de avisos e abre aceite / lista. */
+  if (type === 'PROVIDER_AFFILIATION_INVITED') {
+    if (!isDefault) return;
+    const affiliationId = String(data.affiliationId || '').trim();
+    const content = response.notification.request.content;
+    if (affiliationId) {
+      NotificationService.addNotification({
+        title: String(content.title || i18n.t('notificationHub.affInviteTitle')),
+        body: String(content.body || i18n.t('notificationHub.affInviteBodyShort')),
+        category: 'info',
+        personaScope: 'provider',
+        providerAffiliationId: affiliationId,
+        fixedId: `paff_invite_${affiliationId}`,
+        suppressLocalBanner: true,
+      });
+    }
+    const acceptUrl = String(data.acceptUrl || '').trim();
+    if (acceptUrl) {
+      try {
+        const can = await Linking.canOpenURL(acceptUrl);
+        if (can) {
+          await Linking.openURL(acceptUrl);
+          return;
+        }
+      } catch {
+        /* cair para navegação in-app */
+      }
+    }
+    router.push('/profile/affiliations' as never);
     return;
   }
 

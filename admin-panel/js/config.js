@@ -147,6 +147,8 @@ export function getEffectivePanelCapabilities() {
         'platform.tenants.write',
         'platform.users.read',
         'platform.users.write',
+        /** Convites prestador / utilizadores em qualquer tenant (painel usa tenant.users.* em várias páginas). */
+        'tenant.users.write.any',
         'tenant.branding.read.any',
         'tenant.branding.write.any'
       );
@@ -160,6 +162,7 @@ export function getEffectivePanelCapabilities() {
           'platform.tenants.write',
           'platform.users.read',
           'platform.users.write',
+          'tenant.users.write.any',
           'tenant.branding.read.any',
           'tenant.branding.write.any'
         );
@@ -515,13 +518,26 @@ export const CONFIG = {
   async post(path, body) {
     let res;
     try {
+      const signal =
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(55000)
+          : undefined;
       res = await fetch(`${CONFIG.API_BASE}${path}`, {
         method: 'POST',
         headers: CONFIG.headers(),
         body: JSON.stringify(body),
+        ...(signal ? { signal } : {}),
       });
     } catch (err) {
       console.error('[CONFIG.post]', path, err);
+      if (err && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
+        return {
+          ok: false,
+          error:
+            'O pedido demorou demais (timeout ~55s). Verifique se a API responde e a ligação de rede.',
+          message: 'timeout',
+        };
+      }
       const msg = adminApiUnreachableMessage('POST', path, err);
       return { ok: false, error: msg, message: msg };
     }

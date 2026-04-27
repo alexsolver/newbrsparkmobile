@@ -331,15 +331,36 @@ async function loadDetail(id) {
     };
   };
   const wireApprove = (early) => {
-    document.getElementById('act-approve').onclick = async () => {
+    const approveBtn = document.getElementById('act-approve');
+    if (!approveBtn) return;
+    approveBtn.onclick = async () => {
       if (!confirm(early ? tpT('tp_cf_approve_early') : tpT('tp_cf_approve'))) return;
-      const out = await CONFIG.post(`/technician-registration/${encodeURIComponent(id)}/approve`, {});
-      if (out?.error) {
-        alert(out.error);
-        return;
+      const revisionBtn = document.getElementById('act-revision');
+      const rejectBtn = document.getElementById('act-reject');
+      const labelDone = tpT('tp_act_approve');
+      const labelBusy = tpT('tp_act_approve_loading');
+      approveBtn.disabled = true;
+      approveBtn.setAttribute('aria-busy', 'true');
+      approveBtn.textContent = labelBusy;
+      if (revisionBtn) revisionBtn.disabled = true;
+      if (rejectBtn) rejectBtn.disabled = true;
+      try {
+        const out = await CONFIG.post(`/technician-registration/${encodeURIComponent(id)}/approve`, {});
+        if (out?.error) {
+          alert(out.error);
+          return;
+        }
+        alert(tpT('tp_ok_approve'));
+        showList();
+      } catch (e) {
+        alert(String(e?.message || e || 'Error'));
+      } finally {
+        approveBtn.disabled = false;
+        approveBtn.removeAttribute('aria-busy');
+        approveBtn.textContent = labelDone;
+        if (revisionBtn) revisionBtn.disabled = false;
+        if (rejectBtn) rejectBtn.disabled = false;
       }
-      alert(tpT('tp_ok_approve'));
-      showList();
     };
   };
   if (res.status === 'SUBMITTED' && canManageTechApplications) {

@@ -31,7 +31,6 @@ import { complianceDocFallbackUrl } from '../../src/constants/legalPublicUrls';
 import { passwordChecks } from '../../src/lib/appPasswordPolicy';
 import { setLanguage, getDeviceRegion } from '../../src/i18n';
 import { useAuth } from '../../src/hooks/useAuth';
-import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 import {
   PHONE_DIAL_ENTRIES,
   PHONE_DIAL_FAVORITES_ISO,
@@ -191,8 +190,6 @@ function createRegisterStyles(C: ColorPalette) {
       fontWeight: '500',
       lineHeight: 16,
     },
-    guestLink: { alignItems: 'center', marginTop: 16, paddingVertical: 8 },
-    guestLinkText: { fontSize: 14, fontWeight: '700', color: C.textSecondary },
     docModalHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -317,7 +314,7 @@ export default function RegisterOnboardingScreen() {
   const { t, i18n } = useTranslation();
   const { colors: C, appTagline } = useTheme();
   const styles = useMemo(() => createRegisterStyles(C), [C]);
-  const { completeRegisterAfterOtpSetup, logout } = useAuth();
+  const { completeRegisterAfterOtpSetup } = useAuth();
 
   const [step, setStep] = useState<Step>(1);
   const [name, setName] = useState('');
@@ -875,16 +872,6 @@ export default function RegisterOnboardingScreen() {
               </TouchableOpacity>
             </>
           )}
-
-          <TouchableOpacity
-            onPress={async () => {
-              await logout();
-              router.replace(getPersonaHomeHref('client') as any);
-            }}
-            style={styles.guestLink}
-          >
-            <Text style={styles.guestLinkText}>{t('auth.exploreGuest')}</Text>
-          </TouchableOpacity>
 
           <View style={styles.footerLinks}>
             <TouchableOpacity onPress={() => openDoc('PRIVACY_POLICY')}>

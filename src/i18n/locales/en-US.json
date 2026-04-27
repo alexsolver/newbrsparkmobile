@@ -1257,6 +1257,10 @@
     "privacySectionTitle": "Privacy",
     "affiliationsCardTitle": "Organizations & partnerships",
     "affiliationsCardSub": "Dedicated link and company partnerships",
+    "affiliationsInvitePendingTitle": "Pending invite",
+    "affiliationsInviteTapHint": "Tap this card to accept. You can also use the email or notification link.",
+    "affiliationsAcceptErrorTitle": "Invite",
+    "affiliationsAcceptErrorBody": "Could not accept the invite. Try again or use the email link.",
     "workScheduleCardTitle": "Hours & regions",
     "workScheduleCardSub": "Weekly availability, service bases, and area on the map — edit and save here",
     "workScheduleActiveTechTitle": "Hours & regions",
@@ -1371,7 +1375,10 @@
     "catSync": "Sync",
     "catAlert": "Alert",
     "catInfo": "Info",
-    "catEvaluation": "Performance"
+    "catEvaluation": "Performance",
+    "affInviteTitle": "Partnership invite",
+    "affInviteBody": "«{{name}}» invited you. Tap to open Organizations & partnerships and accept.",
+    "affInviteBodyShort": "New company invite on the network. Open Organizations & partnerships."
   },
   "calendar": {
     "title": "Calendar",

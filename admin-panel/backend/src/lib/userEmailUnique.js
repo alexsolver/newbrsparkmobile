@@ -51,8 +51,44 @@ async function resolveCanonicalEmailNormForUser(prisma, user) {
   return String(user?.email || '').trim().toLowerCase();
 }
 
+/**
+ * E-mails que devem bater com `ChecklistExecution.ownerEmail` para o utilizador autenticado no app:
+ * linha `User.email`, canónico `AppAccount.emailNorm`, e demais linhas `User` do mesmo `AppAccount`
+ * (ex.: e-mail técnico sintético + login real).
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string} userId
+ * @returns {Promise<string[]>} lista única em minúsculas
+ */
+async function resolveFieldTaskOwnerEmailCandidatesForAppUser(prisma, userId) {
+  const uid = String(userId || '').trim();
+  if (!uid) return [];
+  const row = await prisma.user.findUnique({
+    where: { id: uid },
+    select: { email: true, appAccountId: true, appAccount: { select: { emailNorm: true } } },
+  });
+  if (!row) return [];
+  const out = new Set();
+  const rowEm = String(row.email || '').trim().toLowerCase();
+  if (rowEm) out.add(rowEm);
+  const canon = await resolveCanonicalEmailNormForUser(prisma, row);
+  if (canon) out.add(canon);
+  if (row.appAccountId) {
+    const sibs = await prisma.user.findMany({
+      where: { appAccountId: String(row.appAccountId), isActive: true },
+      select: { email: true },
+    });
+    for (const s of sibs) {
+      const em = String(s.email || '').trim().toLowerCase();
+      if (em) out.add(em);
+    }
+  }
+  return [...out];
+}
+
 module.exports = {
   buildSyntheticUserEmail,
   allocateUniqueUserRowEmail,
   resolveCanonicalEmailNormForUser,
+  resolveFieldTaskOwnerEmailCandidatesForAppUser,
 };

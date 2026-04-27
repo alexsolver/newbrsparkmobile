@@ -8,13 +8,14 @@ const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRev
 const techStockMovementsSearchHandler = require('../lib/techStockMovementsSearchHandler');
 const { canReceiveFieldTasksForAppSession } = require('../lib/technicianEligibility');
 const { broadcastCandidateArray, normalizeEmail: normalizeSyncEmail } = require('../lib/fieldTaskExecutionAccess');
+const { resolveFieldTaskOwnerEmailCandidatesForAppUser } = require('../lib/userEmailUnique');
 const {
   getTenantKind,
   buildAssetVisibilityWhere,
   assertUserCanMutateAsset,
   assertProviderTenantAllowsCreate,
 } = require('../lib/tenantAssetSyncPolicy');
-const { prismaWhereExecutionBelongsToTenant } = require('../lib/fieldTaskExecutionTenantScope');
+const { prismaWhereExecutionBelongsToAppFieldTaskScope } = require('../lib/fieldTaskExecutionTenantScope');
 
 // Todas as rotas de sync exigem JWT de usuário (não de admin)
 router.use(authUser);
@@ -542,8 +543,13 @@ router.get('/tasks', async (req, res) => {
   try {
     const jwtEmail = String(req.user?.email || '').trim();
     const qEmail = String(req.query.owner_email || '').trim();
-    if (qEmail && qEmail.toLowerCase() !== jwtEmail.toLowerCase()) {
-      return res.status(403).json({ error: 'owner_email não coincide com o usuário autenticado.' });
+    const ownerCandidates = await resolveFieldTaskOwnerEmailCandidatesForAppUser(prisma, req.user.id);
+    const candSet = new Set(ownerCandidates.map((e) => String(e || '').trim().toLowerCase()).filter(Boolean));
+    if (qEmail) {
+      const qn = qEmail.toLowerCase();
+      if (!candSet.has(qn) && qn !== jwtEmail.toLowerCase()) {
+        return res.status(403).json({ error: 'owner_email não coincide com o usuário autenticado.' });
+      }
     }
     const ownerEmail = qEmail || jwtEmail;
     if (!ownerEmail) return res.status(400).json({ error: 'owner_email obrigatório.' });
@@ -567,17 +573,23 @@ router.get('/tasks', async (req, res) => {
     }
 
     /**
-     * `ChecklistExecution` não tem coluna tenantId. Sem este filtro, `ownerEmail` sozinho devolvia
+     * `ChecklistExecution` não tem coluna tenantId. Sem filtro, `ownerEmail` sozinho devolvia
      * execuções homónimas noutros tenants e `BROADCAST+OPEN` carregava ofertas de todo o sistema.
+     * Inclui tenant «casa» do utilizador além do tenant efetivo da sessão — senão FT despachadas
+     * com `fieldTaskContextTenantId` na org de registo somem quando o JWT opera noutro espaço (ex.: PROVIDER).
      */
-    const tenantAssetRows = await prisma.asset.findMany({
-      where: { tenantId },
-      select: { id: true },
+    const executionBelongsToJwtTenant = await prismaWhereExecutionBelongsToAppFieldTaskScope(prisma, {
+      effectiveTenantId: tenantId,
+      userId: req.user.id,
     });
-    const tenantAssetIds = tenantAssetRows.map((r) => r.id);
-    const executionBelongsToJwtTenant = prismaWhereExecutionBelongsToTenant(tenantId, tenantAssetIds);
 
-    const ownerWhere = { equals: ownerEmail, mode: 'insensitive' };
+    /** `ownerEmail` na OS pode ser o login canónico; o JWT traz `User.email` sintético do mesmo AppAccount. */
+    const ownerEmailClause =
+      ownerCandidates.length === 0
+        ? { ownerEmail: { equals: ownerEmail, mode: 'insensitive' } }
+        : ownerCandidates.length === 1
+          ? { ownerEmail: { equals: ownerCandidates[0], mode: 'insensitive' } }
+          : { OR: ownerCandidates.map((em) => ({ ownerEmail: { equals: em, mode: 'insensitive' } })) };
 
     const revInclude = {
       revisions: {
@@ -591,7 +603,7 @@ router.get('/tasks', async (req, res) => {
       where: {
         AND: [
           {
-            ownerEmail: ownerWhere,
+            ...ownerEmailClause,
             routineTaskNumber: null,
             status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
           },
@@ -616,10 +628,12 @@ router.get('/tasks', async (req, res) => {
       },
       include: { template: true, ...revInclude },
     });
-    const emNorm = normalizeSyncEmail(ownerEmail);
     const activeOsBroadcastMine = activeOsBroadcastOpen.filter((row) => {
       const arr = broadcastCandidateArray(row.broadcastCandidates);
-      return emNorm && arr.includes(emNorm);
+      return ownerCandidates.some((c) => {
+        const n = normalizeSyncEmail(c);
+        return n && arr.includes(n);
+      });
     });
 
     const seenFt = new Set();
@@ -634,7 +648,7 @@ router.get('/tasks', async (req, res) => {
       where: {
         AND: [
           {
-            ownerEmail: ownerWhere,
+            ...ownerEmailClause,
             routineTaskNumber: { not: null },
             status: { in: ['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED'] },
           },
@@ -649,7 +663,7 @@ router.get('/tasks', async (req, res) => {
       where: {
         AND: [
           {
-            ownerEmail: ownerWhere,
+            ...ownerEmailClause,
             routineTaskNumber: null,
             status: { in: ['COMPLETED', 'SYNCED'] },
           },
@@ -665,7 +679,7 @@ router.get('/tasks', async (req, res) => {
       where: {
         AND: [
           {
-            ownerEmail: ownerWhere,
+            ...ownerEmailClause,
             routineTaskNumber: { not: null },
             status: { in: ['COMPLETED', 'SYNCED'] },
           },
@@ -681,7 +695,7 @@ router.get('/tasks', async (req, res) => {
       where: {
         AND: [
           {
-            ownerEmail: ownerWhere,
+            ...ownerEmailClause,
             routineTaskNumber: { not: null },
             status: { in: ['CANCELLED', 'CANCELED'] },
           },

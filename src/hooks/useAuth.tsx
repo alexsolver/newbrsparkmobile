@@ -18,6 +18,7 @@ import { dataCollectionService } from '../services/dataCollectionService';
 import { warmAvatarCacheForUser } from '../services/avatarLocalCache';
 import { normalizeUserAvatarUrl } from '../utils/normalizeUserAvatarUrl';
 import { NotificationService } from '../services/notifications';
+import i18n from '../i18n';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -201,6 +202,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           evaluationInstanceId,
           surveyUrl,
           fixedId: `eval_survey_${evaluationInstanceId}`,
+          suppressLocalBanner: true,
+        });
+        return;
+      }
+      if (t === 'PROVIDER_AFFILIATION_INVITED') {
+        const affiliationId =
+          typeof data?.affiliationId === 'string' ? data.affiliationId.trim() : '';
+        if (!affiliationId) return;
+        const content = notification.request.content;
+        NotificationService.addNotification({
+          title: String(content.title || i18n.t('notificationHub.affInviteTitle')),
+          body: String(content.body || i18n.t('notificationHub.affInviteBodyShort')),
+          category: 'info',
+          personaScope: 'provider',
+          providerAffiliationId: affiliationId,
+          fixedId: `paff_invite_${affiliationId}`,
           suppressLocalBanner: true,
         });
       }

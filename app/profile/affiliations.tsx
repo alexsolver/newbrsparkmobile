@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ProviderAffiliationsApi, ProviderAffiliation } from '../../src/services/providerAffiliations';
 
@@ -26,20 +27,39 @@ function cardAccent(a: ProviderAffiliation) {
 
 export default function ProviderAffiliationsScreen() {
   const { colors: C } = useTheme();
+  const { t } = useTranslation();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [rows, setRows] = useState<ProviderAffiliation[]>([]);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  /** Só o primeiro foco usa ecrã de loading completo; voltas ao separador actualizam em silêncio (convites novos). */
+  const firstFocusRef = useRef(true);
 
   const load = useCallback(async () => {
     const j = await ProviderAffiliationsApi.getMeStatus();
     setRows(j.affiliations || []);
   }, []);
 
-  useEffect(() => {
-    setLoading(true);
-    load().finally(() => setLoading(false));
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      const isFirst = firstFocusRef.current;
+      if (isFirst) setLoading(true);
+      firstFocusRef.current = false;
+      load()
+        .catch(() => {
+          if (!cancelled) setRows([]);
+        })
+        .finally(() => {
+          if (!cancelled && isFirst) setLoading(false);
+        });
+      return () => {
+        cancelled = true;
+        if (isFirst) setLoading(false);
+      };
+    }, [load])
+  );
 
   const { dedicated, partners } = useMemo(() => {
     const ded = rows
@@ -60,7 +80,31 @@ export default function ProviderAffiliationsScreen() {
     }
   };
 
-  const Section = ({ title, hint, items }: { title: string; hint: string; items: ProviderAffiliation[] }) => {
+  const handleAcceptInvite = useCallback(
+    async (affiliationId: string) => {
+      setAcceptingId(affiliationId);
+      try {
+        await ProviderAffiliationsApi.acceptByAffiliationId(affiliationId);
+        await load();
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        Alert.alert(t('profile.affiliationsAcceptErrorTitle'), msg || t('profile.affiliationsAcceptErrorBody'));
+      } finally {
+        setAcceptingId(null);
+      }
+    },
+    [load, t]
+  );
+
+  const Section = ({
+    title,
+    hint,
+    items,
+  }: {
+    title: string;
+    hint: string;
+    items: ProviderAffiliation[];
+  }) => {
     return (
       <View style={{ marginBottom: 18 }}>
         <Text style={{ fontSize: 12, fontWeight: '900', color: '#64748B', letterSpacing: 0.6 }}>
@@ -76,25 +120,24 @@ export default function ProviderAffiliationsScreen() {
           ) : (
             items.map((a) => {
               const col = cardAccent(a);
-              return (
-                <View
-                  key={a.id}
-                  style={{
-                    backgroundColor: col.bg,
-                    borderRadius: 16,
-                    padding: 14,
-                    borderWidth: 1,
-                    borderColor: col.border,
-                  }}
-                >
+              const invited = String(a.status).toUpperCase() === 'INVITED';
+              const busy = acceptingId === a.id;
+              const acceptLocked = acceptingId !== null;
+              const cardStyle = {
+                backgroundColor: col.bg,
+                borderRadius: 16,
+                padding: 14,
+                borderWidth: 1,
+                borderColor: col.border,
+              };
+              const body = (
+                <>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={{ fontSize: 15, fontWeight: '900', color: col.title }} numberOfLines={1}>
                         {a.tenant?.name || 'Empresa'}
                       </Text>
-                      <Text style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
-                        {fmtStatusPt(a)}
-                      </Text>
+                      <Text style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>{fmtStatusPt(a)}</Text>
                     </View>
                     <View style={{ backgroundColor: col.chipBg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 }}>
                       <Text style={{ color: '#fff', fontWeight: '900', fontSize: 10 }}>
@@ -104,13 +147,20 @@ export default function ProviderAffiliationsScreen() {
                   </View>
 
                   {a.note ? (
-                    <Text style={{ fontSize: 12, color: '#334155', marginTop: 10, lineHeight: 18 }}>
-                      {a.note}
-                    </Text>
+                    <Text style={{ fontSize: 12, color: '#334155', marginTop: 10, lineHeight: 18 }}>{a.note}</Text>
                   ) : null}
 
                   {String(a.status).toUpperCase() === 'REQUESTED' ? (
-                    <View style={{ marginTop: 10, backgroundColor: '#EFF6FF', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#BFDBFE' }}>
+                    <View
+                      style={{
+                        marginTop: 10,
+                        backgroundColor: '#EFF6FF',
+                        borderRadius: 12,
+                        padding: 12,
+                        borderWidth: 1,
+                        borderColor: '#BFDBFE',
+                      }}
+                    >
                       <Text style={{ fontSize: 12, color: '#1D4ED8', fontWeight: '900' }}>Próximo passo</Text>
                       <Text style={{ fontSize: 12, color: '#1E3A8A', marginTop: 4, lineHeight: 18 }}>
                         A empresa ainda precisa confirmar a ativação no painel.
@@ -118,14 +168,52 @@ export default function ProviderAffiliationsScreen() {
                     </View>
                   ) : null}
 
-                  {String(a.status).toUpperCase() === 'INVITED' ? (
-                    <View style={{ marginTop: 10, backgroundColor: '#FEFCE8', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#FDE68A' }}>
-                      <Text style={{ fontSize: 12, color: '#92400E', fontWeight: '900' }}>Convite pendente</Text>
-                      <Text style={{ fontSize: 12, color: '#78350F', marginTop: 4, lineHeight: 18 }}>
-                        Abra o link do convite (e-mail/push) para aceitar.
+                  {invited ? (
+                    <View
+                      style={{
+                        marginTop: 10,
+                        backgroundColor: '#FEFCE8',
+                        borderRadius: 12,
+                        padding: 12,
+                        borderWidth: 1,
+                        borderColor: '#FDE68A',
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, color: '#92400E', fontWeight: '900' }}>
+                        {t('profile.affiliationsInvitePendingTitle')}
                       </Text>
+                      <Text style={{ fontSize: 12, color: '#78350F', marginTop: 4, lineHeight: 18 }}>
+                        {t('profile.affiliationsInviteTapHint')}
+                      </Text>
+                      {busy ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 8 }}>
+                          <ActivityIndicator size="small" color="#92400E" />
+                        </View>
+                      ) : null}
                     </View>
                   ) : null}
+                </>
+              );
+
+              if (invited) {
+                return (
+                  <TouchableOpacity
+                    key={a.id}
+                    style={cardStyle}
+                    onPress={() => void handleAcceptInvite(a.id)}
+                    disabled={acceptLocked}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('profile.affiliationsInvitePendingTitle')}
+                  >
+                    {body}
+                  </TouchableOpacity>
+                );
+              }
+
+              return (
+                <View key={a.id} style={cardStyle}>
+                  {body}
                 </View>
               );
             })

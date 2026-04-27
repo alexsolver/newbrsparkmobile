@@ -9,6 +9,13 @@ const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
 const { assertTenantAccess, resolveScopedTenantId } = require('../lib/authorization');
+const { escapeHtmlEmailFragment } = require('../lib/emailEscapeHtml');
+const {
+  ensureProviderIdentityForUserId,
+  syncActiveAffiliationFromTechnicianStatus,
+} = require('../lib/providerTechnicianAffiliationSync');
+const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
+const { sendExpoPushToMany } = require('../services/expoPush');
 
 const publicRouter = express.Router();
 const adminRouter = express.Router();
@@ -68,17 +75,8 @@ async function ensureProviderFirstEnabledOr403(res, tenantId) {
   return true;
 }
 
-async function ensureProviderIdentityForUser(userId) {
-  return prisma.providerIdentity.upsert({
-    where: { userId: String(userId) },
-    create: {
-      userId: String(userId),
-      globalStatus: 'PENDING',
-      kycStatus: 'PENDING',
-      profileJson: { source: 'provider_first_onboarding' },
-    },
-    update: {},
-  });
+function ensureProviderIdentityForUser(userId) {
+  return ensureProviderIdentityForUserId(prisma, userId, 'provider_first_onboarding');
 }
 
 async function findOrCreateEditableOnboardingApp(providerIdentityId, inviteToken) {
@@ -108,27 +106,98 @@ async function findOrCreateEditableOnboardingApp(providerIdentityId, inviteToken
   });
 }
 
+const onboardingStatusInclude = {
+  applications: {
+    orderBy: { updatedAt: 'desc' },
+    take: 1,
+  },
+  affiliations: {
+    orderBy: [{ updatedAt: 'desc' }],
+    include: {
+      tenant: {
+        select: { id: true, name: true, slug: true, status: true, kind: true },
+      },
+    },
+  },
+};
+
+/**
+ * `ProviderIdentity` está ligado a um `User` concreto; o JWT do app pode referenciar
+ * outro `User` do mesmo `AppAccount` (e-mail técnico vs canónico). Resolve a PI
+ * correcta para listar convites e afiliações.
+ */
+async function resolveProviderIdentityForAppUserId(userId) {
+  let providerIdentity = await prisma.providerIdentity.findUnique({
+    where: { userId: String(userId) },
+    include: onboardingStatusInclude,
+  });
+  if (providerIdentity) return providerIdentity;
+  const sessionUser = await prisma.user.findUnique({
+    where: { id: String(userId) },
+    select: { appAccountId: true },
+  });
+  if (!sessionUser?.appAccountId) return null;
+  return prisma.providerIdentity.findFirst({
+    where: { user: { appAccountId: String(sessionUser.appAccountId) } },
+    orderBy: { updatedAt: 'desc' },
+    include: onboardingStatusInclude,
+  });
+}
+
+/** Convite de parceria pertence à sessão se for o mesmo User ou o mesmo AppAccount. */
+async function sessionUserMayActAsProviderForAffiliation(reqUserId, providerIdentityUserId) {
+  if (String(reqUserId) === String(providerIdentityUserId)) return true;
+  const [sessionU, ownerU] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: String(reqUserId) },
+      select: { appAccountId: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: String(providerIdentityUserId) },
+      select: { appAccountId: true },
+    }),
+  ]);
+  if (!sessionU?.appAccountId || !ownerU?.appAccountId) return false;
+  return String(sessionU.appAccountId) === String(ownerU.appAccountId);
+}
+
+/** Prestador ACTIVE no painel sem linha em ProviderTenantAffiliation — preenche ao abrir a app. */
+async function maybeBackfillAffiliationForActiveTechnician(userId, tenantId) {
+  const uid = String(userId || '').trim();
+  const tid = String(tenantId || '').trim();
+  if (!uid || !tid) return;
+  const tp = await prisma.technicianProfile.findUnique({
+    where: { userId: uid },
+    select: { status: true },
+  });
+  if (!tp || String(tp.status || '').toUpperCase() !== 'ACTIVE') return;
+  const u = await prisma.user.findUnique({
+    where: { id: uid },
+    select: { tenantId: true, tenant: { select: { kind: true } } },
+  });
+  if (!u || String(u.tenantId || '') !== tid) return;
+  await syncActiveAffiliationFromTechnicianStatus(prisma, {
+    userId: uid,
+    tenantId: tid,
+    tenantKind: u.tenant?.kind,
+  }).catch(() => {});
+}
+
 // GET /api/providers/me/onboarding/status
 publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
   try {
-    if (!(await ensureProviderFirstEnabledOr403(res, req.user.tenantId))) return;
-    const providerIdentity = await prisma.providerIdentity.findUnique({
-      where: { userId: req.user.id },
-      include: {
-        applications: {
-          orderBy: { updatedAt: 'desc' },
-          take: 1,
-        },
-        affiliations: {
-          orderBy: [{ updatedAt: 'desc' }],
-          include: {
-            tenant: {
-              select: { id: true, name: true, slug: true, status: true },
-            },
-          },
-        },
-      },
-    });
+    // Não usar `ensureProviderFirstEnabledOr403(req.user.tenantId)` aqui: o JWT traz o tenant
+    // «principal» do utilizador; o convite vem de outra empresa com provider-first ativo.
+    // Bloquear pela sessão impedia ver afiliações INVITED na app (Organizações e parcerias).
+    let providerIdentity = await resolveProviderIdentityForAppUserId(req.user.id);
+    const sessionTid = String(req.user.tenantId || '').trim();
+    if (
+      sessionTid &&
+      (!providerIdentity || !(providerIdentity.affiliations && providerIdentity.affiliations.length))
+    ) {
+      await maybeBackfillAffiliationForActiveTechnician(req.user.id, sessionTid);
+      providerIdentity = await resolveProviderIdentityForAppUserId(req.user.id);
+    }
     if (!providerIdentity) {
       return res.json({
         providerIdentity: null,
@@ -137,6 +206,16 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
       });
     }
     const latest = providerIdentity.applications[0] || null;
+    /**
+     * Ocultar só espaços pessoais (CLIENT/PROVIDER). Incluir COMPANY e convites cujo `kind` ainda
+     * venha vazio ou fora de sync (evita lista vazia em «Organizações e parcerias»).
+     */
+    const affiliationsForApp = (providerIdentity.affiliations || []).filter((row) => {
+      if (String(row.relationshipType || '').toUpperCase() === 'OWNER') return false;
+      const k = String(row.tenant?.kind || '').toUpperCase();
+      if (k === 'CLIENT' || k === 'PROVIDER') return false;
+      return true;
+    });
     return res.json({
       providerIdentity: {
         id: providerIdentity.id,
@@ -154,7 +233,7 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
             updatedAt: latest.updatedAt,
           }
         : null,
-      affiliations: providerIdentity.affiliations.map((row) => ({
+      affiliations: affiliationsForApp.map((row) => ({
         id: row.id,
         status: row.status,
         relationshipType: row.relationshipType || 'PARTNER',
@@ -165,6 +244,58 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
         activatedAt: row.activatedAt,
         endedAt: row.endedAt,
       })),
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/providers/me/affiliations/:id/accept
+// Mesmo efeito que POST /affiliations/:token/accept, sem expor invitationToken na lista.
+publicRouter.post('/me/affiliations/:id/accept', authUser, async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id) return res.status(400).json({ error: 'Identificador inválido.' });
+    const row = await prisma.providerTenantAffiliation.findFirst({
+      where: { id },
+      include: {
+        providerIdentity: {
+          include: { user: { select: { id: true, email: true } } },
+        },
+        tenant: { select: { id: true, name: true, slug: true } },
+      },
+    });
+    if (!row) return res.status(404).json({ error: 'Vínculo não encontrado.' });
+    if (!(await sessionUserMayActAsProviderForAffiliation(req.user.id, row.providerIdentity.userId))) {
+      return res.status(403).json({
+        error: 'Este convite não pertence à conta autenticada.',
+        code: 'AFFILIATION_EMAIL_MISMATCH',
+      });
+    }
+    if (String(row.status || '').toUpperCase() !== 'INVITED') {
+      return res.status(409).json({
+        error: 'Este convite já não está pendente de aceitação.',
+        code: 'AFFILIATION_NOT_INVITED',
+      });
+    }
+    if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
+    const updated = await prisma.providerTenantAffiliation.update({
+      where: { id: row.id },
+      data: {
+        status: 'REQUESTED',
+        requestedAt: new Date(),
+        invitationToken: null,
+      },
+    });
+    return res.json({
+      ok: true,
+      affiliation: {
+        id: updated.id,
+        status: updated.status,
+        relationshipType: updated.relationshipType || 'PARTNER',
+        tenant: row.tenant,
+        requestedAt: updated.requestedAt,
+      },
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -299,7 +430,7 @@ publicRouter.post('/affiliations/:token/accept', authUser, async (req, res) => {
     });
     if (!row) return res.status(404).json({ error: 'Convite não encontrado.' });
     if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
-    if (String(row.providerIdentity.userId) !== String(req.user.id)) {
+    if (!(await sessionUserMayActAsProviderForAffiliation(req.user.id, row.providerIdentity.userId))) {
       return res.status(403).json({
         error: 'Este convite não pertence à conta autenticada.',
         code: 'AFFILIATION_EMAIL_MISMATCH',
@@ -343,7 +474,7 @@ publicRouter.get('/affiliations/:token', authUser, async (req, res) => {
     });
     if (!row) return res.status(404).json({ error: 'Convite não encontrado.' });
     if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
-    if (String(row.providerIdentity.userId) !== String(req.user.id)) {
+    if (!(await sessionUserMayActAsProviderForAffiliation(req.user.id, row.providerIdentity.userId))) {
       return res.status(403).json({
         error: 'Este convite não pertence à conta autenticada.',
         code: 'AFFILIATION_EMAIL_MISMATCH',
@@ -419,17 +550,24 @@ adminRouter.post('/onboarding/invite', express.json(), async (req, res) => {
 adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email);
-    if (!email) return res.status(400).json({ error: 'E-mail é obrigatório.' });
+    if (!email) {
+      return res.status(400).json({ error: 'E-mail é obrigatório.' });
+    }
     const tenantId = resolveAdminTenantId(req, req.body?.tenantId);
     if (!tenantId) {
       return res.status(400).json({
         error: 'tenantId é obrigatório para convite de parceria.',
       });
     }
-    if (!canAccessTenant(req, tenantId)) return res.status(403).json({ error: 'Sem permissão para este tenant.' });
-    if (!(await ensureProviderFirstEnabledOr403(res, tenantId))) return;
+    if (!canAccessTenant(req, tenantId)) {
+      return res.status(403).json({ error: 'Sem permissão para este tenant.' });
+    }
+    if (!(await ensureProviderFirstEnabledOr403(res, tenantId))) {
+      return;
+    }
 
-    const providers = await prisma.providerIdentity.findMany({
+    const providerInviteUserInclude = { select: { id: true, email: true, name: true, appAccountId: true } };
+    let providers = await prisma.providerIdentity.findMany({
       where: {
         user: {
           email: {
@@ -439,10 +577,20 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
         },
       },
       include: {
-        user: { select: { id: true, email: true, name: true } },
+        user: providerInviteUserInclude,
       },
       take: 3,
     });
+    if (!providers.length) {
+      const acc = await prisma.appAccount.findUnique({ where: { emailNorm: email }, select: { id: true } });
+      if (acc) {
+        providers = await prisma.providerIdentity.findMany({
+          where: { user: { appAccountId: acc.id } },
+          include: { user: providerInviteUserInclude },
+          take: 3,
+        });
+      }
+    }
     if (!providers.length) {
       return res.status(404).json({
         error: 'Prestador ainda não possui cadastro global concluído.',
@@ -456,6 +604,20 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
       });
     }
     const provider = providers[0];
+    const adminInviteEmailTo = provider.user.appAccountId
+      ? (await prisma.appAccount.findUnique({
+            where: { id: String(provider.user.appAccountId) },
+            select: { emailNorm: true },
+          }))?.emailNorm || provider.user.email
+      : provider.user.email;
+    const adminInvitePushUserIds = provider.user.appAccountId
+      ? (
+          await prisma.user.findMany({
+            where: { appAccountId: String(provider.user.appAccountId) },
+            select: { id: true },
+          })
+        ).map((u) => u.id)
+      : [String(provider.userId)];
 
     const relationshipTypeRaw = String(req.body?.relationshipType || 'PARTNER').trim().toUpperCase();
     const relationshipType = AFFILIATION_RELATIONSHIP_TYPES.has(relationshipTypeRaw)
@@ -505,7 +667,7 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
           ...auditActor(req),
           tenantId: String(tenantId),
           action: 'PROVIDER_AFFILIATION_INVITED',
-          resource: provider.user.email,
+          resource: adminInviteEmailTo,
           category: 'ADMIN',
           metadata: auditContextMetadata(req, {
             providerIdentityId: provider.id,
@@ -518,16 +680,86 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
 
     const acceptUrl = `${AFFILIATION_ACCEPT_BASE_URL}${AFFILIATION_ACCEPT_BASE_URL.includes('?') ? '&' : '?'}token=${encodeURIComponent(invitationToken)}`;
 
+    const tenantLabelRow = await prisma.tenant
+      .findUnique({
+        where: { id: String(tenantId) },
+        select: { name: true, slug: true },
+      })
+      .catch(() => null);
+    const tenantLabel = String(tenantLabelRow?.name || tenantLabelRow?.slug || tenantId).trim() || 'Empresa';
+
+    const relIsDedicated = String(row.relationshipType || relationshipType).toUpperCase() === 'DEDICATED';
+    const relPt = relIsDedicated ? 'vínculo dedicado (full time)' : 'parceria (multi-empresa)';
+
+    const notify = {
+      emailSent: false,
+      emailSkipped: false,
+      emailError: null,
+      emailProvider: null,
+      emailSkippedReason: null,
+      pushSent: 0,
+      pushErrors: 0,
+      pushTokenCount: 0,
+      pushFirstError: null,
+    };
+    try {
+      const subject = `Convite BrSpark — ${tenantLabel}`;
+      const text = `Olá,\n\nA empresa «${tenantLabel}» convidou-o para ${relPt} na rede BrSpark.\n\nAbra o link no telemóvel com a app BrSpark instalada:\n${acceptUrl}\n\nNo app: Perfil → Organizações e parcerias — o convite aparece como «Convite recebido» até aceitar.\n\nSe não esperava este convite, ignore.\n`;
+      const html = `<p>Olá,</p><p>A empresa <strong>${escapeHtmlEmailFragment(tenantLabel)}</strong> convidou-o para <strong>${escapeHtmlEmailFragment(relPt)}</strong> na rede BrSpark.</p><p><a href="${escapeHtmlEmailFragment(acceptUrl)}">Abrir no app / aceitar convite</a></p><p style="font-size:13px;color:#555">Na app: <strong>Perfil</strong> → <strong>Organizações e parcerias</strong> — o estado aparece como «Convite recebido» até aceitar.</p><p style="font-size:12px;color:#888">Se o link não abrir, copie o endereço acima ou abra a app e atualize esse separador.</p>`;
+      const { send, provider: emailProviderUsed } = await sendTransactionalEmailWithFallback({
+        to: provider.user.email,
+        subject,
+        html,
+        text,
+      });
+      notify.emailSent = !!send?.ok;
+      notify.emailSkipped = !!send?.skipped;
+      notify.emailProvider = emailProviderUsed || null;
+      if (send?.reason) notify.emailSkippedReason = String(send.reason).slice(0, 500);
+      if (!send?.ok && send?.error) notify.emailError = String(send.error).slice(0, 240);
+      else if (!send?.ok && send?.skipped && send?.reason && !notify.emailError) {
+        notify.emailError = String(send.reason).slice(0, 240);
+      }
+    } catch (e) {
+      console.error('[providers/affiliations/invite] e-mail transacional:', e?.message || e);
+      notify.emailError = String(e?.message || e).slice(0, 240);
+    }
+
+    try {
+      const tokens = await prisma.pushToken.findMany({ where: { userId: { in: adminInvitePushUserIds } } });
+      notify.pushTokenCount = tokens.length;
+      if (tokens.length) {
+        const pushRes = await sendExpoPushToMany(tokens, {
+          channelId: 'brspark-tecnico',
+          title: 'Convite — organizações e parcerias',
+          body: `${tenantLabel}: novo convite (${relIsDedicated ? 'dedicado' : 'parceria'}). Abra a app.`,
+          data: {
+            type: 'PROVIDER_AFFILIATION_INVITED',
+            tenantId: String(tenantId),
+            affiliationId: row.id,
+            acceptUrl,
+          },
+        });
+        notify.pushSent = Number(pushRes?.sent) || 0;
+        notify.pushErrors = Number(pushRes?.errors) || 0;
+        const bad = (pushRes.tickets || []).find((x) => x && x.status === 'error');
+        if (bad) notify.pushFirstError = String(bad.message || 'erro Expo').slice(0, 200);
+      }
+    } catch (e) {
+      console.error('[providers/affiliations/invite] Expo push:', e?.message || e);
+    }
+
     return res.status(201).json({
       ok: true,
       affiliationId: row.id,
       providerIdentityId: provider.id,
-      email: provider.user.email,
+      email: adminInviteEmailTo,
       invitationToken,
       acceptUrl,
       status: row.status,
       relationshipType: row.relationshipType || relationshipType,
       invitedAt: row.invitedAt,
+      notify,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

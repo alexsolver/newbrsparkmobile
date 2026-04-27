@@ -18,6 +18,8 @@ const MANAGER_ALLOWED_PREFIXES = [
   '/api/locations',
   '/api/work-time',
   '/api/technician-registration',
+  /** Convites / vínculos prestador ↔ empresa (modal «Convidar parceria», ficha utilizador). */
+  '/api/providers',
   '/api/plans',
   '/api/subscriptions',
   '/api/checklists',

@@ -23,10 +23,14 @@ module.exports = async function optionalAuthUser(req, res, next) {
         role: true,
         isActive: true,
         currentSessionId: true,
+        appAccountId: true,
+        appAccount: { select: { emailNorm: true } },
       },
     });
     if (user?.isActive && user.currentSessionId === payload.sessionId) {
       req.appUser = user;
+      /** Tenant do JWT (pode diferir do `user.tenantId` em fluxos com tenant efectivo). */
+      req.appJwtTenantId = String(payload.tenantId || '').trim();
     }
   } catch {
     /* token inválido — tratar como anónimo */

@@ -90,7 +90,9 @@ function run() {
   });
   assert.equal(appUser.scope, TENANT_SCOPE);
   assert.equal(hasCapability(appUser, 'mobile.mode.services'), true);
-  assert.equal(hasCapability(appUser, 'mobile.mode.provider'), false);
+  assert.equal(hasCapability(appUser, 'mobile.mode.provider'), true);
+  assert.equal(hasCapability(appUser, 'mobile.provider.quickActions'), true);
+  assert.equal(hasCapability(appUser, 'mobile.provider.osSearch'), true);
   assert.equal(hasCapability(appUser, 'mobile.workTime.access'), false);
 
   const appProvider = buildAppAuthorization({

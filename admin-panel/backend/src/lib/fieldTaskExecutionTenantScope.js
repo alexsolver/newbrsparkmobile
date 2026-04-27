@@ -31,6 +31,56 @@ function prismaWhereExecutionBelongsToTenant(tenantId, tenantAssetIds) {
 }
 
 /**
+ * App móvel: FT/OS despachadas com `fieldTaskContextTenantId` = org de registo do técnico
+ * devem continuar visíveis quando a sessão opera noutro tenant (ex.: espaço PROVIDER pessoal).
+ * Combina o tenant efetivo do JWT, a tenant da linha `User` e **todas** as tenants de outros `User`
+ * do mesmo `AppAccount` (mesmo login — e-mail sintético vs org de registo).
+ *
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {{ effectiveTenantId: string, userId: string }} opts
+ * @returns {Promise<import('@prisma/client').Prisma.ChecklistExecutionWhereInput>}
+ */
+async function prismaWhereExecutionBelongsToAppFieldTaskScope(prisma, { effectiveTenantId, userId }) {
+  const eff = String(effectiveTenantId || '').trim();
+  const uid = String(userId || '').trim();
+  if (!uid) return { OR: [] };
+  const homeRow = await prisma.user.findUnique({
+    where: { id: uid },
+    select: { tenantId: true, appAccountId: true },
+  });
+  const scopeIdSet = new Set([eff, String(homeRow?.tenantId || '').trim()].filter(Boolean));
+  if (homeRow?.appAccountId) {
+    const sibs = await prisma.user.findMany({
+      where: { appAccountId: String(homeRow.appAccountId), isActive: true },
+      select: { tenantId: true },
+    });
+    for (const s of sibs) {
+      const t = String(s.tenantId || '').trim();
+      if (t) scopeIdSet.add(t);
+    }
+  }
+  const scopeIds = [...scopeIdSet];
+  if (!scopeIds.length) return { OR: [] };
+
+  const assetRows = await prisma.asset.findMany({
+    where: { tenantId: { in: scopeIds } },
+    select: { id: true, tenantId: true },
+  });
+  const assetIdsByTenant = new Map(scopeIds.map((id) => [id, []]));
+  for (const row of assetRows) {
+    const list = assetIdsByTenant.get(row.tenantId);
+    if (list) list.push(row.id);
+  }
+
+  const parts = [];
+  for (const tid of scopeIds) {
+    const inner = prismaWhereExecutionBelongsToTenant(tid, assetIdsByTenant.get(tid) || []);
+    if (inner.OR && inner.OR.length) parts.push(...inner.OR);
+  }
+  return { OR: parts };
+}
+
+/**
  * Resolve a tenant a gravar em metadata no despacho.
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {{
@@ -89,5 +139,6 @@ async function resolveFieldTaskContextTenantIdForDispatch(prisma, { loadedTempla
 module.exports = {
   FIELD_TASK_CONTEXT_TENANT_KEY,
   prismaWhereExecutionBelongsToTenant,
+  prismaWhereExecutionBelongsToAppFieldTaskScope,
   resolveFieldTaskContextTenantIdForDispatch,
 };

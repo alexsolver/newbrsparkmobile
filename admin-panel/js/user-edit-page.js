@@ -2,7 +2,7 @@
  * Edição completa de usuário (admin) — dados, endereço, prestador, documentos multi-location, horários.
  */
 import { initPage } from './sidebar.js';
-import { CONFIG, getPanelCapabilities } from './config.js';
+import { CONFIG, getEffectivePanelCapabilities } from './config.js';
 import {
   getAdminUiLocale,
   setAdminUiLocale,
@@ -20,7 +20,7 @@ const dirtyHooks = { mark: () => {}, refreshWorkspace: () => {} };
 let bumpUserRefFaceState = null;
 /** Tenant com `locale.countryCode === 'BR'` — mostra vínculo CLT/PJ no registro de horas. */
 let ueTenantCountryBr = false;
-const userEditPanelCaps = new Set(getPanelCapabilities());
+const userEditPanelCaps = new Set(getEffectivePanelCapabilities());
 const isLimitedTenantManager = userEditPanelCaps.has('tenant.users.write.limited');
 const isTenantUserAdmin =
   userEditPanelCaps.has('tenant.users.write.self') || userEditPanelCaps.has('tenant.users.write.any');
@@ -114,14 +114,22 @@ function providerAffStatusLabel(status) {
   return key ? t(key) : u || '—';
 }
 
-/** Convite requer `ProviderIdentity`; desativa o botão e evita 404 no POST. Não reativar em modo leitura. */
+/**
+ * Não use `button.disabled` quando falta ProviderIdentity: o browser não dispara clique (parece
+ * "botão morto"). Usamos `data-ue-paff-has-pi` + estilo; o handler mostra o alerta.
+ */
 function syncPaffInviteButtonFromPayload(payload) {
   const invBtn = document.getElementById('ue-paff-invite-btn');
+  const body = document.getElementById('ue-paff-body');
+  const hasPi = !!(payload?.providerIdentity);
+  if (body) body.setAttribute('data-ue-paff-has-pi', hasPi ? '1' : '0');
   if (!invBtn) return;
   if (isUserEditReadonly()) return;
-  const needPi = !payload?.providerIdentity;
-  invBtn.disabled = needPi;
+  const needPi = !hasPi;
+  invBtn.disabled = false;
   invBtn.title = needPi ? t('ue_paffInviteNeedPi') : '';
+  invBtn.classList.toggle('ue-paff-invite--no-pi', needPi);
+  invBtn.style.opacity = needPi ? '0.82' : '';
   invBtn.setAttribute('aria-disabled', needPi ? 'true' : 'false');
 }
 
@@ -222,8 +230,94 @@ function paintProviderAffiliationsSection(payload) {
   syncPaffInviteButtonFromPayload(payload);
 }
 
-let uePaffBound = false;
 let uePaffLastUserId = '';
+
+/**
+ * Clic no «Enviar convite» (delegado em #sec-provider-affiliations — sobrevive a re-render e evita
+ * bind perdido se o botão ainda não existia no 1.º passo).
+ */
+async function onUePaffSectionClickForInvite(e) {
+  // Clic no texto do botão → `target` é Text; Text não tem `.closest()` e o handler saía em silêncio.
+  // Não nomear `t` — sombreia `t()` de user-pages-i18n e quebra todos os `alert(t('…'))` (async falha em silêncio).
+  const clickTarget = e.target;
+  const from =
+    clickTarget && clickTarget.nodeType === 1
+      ? clickTarget
+      : clickTarget && clickTarget.parentElement
+        ? clickTarget.parentElement
+        : null;
+  const btn = from && from.closest ? from.closest('#ue-paff-invite-btn') : null;
+  if (!btn || String(btn.getAttribute('id') || '') !== 'ue-paff-invite-btn') return;
+  e.preventDefault();
+  if (isUserEditReadonly()) {
+    alert(t('ue_paffReadonlyBlock'));
+    return;
+  }
+  if (btn.disabled) return;
+  const body = document.getElementById('ue-paff-body');
+  if (body?.getAttribute('data-ue-paff-has-pi') === '0') {
+    alert(t('ue_paffInviteNeedPi'));
+    return;
+  }
+  const section = document.getElementById('sec-provider-affiliations');
+  const email = String(
+    section?.dataset?.uePaffInviteEmail || document.getElementById('f-email')?.value || ''
+  ).trim();
+  const tid = panelTenantIdUserEdit() || String(document.getElementById('ue-paff-tenant')?.value || '').trim();
+  const rel = String(document.getElementById('ue-paff-rel')?.value || 'PARTNER').toUpperCase();
+  const note = String(document.getElementById('ue-paff-note')?.value || '').trim();
+  if (!tid) {
+    alert(t('ue_paffNeedTenant'));
+    return;
+  }
+  if (!email) {
+    alert(t('ue_paffNeedEmail'));
+    return;
+  }
+  btn.disabled = true;
+  let res;
+  try {
+    res = await CONFIG.post('/providers/affiliations/invite', {
+      email,
+      tenantId: tid,
+      relationshipType: rel === 'DEDICATED' ? 'DEDICATED' : 'PARTNER',
+      note: note || undefined,
+    }).catch(() => null);
+  } finally {
+    btn.disabled = false;
+  }
+  if (res?.error) {
+    alert(res.error);
+    return;
+  }
+  if (!res?.affiliationId && !res?.ok) {
+    alert(res?.error || t('ue_paffInviteErr'));
+    return;
+  }
+  const accept = res.acceptUrl ? `\n\n${res.acceptUrl}` : '';
+  const n = res.notify || {};
+  const skipReason = n.emailSkippedReason ? String(n.emailSkippedReason).slice(0, 260) : '';
+  const emailLine =
+    n.emailSent === true
+      ? `\n\nE-mail ao prestador: enviado (${n.emailProvider || 'ok'}). Verifique spam.`
+      : n.emailSkipped
+        ? `\n\nE-mail: não enviado (${n.emailProvider || '—'}). ${skipReason || 'Configure Microsoft Graph, MailerSend ou Nylas no servidor.'}`
+        : n.emailError
+          ? `\n\nE-mail: falhou — ${String(n.emailError).slice(0, 200)}`
+          : '';
+  const pushTok = typeof n.pushTokenCount === 'number' ? n.pushTokenCount : null;
+  const pushErrExpo = n.pushFirstError ? String(n.pushFirstError).slice(0, 160) : '';
+  const pushLine =
+    typeof n.pushSent === 'number'
+      ? n.pushSent > 0
+        ? `\n\nPush: ${n.pushSent} aceite(s) pela Expo.${n.pushErrors ? ` Falhas: ${n.pushErrors}.` : ''} App → Organizações e parcerias.`
+        : pushTok && pushTok > 0
+          ? `\n\nPush: ${pushTok} token(s), 0 entregues.${pushErrExpo ? ` Expo: ${pushErrExpo}` : ' Verifique tokens inválidos.'}`
+          : '\n\nPush: sem token Expo no dispositivo do prestador.'
+      : '';
+  alert(t('ue_paffInviteOk') + accept + emailLine + pushLine);
+  await refreshUserEditProviderAffiliations();
+}
 
 async function refreshUserEditProviderAffiliations() {
   const id = uePaffLastUserId;
@@ -290,49 +384,13 @@ async function initUserEditProviderAffiliations(userId, u) {
     tenantWrap.style.display = panelTenantIdUserEdit() ? 'none' : '';
   }
 
-  if (!uePaffBound) {
-    const btn = document.getElementById('ue-paff-invite-btn');
-    if (btn) {
-      uePaffBound = true;
-      btn.addEventListener('click', async () => {
-        if (isUserEditReadonly()) {
-          alert(t('ue_paffReadonlyBlock'));
-          return;
-        }
-        if (btn.disabled) return;
-        const tid = panelTenantIdUserEdit() || String(document.getElementById('ue-paff-tenant')?.value || '').trim();
-        const rel = String(document.getElementById('ue-paff-rel')?.value || 'PARTNER').toUpperCase();
-        const note = String(document.getElementById('ue-paff-note')?.value || '').trim();
-        if (!tid) {
-          alert(t('ue_paffNeedTenant'));
-          return;
-        }
-        if (!email) {
-          alert(t('ue_paffNeedEmail'));
-          return;
-        }
-        btn.disabled = true;
-        const res = await CONFIG.post('/providers/affiliations/invite', {
-          email,
-          tenantId: tid,
-          relationshipType: rel === 'DEDICATED' ? 'DEDICATED' : 'PARTNER',
-          note: note || undefined,
-        }).catch(() => null);
-        btn.disabled = false;
-        if (res?.error) {
-          alert(res.error);
-          return;
-        }
-        if (!res?.affiliationId && !res?.ok) {
-          alert(res?.error || t('ue_paffInviteErr'));
-          return;
-        }
-        const accept = res.acceptUrl ? `\n\n${res.acceptUrl}` : '';
-        alert(t('ue_paffInviteOk') + accept);
-        await refreshUserEditProviderAffiliations();
-      });
-    }
+  if (section.dataset.uePaffInviteDeleg !== '1') {
+    section.dataset.uePaffInviteDeleg = '1';
+    section.addEventListener('click', (ev) => {
+      void onUePaffSectionClickForInvite(ev);
+    });
   }
+  section.dataset.uePaffInviteEmail = String(email || '').trim();
 
   await loadCompanyTenantsForPaffSelect();
   await refreshUserEditProviderAffiliations();
@@ -614,6 +672,9 @@ function applyUserEditReadonlyIfNeeded() {
   const scroll = document.querySelector('.ue-scroll');
   if (scroll) {
     scroll.querySelectorAll('input, select, textarea, button').forEach((el) => {
+      // Manter o botão de convite clicável para o handler (delegado) mostrar o aviso de só leitura;
+      // `button[disabled]` não dispara clique — parecia "nada acontece".
+      if (el.id === 'ue-paff-invite-btn') return;
       el.disabled = true;
     });
   }

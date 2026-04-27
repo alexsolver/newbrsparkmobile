@@ -279,7 +279,10 @@ function buildAppAuthorization(user) {
   const adminEligible = role === 'MANAGER' || role === 'TENANT_ADMIN' || role === 'SAAS_ADMIN';
   const capabilities = [
     'mobile.mode.services',
-    ...(providerEligible ? ['mobile.mode.provider', 'mobile.provider.quickActions', 'mobile.provider.osSearch'] : []),
+    // Modo prestador no app: activo por defeito em todas as tenants (JWT do app).
+    'mobile.mode.provider',
+    'mobile.provider.quickActions',
+    'mobile.provider.osSearch',
     ...(providerEligible && role !== 'USER' ? ['mobile.workTime.access'] : []),
     ...(adminEligible ? ['mobile.admin.quickActions'] : []),
   ];

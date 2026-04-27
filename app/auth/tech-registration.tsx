@@ -2,7 +2,7 @@
  * Cadastro de prestador (token) — convite enviado por uma empresa (painel) ou inscrição pelo app (perfil).
  * Rota: /auth/tech-registration?token=...
  *
- * Passo 1: foto de perfil (IA). Passo 2: ≥4 fotos biométricas validadas no servidor contra a foto de perfil.
+ * Passo 1: foto de perfil (IA). Passo 2: ≥2 fotos biométricas validadas no servidor contra a foto de perfil.
  * Ordem de validação IA: `/api/me/validate-technician-profile-photo` → `/api/technician-registration/public/:token/validate-profile-photo` → `/api/ai-technician-profile-photo/validate` (404 em cada passo tenta o próximo).
  * Isto é independente da biometria operacional dos checklists.
  */
@@ -45,7 +45,7 @@ import i18n from '../../src/i18n';
 import DatePickerButton from '../../src/components/DatePickerButton';
 
 /** Mínimo de fotos para o reconhecimento facial do tenant — secção à parte do passo 1 (IA). */
-const MIN_FACE_ENROLLMENT_PHOTOS = 4;
+const MIN_FACE_ENROLLMENT_PHOTOS = 2;
 
 function sanitizeBiometryUserText(text: string): string {
   return String(text || '')
@@ -281,7 +281,7 @@ type TechRegIdDocumentPayload = {
   };
 };
 
-/** Metadados da foto inicial (câmera + IA); ou rascunho antigo com ≥4 fotos (legacy). */
+/** Metadados da foto inicial (câmera + IA); ou rascunho antigo com ≥2 fotos (legacy). */
 type PrimaryProfileCapture = {
   validatedAt: string;
   /** Gate do passo 1: só IA (OpenAI hoje). `openai_vision` = legado gravado antes da renomeação. */
@@ -360,7 +360,7 @@ export default function TechRegistrationScreen() {
   const [primaryProfileCapture, setPrimaryProfileCapture] = useState<PrimaryProfileCapture>(null);
   const [primaryValidating, setPrimaryValidating] = useState(false);
   const [primaryValidationError, setPrimaryValidationError] = useState<string | null>(null);
-  /** Passo 2 (só fluxo IA): utilizador confirmou seguir para o formulário após ≥4 fotos biométricas. */
+  /** Passo 2 (só fluxo IA): utilizador confirmou seguir para o formulário após ≥2 fotos biométricas. */
   const [biometricStepConfirmed, setBiometricStepConfirmed] = useState(false);
   const [faceEnrollmentSubmitting, setFaceEnrollmentSubmitting] = useState(false);
   const [idDocumentSubmitting, setIdDocumentSubmitting] = useState(false);
@@ -1712,7 +1712,13 @@ export default function TechRegistrationScreen() {
           <View style={{ paddingHorizontal: 24 }}>
             <TouchableOpacity
               style={styles.btn}
-              onPress={() => router.push({ pathname: '/auth/login', params: { techRegToken: token } } as any)}
+              onPress={async () => {
+                // Sempre limpar sessão local antes do login: se o contexto ainda tinha `user` mas o
+                // GET público devolveu requiresAuth (JWT expirado / sessionId desalinhado), o login
+                // redireciona logo para tech-registration (useEffect) e entramos em ciclo infinito.
+                await logout();
+                router.push({ pathname: '/auth/login', params: { techRegToken: token } } as any);
+              }}
             >
               <Text style={styles.btnText}>Entrar no BrSpark</Text>
             </TouchableOpacity>

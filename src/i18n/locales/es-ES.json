@@ -1257,6 +1257,10 @@
     "privacySectionTitle": "Privacidad",
     "affiliationsCardTitle": "Organizaciones y alianzas",
     "affiliationsCardSub": "Vínculo dedicado y alianzas con empresas",
+    "affiliationsInvitePendingTitle": "Invitación pendiente",
+    "affiliationsInviteTapHint": "Toca esta tarjeta para aceptar. También puedes usar el enlace del correo o la notificación.",
+    "affiliationsAcceptErrorTitle": "Invitación",
+    "affiliationsAcceptErrorBody": "No se pudo aceptar la invitación. Inténtalo de nuevo o usa el enlace del correo.",
     "workScheduleCardTitle": "Horarios y regiones",
     "workScheduleCardSub": "Disponibilidad semanal, sedes y área en el mapa — edite y guarde aquí",
     "workScheduleActiveTechTitle": "Horarios y regiones",
@@ -1371,7 +1375,10 @@
     "catSync": "Sincronización",
     "catAlert": "Alerta",
     "catInfo": "Info",
-    "catEvaluation": "Desempeño"
+    "catEvaluation": "Desempeño",
+    "affInviteTitle": "Invitación de vínculo",
+    "affInviteBody": "«{{name}}» te invitó. Toca para abrir Organizaciones y alianzas y aceptar.",
+    "affInviteBodyShort": "Nueva invitación de empresa en la red. Abre Organizaciones y alianzas."
   },
   "calendar": {
     "title": "Calendario",

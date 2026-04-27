@@ -34,6 +34,7 @@ const { normalizeServiceCoverageGeo } = require('../lib/technicianServiceCoverag
 const { validateAppPasswordPolicy } = require('../lib/appPasswordPolicy');
 const { validatePanelRoleForTenantKind, setUnifiedPasswordHashForEmail } = require('../lib/appAccountAuth');
 const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
+const { syncActiveAffiliationFromTechnicianStatus } = require('../lib/providerTechnicianAffiliationSync');
 
 const MAX_AVATAR_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_DOC_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -251,6 +252,86 @@ router.get('/', async (req, res) => {
       prisma.user.count({ where }),
     ]);
     res.json({ data: users, total, page: +page, sort: sortKey, sortDir: dir });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const DEDICATED_TERMINAL = new Set(['REJECTED', 'INACTIVE']);
+
+/**
+ * Vínculo dedicado que impede novo convite de parceria (outra empresa ou dedicado activo/pendente na mesma).
+ */
+function dedicatedAffiliationBlocksPartnershipInvite(aff, invitingTenantId) {
+  if (String(aff.relationshipType || '').toUpperCase() !== 'DEDICATED') return false;
+  const st = String(aff.status || '').toUpperCase();
+  if (DEDICATED_TERMINAL.has(st)) return false;
+  const tid = String(aff.tenantId || '');
+  if (tid !== invitingTenantId) return true;
+  return ['ACTIVE', 'INVITED', 'REQUESTED', 'SUSPENDED'].includes(st);
+}
+
+// GET /api/users/partnership-candidates?tenantId= — prestadores com identidade global sem dedicado bloqueante
+router.get('/partnership-candidates', async (req, res) => {
+  try {
+    const rawTid = req.query.tenantId != null ? String(req.query.tenantId).trim() : '';
+    const invitingTenantId = scopedTenantIdFromReq(req, rawTid || null);
+    if (!invitingTenantId) {
+      return res.status(400).json({ error: 'tenantId é obrigatório (organização que envia o convite).' });
+    }
+    if (!assertTenantAccess(req.authorization, invitingTenantId)) {
+      return res.status(403).json({ error: 'Sem permissão para listar candidatos neste tenant.' });
+    }
+    const invitingTenant = await prisma.tenant.findUnique({
+      where: { id: invitingTenantId },
+      select: { id: true, kind: true },
+    });
+    if (!invitingTenant || String(invitingTenant.kind || '').toUpperCase() !== 'COMPANY') {
+      return res.status(400).json({ error: 'Apenas tenants empresa (COMPANY) podem convidar parcerias pelo painel.' });
+    }
+
+    const identities = await prisma.providerIdentity.findMany({
+      where: {
+        user: {
+          isActive: true,
+          role: 'PROVIDER',
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            technicianProfile: { select: { city: true } },
+          },
+        },
+        affiliations: {
+          where: { relationshipType: 'DEDICATED' },
+          select: { tenantId: true, status: true, relationshipType: true },
+        },
+      },
+      orderBy: [{ user: { name: 'asc' } }],
+      take: 2000,
+    });
+
+    const data = [];
+    for (const pi of identities) {
+      const list = Array.isArray(pi.affiliations) ? pi.affiliations : [];
+      const blocked = list.some((a) => dedicatedAffiliationBlocksPartnershipInvite(a, invitingTenantId));
+      if (blocked) continue;
+      const u = pi.user;
+      if (!u?.email) continue;
+      data.push({
+        providerIdentityId: pi.id,
+        userId: u.id,
+        email: u.email,
+        name: u.name,
+        city: u.technicianProfile?.city || null,
+      });
+    }
+
+    res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -679,6 +760,24 @@ router.patch('/:id/technician-profile', async (req, res) => {
         },
       })
       .catch(() => {});
+
+    if (st === 'ACTIVE') {
+      try {
+        const tu = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { tenantId: true, tenant: { select: { kind: true } } },
+        });
+        if (tu) {
+          await syncActiveAffiliationFromTechnicianStatus(prisma, {
+            userId: user.id,
+            tenantId: tu.tenantId,
+            tenantKind: tu.tenant?.kind,
+          });
+        }
+      } catch (e) {
+        console.error('[PATCH /users/:id/technician-profile] sync affiliation:', e?.message || e);
+      }
+    }
 
     res.json(updated);
   } catch (err) {
@@ -1556,6 +1655,22 @@ router.patch('/:id', express.json(), async (req, res) => {
 
     if (needsComprefaceSync) {
       await syncComprefaceGalleryAfterUserChange(prisma, existing.id, req, 'user_patch');
+    }
+
+    try {
+      const tp = await prisma.technicianProfile.findUnique({
+        where: { userId: id },
+        select: { status: true },
+      });
+      if (tp && String(tp.status || '').toUpperCase() === 'ACTIVE') {
+        await syncActiveAffiliationFromTechnicianStatus(prisma, {
+          userId: id,
+          tenantId: existing.tenantId,
+          tenantKind: existing.tenant?.kind,
+        });
+      }
+    } catch (e) {
+      console.error('[PATCH /users/:id] sync ProviderTenantAffiliation:', e?.message || e);
     }
 
     await prisma.auditLog

@@ -4,7 +4,12 @@ const crypto = require('crypto');
 const express = require('express');
 const prisma = require('../db');
 const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
+const { escapeHtmlEmailFragment } = require('../lib/emailEscapeHtml');
+const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 const { sendExpoPushToMany } = require('../services/expoPush');
+
+const AFFILIATION_ACCEPT_BASE_URL =
+  String(process.env.PROVIDER_AFFILIATION_ACCEPT_URL_BASE || 'brsparkmobile://provider-affiliation/accept').trim();
 
 const router = express.Router();
 
@@ -278,7 +283,7 @@ router.post('/provider-affiliations/invite', express.json({ limit: '64kb' }), as
     if (!tenantId) return res.status(400).json({ error: 'tenantId é obrigatório.' });
     if (!(await ensureProviderFirstEnabledOr403(res, tenantId))) return;
 
-    const providers = await prisma.providerIdentity.findMany({
+    let providers = await prisma.providerIdentity.findMany({
       where: {
         user: {
           email: {
@@ -287,9 +292,19 @@ router.post('/provider-affiliations/invite', express.json({ limit: '64kb' }), as
           },
         },
       },
-      include: { user: { select: { id: true, email: true, name: true } } },
+      include: { user: { select: { id: true, email: true, name: true, appAccountId: true } } },
       take: 3,
     });
+    if (!providers.length) {
+      const acc = await prisma.appAccount.findUnique({ where: { emailNorm: email }, select: { id: true } });
+      if (acc) {
+        providers = await prisma.providerIdentity.findMany({
+          where: { user: { appAccountId: acc.id } },
+          include: { user: { select: { id: true, email: true, name: true, appAccountId: true } } },
+          take: 3,
+        });
+      }
+    }
     if (!providers.length) {
       return res.status(404).json({
         error: 'Prestador ainda não possui cadastro global concluído.',
@@ -303,6 +318,20 @@ router.post('/provider-affiliations/invite', express.json({ limit: '64kb' }), as
       });
     }
     const provider = providers[0];
+    const pushUserIds = provider.user.appAccountId
+      ? (
+          await prisma.user.findMany({
+            where: { appAccountId: String(provider.user.appAccountId) },
+            select: { id: true },
+          })
+        ).map((u) => u.id)
+      : [String(provider.userId)];
+    const emailTo = provider.user.appAccountId
+      ? (await prisma.appAccount.findUnique({
+            where: { id: String(provider.user.appAccountId) },
+            select: { emailNorm: true },
+          }))?.emailNorm || provider.user.email
+      : provider.user.email;
 
     const relationshipTypeRaw = String(req.body?.relationshipType || 'PARTNER').trim().toUpperCase();
     const relationshipType = relationshipTypeRaw === 'DEDICATED' ? 'DEDICATED' : 'PARTNER';
@@ -337,33 +366,90 @@ router.post('/provider-affiliations/invite', express.json({ limit: '64kb' }), as
       },
     });
 
-    const pushTitle = String(req.body?.pushTitle || 'Nova parceria').trim() || 'Nova parceria';
+    const acceptUrl = `${AFFILIATION_ACCEPT_BASE_URL}${AFFILIATION_ACCEPT_BASE_URL.includes('?') ? '&' : '?'}token=${encodeURIComponent(invitationToken)}`;
+    const tenantLabelRow = await prisma.tenant
+      .findUnique({
+        where: { id: String(tenantId) },
+        select: { name: true, slug: true },
+      })
+      .catch(() => null);
+    const tenantLabel = String(tenantLabelRow?.name || tenantLabelRow?.slug || tenantId).trim() || 'Empresa';
+    const relIsDedicated = String(row.relationshipType || relationshipType).toUpperCase() === 'DEDICATED';
+    const relPt = relIsDedicated ? 'vínculo dedicado (full time)' : 'parceria (multi-empresa)';
+
+    const notify = {
+      emailSent: false,
+      emailSkipped: false,
+      emailError: null,
+      emailProvider: null,
+      emailSkippedReason: null,
+      pushSent: 0,
+      pushErrors: 0,
+      pushTokenCount: 0,
+      pushFirstError: null,
+    };
+
+    try {
+      const subject = `Convite BrSpark — ${tenantLabel}`;
+      const text = `Olá,\n\nA empresa «${tenantLabel}» convidou-o para ${relPt} na rede BrSpark.\n\nAbra o link no telemóvel com a app BrSpark instalada:\n${acceptUrl}\n\nNo app: Perfil → Organizações e parcerias.\n`;
+      const html = `<p>Olá,</p><p>A empresa <strong>${escapeHtmlEmailFragment(tenantLabel)}</strong> convidou-o para <strong>${escapeHtmlEmailFragment(relPt)}</strong> na rede BrSpark.</p><p><a href="${escapeHtmlEmailFragment(acceptUrl)}">Abrir no app / aceitar convite</a></p>`;
+      const { send, provider: emailProviderUsed } = await sendTransactionalEmailWithFallback({
+        to: emailTo,
+        subject,
+        html,
+        text,
+      });
+      notify.emailSent = !!send?.ok;
+      notify.emailSkipped = !!send?.skipped;
+      notify.emailProvider = emailProviderUsed || null;
+      if (send?.reason) notify.emailSkippedReason = String(send.reason).slice(0, 500);
+      if (!send?.ok && send?.error) notify.emailError = String(send.error).slice(0, 240);
+      else if (!send?.ok && send?.skipped && send?.reason && !notify.emailError) {
+        notify.emailError = String(send.reason).slice(0, 240);
+      }
+    } catch (e) {
+      console.error('[internal/provider-affiliations/invite] e-mail:', e?.message || e);
+      notify.emailError = String(e?.message || e).slice(0, 240);
+    }
+
+    const pushTitle = String(req.body?.pushTitle || 'Convite — organizações e parcerias').trim() || 'Convite — organizações e parcerias';
     const pushBody =
-      String(req.body?.pushBody || 'Você recebeu um convite de parceria.').trim() ||
-      'Você recebeu um convite de parceria.';
-    const tokens = await prisma.pushToken.findMany({ where: { userId: provider.userId } });
+      String(req.body?.pushBody || `${tenantLabel}: novo convite. Abra a app.`).trim() ||
+      `${tenantLabel}: novo convite. Abra a app.`;
+    const tokens = await prisma.pushToken.findMany({ where: { userId: { in: pushUserIds } } });
+    notify.pushTokenCount = tokens.length;
     if (tokens.length) {
-      sendExpoPushToMany(tokens, {
-        title: pushTitle,
-        body: pushBody,
-        data: {
-          type: 'PROVIDER_AFFILIATION_INVITED',
-          tenantId: String(tenantId),
-          affiliationId: row.id,
-        },
-      }).catch((err) =>
-        console.error('[internal/provider-affiliations/invite] Expo push falhou:', err?.message || err)
-      );
+      try {
+        const pushRes = await sendExpoPushToMany(tokens, {
+          channelId: 'brspark-tecnico',
+          title: pushTitle,
+          body: pushBody,
+          data: {
+            type: 'PROVIDER_AFFILIATION_INVITED',
+            tenantId: String(tenantId),
+            affiliationId: row.id,
+            acceptUrl,
+          },
+        });
+        notify.pushSent = Number(pushRes?.sent) || 0;
+        notify.pushErrors = Number(pushRes?.errors) || 0;
+        const bad = (pushRes.tickets || []).find((x) => x && x.status === 'error');
+        if (bad) notify.pushFirstError = String(bad.message || 'erro Expo').slice(0, 200);
+      } catch (err) {
+        console.error('[internal/provider-affiliations/invite] Expo push falhou:', err?.message || err);
+      }
     }
 
     return res.status(201).json({
       ok: true,
       affiliationId: row.id,
       providerIdentityId: provider.id,
-      email: provider.user.email,
+      email: emailTo,
+      acceptUrl,
       status: row.status,
       relationshipType: row.relationshipType || relationshipType,
       invitedAt: row.invitedAt,
+      notify,
     });
   } catch (err) {
     console.error('[internal/provider-affiliations/invite]', err);

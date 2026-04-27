@@ -9,7 +9,7 @@ const { normalizeServiceCoverageGeo } = require('./technicianServiceCoverage');
 const UPLOADS_ROOT = path.join(__dirname, '../../public/uploads');
 
 /** Mínimo de fotos faciais exigidas na candidatura (reconhecimento facial / FaceMatch). */
-const MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT = 4;
+const MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT = 2;
 
 function normalizeFacePhotos(raw) {
   if (raw == null) return [];
@@ -165,6 +165,18 @@ async function mirrorApprovedLegacyRegistrationToProviderNetwork(prisma, { tenan
   const now = new Date();
 
   return prisma.$transaction(async (tx) => {
+    const tenantRow = await tx.tenant.findUnique({
+      where: { id: String(tenantId) },
+      select: { kind: true },
+    });
+    const tenantKind = String(tenantRow?.kind || 'COMPANY').toUpperCase();
+    const isCompanyTenant = tenantKind === 'COMPANY';
+    /** Parcerias na app são só prestador ↔ tenant empresa; espaço CLIENT/PROVIDER é vínculo owner interno. */
+    const relationshipType = isCompanyTenant ? 'PARTNER' : 'OWNER';
+    const affiliationNote = isCompanyTenant
+      ? 'Criado automaticamente pela aprovação no fluxo legado.'
+      : 'Espaço próprio do prestador (owner). Parcerias na app mostram apenas vínculos com tenant empresa (COMPANY).';
+
     const providerIdentity = await tx.providerIdentity.upsert({
       where: { userId: String(userId) },
       create: {
@@ -207,17 +219,17 @@ async function mirrorApprovedLegacyRegistrationToProviderNetwork(prisma, { tenan
         tenantId: String(tenantId),
         providerIdentityId: providerIdentity.id,
         status: 'ACTIVE',
-        relationshipType: 'PARTNER',
+        relationshipType,
         invitedAt: now,
         requestedAt: now,
         activatedAt: now,
-        note: 'Criado automaticamente pela aprovação no fluxo legado.',
+        note: affiliationNote,
       },
       update: {
         status: 'ACTIVE',
-        relationshipType: 'PARTNER',
+        relationshipType,
         activatedAt: now,
-        note: 'Atualizado automaticamente pela aprovação no fluxo legado.',
+        note: affiliationNote,
       },
     });
 

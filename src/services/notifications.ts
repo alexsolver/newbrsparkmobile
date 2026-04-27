@@ -4,6 +4,8 @@ import { Platform, LogBox } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './auth';
+import i18n from '../i18n';
+import { ProviderAffiliationsApi } from './providerAffiliations';
 import { getLocalAssets, getVenueStockItemsOnly, getLocalTechStockItems } from '../database';
 import { AssetExtensionsService } from './assetExtensionsService';
 import {
@@ -152,6 +154,8 @@ export interface AppNotification {
   evaluationInstanceId?: string;
   /** Convite à pesquisa (cliente): abrir no browser em vez de Desempenho */
   surveyUrl?: string;
+  /** Convite de vínculo empresa (prestador) — abre Organizações e parcerias */
+  providerAffiliationId?: string;
 }
 
 const READ_NOTIFICATIONS_LEGACY_KEY = '@brspark_read_notifications';
@@ -174,10 +178,8 @@ export const NotificationService = {
     return _notifications.filter((n) => n.personaScope === persona && !n.read).length;
   },
 
-  async markAsRead(id: string, persona: NotificationPersona) {
-    _notifications = _notifications.map((n) =>
-      n.id === id && n.personaScope === persona ? { ...n, read: true } : n
-    );
+  async markAsRead(id: string, _persona: NotificationPersona) {
+    _notifications = _notifications.map((n) => (n.id === id ? { ...n, read: true } : n));
     _listeners.forEach((l) => l());
     await NotificationService.saveReadStates();
   },
@@ -285,6 +287,27 @@ export const NotificationService = {
       /* offline / não autenticado */
     }
 
+    // 2d. Convites de vínculo (provider-first) — prestador, lista na central de avisos
+    try {
+      const { affiliations } = await ProviderAffiliationsApi.getMeStatus();
+      for (const row of affiliations || []) {
+        if (String(row.status || '').toUpperCase() !== 'INVITED') continue;
+        const tenantName = row.tenant?.name || '—';
+        generated.push({
+          id: `paff_invite_${row.id}`,
+          title: i18n.t('notificationHub.affInviteTitle'),
+          body: i18n.t('notificationHub.affInviteBody', { name: tenantName }),
+          category: 'info',
+          read: false,
+          timestamp: row.invitedAt ? new Date(row.invitedAt).getTime() : Date.now(),
+          personaScope: 'provider',
+          providerAffiliationId: row.id,
+        });
+      }
+    } catch {
+      /* offline / fluxo desativado / não prestador */
+    }
+
     // 3. Maintenance / Warning Assets — visão gestão do bem (cliente)
     const assets = getLocalAssets(userEmail, { includeMobileWarehouse: false });
     assets.forEach((asset) => {
@@ -360,7 +383,14 @@ export const NotificationService = {
       );
     }
 
-    const manualPushes = _notifications.filter((n) => n.id.startsWith('n_'));
+    /** Não apagar: testes manuais (`n_*`) nem convites/evals registados a partir do push (sinc. API ainda vazia). */
+    const manualPushes = _notifications.filter(
+      (n) =>
+        n.id.startsWith('n_') ||
+        n.id.startsWith('paff_invite_') ||
+        n.id.startsWith('eval_survey_') ||
+        n.providerAffiliationId,
+    );
 
     const all = [...generated, ...manualPushes].sort((a, b) => b.timestamp - a.timestamp);
     

@@ -41,7 +41,7 @@ export default function NotificationsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuth();
-  const { activePersona } = usePersona();
+  const { activePersona, canUseProviderPersona } = usePersona();
   const persona: NotificationPersona = activePersona;
   const { colors: C, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createNotificationsStyles(C), [C]);
@@ -96,6 +96,10 @@ export default function NotificationsScreen() {
         }
         return;
       }
+      if (t === 'PROVIDER_AFFILIATION_INVITED') {
+        router.push('/profile/affiliations' as any);
+        return;
+      }
       if (data?.assetId) router.push(`/asset/${data.assetId}` as any);
     });
 
@@ -133,8 +137,22 @@ export default function NotificationsScreen() {
   };
 
   const categories = ['all', 'maintenance', 'expiry', 'alert', 'sync', 'info', 'evaluation'];
-  const filtered = filter === 'all' ? items : items.filter((i) => i.category === filter);
-  const unread = items.filter((i) => !i.read).length;
+  const mergedInbox = useMemo(() => {
+    const base = NotificationService.getAll(persona);
+    if (persona !== 'client' || !canUseProviderPersona) return base;
+    const fromProvider = NotificationService.getAll('provider').filter((n) => n.providerAffiliationId);
+    if (!fromProvider.length) return base;
+    const byId = new Map<string, AppNotification>();
+    for (const n of base) byId.set(n.id, n);
+    for (const n of fromProvider) {
+      if (!byId.has(n.id)) byId.set(n.id, n);
+    }
+    return Array.from(byId.values()).sort((a, b) => b.timestamp - a.timestamp);
+  }, [persona, canUseProviderPersona, items]);
+
+  const itemsForUi = mergedInbox;
+  const filtered = filter === 'all' ? itemsForUi : itemsForUi.filter((i) => i.category === filter);
+  const unread = itemsForUi.filter((i) => !i.read).length;
 
   const renderItem = ({ item, index }: { item: AppNotification; index: number }) => {
     const cfg = categoryConfig[item.category] || categoryConfig.info;
@@ -156,6 +174,10 @@ export default function NotificationsScreen() {
           }
           if (item.evaluationInstanceId) {
             router.push(`/productivity/${item.evaluationInstanceId}` as any);
+            return;
+          }
+          if (item.providerAffiliationId) {
+            router.push('/profile/affiliations' as any);
           }
         }}
       >
