@@ -524,7 +524,7 @@ router.get('/:id/providers', async (req, res) => {
         return {
           id: row.id,
           status: row.status,
-          relationshipType: row.relationshipType || 'PARTNER',
+          relationshipType: row.relationshipType || 'DEDICATED',
           note: row.note,
           invitedAt: row.invitedAt,
           requestedAt: row.requestedAt,

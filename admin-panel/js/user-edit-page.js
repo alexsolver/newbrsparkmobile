@@ -93,7 +93,7 @@ const COLLAPSIBLE_SECTION_SUMMARIES = {
   'sec-docs-pro': 'Certificações, NR, ASO e anexos operacionais.',
   'sec-horarios': 'Turnos e disponibilidade por dia.',
   'sec-regioes': 'Cobertura geográfica e bases habilitadas.',
-  'sec-provider-affiliations': 'Parceria ou dedicado com empresas (convites e estado).',
+  'sec-provider-affiliations': 'Vínculo com empresas (convites e estado).',
   'sec-ops': 'Sessão ativa, notas internas e preferências.',
   'sec-audit': 'Histórico recente de ações administrativas.',
 };
@@ -533,8 +533,13 @@ function paintProviderAffiliationsSection(payload) {
   tbody.innerHTML = rows
     .map((row) => {
       const name = row.tenant?.name || row.tenantId || '—';
-      const rel = String(row.relationshipType || 'PARTNER').toUpperCase();
-      const relLab = rel === 'DEDICATED' ? t('ue_paffRelDedicated') : t('ue_paffRelPartner');
+      const rel = String(row.relationshipType || 'DEDICATED').toUpperCase();
+      const relLab =
+        rel === 'OWNER'
+          ? t('ue_paffRelOwner')
+          : rel === 'DEDICATED' || rel === 'PARTNER'
+            ? t('ue_paffRelDedicated')
+            : rel;
       const st = String(row.status || '').toUpperCase();
       const dates = [
         row.invitedAt ? `${t('ue_paffDtInvited')}: ${esc(formatUeDateTime(row.invitedAt))}` : '',
@@ -638,7 +643,7 @@ async function onUePaffSectionClickForInvite(e) {
     section?.dataset?.uePaffInviteEmail || document.getElementById('f-email')?.value || ''
   ).trim();
   const tid = panelTenantIdUserEdit() || String(document.getElementById('ue-paff-tenant')?.value || '').trim();
-  const rel = String(document.getElementById('ue-paff-rel')?.value || 'PARTNER').toUpperCase();
+  const rel = String(document.getElementById('ue-paff-rel')?.value || 'DEDICATED').toUpperCase();
   const note = String(document.getElementById('ue-paff-note')?.value || '').trim();
   if (!tid) {
     alert(t('ue_paffNeedTenant'));
@@ -654,7 +659,7 @@ async function onUePaffSectionClickForInvite(e) {
     res = await CONFIG.post('/providers/affiliations/invite', {
       email,
       tenantId: tid,
-      relationshipType: rel === 'DEDICATED' ? 'DEDICATED' : 'PARTNER',
+      relationshipType: 'DEDICATED',
       note: note || undefined,
     }).catch(() => null);
   } finally {

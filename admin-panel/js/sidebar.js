@@ -65,6 +65,16 @@ function escSidebarAttr(s) {
     .replace(/"/g, '&quot;');
 }
 
+/** Evita «master (master)» no seletor quando nome e slug coincidem. */
+function tenantPickerOptionLabel(row) {
+  const name = String(row?.name || '').trim();
+  const slug = String(row?.slug || '').trim();
+  const id = String(row?.id || '').trim();
+  if (name && slug && name.toLowerCase() === slug.toLowerCase()) return name;
+  if (name && slug) return `${name} (${slug})`;
+  return name || slug || id;
+}
+
 const SS_PANEL_TENANT_LIST_KIND = 'brspark_panel_tenant_list_kind';
 
 /** Seletor de plataforma: só organizações empresa (alinhado a `GET /tenants?all=1` sem `kind=ALL`). */
@@ -115,8 +125,7 @@ async function refillPanelTenantSelectOptions(sel) {
     seen.add(String(row.id));
     const opt = document.createElement('option');
     opt.value = String(row.id);
-    const slug = row.slug ? ` (${row.slug})` : '';
-    opt.textContent = `${row.name || row.slug || row.id}${slug}`;
+    opt.textContent = tenantPickerOptionLabel(row);
     sel.appendChild(opt);
   }
 
@@ -126,8 +135,7 @@ async function refillPanelTenantSelectOptions(sel) {
       if (one && one.id && !one.error) {
         const opt = document.createElement('option');
         opt.value = String(one.id);
-        const slug = one.slug ? ` (${one.slug})` : '';
-        opt.textContent = `${one.name || one.slug || one.id}${slug}`;
+        opt.textContent = tenantPickerOptionLabel(one);
         sel.insertBefore(opt, sel.children[1] || null);
       }
     } catch {
@@ -535,14 +543,19 @@ export function renderSidebar(alertCount = 3) {
       if (raw && panelMode === 'tenant') {
         const tn = JSON.parse(raw);
         const kind = tn.kind || 'COMPANY';
-        const slug = String(tn.slug || '').replace(/</g, '&lt;');
-        const display = String(stripTenantDisplaySuffix(tn.name, kind) || tn.name || '').replace(/</g, '&lt;');
+        const slugRaw = String(tn.slug || '').trim();
+        const displayRaw = String(stripTenantDisplaySuffix(tn.name, kind) || tn.name || '').trim();
+        const slug = slugRaw.replace(/</g, '&lt;');
+        const display = displayRaw.replace(/</g, '&lt;');
         const badge = String(tenantKindBadgeLabelPt(kind)).replace(/</g, '&lt;');
         const kslug = tenantKindSlugForChip(kind);
+        const dupSlug =
+          slugRaw && displayRaw && slugRaw.toLowerCase() === displayRaw.toLowerCase();
+        const slugChip = dupSlug ? '' : `<span class="sidebar-tenant-chip__slug">· ${slug}</span>`;
         tenantLine = `<div class="sidebar-tenant-chip sidebar-tenant-chip--${kslug}" title="${slug}">
         <span class="sidebar-tenant-chip__badge">${badge}</span>
         <span class="sidebar-tenant-chip__name">${display}</span>
-        <span class="sidebar-tenant-chip__slug">· ${slug}</span>
+        ${slugChip}
       </div>`;
       }
     } catch {

@@ -429,7 +429,7 @@ const M = {
     ue_navPaff: 'Empresas (vínculos)',
     ue_secPaffTitle: 'Vínculos com empresas (rede prestador)',
     ue_paffIntro_html:
-      '<strong>Parceria</strong>: o prestador não opera “dentro” da empresa no app; pode receber OS dessa empresa entre outras. <strong>Dedicado</strong>: vínculo exclusivo na app com essa empresa (ao ativar, outras afiliações ativas são encerradas automaticamente). Requer identidade global de prestador e fluxo provider-first ativo na empresa.',
+      '<strong>Vínculo</strong>: relação operacional com a empresa (horários de exclusividade podem ser acordados). Ao ativar, outras afiliações ativas com a mesma conta podem ser encerradas automaticamente. Requer identidade global de prestador e fluxo provider-first ativo na empresa.',
     ue_paffNoIdentity:
       'Ainda não existe identidade global de prestador para este e-mail. Conclua o cadastro global / KYC antes de convites ou use o fluxo de cadastro de prestador.',
     ue_paffLoading: 'A carregar vínculos…',
@@ -459,8 +459,8 @@ const M = {
     ue_paffLblNote: 'Nota (opcional)',
     ue_paffNotePh: 'Contexto interno (visível na afiliação)',
     ue_paffBtnInvite: 'Enviar convite',
-    ue_paffRelPartner: 'Parceria',
-    ue_paffRelDedicated: 'Dedicado',
+    ue_paffRelDedicated: 'Vínculo',
+    ue_paffRelOwner: 'Espaço próprio',
     ue_paffThCompany: 'Empresa',
     ue_paffThType: 'Tipo',
     ue_paffThStatus: 'Estado',
@@ -711,33 +711,32 @@ const M = {
     pr_th_requested: 'Pedido em',
     pr_th_actions: 'Ações',
     pr_activate: 'Activar',
-    pr_confirm_activate: 'Activar esta parceria na organização?',
+    pr_confirm_activate: 'Activar este vínculo na organização?',
     pr_kyc_pending: 'KYC pendente',
     pr_kyc_open_user: 'Abrir ficha (cadastro / KYC)',
     pr_open_user_affiliations: 'Ficha → vínculos com empresas',
-    pr_rel_partner: 'Parceria',
-    pr_rel_dedicated: 'Dedicado',
+    pr_rel_dedicated: 'Vínculo',
+    pr_rel_owner: 'Espaço próprio',
     pr_select_tenant_first: 'Seleccione a organização (tenant) para continuar.',
     pr_loading: 'A carregar…',
     pr_bonds_count: '{n} vínculo(s) mostrados.',
     pr_candidates_count: '{n} prestador(es) na lista de candidatos.',
     pr_candidates_filter_empty: 'Nenhum resultado para o filtro.',
-    pr_card_invite_title: 'Convidar parceria ou vínculo dedicado',
+    pr_card_invite_title: 'Convidar prestador (vínculo)',
     pr_invite_intro_html:
-      'Envie um convite de <strong>parceria</strong> (multi-empresa) ou <strong>vínculo dedicado</strong> (full time). Requer provider-first activo no tenant e prestador com cadastro global.',
+      'Envie um convite de <strong>vínculo</strong> com a empresa (horários de exclusividade podem ser acordados). Requer provider-first activo no tenant e prestador com cadastro global.',
     pr_lbl_invite_email: 'E-mail do prestador *',
     pr_ph_invite_email: 'tecnico@exemplo.com',
-    pr_lbl_candidates: 'Prestadores disponíveis para parceria',
+    pr_lbl_candidates: 'Prestadores disponíveis para convite',
     pr_candidates_help:
-      'Contas com cadastro global de prestador sem vínculo dedicado activo ou pendente noutra empresa (nem na sua). Clique numa linha para preencher o e-mail.',
+      'Contas com cadastro global de prestador sem vínculo activo ou pendente noutra empresa (nem na sua). Clique numa linha para preencher o e-mail.',
     pr_candidates_filter_ph: 'Filtrar por nome ou e-mail…',
     pr_lbl_invite_tenant: 'Tenant (empresa) *',
     pr_invite_tenant_hint: 'Necessário no modo global. Em modo organização, usamos automaticamente o contexto actual.',
-    pr_lbl_type: 'Tipo de vínculo *',
-    pr_invite_opt_partner: 'Parceria (multi-empresa)',
-    pr_invite_opt_dedicated: 'Vínculo dedicado (full time)',
+    pr_lbl_type: 'Tipo de vínculo',
+    pr_invite_opt_dedicated: 'Vínculo com a empresa',
     pr_type_hint:
-      'Se activado como dedicado, outras parcerias activas do prestador podem ser desactivadas automaticamente.',
+      'Só é possível convidar com vínculo dedicado. Ao activar, outros vínculos activos do prestador podem ser desactivados automaticamente.',
     pr_lbl_note: 'Mensagem (opcional)',
     pr_ph_note: 'Ex.: Vínculo full time na operação de SP.',
     pr_invite_submit: 'Criar convite',
@@ -750,7 +749,7 @@ const M = {
     pr_invite_email_ok: 'E-mail ao prestador: enviado ({p}). Verifique spam.',
     pr_invite_email_skip: 'E-mail: não enviado ({p}). {r}',
     pr_invite_email_fail: 'E-mail: falhou — {e}',
-    pr_invite_push_ok: 'Notificação no telemóvel: {n} aceite(s) pela Expo.{err} Abra a app → Organizações e parcerias.',
+    pr_invite_push_ok: 'Notificação no telemóvel: {n} aceite(s) pela Expo.{err} Abra a app → Empresas (vínculos).',
     pr_invite_push_partial: 'Push: {n} token(s) registado(s), 0 entregues.{e}',
     pr_invite_push_none: 'Push: nenhum token Expo (o prestador tem de abrir a app com notificações activas).',
     pr_card_apps_title: 'Candidaturas (onboarding)',
@@ -1234,7 +1233,7 @@ const M = {
     ue_navPaff: 'Companies (links)',
     ue_secPaffTitle: 'Company links (provider network)',
     ue_paffIntro_html:
-      '<strong>Partnership</strong>: the provider does not work “inside” that company in the app; they may receive work orders from it among others. <strong>Dedicated</strong>: exclusive in-app relationship with that company (activating automatically ends other active affiliations). Requires a global provider identity and provider-first enabled on the company tenant.',
+      '<strong>Link</strong>: operational relationship with the company (exclusive time windows may be agreed). Activating may automatically end other active affiliations on the same account. Requires a global provider identity and provider-first enabled on the company tenant.',
     ue_paffNoIdentity:
       'No global provider identity exists for this email yet. Complete global onboarding / KYC before invitations, or use the provider signup flow.',
     ue_paffLoading: 'Loading company links…',
@@ -1264,8 +1263,8 @@ const M = {
     ue_paffLblNote: 'Note (optional)',
     ue_paffNotePh: 'Internal context (stored on the affiliation)',
     ue_paffBtnInvite: 'Send invite',
-    ue_paffRelPartner: 'Partnership',
-    ue_paffRelDedicated: 'Dedicated',
+    ue_paffRelDedicated: 'Company link',
+    ue_paffRelOwner: 'Own space',
     ue_paffThCompany: 'Company',
     ue_paffThType: 'Type',
     ue_paffThStatus: 'Status',
@@ -1514,32 +1513,31 @@ const M = {
     pr_th_requested: 'Requested at',
     pr_th_actions: 'Actions',
     pr_activate: 'Activate',
-    pr_confirm_activate: 'Activate this partnership for the organization?',
+    pr_confirm_activate: 'Activate this link for the organization?',
     pr_kyc_pending: 'KYC pending',
     pr_kyc_open_user: 'Open profile (signup / KYC)',
     pr_open_user_affiliations: 'Profile → company links',
-    pr_rel_partner: 'Partnership',
-    pr_rel_dedicated: 'Dedicated',
+    pr_rel_dedicated: 'Company link',
+    pr_rel_owner: 'Own space',
     pr_select_tenant_first: 'Select an organization (tenant) to continue.',
     pr_loading: 'Loading…',
     pr_bonds_count: '{n} link(s) shown.',
     pr_candidates_count: '{n} provider(s) in the candidate list.',
     pr_candidates_filter_empty: 'No rows match the filter.',
-    pr_card_invite_title: 'Invite partnership or dedicated link',
+    pr_card_invite_title: 'Invite provider (company link)',
     pr_invite_intro_html:
-      'Send a <strong>partnership</strong> (multi-company) or <strong>dedicated</strong> (full-time) invite. Requires provider-first on the tenant and a global provider account.',
+      'Send a <strong>company link</strong> invite (exclusive time windows may be agreed). Requires provider-first on the tenant and a global provider account.',
     pr_lbl_invite_email: 'Provider email *',
     pr_ph_invite_email: 'tech@example.com',
-    pr_lbl_candidates: 'Providers available for partnership',
+    pr_lbl_candidates: 'Providers available to invite',
     pr_candidates_help:
-      'Accounts with a global provider profile without an active/pending dedicated link at another company (or yours). Click a row to fill the email field.',
+      'Accounts with a global provider profile without an active/pending link at another company (or yours). Click a row to fill the email field.',
     pr_candidates_filter_ph: 'Filter by name or email…',
     pr_lbl_invite_tenant: 'Tenant (company) *',
     pr_invite_tenant_hint: 'Required in platform mode. In organization mode the current context is used automatically.',
-    pr_lbl_type: 'Link type *',
-    pr_invite_opt_partner: 'Partnership (multi-company)',
-    pr_invite_opt_dedicated: 'Dedicated link (full time)',
-    pr_type_hint: 'When activated as dedicated, other active partnerships may be turned off automatically.',
+    pr_lbl_type: 'Link type',
+    pr_invite_opt_dedicated: 'Company link',
+    pr_type_hint: 'Only company-link invites are supported. Activating may turn off other active links automatically.',
     pr_lbl_note: 'Message (optional)',
     pr_ph_note: 'E.g. Full-time operation in SP.',
     pr_invite_submit: 'Create invite',
@@ -1552,7 +1550,7 @@ const M = {
     pr_invite_email_ok: 'Email to provider: sent ({p}). Check spam.',
     pr_invite_email_skip: 'Email: not sent ({p}). {r}',
     pr_invite_email_fail: 'Email: failed — {e}',
-    pr_invite_push_ok: 'Mobile notification: {n} accepted by Expo.{err} Open the app → Organizations & partnerships.',
+    pr_invite_push_ok: 'Mobile notification: {n} accepted by Expo.{err} Open the app → Companies (links).',
     pr_invite_push_partial: 'Push: {n} token(s) registered, 0 delivered.{e}',
     pr_invite_push_none: 'Push: no Expo tokens (the technician must open the app with notifications on).',
     pr_card_apps_title: 'Applications (onboarding)',
@@ -2191,8 +2189,6 @@ export function applyUserEditStaticPageI18n() {
   setT('ue-paff-ob-reject', 'ue_paffObBtnReject');
   const prel = document.getElementById('ue-paff-rel');
   if (prel) {
-    const op = prel.querySelector('option[value="PARTNER"]');
-    if (op) op.textContent = t('ue_paffRelPartner');
     const od = prel.querySelector('option[value="DEDICATED"]');
     if (od) od.textContent = t('ue_paffRelDedicated');
   }
@@ -2335,9 +2331,7 @@ export function applyPrestadoresPageI18n() {
   if (pith) pith.textContent = t('pr_invite_tenant_hint');
   setT('pr-lbl-type', 'pr_lbl_type');
   const ptype = document.getElementById('pr-invite-type');
-  if (ptype) {
-    const op = ptype.querySelector('option[value="PARTNER"]');
-    if (op) op.textContent = t('pr_invite_opt_partner');
+  if (ptype && String(ptype.tagName || '').toUpperCase() === 'SELECT') {
     const od = ptype.querySelector('option[value="DEDICATED"]');
     if (od) od.textContent = t('pr_invite_opt_dedicated');
   }

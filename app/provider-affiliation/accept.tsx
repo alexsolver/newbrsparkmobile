@@ -7,19 +7,19 @@ import { ProviderAffiliationsApi, ProviderAffiliation } from '../../src/services
 import { useAuth } from '../../src/hooks/useAuth';
 
 function relationshipTitle(type: string) {
-  return String(type).toUpperCase() === 'DEDICATED' ? 'Vínculo dedicado' : 'Parceria';
+  const u = String(type || '').toUpperCase();
+  if (u === 'OWNER') return 'Espaço próprio';
+  return 'Vínculo com a empresa';
 }
 
 function consequenceBullets(type: string) {
-  if (String(type).toUpperCase() !== 'DEDICATED') {
-    return [
-      'Você poderá prestar serviços para esta empresa (se aprovado/ativado).',
-      'A empresa ainda precisará confirmar a ativação após o seu aceite.',
-    ];
+  const u = String(type || '').toUpperCase();
+  if (u === 'OWNER') {
+    return ['Convite associado ao seu espaço de prestador na plataforma.'];
   }
   return [
-    'Este é um vínculo full time (dedicado) com uma empresa.',
-    'Ao ativar, outras parcerias ativas podem ser desativadas automaticamente.',
+    'Vínculo operacional com a empresa (horários de exclusividade podem ser acordados).',
+    'Ao ativar, outros vínculos ativos com a mesma conta podem ser encerrados automaticamente.',
     'A empresa ainda precisará confirmar a ativação após o seu aceite.',
   ];
 }

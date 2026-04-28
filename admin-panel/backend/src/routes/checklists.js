@@ -40,6 +40,7 @@ const {
     filterBroadcastCandidatesExcludingDedicatedAt,
     isAppUserInDedicatedExclusiveAt,
 } = require('../lib/providerDedicatedExclusiveService');
+const { allAssigneesHaveDedicatedWithTenant } = require('../lib/providerDedicatedDispatch');
 const { resolveFieldTaskContextTenantIdForDispatch, FIELD_TASK_CONTEXT_TENANT_KEY } = require('../lib/fieldTaskExecutionTenantScope');
 const {
     TRANSIT_ETA_DISPLAY_SNAPSHOT_AT,
@@ -1117,7 +1118,7 @@ router.post('/executions/:taskId/claim', authUser, async (req, res) => {
                     err: 403,
                     body: {
                         error:
-                            'Indisponível para aceitar ofertas partner neste horário (janela dedicada exclusiva com uma empresa).',
+                            'Indisponível para aceitar ofertas neste horário (janela de exclusividade do vínculo dedicado com uma empresa).',
                         code: 'DEDICATED_PARTNER_EXCLUSIVE',
                     },
                 };
@@ -1610,7 +1611,12 @@ router.post('/dispatch', async (req, res) => {
             });
         }
 
-        const isBroadcast = resolvedList.length >= 2;
+        const allDedicatedToDispatch = await allAssigneesHaveDedicatedWithTenant(
+            prisma,
+            resolvedList,
+            fieldTaskContextTenantId
+        );
+        const isBroadcast = resolvedList.length >= 2 || !allDedicatedToDispatch;
 
         let broadcastClaimExpiresAt = null;
         if (isBroadcast && payload.broadcastClaimExpiresAt != null && String(payload.broadcastClaimExpiresAt).trim() !== '') {
@@ -1621,7 +1627,7 @@ router.post('/dispatch', async (req, res) => {
             broadcastClaimExpiresAt = parsed.date;
         } else if (!isBroadcast && payload.broadcastClaimExpiresAt != null && String(payload.broadcastClaimExpiresAt).trim() !== '') {
             return res.status(400).json({
-                error: 'broadcastClaimExpiresAt só se aplica ao modo «primeiro a aceitar» (dois ou mais técnicos). Omita o campo ou use candidateEmails com 2+ e-mails.',
+                error: 'broadcastClaimExpiresAt só se aplica ao modo oferta (OS sem vínculo dedicado ou vários técnicos). Omita o campo ou use candidatos em modo oferta.',
             });
         }
 
@@ -1641,7 +1647,7 @@ router.post('/dispatch', async (req, res) => {
         if (urgenteRequested && !isBroadcast) {
             return res.status(400).json({
                 error:
-                    'Urgente só se aplica ao despacho em oferta (dois ou mais técnicos — primeiro a aceitar). Omita urgente ou adicione candidatos.',
+                    'Urgente só se aplica ao despacho em oferta (vários técnicos ou técnico sem vínculo dedicado com esta empresa). Omita urgente ou use modo oferta.',
             });
         }
 
@@ -1712,10 +1718,13 @@ router.post('/dispatch', async (req, res) => {
         let broadcastList = normalizeBroadcastCandidateEmails(resolvedList);
         if (isBroadcast) {
             broadcastList = await filterBroadcastCandidatesExcludingDedicatedAt(prisma, broadcastList, scheduledStart);
-            if (broadcastList.length < 2) {
+            const minBroadcastCandidates = resolvedList.length >= 2 ? 2 : 1;
+            if (broadcastList.length < minBroadcastCandidates) {
                 return res.status(400).json({
                     error:
-                        'Após excluir prestadores em janela dedicada exclusiva no horário agendado da OS, faltam candidatos para o modo «primeiro a aceitar» (mínimo 2).',
+                        minBroadcastCandidates >= 2
+                            ? 'Após excluir prestadores em janela de vínculo dedicado exclusivo no horário agendado da OS, faltam candidatos para o modo oferta com vários técnicos (mínimo 2).'
+                            : 'O prestador não está disponível para ofertas neste horário (janela de exclusividade de vínculo dedicado com outra empresa).',
                     code: 'BROADCAST_DEDICATED_EXCLUSIVITY',
                 });
             }
@@ -1778,9 +1787,18 @@ router.post('/dispatch', async (req, res) => {
                 return !t || t === 'nova os designada' || t === 'nova atividade';
             };
 
-            let pushTitle = isBroadcast ? 'Nova OS — primeiro a aceitar' : 'Nova OS atribuída';
+            const broadcastMulti = isBroadcast && resolvedList.length >= 2;
+            let pushTitle = isBroadcast
+                ? broadcastMulti
+                    ? 'Nova OS — primeiro a aceitar'
+                    : 'Nova OS em oferta'
+                : 'Nova OS atribuída';
             if (urgenteFlag) {
-                pushTitle = isBroadcast ? 'OS urgente — primeiro a aceitar' : 'OS urgente atribuída';
+                pushTitle = isBroadcast
+                    ? broadcastMulti
+                        ? 'OS urgente — primeiro a aceitar'
+                        : 'OS urgente em oferta'
+                    : 'OS urgente atribuída';
             }
             const parts = [];
             if (osNum) parts.push(osNum);

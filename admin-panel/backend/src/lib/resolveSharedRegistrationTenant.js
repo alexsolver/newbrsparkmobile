@@ -34,6 +34,28 @@ async function resolveSharedRegistrationTenant(tx) {
 }
 
 /**
+ * True se `tenantId` é a tenant COMPANY de registo partilhado (piscina da app).
+ * Usa `resolveSharedRegistrationTenant` e, em fallback, o slug na linha — evita falhas quando
+ * `APP_REGISTRATION_SHARED_TENANT_ID` no env não coincide com o id real (ex.: «BrSpark App (master)» no painel).
+ *
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} client
+ * @param {string|null|undefined} tenantId
+ */
+async function tenantIsSharedAppRegistrationPool(client, tenantId) {
+  if (!tenantId) return false;
+  const shared = await resolveSharedRegistrationTenant(client);
+  if (shared && String(shared.id) === String(tenantId)) return true;
+  const row = await client.tenant.findUnique({
+    where: { id: tenantId },
+    select: { slug: true, kind: true },
+  });
+  if (!row?.slug || String(row.kind).toUpperCase() !== 'COMPANY') return false;
+  const slugEnv = String(process.env.APP_REGISTRATION_SHARED_TENANT_SLUG || '').trim().toLowerCase();
+  const want = slugEnv || DEFAULT_SHARED_SLUG.toLowerCase();
+  return String(row.slug).toLowerCase() === want;
+}
+
+/**
  * Tenant COMPANY de registo partilhado da app (`APP_REGISTRATION_SHARED_TENANT_*`, omissão slug `master`).
  * Não deve ser tratada como organização operacional (ex.: política de ponto global).
  *
@@ -41,13 +63,12 @@ async function resolveSharedRegistrationTenant(tx) {
  * @param {string|null|undefined} tenantId
  */
 async function isSharedAppRegistrationTenantId(client, tenantId) {
-  if (!tenantId) return false;
-  const shared = await resolveSharedRegistrationTenant(client);
-  return !!(shared && String(shared.id) === String(tenantId));
+  return tenantIsSharedAppRegistrationPool(client, tenantId);
 }
 
 module.exports = {
   resolveSharedRegistrationTenant,
   isSharedAppRegistrationTenantId,
+  tenantIsSharedAppRegistrationPool,
   DEFAULT_SHARED_SLUG,
 };

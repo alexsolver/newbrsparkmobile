@@ -734,7 +734,7 @@ router.get('/tasks', async (req, res) => {
     });
 
     console.log(
-      `[sync/tasks] ✅ ${ownerEmail} → OS ativas ${activeOs.length} + RT ativas ${activeRt.length} + concl./sync OS ${doneOs.length} + RT ${doneRt.length} + RT cancel. ${cancelledRt.length} → ${userTasks.length} no payload${suppressPartnerBroadcast ? ' (ofertas broadcast partner suprimidas — janela dedicada)' : ''}`
+      `[sync/tasks] ✅ ${ownerEmail} → OS ativas ${activeOs.length} + RT ativas ${activeRt.length} + concl./sync OS ${doneOs.length} + RT ${doneRt.length} + RT cancel. ${cancelledRt.length} → ${userTasks.length} no payload${suppressPartnerBroadcast ? ' (ofertas broadcast suprimidas — janela vínculo dedicado)' : ''}`
     );
     res.json(userTasks);
   } catch (err) {

@@ -38,7 +38,7 @@ async function resolveProviderIdentityIdsForAppSessionUser(prisma, userId) {
 }
 
 /**
- * Em `at`, o prestador (identidade global via sessão) está numa janela dedicada exclusiva (sem ofertas partner)?
+ * Em `at`, o prestador (identidade global via sessão) está numa janela de exclusividade do vínculo dedicado?
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} userId
  * @param {Date} [at]

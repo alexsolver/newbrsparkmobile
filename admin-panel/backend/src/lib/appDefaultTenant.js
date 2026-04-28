@@ -28,7 +28,30 @@ async function resolveAppDefaultTenantId() {
   return t ? t.id : null;
 }
 
+/**
+ * Tenant org legada do painel / OTP (slug `brspark` por omissão). Usa o mesmo critério que
+ * `APP_DEFAULT_TENANT_*`, com recurso ao slug da linha quando o env não resolve o id.
+ *
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} client
+ * @param {string|null|undefined} tenantId
+ * @returns {Promise<boolean>}
+ */
+async function tenantIsAppMobileMaster(client, tenantId) {
+  if (!tenantId) return false;
+  const resolved = await resolveAppDefaultTenantId();
+  if (resolved && String(resolved) === String(tenantId)) return true;
+  const row = await client.tenant.findUnique({
+    where: { id: tenantId },
+    select: { slug: true },
+  });
+  if (!row?.slug) return false;
+  const envSlug = String(process.env.APP_DEFAULT_TENANT_SLUG || '').trim().toLowerCase();
+  const want = envSlug || APP_MOBILE_MASTER_TENANT_SLUG.toLowerCase();
+  return String(row.slug).toLowerCase() === want;
+}
+
 module.exports = {
   APP_MOBILE_MASTER_TENANT_SLUG,
   resolveAppDefaultTenantId,
+  tenantIsAppMobileMaster,
 };

@@ -1008,7 +1008,7 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
         },
       },
     });
-    if (!row) return res.status(404).json({ error: 'Parceria não encontrada.' });
+    if (!row) return res.status(404).json({ error: 'Vínculo não encontrado.' });
     if (!canAccessTenant(req, row.tenantId)) return res.status(403).json({ error: 'Sem permissão para este tenant.' });
     if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
     const lineKyc = String(row.providerIdentity?.kycStatus || '')
@@ -1103,7 +1103,7 @@ adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
       where: { id },
       include: { providerIdentity: { include: { user: { select: { appAccountId: true } } } } },
     });
-    if (!row) return res.status(404).json({ error: 'Parceria não encontrada.' });
+    if (!row) return res.status(404).json({ error: 'Vínculo não encontrado.' });
     if (!canAccessTenant(req, row.tenantId)) return res.status(403).json({ error: 'Sem permissão para este tenant.' });
     if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
     const note = String(req.body?.note || '').trim();

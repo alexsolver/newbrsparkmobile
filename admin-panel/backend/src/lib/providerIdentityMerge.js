@@ -42,9 +42,9 @@ function affiliationStatusRank(st) {
 
 function affiliationRelationshipRank(rt) {
   const u = String(rt || '').toUpperCase();
-  if (u === 'DEDICATED') return 0;
-  if (u === 'PARTNER') return 1;
-  return 2;
+  if (u === 'DEDICATED' || u === 'PARTNER') return 0;
+  if (u === 'OWNER') return 2;
+  return 1;
 }
 
 /**

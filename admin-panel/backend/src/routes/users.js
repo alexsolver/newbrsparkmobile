@@ -1271,7 +1271,7 @@ router.get('/:id/provider-affiliations', async (req, res) => {
         tenantId: row.tenantId,
         tenant: row.tenant,
         status: row.status,
-        relationshipType: row.relationshipType || 'PARTNER',
+        relationshipType: row.relationshipType || 'DEDICATED',
         note: row.note,
         invitedAt: row.invitedAt,
         requestedAt: row.requestedAt,

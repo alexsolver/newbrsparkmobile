@@ -427,12 +427,13 @@ async function main() {
   if (existingMaster) {
     tenantMaster = await prisma.tenant.update({
       where: { id: existingMaster.id },
-      data: { localeId: locBr.id, status: 'ACTIVE', kind: 'COMPANY' },
+      data: { name: 'master', localeId: locBr.id, status: 'ACTIVE', kind: 'COMPANY' },
     });
   } else if (legacyShared) {
     tenantMaster = await prisma.tenant.update({
       where: { id: legacyShared.id },
       data: {
+        name: 'master',
         slug: 'master',
         localeId: locBr.id,
         status: 'ACTIVE',
@@ -442,7 +443,7 @@ async function main() {
   } else {
     tenantMaster = await prisma.tenant.create({
       data: {
-        name: 'BrSpark App',
+        name: 'master',
         slug: 'master',
         email: 'app-conta@brspark.internal',
         ownerName: 'BrSpark',
@@ -468,7 +469,7 @@ async function main() {
     });
   }
   console.log(
-    `✅ Tenant app padrão: ${tenantMaster.name} (slug ${tenantMaster.slug}) — use APP_DEFAULT_TENANT_SLUG=master no .env`,
+    `✅ Tenant piscina de registo (app): nome «${tenantMaster.name}», slug «${tenantMaster.slug}» — env: APP_REGISTRATION_SHARED_TENANT_*`,
   );
 
   const tenantDemo = await prisma.tenant.upsert({

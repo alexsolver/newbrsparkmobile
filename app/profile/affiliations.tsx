@@ -69,14 +69,10 @@ export default function ProviderAffiliationsScreen() {
     }, [load, t])
   );
 
-  const { dedicated, partners } = useMemo(() => {
-    const ded = rows
+  const dedicated = useMemo(() => {
+    return rows
       .filter((r) => isDedicated(r))
       .sort((a, b) => String(b.activatedAt || b.invitedAt || '').localeCompare(String(a.activatedAt || a.invitedAt || '')));
-    const par = rows
-      .filter((r) => !isDedicated(r))
-      .sort((a, b) => String(b.activatedAt || b.invitedAt || '').localeCompare(String(a.activatedAt || a.invitedAt || '')));
-    return { dedicated: ded, partners: par };
   }, [rows]);
 
   const onRefresh = async () => {
@@ -437,11 +433,6 @@ export default function ProviderAffiliationsScreen() {
             title={t('profile.affiliationsSectionDedicated')}
             hint={t('profile.affiliationsSectionDedicatedHint')}
             items={dedicated}
-          />
-          <Section
-            title={t('profile.affiliationsSectionPartners')}
-            hint={t('profile.affiliationsSectionPartnersHint')}
-            items={partners}
           />
 
           <TouchableOpacity onPress={() => router.back()} style={{ alignItems: 'center', paddingVertical: 10 }}>

@@ -241,10 +241,13 @@ async function loadBondsTable() {
         const u = r.providerIdentity?.user || {};
         const name = String(u.name || '').trim() || '—';
         const em = String(u.loginEmailNorm || u.email || '').trim();
+        const rt = String(r.relationshipType || 'DEDICATED').toUpperCase();
         const rel =
-          String(r.relationshipType || 'PARTNER').toUpperCase() === 'DEDICATED'
-            ? t('pr_rel_dedicated')
-            : t('pr_rel_partner');
+          rt === 'OWNER'
+            ? t('pr_rel_owner')
+            : rt === 'DEDICATED' || rt === 'PARTNER'
+              ? t('pr_rel_dedicated')
+              : rt;
         const st = String(r.status || '').toUpperCase();
         const reqAt = r.requestedAt
           ? new Date(r.requestedAt).toLocaleString(getAdminUiLocale())
@@ -330,7 +333,7 @@ async function runAffiliationInviteSubmit() {
     alert(t('pr_alert_email'));
     return;
   }
-  const relationshipType = String(document.getElementById('pr-invite-type')?.value || 'PARTNER')
+  const relationshipType = String(document.getElementById('pr-invite-type')?.value || 'DEDICATED')
     .trim()
     .toUpperCase();
   const note = String(document.getElementById('pr-invite-note')?.value || '').trim();

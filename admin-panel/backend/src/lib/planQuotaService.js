@@ -1,7 +1,8 @@
 'use strict';
 
 const { saoPauloYearMonthFromDate } = require('./ftOsNumber');
-const { resolveSharedRegistrationTenant } = require('./resolveSharedRegistrationTenant');
+const { tenantIsSharedAppRegistrationPool } = require('./resolveSharedRegistrationTenant');
+const { tenantIsAppMobileMaster } = require('./appDefaultTenant');
 
 /** @typedef {'AI_FACIAL'|'AI_VISION_DETECTION'|'AI_VISION_ANALYSIS'|'FIELD_TASK'|'ROUTINE_TASK'} QuotaKind */
 
@@ -30,6 +31,17 @@ const MSG = {
   TECHNICIANS: 'Limite de técnicos de campo do plano foi atingido. Peça ao administrador para aumentar o pacote.',
   TEMPLATES: 'Limite de formulários ativos do plano foi atingido. Arquive ou desative modelos antes de criar outro.',
 };
+
+/**
+ * Tenants onde o limite `maxTechnicians` do plano não aplica (piscina «BrSpark App (master)» + tenant org legada brspark).
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} prisma
+ * @param {string} tenantId
+ */
+async function isTechnicianSeatQuotaExemptTenant(prisma, tenantId) {
+  if (!tenantId) return false;
+  if (await tenantIsSharedAppRegistrationPool(prisma, tenantId)) return true;
+  return tenantIsAppMobileMaster(prisma, tenantId);
+}
 
 function periodKeyNow() {
   return saoPauloYearMonthFromDate(new Date()).periodKey;
@@ -131,6 +143,7 @@ async function countActiveTechnicianSeats(prisma, tenantId) {
 async function assertTechnicianSeatForNewUser(prisma, tenantId, roleUpper) {
   const r = String(roleUpper || '').toUpperCase();
   if (r !== 'USER' && r !== 'PROVIDER') return { ok: true };
+  if (await isTechnicianSeatQuotaExemptTenant(prisma, tenantId)) return { ok: true };
   const plan = await loadActivePlanForTenant(prisma, tenantId);
   if (!plan) return { ok: true };
   const max = Number(plan.maxTechnicians);
@@ -143,19 +156,14 @@ async function assertTechnicianSeatForNewUser(prisma, tenantId, roleUpper) {
 }
 
 /**
- * Como {@link assertTechnicianSeatForNewUser}, mas ignora quota na tenant COMPANY
- * de registo partilhado da app (`resolveSharedRegistrationTenant`): contas de
- * utilizador final/prestador nessa piscina não consomem lugares de técnico do plano.
+ * Como {@link assertTechnicianSeatForNewUser}; o nome mantém o sentido histórico — a quota
+ * já fica isenta na piscina de registo partilhado e na tenant org legada (ver `isTechnicianSeatQuotaExemptTenant`).
  *
  * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} prisma
  * @param {string} tenantId
  * @param {string} roleUpper
  */
 async function assertTechnicianSeatForNewUserUnlessSharedAppPool(prisma, tenantId, roleUpper) {
-  const shared = await resolveSharedRegistrationTenant(prisma);
-  if (shared && String(shared.id) === String(tenantId)) {
-    return { ok: true };
-  }
   return assertTechnicianSeatForNewUser(prisma, tenantId, roleUpper);
 }
 
@@ -170,6 +178,7 @@ async function assertTechnicianSeatForUserPatch(prisma, existing, patch) {
   const nextActive = patch.isActive !== undefined ? !!patch.isActive : !!existing.isActive;
   const willBeTech = nextActive && (nextRole === 'USER' || nextRole === 'PROVIDER');
   if (!willBeTech) return { ok: true };
+  if (await isTechnicianSeatQuotaExemptTenant(prisma, existing.tenantId)) return { ok: true };
 
   const plan = await loadActivePlanForTenant(prisma, existing.tenantId);
   if (!plan) return { ok: true };

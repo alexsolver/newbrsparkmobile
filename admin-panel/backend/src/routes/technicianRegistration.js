@@ -47,9 +47,9 @@ const TECH_REG_SUBMIT_OTP_TTL_SECONDS = Number(process.env.TECH_REG_SUBMIT_OTP_T
 const TECH_REG_SUBMIT_OTP_MAX_ATTEMPTS = Number(process.env.TECH_REG_SUBMIT_OTP_MAX_ATTEMPTS || 5);
 const TECH_REG_SUBMIT_OTP_PURPOSE = 'TECH_REG_SUBMIT_OTP';
 
-/** Se `1`/`true`: após envio bem-sucedido do cadastro prestador **self-service** (sem convite do painel), aprova e materializa na mesma requisição (`TechnicianProfile` ACTIVE). Convites do painel mantêm revisão manual. */
-function techRegAutoApproveSelfServiceEnabled() {
-  const v = String(process.env.TECH_REG_AUTO_APPROVE_SELF_SERVICE || '').trim().toLowerCase();
+/** Se `1`/`true`: desativa a aprovação automática após o envio do cadastro (revisão manual no painel). Por omissão o prestador é habilitado logo após o envio bem-sucedido. */
+function techRegSkipAutoApproveAfterSubmit() {
+  const v = String(process.env.TECH_REG_SKIP_AUTO_APPROVE_AFTER_SUBMIT || '').trim().toLowerCase();
   return v === '1' || v === 'true' || v === 'yes';
 }
 
@@ -958,7 +958,7 @@ publicRouter.post(
 
       let outStatus = updated.status;
       let autoApproved = false;
-      if (techRegAutoApproveSelfServiceEnabled() && !app.createdByUserId) {
+      if (!techRegSkipAutoApproveAfterSubmit()) {
         try {
           const approvedUser = await materializeApprovedApplication(basePrisma, app.id);
           await mirrorApprovedLegacyRegistrationToProviderNetwork(basePrisma, {
@@ -982,7 +982,7 @@ publicRouter.post(
           outStatus = 'APPROVED';
           autoApproved = true;
         } catch (autoErr) {
-          console.error('[tech-reg] auto-approve self-service', autoErr);
+          console.error('[tech-reg] auto-approve after submit', autoErr);
           return res.status(500).json({
             error:
               autoErr && autoErr.message
