@@ -77,11 +77,11 @@ async function syncActiveAffiliationFromTechnicianStatus(client, opts) {
       tenantId: tid,
       providerIdentityId: pi.id,
       status: 'ACTIVE',
-      relationshipType: 'PARTNER',
+      relationshipType: 'DEDICATED',
       invitedAt: now,
       requestedAt: now,
       activatedAt: now,
-      note: 'Sincronizado ao ativar prestador na tenant (painel).',
+      note: 'Sincronizado ao ativar prestador na tenant (painel) — vínculo dedicado.',
     },
   });
   return { ok: true, affiliationId: row.id };

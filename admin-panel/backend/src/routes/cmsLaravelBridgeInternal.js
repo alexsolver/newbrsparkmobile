@@ -8,6 +8,7 @@ const { escapeHtmlEmailFragment } = require('../lib/emailEscapeHtml');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
 const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
 const { sendExpoPushToMany } = require('../services/expoPush');
+const { isHiddenFromPublicDirectoryAt } = require('../lib/providerDedicatedExclusiveService');
 
 const AFFILIATION_ACCEPT_BASE_URL =
   String(process.env.PROVIDER_AFFILIATION_ACCEPT_URL_BASE || 'brsparkmobile://provider-affiliation/accept').trim();
@@ -154,11 +155,13 @@ router.post('/cms-tenant-provision', express.json({ limit: '128kb' }), async (re
  * Protegido por X-Bridge-Secret (mesmo segredo do provisionamento).
  *
  * Retorna:
- *  { ok: true, providers: [{ userId, email, name, role, phone, city?, tenant: { id, slug, name, status, kind } }] }
+ *  { ok: true, providers: [{ userId, email, name, role, phone, city? }] }
+ *  Sem `tenant` na resposta: o vínculo prestador↔empresa não é exposto em buscas públicas.
  */
 router.post('/cms-directory-providers-snapshot', express.json({ limit: '64kb' }), async (req, res) => {
   try {
     if (!requireBridge(req, res)) return;
+    const at = new Date();
     const rows = await prisma.user.findMany({
       where: {
         isActive: true,
@@ -175,26 +178,66 @@ router.post('/cms-directory-providers-snapshot', express.json({ limit: '64kb' })
         tenant: { select: { id: true, slug: true, name: true, status: true, kind: true } },
         technicianProfile: true,
         appAccount: { select: { emailNorm: true } },
+        providerIdentity: {
+          select: {
+            affiliations: {
+              where: { status: 'ACTIVE', relationshipType: 'DEDICATED' },
+              select: { status: true, relationshipType: true, tenantScheduleJson: true },
+            },
+          },
+        },
       },
       orderBy: [{ createdAt: 'asc' }],
       take: 5000,
     });
 
+    const visibleRows = rows.filter((u) => !isHiddenFromPublicDirectoryAt(u.providerIdentity, at));
+
     const providers = await Promise.all(
-      rows.map(async (u) => ({
+      visibleRows.map(async (u) => ({
         userId: u.id,
         email: (await resolveCanonicalEmailNormForUser(prisma, u)) || u.email,
         name: u.name,
         role: u.role,
         phone: u.phone || null,
         city: u.technicianProfile?.city || null,
-        tenant: u.tenant,
       })),
     );
 
     return res.json({ ok: true, providers });
   } catch (err) {
     console.error('[cms-directory-providers-snapshot]', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/internal/cms-directory-resolve-provider-tenant
+ * Resolve o tenant Node (empresa) onde o utilizador prestador está listado — só servidor Laravel (bridge).
+ */
+router.post('/cms-directory-resolve-provider-tenant', express.json({ limit: '16kb' }), async (req, res) => {
+  try {
+    if (!requireBridge(req, res)) return;
+    const userId = String(req.body?.userId || '').trim();
+    if (!userId) return res.status(400).json({ error: 'userId é obrigatório.' });
+    const u = await prisma.user.findFirst({
+      where: {
+        id: userId,
+        isActive: true,
+        role: 'PROVIDER',
+        tenant: {
+          is: {
+            kind: 'COMPANY',
+            status: { notIn: ['SUSPENDED', 'CANCELLED'] },
+          },
+        },
+      },
+      select: { tenantId: true },
+    });
+    if (!u?.tenantId) return res.status(404).json({ error: 'Prestador não encontrado.' });
+    return res.json({ ok: true, nodeTenantId: String(u.tenantId) });
+  } catch (err) {
+    console.error('[cms-directory-resolve-provider-tenant]', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -337,8 +380,7 @@ router.post('/provider-affiliations/invite', express.json({ limit: '64kb' }), as
           }))?.emailNorm || provider.user.email
       : provider.user.email;
 
-    const relationshipTypeRaw = String(req.body?.relationshipType || 'PARTNER').trim().toUpperCase();
-    const relationshipType = relationshipTypeRaw === 'DEDICATED' ? 'DEDICATED' : 'PARTNER';
+    const relationshipType = 'DEDICATED';
     const note = String(req.body?.note || '').trim();
     const invitationToken = crypto.randomBytes(24).toString('hex');
     const now = new Date();
@@ -378,8 +420,7 @@ router.post('/provider-affiliations/invite', express.json({ limit: '64kb' }), as
       })
       .catch(() => null);
     const tenantLabel = String(tenantLabelRow?.name || tenantLabelRow?.slug || tenantId).trim() || 'Empresa';
-    const relIsDedicated = String(row.relationshipType || relationshipType).toUpperCase() === 'DEDICATED';
-    const relPt = relIsDedicated ? 'vínculo dedicado (full time)' : 'parceria (multi-empresa)';
+    const relPt = 'vínculo dedicado (full time)';
 
     const notify = {
       emailSent: false,

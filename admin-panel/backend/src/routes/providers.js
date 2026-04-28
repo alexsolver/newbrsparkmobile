@@ -32,6 +32,10 @@ const {
 const { endSiblingAffiliationsSameTenantAppAccount } = require('../lib/providerAffiliationSiblingEnd');
 const { invalidateAppEffectiveTenantIdCache } = require('../lib/appLoginEffectiveTenant');
 const { parseDedicatedExclusiveFromTenantScheduleJson } = require('../lib/dedicatedExclusiveTime');
+const {
+  isHiddenFromCompanyDirectoryAt,
+  isHiddenFromPublicDirectoryAt,
+} = require('../lib/providerDedicatedExclusiveService');
 const { hasActiveDedicatedAffiliationForAppUser } = require('../lib/providerOnboardingGuards');
 const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
 
@@ -45,7 +49,7 @@ const AFFILIATION_ACCEPT_BASE_URL =
 const ONBOARDING_INVITE_BASE_URL =
   String(process.env.PROVIDER_GLOBAL_ONBOARDING_URL_BASE || 'brsparkmobile://provider-onboarding').trim();
 
-const AFFILIATION_RELATIONSHIP_TYPES = new Set(['PARTNER', 'DEDICATED']);
+const AFFILIATION_RELATIONSHIP_TYPES = new Set(['DEDICATED']);
 
 const ONBOARDING_DEDICATED_ACTIVE_MSG =
   'Já existe um vínculo dedicado ativo. Não é necessário abrir ou submeter candidatura de onboarding por este fluxo.';
@@ -196,7 +200,7 @@ function affiliationPayloadFromRow(row, extra = {}) {
   return {
     id: row.id,
     status: row.status,
-    relationshipType: row.relationshipType || 'PARTNER',
+    relationshipType: row.relationshipType || 'DEDICATED',
     note: row.note,
     tenant: row.tenant,
     invitedAt: row.invitedAt,
@@ -372,7 +376,7 @@ publicRouter.post('/me/affiliations/:id/accept', authUser, async (req, res) => {
       affiliation: {
         id: updated.id,
         status: updated.status,
-        relationshipType: updated.relationshipType || 'PARTNER',
+        relationshipType: updated.relationshipType || 'DEDICATED',
         tenant: row.tenant,
         requestedAt: updated.requestedAt,
       },
@@ -669,7 +673,7 @@ publicRouter.post('/affiliations/:token/accept', authUser, async (req, res) => {
       affiliation: {
         id: updated.id,
         status: updated.status,
-        relationshipType: updated.relationshipType || 'PARTNER',
+        relationshipType: updated.relationshipType || 'DEDICATED',
         tenant: row.tenant,
         requestedAt: updated.requestedAt,
       },
@@ -705,7 +709,7 @@ publicRouter.get('/affiliations/:token', authUser, async (req, res) => {
       affiliation: {
         id: row.id,
         status: row.status,
-        relationshipType: row.relationshipType || 'PARTNER',
+        relationshipType: row.relationshipType || 'DEDICATED',
         note: row.note,
         tenant: row.tenant,
         invitedAt: row.invitedAt,
@@ -839,13 +843,14 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
         ).map((u) => u.id)
       : [String(provider.userId)];
 
-    const relationshipTypeRaw = String(req.body?.relationshipType || 'PARTNER').trim().toUpperCase();
+    const relationshipTypeRaw0 = String(req.body?.relationshipType || 'DEDICATED').trim().toUpperCase();
+    const relationshipTypeRaw = relationshipTypeRaw0 === 'PARTNER' ? 'DEDICATED' : relationshipTypeRaw0;
     const relationshipType = AFFILIATION_RELATIONSHIP_TYPES.has(relationshipTypeRaw)
       ? relationshipTypeRaw
       : null;
     if (!relationshipType) {
       return res.status(400).json({
-        error: 'relationshipType inválido. Use PARTNER ou DEDICATED.',
+        error: 'relationshipType inválido. O único vínculo prestador–empresa é DEDICATED (vínculo dedicado).',
         code: 'RELATIONSHIP_TYPE_INVALID',
       });
     }
@@ -908,8 +913,7 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
       .catch(() => null);
     const tenantLabel = String(tenantLabelRow?.name || tenantLabelRow?.slug || tenantId).trim() || 'Empresa';
 
-    const relIsDedicated = String(row.relationshipType || relationshipType).toUpperCase() === 'DEDICATED';
-    const relPt = relIsDedicated ? 'vínculo dedicado (full time)' : 'parceria (multi-empresa)';
+    const relPt = 'vínculo dedicado (full time)';
 
     const notify = {
       emailSent: false,
@@ -952,7 +956,7 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
         const pushRes = await sendExpoPushToMany(tokens, {
           channelId: 'brspark-tecnico',
           title: 'Convite — organizações e parcerias',
-          body: `${tenantLabel}: novo convite (${relIsDedicated ? 'dedicado' : 'parceria'}). Abra a app.`,
+          body: `${tenantLabel}: novo convite (dedicado). Abra a app.`,
           data: {
             type: 'PROVIDER_AFFILIATION_INVITED',
             tenantId: String(tenantId),
@@ -1032,7 +1036,7 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
       const now = new Date();
 
       // Se este vínculo for DEDICATED, desativar automaticamente outras afiliações ativas do prestador.
-      if (String(row.relationshipType || 'PARTNER').toUpperCase() === 'DEDICATED') {
+      if (String(row.relationshipType || 'DEDICATED').toUpperCase() === 'DEDICATED') {
         await tx.providerTenantAffiliation.updateMany({
           where: {
             providerIdentityId: row.providerIdentityId,
@@ -1080,7 +1084,7 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
       affiliation: {
         id: updated.id,
         status: updated.status,
-        relationshipType: updated.relationshipType || 'PARTNER',
+        relationshipType: updated.relationshipType || 'DEDICATED',
         activatedAt: updated.activatedAt,
       },
     });
@@ -1129,7 +1133,7 @@ adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
       affiliation: {
         id: updated.id,
         status: updated.status,
-        relationshipType: updated.relationshipType || 'PARTNER',
+        relationshipType: updated.relationshipType || 'DEDICATED',
         endedAt: updated.endedAt,
       },
     });
@@ -1138,7 +1142,7 @@ adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
   }
 });
 
-/** Diretório de prestadores (perfil técnico) — por omissão só quem não tem vínculo DEDICATED bloqueante em nenhuma empresa; `includeDedicatedBound=1` lista todos. */
+/** Diretório: utilizadores activos com perfil técnico OU identidade global de prestador; dedicado opcional (query). */
 function scheduleHasEnabled(ws) {
   if (!ws || typeof ws !== 'object' || Array.isArray(ws)) return false;
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -1179,42 +1183,30 @@ function canReadProviderDirectory(req) {
   );
 }
 
-/** Alinhado a `dedicatedAffiliationBlocksPartnershipInvite` em `users.js`: dedicado não terminal bloqueia outras empresas. */
-const DIRECTORY_DEDICATED_TERMINAL = new Set(['REJECTED', 'INACTIVE']);
-const DIRECTORY_DEDICATED_BLOCKING_STATUSES = new Set(['ACTIVE', 'INVITED', 'REQUESTED', 'SUSPENDED']);
-
-/**
- * Prestador com vínculo DEDICATED em estado que reserva o prestador a uma empresa (qualquer tenant).
- * Sem identidade global ou sem afiliações dedicadas activas/pendentes ⇒ pode ser listado como acessível.
- */
-function hasGloballyBlockingDedicatedAffiliation(providerIdentity) {
-  if (!providerIdentity || typeof providerIdentity !== 'object') return false;
-  const list = Array.isArray(providerIdentity.affiliations) ? providerIdentity.affiliations : [];
-  return list.some((aff) => {
-    if (String(aff.relationshipType || '').toUpperCase() !== 'DEDICATED') return false;
-    const st = String(aff.status || '').toUpperCase();
-    if (DIRECTORY_DEDICATED_TERMINAL.has(st)) return false;
-    return DIRECTORY_DEDICATED_BLOCKING_STATUSES.has(st);
-  });
-}
-
 function rowMatchesDirectoryFilters(u, { qSearch, skill, locationId, hasSchedule, hasCoverage }) {
   const tp = u.technicianProfile;
-  if (!tp) return false;
+  const pi = u.providerIdentity;
+  if (!tp && !pi) return false;
+  if (locationId && !tp) return false;
+  if (hasSchedule === '1' && !tp) return false;
+  if (hasCoverage === '1' && !tp) return false;
   if (qSearch) {
     const q = qSearch.toLowerCase();
     const emTech = u.email ? String(u.email).toLowerCase() : '';
     const emCanon = u.loginEmailNorm ? String(u.loginEmailNorm).toLowerCase() : '';
+    const spec = tp?.specialty || pi?.specialty;
+    const cft = tp?.cft || pi?.cft;
     const hit =
       emTech.includes(q) ||
       emCanon.includes(q) ||
       (u.name && String(u.name).toLowerCase().includes(q)) ||
-      (tp.specialty && String(tp.specialty).toLowerCase().includes(q)) ||
-      (tp.cft && String(tp.cft).toLowerCase().includes(q));
+      (spec && String(spec).toLowerCase().includes(q)) ||
+      (cft && String(cft).toLowerCase().includes(q));
     if (!hit) return false;
   }
   if (skill) {
-    const hay = JSON.stringify(tp.skillsJson ?? '').toLowerCase();
+    const skillsSrc = tp?.skillsJson ?? pi?.skillsJson ?? '';
+    const hay = JSON.stringify(skillsSrc).toLowerCase();
     if (!hay.includes(skill.toLowerCase())) return false;
   }
   if (locationId) {
@@ -1233,10 +1225,23 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
       return res.status(403).json({ error: 'Sem permissão para consultar o diretório de prestadores.' });
     }
     const qTenant = req.query.tenantId != null ? String(req.query.tenantId).trim() : '';
-    if (qTenant && !assertTenantAccess(req.authorization, qTenant)) {
-      return res.status(403).json({ error: 'Sem permissão para este tenant.' });
+    let tenantFilter;
+    if (isPlatformAdmin(req.authorization)) {
+      if (qTenant) {
+        if (!assertTenantAccess(req.authorization, qTenant)) {
+          return res.status(403).json({ error: 'Sem permissão para este tenant.' });
+        }
+        tenantFilter = qTenant;
+      } else {
+        // «Todas (plataforma)» não envia tenantId — não aplicar panelFilterTenantId do JWT (senão fica preso a uma org).
+        tenantFilter = null;
+      }
+    } else {
+      if (qTenant && !assertTenantAccess(req.authorization, qTenant)) {
+        return res.status(403).json({ error: 'Sem permissão para este tenant.' });
+      }
+      tenantFilter = resolveScopedTenantId(req.authorization, qTenant || null);
     }
-    const tenantFilter = resolveScopedTenantId(req.authorization, qTenant || null);
 
     const qSearch = req.query.q != null ? String(req.query.q).trim().slice(0, 200) : '';
     const skill = req.query.skill != null ? String(req.query.skill).trim().slice(0, 120) : '';
@@ -1244,7 +1249,9 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
     const hasSchedule = String(req.query.hasSchedule || '').trim() === '1' ? '1' : '';
     const hasCoverage = String(req.query.hasCoverage || '').trim() === '1' ? '1' : '';
     const techStatus = req.query.techStatus != null ? String(req.query.techStatus).trim().slice(0, 32) : '';
+    /** Lista completa ignorando janelas exclusivas do vínculo dedicado (auditoria / operações). */
     const includeDedicatedBound = String(req.query.includeDedicatedBound || '').trim() === '1';
+    const at = new Date();
 
     const page = Math.max(1, Math.min(500, parseInt(String(req.query.page || '1'), 10) || 1));
     const pageSize = Math.max(10, Math.min(100, parseInt(String(req.query.pageSize || '50'), 10) || 50));
@@ -1252,12 +1259,19 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
 
     const where = {
       isActive: true,
-      technicianProfile: techStatus ? { is: { status: techStatus } } : { isNot: null },
       ...(tenantFilter ? { tenantId: tenantFilter } : {}),
+      AND: [],
     };
-    const andParts = [];
-    if (!isPlatformAdmin(req.authorization)) andParts.push(nonPlatformUserReadWhere(req.authorization));
-    if (andParts.length) where.AND = andParts;
+    if (techStatus) {
+      where.AND.push({ technicianProfile: { is: { status: techStatus } } });
+    } else {
+      where.AND.push({
+        OR: [{ technicianProfile: { isNot: null } }, { providerIdentity: { isNot: null } }],
+      });
+    }
+    if (!isPlatformAdmin(req.authorization)) {
+      where.AND.push(nonPlatformUserReadWhere(req.authorization));
+    }
 
     const rows = await prisma.user.findMany({
       where,
@@ -1289,8 +1303,15 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
         providerIdentity: {
           select: {
             id: true,
+            globalStatus: true,
+            specialty: true,
+            cft: true,
+            score: true,
+            skillsJson: true,
+            updatedAt: true,
             affiliations: {
-              select: { tenantId: true, status: true, relationshipType: true },
+              where: { relationshipType: 'DEDICATED', status: 'ACTIVE' },
+              select: { tenantId: true, status: true, relationshipType: true, tenantScheduleJson: true },
             },
           },
         },
@@ -1307,34 +1328,40 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
     const filtered = enriched.filter((u) => {
       if (!rowMatchesDirectoryFilters(u, post)) return false;
       if (includeDedicatedBound) return true;
-      return !hasGloballyBlockingDedicatedAffiliation(u.providerIdentity);
+      const pi = u.providerIdentity;
+      if (tenantFilter) {
+        return !isHiddenFromCompanyDirectoryAt(pi, tenantFilter, at);
+      }
+      return !isHiddenFromPublicDirectoryAt(pi, at);
     });
     const total = filtered.length;
     const start = (page - 1) * pageSize;
     const slice = filtered.slice(start, start + pageSize);
 
-    const data = slice.map((u) => ({
-      userId: u.id,
-      email: u.loginEmailNorm || u.email,
-      name: u.name,
-      role: u.role,
-      tenantId: u.tenantId,
-      tenantName: u.tenant?.name || null,
-      updatedAt: u.updatedAt,
-      technician: {
-        status: u.technicianProfile?.status,
-        specialty: u.technicianProfile?.specialty,
-        cft: u.technicianProfile?.cft,
-        score: u.technicianProfile?.score,
-        skillsJson: u.technicianProfile?.skillsJson,
-        workScheduleJson: u.technicianProfile?.workScheduleJson,
-        serviceLocationIds: u.technicianProfile?.serviceLocationIds,
-        serviceCoverageGeoJson: u.technicianProfile?.serviceCoverageGeoJson,
-        hasSchedule: scheduleHasEnabled(u.technicianProfile?.workScheduleJson),
-        hasCoverageArea: coverageHasArea(u.technicianProfile?.serviceCoverageGeoJson),
-        updatedAt: u.technicianProfile?.updatedAt,
-      },
-    }));
+    const data = slice.map((u) => {
+      const tp = u.technicianProfile;
+      const pi = u.providerIdentity;
+      return {
+        userId: u.id,
+        email: u.loginEmailNorm || u.email,
+        name: u.name,
+        role: u.role,
+        updatedAt: u.updatedAt,
+        technician: {
+          status: tp?.status ?? pi?.globalStatus ?? null,
+          specialty: tp?.specialty ?? pi?.specialty ?? null,
+          cft: tp?.cft ?? pi?.cft ?? null,
+          score: tp?.score ?? pi?.score ?? null,
+          skillsJson: tp?.skillsJson ?? pi?.skillsJson ?? null,
+          workScheduleJson: tp?.workScheduleJson ?? null,
+          serviceLocationIds: tp?.serviceLocationIds ?? null,
+          serviceCoverageGeoJson: tp?.serviceCoverageGeoJson ?? null,
+          hasSchedule: scheduleHasEnabled(tp?.workScheduleJson),
+          hasCoverageArea: coverageHasArea(tp?.serviceCoverageGeoJson),
+          updatedAt: tp?.updatedAt ?? pi?.updatedAt ?? null,
+        },
+      };
+    });
 
     return res.json({
       data,
@@ -1346,8 +1373,13 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
         maxFetch,
         capped: rows.length >= maxFetch,
         tenantScoped: !!tenantFilter,
+        platformCrossTenant: isPlatformAdmin(req.authorization) && !tenantFilter,
         includeDedicatedBound,
-        directoryEligibility: includeDedicatedBound ? 'all' : 'withoutGloballyBlockingDedicated',
+        directoryEligibility: includeDedicatedBound
+          ? 'all'
+          : tenantFilter
+            ? 'visibleOutsideDedicatedExclusiveWindowsForViewerTenant'
+            : 'visibleOutsideDedicatedExclusiveWindowsGlobally',
       },
     });
   } catch (err) {

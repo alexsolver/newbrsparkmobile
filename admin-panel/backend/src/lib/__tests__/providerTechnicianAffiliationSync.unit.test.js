@@ -215,7 +215,7 @@ test('reconcileAffiliationRowsByIds: cross-tenant por id', async () => {
         tenantId: 't-brs',
         providerIdentityId: 'pi1',
         status: 'ACTIVE',
-        relationshipType: 'PARTNER',
+        relationshipType: 'DEDICATED',
       }),
       updateMany: async ({ where }) => {
         updatedId = where.id;
@@ -266,7 +266,7 @@ test('ensureAffiliationRowStatusesMatchTechnicianProfiles: User inativo força I
       providerIdentityId: 'pi1',
       tenantId: 't1',
       status: 'ACTIVE',
-      relationshipType: 'PARTNER',
+      relationshipType: 'DEDICATED',
     },
   ];
   const r = await ensureAffiliationRowStatusesMatchTechnicianProfiles(client, rows, 'sess', '');

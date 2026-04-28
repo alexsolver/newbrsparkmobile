@@ -171,11 +171,11 @@ async function mirrorApprovedLegacyRegistrationToProviderNetwork(prisma, { tenan
     });
     const tenantKind = String(tenantRow?.kind || 'COMPANY').toUpperCase();
     const isCompanyTenant = tenantKind === 'COMPANY';
-    /** Parcerias na app são só prestador ↔ tenant empresa; espaço CLIENT/PROVIDER é vínculo owner interno. */
-    const relationshipType = isCompanyTenant ? 'PARTNER' : 'OWNER';
+    /** Vínculo prestador ↔ empresa na app é apenas DEDICATED; espaço CLIENT/PROVIDER é OWNER interno. */
+    const relationshipType = isCompanyTenant ? 'DEDICATED' : 'OWNER';
     const affiliationNote = isCompanyTenant
-      ? 'Criado automaticamente pela aprovação no fluxo legado.'
-      : 'Espaço próprio do prestador (owner). Parcerias na app mostram apenas vínculos com tenant empresa (COMPANY).';
+      ? 'Criado automaticamente pela aprovação no fluxo legado (vínculo dedicado).'
+      : 'Espaço próprio do prestador (owner). Vínculos com tenant empresa (COMPANY) usam vínculo dedicado.';
 
     const providerIdentity = await tx.providerIdentity.upsert({
       where: { userId: String(userId) },

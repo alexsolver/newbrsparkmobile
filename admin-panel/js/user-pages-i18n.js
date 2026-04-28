@@ -765,7 +765,7 @@ const M = {
     pdc_bc_here: 'Diretório',
     pdc_hero_title: 'Diretório de prestadores',
     pdc_hero_sub:
-      'Prestadores com perfil técnico que não têm vínculo DEDICATED activo ou pendente (ACTIVE, INVITED, REQUESTED, SUSPENDED) com nenhuma empresa, em qualquer tenant — ou seja, acessíveis para parceria ou convite sem conflito de exclusividade. No âmbito da plataforma ou do tenant em contexto. Filtre por texto, competências, bases, agenda e área.',
+      'Inclui quem tem perfil técnico (tenant) ou identidade global de prestador (sem obrigar as duas). Por omissão exclui quem tem vínculo DEDICATED activo ou pendente (ACTIVE, INVITED, REQUESTED, SUSPENDED) nalguma empresa. Âmbito plataforma ou tenant. Filtros: texto, competências, bases, agenda e área (agenda/área/base exigem perfil técnico).',
     pdc_filter_include_dedicated:
       'Mostrar também quem já tem vínculo dedicado activo ou pendente nalguma empresa (lista completa, todas as tenants visíveis na consulta).',
     pdc_link_apps: 'Candidaturas (onboarding)',
@@ -1563,7 +1563,7 @@ const M = {
     pdc_bc_here: 'Directory',
     pdc_hero_title: 'Provider directory',
     pdc_hero_sub:
-      'Technicians who do not have a DEDICATED affiliation in a blocking state (ACTIVE, INVITED, REQUESTED, SUSPENDED) with any company, across tenants—so they remain reachable for partnership invites without dedicated exclusivity conflicts. Scoped to the platform or current tenant. Filter by text, skills, sites, schedule and coverage.',
+      'Includes users with a technician profile and/or a global provider identity (either is enough). By default excludes anyone with a blocking DEDICATED tie (ACTIVE, INVITED, REQUESTED, SUSPENDED) at any company. Scoped to platform or tenant. Filters: text, skills, sites, schedule and area (schedule/area/site need a technician profile row).',
     pdc_filter_include_dedicated:
       'Also show providers who already have an active or pending dedicated tie with some company (full list for the rows your query can read).',
     pdc_link_apps: 'Applications (onboarding)',

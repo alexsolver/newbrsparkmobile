@@ -146,10 +146,55 @@ async function assertNoDedicatedOverlapForProviderIdentity(prisma, providerIdent
   return { ok: true };
 }
 
+/**
+ * Diretório público (snapshot CMS): ocultar se o instante cai numa janela exclusiva de
+ * qualquer vínculo ACTIVE+DEDICATED (fora dessas janelas, todas as empresas podem ver/contactar).
+ *
+ * @param {{ affiliations?: Array<{ status?: string, relationshipType?: string, tenantScheduleJson?: unknown }> } | null} providerIdentity
+ * @param {Date} [at]
+ */
+function isHiddenFromPublicDirectoryAt(providerIdentity, at = new Date()) {
+  const list = Array.isArray(providerIdentity?.affiliations) ? providerIdentity.affiliations : [];
+  for (const aff of list) {
+    if (String(aff.relationshipType || '').toUpperCase() !== 'DEDICATED') continue;
+    if (String(aff.status || '').toUpperCase() !== 'ACTIVE') continue;
+    const p = parseDedicatedExclusiveFromTenantScheduleJson(aff.tenantScheduleJson);
+    if (isInstantInDedicatedBlock(at, p)) return true;
+  }
+  return false;
+}
+
+/**
+ * Diretório painel empresa: ocultar ao `viewerTenantId` quando outra empresa tem ACTIVE+DEDICATED
+ * e `at` está na janela exclusiva. A empresa do dedicado continua a ver o prestador.
+ * `viewerTenantId` vazio ⇒ vista plataforma sem filtro por janela.
+ *
+ * @param {{ affiliations?: Array<{ tenantId?: string, status?: string, relationshipType?: string, tenantScheduleJson?: unknown }> } | null} providerIdentity
+ * @param {string|null|undefined} viewerTenantId
+ * @param {Date} [at]
+ */
+function isHiddenFromCompanyDirectoryAt(providerIdentity, viewerTenantId, at = new Date()) {
+  const vt = String(viewerTenantId || '').trim();
+  if (!vt) return false;
+  const list = Array.isArray(providerIdentity?.affiliations) ? providerIdentity.affiliations : [];
+  for (const aff of list) {
+    if (String(aff.relationshipType || '').toUpperCase() !== 'DEDICATED') continue;
+    if (String(aff.status || '').toUpperCase() !== 'ACTIVE') continue;
+    const p = parseDedicatedExclusiveFromTenantScheduleJson(aff.tenantScheduleJson);
+    if (!isInstantInDedicatedBlock(at, p)) continue;
+    const dedicatedTid = String(aff.tenantId || '').trim();
+    if (dedicatedTid && dedicatedTid === vt) continue;
+    return true;
+  }
+  return false;
+}
+
 module.exports = {
   resolveProviderIdentityIdsForAppSessionUser,
   isAppUserInDedicatedExclusiveAt,
   isCanonicalTechnicianEmailDedicatedAt,
   filterBroadcastCandidatesExcludingDedicatedAt,
   assertNoDedicatedOverlapForProviderIdentity,
+  isHiddenFromPublicDirectoryAt,
+  isHiddenFromCompanyDirectoryAt,
 };
