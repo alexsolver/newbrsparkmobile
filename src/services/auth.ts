@@ -523,6 +523,23 @@ export async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem(TOKEN_KEY);
 }
 
+/** Evita «JSON Parse error: Unexpected character: <» quando o proxy devolve HTML (404/502). */
+async function parseFetchJsonBody(res: Response): Promise<unknown> {
+  const text = await res.text();
+  const t = text.trim();
+  if (!t) return {};
+  if (t.startsWith('<')) {
+    throw new Error(
+      `O servidor devolveu HTML em vez de JSON (HTTP ${res.status}). Verifique a URL da API ou tente mais tarde.`,
+    );
+  }
+  try {
+    return JSON.parse(t);
+  } catch {
+    throw new Error(`Resposta inválida do servidor (HTTP ${res.status}).`);
+  }
+}
+
 // ─── AuthService ─────────────────────────────────────────────────────────────
 export class AuthService {
   static async tryAutoRestoreOfflineBackup(user: User | null): Promise<void> {
@@ -748,7 +765,7 @@ export class AuthService {
     const res = await fetch(`${API_BASE}/api/me/sibling-workspaces`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const data = (await res.json()) as { workspaces?: SiblingWorkspaceOption[] };
+    const data = (await parseFetchJsonBody(res)) as { workspaces?: SiblingWorkspaceOption[] };
     if (!res.ok || !Array.isArray(data?.workspaces)) return [];
     return data.workspaces;
   }
@@ -766,7 +783,7 @@ export class AuthService {
       },
       body: JSON.stringify({ tenantId: String(tenantId || '').trim(), deviceId }),
     });
-    const data = await res.json();
+    const data = (await parseFetchJsonBody(res)) as Record<string, unknown>;
     if (!res.ok) {
       throw new Error((data as { error?: string }).error || 'Não foi possível mudar de organização.');
     }
@@ -796,10 +813,23 @@ export class AuthService {
       },
       body: JSON.stringify({ kind, deviceId }),
     });
-    const data = await res.json();
+    const data = (await parseFetchJsonBody(res)) as Record<string, unknown>;
     if (!res.ok) {
       const tid = (data as { tenantId?: string }).tenantId;
       if (res.status === 409 && tid) {
+        const conflictUserId = (data as { userId?: string }).userId;
+        const local = await AuthService.getUser();
+        // Espaço prestador/cliente já existe na tenant partilhada para ESTE login: a sessão JWT
+        // já é esse utilizador — `switch-workspace` devolveria «Já está nesta organização.».
+        if (conflictUserId && local && String(conflictUserId) === String(local.id)) {
+          const fresh = await AuthService.validateSession();
+          if (fresh) {
+            await AuthService.restorePostLoginLocalState(fresh);
+            return fresh;
+          }
+          await AuthService.restorePostLoginLocalState(local);
+          return local;
+        }
         return AuthService.switchWorkspace(String(tid).trim());
       }
       throw new Error((data as { error?: string }).error || 'Não foi possível criar o espaço.');

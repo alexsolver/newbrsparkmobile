@@ -315,7 +315,7 @@ function publicUrl(path: string) {
 export default function TechRegistrationScreen() {
   const { colors: C } = useTheme();
   const router = useRouter();
-  const { user, logout, patchUser } = useAuth();
+  const { user, logout, patchUser, refreshUser } = useAuth();
   const params = useLocalSearchParams<{ token?: string }>();
   const token = typeof params.token === 'string' ? params.token : '';
 
@@ -1602,15 +1602,33 @@ export default function TechRegistrationScreen() {
       }
       setShowAllTimeErrors(false);
       setTimeTouchByDay({});
-      Alert.alert(i18n.t('appAlerts.techReg.sentTitle'), i18n.t('appAlerts.techReg.sentBody'), [
-        {
-          text: i18n.t('common.ok'),
-          onPress: () =>
-            user
-              ? router.replace('/profile' as any)
-              : router.replace('/auth/login' as any),
-        },
-      ]);
+      const approvedNow =
+        data.autoApproved === true ||
+        String(data.status || '').toUpperCase() === 'APPROVED';
+      if (approvedNow && user) {
+        try {
+          await refreshUser();
+        } catch {
+          /* estado actualizado na próxima abertura de /me */
+        }
+      }
+      Alert.alert(
+        approvedNow
+          ? i18n.t('appAlerts.techReg.approvedTitle')
+          : i18n.t('appAlerts.techReg.sentTitle'),
+        approvedNow
+          ? i18n.t('appAlerts.techReg.approvedBody')
+          : i18n.t('appAlerts.techReg.sentBody'),
+        [
+          {
+            text: i18n.t('common.ok'),
+            onPress: () =>
+              user
+                ? router.replace('/profile' as any)
+                : router.replace('/auth/login' as any),
+          },
+        ]
+      );
       setSecurityModalVisible(false);
       setSubmitOtpCode('');
       setSubmitOtpChallengeToken(null);

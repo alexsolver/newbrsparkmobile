@@ -3,6 +3,7 @@
 const prisma = require('../db');
 const { resolveScopedTenantId } = require('./authorization');
 const { resolveAppEffectiveTenantId } = require('./appLoginEffectiveTenant');
+const { isSharedAppRegistrationTenantId } = require('./resolveSharedRegistrationTenant');
 
 const WORK_TIME_FLAG_KEY = 'work_time';
 
@@ -130,9 +131,12 @@ async function getWorkTimeEffectiveForUser(userId, db = prisma) {
   const flagOn = flagScope || flagHome;
   const settings = await ensureWorkTimeSettings(scopeTenantId, db);
   const settingsHome = dedicatedContext ? await ensureWorkTimeSettings(homeTenantId, db) : null;
+  const sharedScope = await isSharedAppRegistrationTenantId(db, scopeTenantId);
+  const sharedHome = dedicatedContext ? await isSharedAppRegistrationTenantId(db, homeTenantId) : false;
   const enrolled = faceEnrollmentOk(user);
   const moduleOn =
-    !!settings.moduleEnabled || !!(settingsHome && settingsHome.moduleEnabled);
+    (!sharedScope && !!settings.moduleEnabled) ||
+    (!sharedHome && !!(settingsHome && settingsHome.moduleEnabled));
   const userOn = !!user.workTimeTrackingEnabled;
   const eligibleRole = canAccountAccessWorkTime(user.role);
   /** Módulo disponível para este papel (tab / entrada no ecrã); batidas exigem `userOn`. */
@@ -169,7 +173,7 @@ async function getWorkTimeEffectiveForUser(userId, db = prisma) {
     workTimeBrazilRegime,
     featureFlagEnabled: flagOn,
     settings: {
-      moduleEnabled: settings.moduleEnabled,
+      moduleEnabled: sharedScope ? false : settings.moduleEnabled,
       requireFaceOnEveryPunch: settings.requireFaceOnEveryPunch,
       requireGpsOnEveryPunch: settings.requireGpsOnEveryPunch,
       requireResolvedAddress: settings.requireResolvedAddress,

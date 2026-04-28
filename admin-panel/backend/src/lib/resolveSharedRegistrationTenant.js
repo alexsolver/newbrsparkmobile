@@ -33,7 +33,21 @@ async function resolveSharedRegistrationTenant(tx) {
   return null;
 }
 
+/**
+ * Tenant COMPANY de registo partilhado da app (`APP_REGISTRATION_SHARED_TENANT_*`, omissão slug `master`).
+ * Não deve ser tratada como organização operacional (ex.: política de ponto global).
+ *
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} client
+ * @param {string|null|undefined} tenantId
+ */
+async function isSharedAppRegistrationTenantId(client, tenantId) {
+  if (!tenantId) return false;
+  const shared = await resolveSharedRegistrationTenant(client);
+  return !!(shared && String(shared.id) === String(tenantId));
+}
+
 module.exports = {
   resolveSharedRegistrationTenant,
+  isSharedAppRegistrationTenantId,
   DEFAULT_SHARED_SLUG,
 };

@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs').promises;
 const prisma = require('../db');
+const { basePrisma } = require('../db');
 const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const {
   materializeApprovedApplication,
@@ -45,6 +46,12 @@ const TECH_REG_RECENT_SESSION_MAX_AGE_SECONDS = Number(process.env.TECH_REG_RECE
 const TECH_REG_SUBMIT_OTP_TTL_SECONDS = Number(process.env.TECH_REG_SUBMIT_OTP_TTL_SECONDS || 10 * 60);
 const TECH_REG_SUBMIT_OTP_MAX_ATTEMPTS = Number(process.env.TECH_REG_SUBMIT_OTP_MAX_ATTEMPTS || 5);
 const TECH_REG_SUBMIT_OTP_PURPOSE = 'TECH_REG_SUBMIT_OTP';
+
+/** Se `1`/`true`: após envio bem-sucedido do cadastro prestador **self-service** (sem convite do painel), aprova e materializa na mesma requisição (`TechnicianProfile` ACTIVE). Convites do painel mantêm revisão manual. */
+function techRegAutoApproveSelfServiceEnabled() {
+  const v = String(process.env.TECH_REG_AUTO_APPROVE_SELF_SERVICE || '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}
 
 /** Desafio OTP efêmero em memória por instância (cid -> payload). */
 const techRegSubmitOtpChallenges = new Map();
@@ -948,7 +955,46 @@ publicRouter.post(
         candidateUserId: req.user.id,
         status: 'SUBMITTED',
       });
-      res.json({ ok: true, status: updated.status });
+
+      let outStatus = updated.status;
+      let autoApproved = false;
+      if (techRegAutoApproveSelfServiceEnabled() && !app.createdByUserId) {
+        try {
+          const approvedUser = await materializeApprovedApplication(basePrisma, app.id);
+          await mirrorApprovedLegacyRegistrationToProviderNetwork(basePrisma, {
+            tenantId: app.tenantId,
+            userId: approvedUser.id,
+            technician: merged.technician,
+          }).catch((e) => {
+            console.warn('[provider-first] mirror legacy auto-approve failed:', e?.message || e);
+          });
+          try {
+            await syncComprefaceGalleryAfterUserChange(basePrisma, approvedUser.id, req, 'tech_reg_auto_approve');
+          } catch (e) {
+            console.warn('[tech-reg] FaceMatch após habilitação automática', e);
+          }
+          await notifyTechRegistrationStatus({
+            tenantId: app.tenantId,
+            invitedEmail: merged.email || app.invitedEmail,
+            candidateUserId: req.user.id,
+            status: 'APPROVED',
+          });
+          outStatus = 'APPROVED';
+          autoApproved = true;
+        } catch (autoErr) {
+          console.error('[tech-reg] auto-approve self-service', autoErr);
+          return res.status(500).json({
+            error:
+              autoErr && autoErr.message
+                ? String(autoErr.message)
+                : 'Envio registado, mas a habilitação automática falhou. A equipa pode aprovar no painel.',
+            code: 'TECH_REG_AUTO_APPROVE_FAILED',
+            status: updated.status,
+          });
+        }
+      }
+
+      res.json({ ok: true, status: outStatus, ...(autoApproved ? { autoApproved: true } : {}) });
     } catch (err) {
       console.error('POST tech-reg submit', err);
       res.status(500).json({ error: err.message });

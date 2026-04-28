@@ -678,6 +678,9 @@ const M = {
     wt_btn_save: 'Salvar',
     wt_alert_pick_tenant: 'Selecione o tenant.',
     wt_alert_saved: 'Configurações guardadas.',
+    wt_shared_pool_banner:
+      'Esta organização é a piscina partilhada de contas da app (tenant de registo). O registo de horas por organização não se aplica aqui — configure nas empresas que empregam os técnicos.',
+    wt_shared_pool_save_blocked: 'Não é possível guardar: política de ponto não está disponível para a piscina partilhada da app.',
 
     /* Telemetry */
     tel_pageTitle: 'BrSpark Admin, Monitoramento de Telemetria',
@@ -1397,6 +1400,9 @@ M['en-US'] = {
   wt_btn_save: 'Save',
   wt_alert_pick_tenant: 'Select the organization.',
   wt_alert_saved: 'Settings saved.',
+  wt_shared_pool_banner:
+    'This organization is the app’s shared sign-up pool. Organization-wide work time policy does not apply here — configure it on the employers’ tenants.',
+  wt_shared_pool_save_blocked: 'Cannot save: work time policy is not available for the app shared pool tenant.',
 
   tel_pageTitle: 'BrSpark Admin, Telemetry',
   tel_bc_here: 'Telemetry',

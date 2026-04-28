@@ -9,6 +9,7 @@ const {
   resolveAdminTargetTenantId,
   getWorkTimeEffectiveForUser,
 } = require('../lib/workTime');
+const { isSharedAppRegistrationTenantId } = require('../lib/resolveSharedRegistrationTenant');
 const { reverseGeocodeLatLng } = require('../lib/workTimeGeocode');
 const { enrichPunchRow } = require('../lib/workTimePunchEnrich');
 const { attachAccumulatedWorkDayForReportRows, punchRecordStatusToneServer } = require('../lib/workTimeDayWorked');
@@ -671,7 +672,12 @@ adminRouter.get('/settings', async (req, res) => {
       return res.status(400).json({ error: 'tenantId é obrigatório (SAAS_ADMIN) ou sessão sem tenant.' });
     }
     const row = await ensureWorkTimeSettings(tenantId);
-    res.json(row);
+    const sharedAppPoolTenant = await isSharedAppRegistrationTenantId(prisma, tenantId);
+    res.json({
+      ...row,
+      sharedAppPoolTenant,
+      moduleEnabled: sharedAppPoolTenant ? false : row.moduleEnabled,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -682,6 +688,14 @@ adminRouter.patch('/settings', express.json(), async (req, res) => {
     const tenantId = resolveAdminTargetTenantId(req, req.body.tenantId || req.query.tenantId);
     if (!tenantId) {
       return res.status(400).json({ error: 'tenantId é obrigatório.' });
+    }
+    if (await isSharedAppRegistrationTenantId(prisma, tenantId)) {
+      return res.status(403).json({
+        error:
+          'A tenant de registo partilhada da app (piscina de contas) não suporta política de ponto por organização. ' +
+          'Configure o registo de horas nas empresas que empregam os técnicos.',
+        code: 'WORK_TIME_SHARED_APP_POOL',
+      });
     }
     await ensureWorkTimeSettings(tenantId);
 

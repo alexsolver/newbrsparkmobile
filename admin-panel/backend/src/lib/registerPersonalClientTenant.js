@@ -1,6 +1,6 @@
 'use strict';
 
-const { assertTechnicianSeatForNewUser } = require('./planQuotaService');
+const { assertTechnicianSeatForNewUserUnlessSharedAppPool } = require('./planQuotaService');
 const {
   resolveSharedRegistrationTenant,
   DEFAULT_SHARED_SLUG,
@@ -65,7 +65,7 @@ async function createPersonalClientTenantAndUserInTransaction(tx, opts) {
     throw new Error('Tenant partilhada de registo não encontrada após resolução.');
   }
 
-  const seat = await assertTechnicianSeatForNewUser(tx, tenant.id, 'USER');
+  const seat = await assertTechnicianSeatForNewUserUnlessSharedAppPool(tx, tenant.id, 'USER');
   if (!seat.ok) {
     const err = new Error(seat.error || 'Limite do plano.');
     err.code = seat.code || 'PLAN_MAX_TECHNICIANS';

@@ -3042,6 +3042,8 @@
       "submitTitle": "Senden",
       "sentTitle": "Gesendet",
       "sentBody": "Ihre Bewerbung wurde gesendet. Bitte auf die Prüfung warten.",
+      "approvedTitle": "Registrierung genehmigt",
+      "approvedBody": "Ihre Anbieter-Registrierung wurde akzeptiert und ist bereits aktiv. Sie können den Anbietermodus in der App nutzen.",
       "networkError": "Netzwerkfehler.",
       "permTitle": "Berechtigung",
       "sessionTitle": "Sitzung",

@@ -1,6 +1,7 @@
 'use strict';
 
 const { saoPauloYearMonthFromDate } = require('./ftOsNumber');
+const { resolveSharedRegistrationTenant } = require('./resolveSharedRegistrationTenant');
 
 /** @typedef {'AI_FACIAL'|'AI_VISION_DETECTION'|'AI_VISION_ANALYSIS'|'FIELD_TASK'|'ROUTINE_TASK'} QuotaKind */
 
@@ -142,6 +143,23 @@ async function assertTechnicianSeatForNewUser(prisma, tenantId, roleUpper) {
 }
 
 /**
+ * Como {@link assertTechnicianSeatForNewUser}, mas ignora quota na tenant COMPANY
+ * de registo partilhado da app (`resolveSharedRegistrationTenant`): contas de
+ * utilizador final/prestador nessa piscina não consomem lugares de técnico do plano.
+ *
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} prisma
+ * @param {string} tenantId
+ * @param {string} roleUpper
+ */
+async function assertTechnicianSeatForNewUserUnlessSharedAppPool(prisma, tenantId, roleUpper) {
+  const shared = await resolveSharedRegistrationTenant(prisma);
+  if (shared && String(shared.id) === String(tenantId)) {
+    return { ok: true };
+  }
+  return assertTechnicianSeatForNewUser(prisma, tenantId, roleUpper);
+}
+
+/**
  * Antes de PATCH em usuário (mudança de papel ou ativo).
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {{ id: string; tenantId: string; role: string; isActive: boolean }} existing
@@ -198,6 +216,7 @@ module.exports = {
   loadActivePlanForTenant,
   consumeQuota,
   assertTechnicianSeatForNewUser,
+  assertTechnicianSeatForNewUserUnlessSharedAppPool,
   assertTechnicianSeatForUserPatch,
   assertChecklistTemplateCapacity,
   countActiveTechnicianSeats,

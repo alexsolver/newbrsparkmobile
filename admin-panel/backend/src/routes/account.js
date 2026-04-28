@@ -3,7 +3,8 @@ const express = require('express');
 const router = require('express').Router();
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
-const prisma  = require('../db');
+const prisma = require('../db');
+const { basePrisma } = require('../db');
 const crypto  = require('crypto');
 const path = require('path');
 const { initialTechRegistrationResponsesJson } = require('../lib/techRegistrationDefaults');
@@ -22,7 +23,7 @@ const {
 } = require('../lib/faceEnrollmentPersist');
 const { readUserAvatarImageBuffer } = require('../lib/userAvatarRead');
 const { verifyTechRegEnrollmentAgainstProfile } = require('../lib/techRegComprefaceVerify');
-const { assertTechnicianSeatForNewUser } = require('../lib/planQuotaService');
+const { assertTechnicianSeatForNewUserUnlessSharedAppPool } = require('../lib/planQuotaService');
 const { verifyOAuthWithLaravel } = require('../lib/laravelInternalOAuthVerify');
 const { buildEffectiveTenantBranding } = require('../lib/tenantBranding');
 const { buildAppAuthorization } = require('../lib/authorization');
@@ -140,15 +141,16 @@ function buildSafeAppUserPayload(user) {
 
 /**
  * Atualiza sessão de um utilizador do app, regista auditoria e devolve JWT + payload de /api/login.
+ * @param {import('@prisma/client').PrismaClient} [db] — usar `basePrisma` em rotas sob RLS que leem tenants fora de `app.current_tenant_id` (ex.: troca de workspace / master).
  */
-async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
+async function issueAppJwtAfterLogin(user, deviceId, auditResource, db = prisma) {
   const newSessionId = crypto.randomUUID();
 
   const prevDevice = user.currentDeviceId != null ? String(user.currentDeviceId) : '';
   const nextDevice = deviceId != null ? String(deviceId) : '';
   const shouldNotifyOtherDevice = user.currentSessionId && prevDevice !== nextDevice;
   if (shouldNotifyOtherDevice) {
-    const tokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
+    const tokens = await db.pushToken.findMany({ where: { userId: user.id } });
     if (tokens.length > 0) {
       sendExpoPushToMany(tokens, {
         data: { type: 'FORCE_LOGOUT', reason: 'NEW_LOGIN' },
@@ -156,7 +158,7 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
     }
   }
 
-  await prisma.user.update({
+  await db.user.update({
     where: { id: user.id },
     data: {
       lastLogin: new Date(),
@@ -165,9 +167,9 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
     },
   });
 
-  await ensureMembershipRoleMatchesTenantKind(prisma, user.id);
+  await ensureMembershipRoleMatchesTenantKind(db, user.id);
 
-  const fresh = await prisma.user.findUnique({
+  const fresh = await db.user.findUnique({
     where: { id: user.id },
     include: {
       tenant: { include: { subscription: { include: { plan: true } } } },
@@ -179,9 +181,9 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
     throw new Error('Falha ao carregar utilizador após login.');
   }
 
-  const presentation = await buildPresentationUserForApp(prisma, fresh);
+  const presentation = await buildPresentationUserForApp(db, fresh);
 
-  await prisma.auditLog.create({
+  await db.auditLog.create({
     data: {
       tenantId: presentation.tenantId,
       userId: fresh.id,
@@ -191,13 +193,13 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
     },
   });
 
-  const refreshToken = await replaceUserRefreshSession(prisma, {
+  const refreshToken = await replaceUserRefreshSession(db, {
     userId: fresh.id,
     sessionId: newSessionId,
     deviceId,
   });
 
-  const jwtEmail = await resolveCanonicalEmailNormForUser(prisma, fresh);
+  const jwtEmail = await resolveCanonicalEmailNormForUser(db, fresh);
   const token = jwt.sign(
     {
       id: fresh.id,
@@ -213,19 +215,20 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource) {
   return {
     token,
     refreshToken,
-    user: await buildSafeAppUserPayloadAsync(presentation),
+    user: await buildSafeAppUserPayloadAsync(presentation, db),
   };
 }
 
 /**
  * Igual a `buildSafeAppUserPayload`, mas resolve `tenant.visionDetectionEngine` com a mesma
  * lógica que `/api/checklists/vision/analyze` (Moondream vs YOLO).
+ * @param {import('@prisma/client').PrismaClient} [db]
  */
-async function buildSafeAppUserPayloadAsync(user) {
+async function buildSafeAppUserPayloadAsync(user, db = prisma) {
   const payload = buildSafeAppUserPayload(user);
   if (payload.tenant && user.tenant) {
     try {
-      payload.tenant.visionDetectionEngine = await resolveVisionDetectionEngineLabelForApp(prisma, user.tenant.features);
+      payload.tenant.visionDetectionEngine = await resolveVisionDetectionEngineLabelForApp(db, user.tenant.features);
     } catch (e) {
       console.warn('[account] visionDetectionEngine', e && e.message);
     }
@@ -1467,21 +1470,22 @@ router.get('/me/sibling-workspaces', authUser, async (req, res) => {
     if (req.user.panel === true) {
       return res.json({ workspaces: [] });
     }
-    const meRow = await prisma.user.findUnique({
+    /** `basePrisma`: pedido corre sob RLS com `app.current_tenant_id` = empresa dedicada; `Tenant` da master ficaria invisível com `prisma`. */
+    const meRow = await basePrisma.user.findUnique({
       where: { id: String(req.user.id || '').trim() },
       select: { id: true, appAccountId: true, email: true, appAccount: { select: { emailNorm: true } } },
     });
-    const emailNorm = await resolveCanonicalEmailNormForUser(prisma, meRow || req.user);
+    const emailNorm = await resolveCanonicalEmailNormForUser(basePrisma, meRow || req.user);
     if (!emailNorm) return res.json({ workspaces: [] });
 
     const meId = String(req.user.id || '').trim();
     const rows = meRow?.appAccountId
-      ? await prisma.user.findMany({
+      ? await basePrisma.user.findMany({
           where: { appAccountId: meRow.appAccountId, isActive: true },
           include: { tenant: true },
           orderBy: { createdAt: 'asc' },
         })
-      : await prisma.user.findMany({
+      : await basePrisma.user.findMany({
           where: { email: emailNorm, isActive: true },
           include: { tenant: true },
           orderBy: { createdAt: 'asc' },
@@ -1497,7 +1501,7 @@ router.get('/me/sibling-workspaces', authUser, async (req, res) => {
     if (tenantIds.length === 0) {
       return res.json({ workspaces: [] });
     }
-    const grouped = await prisma.user.groupBy({
+    const grouped = await basePrisma.user.groupBy({
       by: ['tenantId'],
       where: { tenantId: { in: tenantIds } },
       _count: { id: true },
@@ -1557,17 +1561,23 @@ router.post('/me/switch-workspace', authUser, async (req, res) => {
     const tenantId = String(req.body?.tenantId || '').trim();
     if (!tenantId) return res.status(400).json({ error: 'tenantId é obrigatório.' });
 
-    const meSw = await prisma.user.findUnique({
+    const meSw = await basePrisma.user.findUnique({
       where: { id: String(req.user.id || '').trim() },
       select: { id: true, appAccountId: true, email: true, appAccount: { select: { emailNorm: true } } },
     });
-    const emailNorm = await resolveCanonicalEmailNormForUser(prisma, meSw || req.user);
+    const emailNorm = await resolveCanonicalEmailNormForUser(basePrisma, meSw || req.user);
     if (!emailNorm) return res.status(400).json({ error: 'Sessão sem e-mail.' });
 
-    const target = await prisma.user.findFirst({
+    const meId = String((meSw && meSw.id) || req.user.id || '').trim();
+    if (!meId) return res.status(400).json({ error: 'Sessão inválida.' });
+
+    /** Na tenant partilhada existem duas filas (USER + PROVIDER) com o mesmo `appAccountId`;
+     * sem `id: { not: meId }` o `findFirst` podia devolver a própria sessão e responder «Já está nesta organização.». */
+    const target = await basePrisma.user.findFirst({
       where: {
         tenantId,
         isActive: true,
+        id: { not: meId },
         ...(meSw?.appAccountId
           ? { appAccountId: meSw.appAccountId }
           : { email: { equals: emailNorm, mode: 'insensitive' } }),
@@ -1585,7 +1595,7 @@ router.post('/me/switch-workspace', authUser, async (req, res) => {
     }
 
     const { deviceId } = req.body;
-    const out = await issueAppJwtAfterLogin(target, deviceId, emailNorm);
+    const out = await issueAppJwtAfterLogin(target, deviceId, emailNorm, basePrisma);
     res.json(out);
   } catch (err) {
     console.error('[me/switch-workspace]', err);
@@ -1774,18 +1784,18 @@ router.post('/me/workspaces', authUser, async (req, res) => {
       return res.status(400).json({ error: 'kind deve ser PROVIDER ou CLIENT.' });
     }
 
-    const me = await prisma.user.findUnique({
+    const me = await basePrisma.user.findUnique({
       where: { id: req.user.id },
       include: { tenant: true, appAccount: { select: { emailNorm: true } } },
     });
     if (!me) return res.status(404).json({ error: 'Utilizador não encontrado.' });
 
-    const emailCanon = await resolveCanonicalEmailNormForUser(prisma, me);
+    const emailCanon = await resolveCanonicalEmailNormForUser(basePrisma, me);
     const accountFilter = me.appAccountId
       ? { appAccountId: me.appAccountId }
       : { email: { equals: emailCanon, mode: 'insensitive' } };
 
-    const shared = await resolveSharedRegistrationTenant(prisma);
+    const shared = await resolveSharedRegistrationTenant(basePrisma);
     if (!shared) {
       return res.status(503).json({
         error:
@@ -1794,7 +1804,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
     }
 
     if (kind === 'PROVIDER') {
-      const existsProv = await prisma.user.findFirst({
+      const existsProv = await basePrisma.user.findFirst({
         where: { ...accountFilter, tenantId: shared.id, role: 'PROVIDER' },
         select: { id: true, tenantId: true },
       });
@@ -1806,7 +1816,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
         });
       }
     } else {
-      const existsPersonal = await prisma.user.findFirst({
+      const existsPersonal = await basePrisma.user.findFirst({
         where: {
           ...accountFilter,
           tenantId: shared.id,
@@ -1831,12 +1841,9 @@ router.post('/me/workspaces', authUser, async (req, res) => {
       }
     }
 
-    const baseName = String(req.body?.name || me.name || 'Organização').trim();
-    const tenantName = baseName;
-
     const seatRole = kind === 'PROVIDER' ? 'PROVIDER' : 'USER';
 
-    const { tenant: newTenant, user: newUser } = await prisma.$transaction(async (tx) => {
+    const { tenant: newTenant, user: newUser } = await basePrisma.$transaction(async (tx) => {
       const sharedRow = await resolveSharedRegistrationTenant(tx);
       if (!sharedRow) {
         const e = new Error('Tenant partilhada não encontrada.');
@@ -1849,7 +1856,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
         e.code = 'SHARED_TENANT_MISSING';
         throw e;
       }
-      const seatCheck = await assertTechnicianSeatForNewUser(tx, tenant.id, seatRole);
+      const seatCheck = await assertTechnicianSeatForNewUserUnlessSharedAppPool(tx, tenant.id, seatRole);
       if (!seatCheck.ok) {
         const e = new Error(seatCheck.error || 'Limite do plano.');
         e.code = seatCheck.code || 'PLAN_MAX_TECHNICIANS';
@@ -1891,7 +1898,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
     });
 
     const deviceId = req.body?.deviceId;
-    const out = await issueAppJwtAfterLogin(newUser, deviceId, emailCanon);
+    const out = await issueAppJwtAfterLogin(newUser, deviceId, emailCanon, basePrisma);
     res.status(201).json({
       ...out,
       workspace: { tenantId: newTenant.id, kind },

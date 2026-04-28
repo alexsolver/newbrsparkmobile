@@ -52,8 +52,41 @@ function activeClient() {
   return s && s.tx ? s.tx : basePrisma;
 }
 
+/**
+ * Dentro do middleware RLS, `prisma` resolve para o `tx` da transacção interactiva.
+ * Esse cliente **não** expõe `$transaction` (ITXClientDenyList) — chamadas como
+ * `prisma.$transaction([...])` falhavam com «$transaction is not a function».
+ * Reutilizamos o mesmo `tx`: callback `fn(tx)` ou sequência de `PrismaPromise`.
+ *
+ * @param {unknown} first
+ * @param {unknown[]} rest
+ */
+function prismaTransactionShim(first, ...rest) {
+  const s = rlsAls.getStore();
+  if (!s || !s.tx) {
+    return basePrisma.$transaction(first, ...rest);
+  }
+  const { tx } = s;
+  if (typeof first === 'function') {
+    return first(tx);
+  }
+  if (Array.isArray(first)) {
+    return (async () => {
+      const out = [];
+      for (const op of first) {
+        out.push(await op);
+      }
+      return out;
+    })();
+  }
+  return basePrisma.$transaction(first, ...rest);
+}
+
 const prisma = new Proxy(basePrisma, {
   get(_target, prop) {
+    if (prop === '$transaction') {
+      return prismaTransactionShim;
+    }
     const active = activeClient();
     const v = active[prop];
     if (typeof v === 'function') return v.bind(active);

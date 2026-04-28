@@ -1453,18 +1453,82 @@ window.loadOpsGeofenceAudit = async function (execId) {
 // ── Reabrir para revisão (modal + técnico) ───────────────────
 let reopenRevisionTaskId = null;
 let _reopenUsersCache = null;
+/** Lista completa antes da deduplicação (para mapear `ownerEmail` sintético → canónico na reabertura). */
+let _reopenUsersCacheRaw = null;
 let _dispatchSuggestIndex = -1;
 /** @type {string[]} E-mails adicionados ao despacho multi-técnico (leilão). */
 window._dispatchCandidateList = [];
 
-/** Usuários ativos para reabertura e despacho (cache compartilhado). */
+/** E-mail canónico de login (`GET /users` expõe `loginEmailNorm`). */
+function canonicalEmailForOpsUser(u) {
+  const fromApi = u && u.loginEmailNorm != null ? String(u.loginEmailNorm).trim() : '';
+  if (fromApi) return fromApi;
+  return String((u && u.email) || '').trim();
+}
+
+/** `User.email` sintético para o mesmo AppAccount (ex.: `+brspark.ws.…`, `+brspark.…`). */
+function isSyntheticBrsparkAffiliationEmail(em) {
+  return /\+brspark\./i.test(String(em || ''));
+}
+
+function opsActiveUserDedupeKey(u) {
+  const aid = u && u.appAccountId != null ? String(u.appAccountId).trim() : '';
+  if (aid) return 'app:' + aid;
+  const c = canonicalEmailForOpsUser(u).toLowerCase();
+  if (c) return 'em:' + c;
+  return 'id:' + String((u && u.id) || '');
+}
+
+function pickRepresentativeOpsUserRow(group) {
+  if (!group || !group.length) return null;
+  if (group.length === 1) return group[0];
+  const canon = canonicalEmailForOpsUser(group[0]).toLowerCase();
+  const exact = group.find((x) => String(x.email || '').trim().toLowerCase() === canon);
+  if (exact) return exact;
+  const plain = group.find((x) => !isSyntheticBrsparkAffiliationEmail(x.email));
+  if (plain) return plain;
+  return [...group].sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')))[0];
+}
+
+function dedupeOpsActiveUsersForPanel(users) {
+  const arr = Array.isArray(users) ? users : [];
+  const m = new Map();
+  for (const u of arr) {
+    const k = opsActiveUserDedupeKey(u);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(u);
+  }
+  const out = [];
+  for (const g of m.values()) {
+    const row = pickRepresentativeOpsUserRow(g);
+    if (row) out.push(row);
+  }
+  return out;
+}
+
+/** Resolve `ownerEmail` da OS (linha ou sintético) para o canónico usando a lista bruta da API. */
+function resolveOpsOwnerEmailToCanonicalInCache(ownerEmailLower, cache) {
+  const o = String(ownerEmailLower || '').trim().toLowerCase();
+  if (!o) return '';
+  const list = Array.isArray(cache) ? cache : [];
+  for (const u of list) {
+    if (String(u.email || '').toLowerCase() === o) return canonicalEmailForOpsUser(u).toLowerCase();
+    if (String(u.loginEmailNorm || '').toLowerCase() === o) return String(u.loginEmailNorm || '').trim().toLowerCase();
+  }
+  return o;
+}
+
+/** Usuários ativos para reabertura e despacho (cache compartilhado, deduplicado por AppAccount / e-mail canónico). */
 async function ensureOpsActiveUsersCache() {
   if (_reopenUsersCache) return _reopenUsersCache;
   try {
     const res = await CONFIG.get('/users?limit=500');
-    _reopenUsersCache = (res && Array.isArray(res.data) ? res.data : []).filter((u) => u.isActive !== false);
+    const raw = (res && Array.isArray(res.data) ? res.data : []).filter((u) => u.isActive !== false);
+    _reopenUsersCacheRaw = raw;
+    _reopenUsersCache = dedupeOpsActiveUsersForPanel(raw);
   } catch (e) {
     console.error('[OPS] users cache', e);
+    _reopenUsersCacheRaw = [];
     _reopenUsersCache = [];
   }
   return _reopenUsersCache;
@@ -1498,7 +1562,8 @@ function filterDispatchTechCandidates(q) {
   const list = _reopenUsersCache.filter((u) => {
     const name = String(u.name || '').toLowerCase();
     const em = String(u.email || '').toLowerCase();
-    return name.includes(query) || em.includes(query);
+    const canon = String(u.loginEmailNorm || '').toLowerCase();
+    return name.includes(query) || em.includes(query) || canon.includes(query);
   });
   list.sort((a, b) =>
     String(a.name || '').localeCompare(String(b.name || ''), opsSortLocale(), { sensitivity: 'base' })
@@ -1515,10 +1580,10 @@ function renderDispatchTechSuggestions(users) {
   }
   ul.innerHTML = users
     .map((u, i) => {
-      const em = String(u.email || '');
+      const displayEm = canonicalEmailForOpsUser(u) || String(u.email || '');
       const nm = String(u.name || '—');
       const active = i === _dispatchSuggestIndex ? ' is-active' : '';
-      return `<li role="option" data-email="${escDispatchSuggest(em)}" class="dispatch-tech-suggest-item${active}"><span class="dts-name">${escDispatchSuggest(nm)}</span><span class="dts-email">${escDispatchSuggest(em)}</span></li>`;
+      return `<li role="option" data-email="${escDispatchSuggest(displayEm)}" class="dispatch-tech-suggest-item${active}"><span class="dts-name">${escDispatchSuggest(nm)}</span><span class="dts-email">${escDispatchSuggest(displayEm)}</span></li>`;
     })
     .join('');
   ul.style.display = 'block';
@@ -2051,7 +2116,8 @@ window.openReopenRevisionModal = async function (taskId) {
 
   try {
     await ensureOpsActiveUsersCache();
-    const cur = String(task.ownerEmail || '').toLowerCase();
+    const curRaw = String(task.ownerEmail || '').toLowerCase().trim();
+    const curCanon = resolveOpsOwnerEmailToCanonicalInCache(curRaw, _reopenUsersCacheRaw || _reopenUsersCache);
     const sorted = [..._reopenUsersCache].sort((a, b) =>
       String(a.name || '').localeCompare(String(b.name || ''), opsSortLocale(), { sensitivity: 'base' })
     );
@@ -2061,12 +2127,12 @@ window.openReopenRevisionModal = async function (taskId) {
     }
     sel.innerHTML = sorted
       .map((u) => {
-        const em = String(u.email || '');
-        return `<option value="${escOpt(em)}">${escOpt(u.name || '')} — ${escOpt(em)}</option>`;
+        const displayEm = canonicalEmailForOpsUser(u) || String(u.email || '');
+        return `<option value="${escOpt(displayEm)}">${escOpt(u.name || '')} — ${escOpt(displayEm)}</option>`;
       })
       .join('');
-    const firstOther = sorted.find((u) => String(u.email || '').toLowerCase() !== cur);
-    sel.value = firstOther ? firstOther.email : sorted[0].email;
+    const firstOther = sorted.find((u) => canonicalEmailForOpsUser(u).toLowerCase() !== curCanon);
+    sel.value = firstOther ? canonicalEmailForOpsUser(firstOther) : canonicalEmailForOpsUser(sorted[0]);
   } catch (e) {
     console.error('[reopen] users', e);
     sel.innerHTML = '<option value="">Erro ao carregar usuários</option>';
@@ -2161,6 +2227,7 @@ window.submitReopenRevision = async function () {
         : 'OS reaberta. O técnico verá a atividade em "Em campo" após sincronizar o app.';
     alert(msg);
     _reopenUsersCache = null;
+    _reopenUsersCacheRaw = null;
     await window.loadBoard();
   } catch (e) {
     const msg = e && e.name === 'AbortError' ? 'Tempo esgotado ao contatar a API. Verifique se o backend está no ar e a rede.' : (e.message || String(e));

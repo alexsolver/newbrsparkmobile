@@ -88,6 +88,8 @@
         <select class="form-control" id="wt-tenant-select" style="max-width: 480px"></select>
       </div>
 
+      <div id="wt-shared-pool-banner" class="wt-alert" style="display: none" role="status"></div>
+
       <div class="wt-alert dc-alert-info" style="background: var(--blue-dim, #eff6ff); color: var(--blue, #1d4ed8); border-color: #bfdbfe">
         <ion-icon name="information-circle-outline" style="font-size: 18px; flex-shrink: 0"></ion-icon>
         <span>
@@ -288,6 +290,35 @@
   const reportLimit = 50;
   let reportTotalPages = 1;
   let reportTotal = 0;
+
+  const WT_SETTINGS_FIELD_IDS = [
+    'wt-module-enabled',
+    'wt-req-face',
+    'wt-req-gps',
+    'wt-req-addr',
+    'wt-drift',
+    'wt-acc',
+    'wt-consent-ver',
+    'wt-notice',
+  ];
+
+  function applySharedPoolUi(locked) {
+    const banner = document.getElementById('wt-shared-pool-banner');
+    for (const id of WT_SETTINGS_FIELD_IDS) {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !!locked;
+    }
+    const saveBtn = document.getElementById('wt-btn-save');
+    if (saveBtn) {
+      const hideSave = !canEditWorkTime || !!locked;
+      saveBtn.hidden = hideSave;
+      saveBtn.disabled = hideSave;
+    }
+    if (banner) {
+      banner.style.display = locked ? 'block' : 'none';
+      if (locked) banner.textContent = mpT('wt_shared_pool_banner');
+    }
+  }
 
   function fmtIsoLocal(iso) {
     if (!iso) return '—';
@@ -582,6 +613,7 @@
       return;
     }
     fillForm(s);
+    applySharedPoolUi(!!s.sharedAppPoolTenant);
     void loadUsersForReport(tid);
     void loadPunches(1);
   }
@@ -589,6 +621,11 @@
   document.getElementById('wt-btn-save').onclick = async () => {
     if (!canEditWorkTime) return;
     const tid = canCrossTenantWorkTime ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
+    const mod = document.getElementById('wt-module-enabled');
+    if (mod && mod.disabled) {
+      alert(mpT('wt_shared_pool_save_blocked'));
+      return;
+    }
     if (!tid) {
       alert(mpT('wt_alert_pick_tenant'));
       return;
@@ -623,7 +660,7 @@
   document.getElementById('wt-report-csv').onclick = () => void exportPunchesCsv();
   document.getElementById('wt-report-prev').onclick = () => void loadPunches(reportPage - 1);
   document.getElementById('wt-report-next').onclick = () => void loadPunches(reportPage + 1);
-  document.getElementById('wt-btn-save').hidden = !canEditWorkTime;
+  applySharedPoolUi(false);
 
   const tid = await resolveTenantForUi();
   if (tid) await loadSettings();

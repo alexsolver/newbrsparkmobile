@@ -3042,6 +3042,8 @@
       "submitTitle": "Send",
       "sentTitle": "Sent",
       "sentBody": "Your application was sent. Please wait for the team to review it.",
+      "approvedTitle": "Registration approved",
+      "approvedBody": "Your provider registration was accepted and is already active. You can use provider mode in the app.",
       "networkError": "Network error.",
       "permTitle": "Permission",
       "sessionTitle": "Session",

@@ -3042,6 +3042,8 @@
       "submitTitle": "Envio",
       "sentTitle": "Enviado",
       "sentBody": "Sua candidatura foi enviada. Aguarde a análise da equipe.",
+      "approvedTitle": "Cadastro aprovado",
+      "approvedBody": "O seu cadastro de prestador foi aceite e já está ativo. Pode usar o modo prestador no app.",
       "networkError": "Falha de rede.",
       "permTitle": "Permissão",
       "sessionTitle": "Sessão",
