@@ -75,9 +75,9 @@ export const USER_PAGES_DE_MERGE = {
   ul_createUser: 'Benutzer anlegen',
   ul_lblTenantsMulti: 'Organisationen (Mandanten) *',
   ul_tenantsHint:
-    'Nur Unternehmens-Mandanten (COMPANY). Die E-Mail unter «E-Mail *» muss bereits als Benutzer in einem Anbieter-Mandanten (PROVIDER) existieren; Plattform-Admins können ohne diese Voraussetzung anlegen. Ein Datensatz pro ausgewählter Organisation mit derselben E-Mail, Namen und Passwort. Slug und Kontakt unter jedem Namen gehören zu dieser Organisation — nicht mit der E-Mail des neuen Benutzers verwechseln.',
+    'Nur Unternehmensorganisationen (COMPANY). Pro ausgewählter Organisation wird ein Benutzerkonto mit derselben E-Mail, demselben Namen und Passwort angelegt. Slug und Kontakt unter jedem Namen gehören zu dieser Organisation — nicht mit der E-Mail des neuen Benutzers verwechseln.',
   ul_tenantsHintScoped:
-    'Nur Unternehmens-Mandanten (COMPANY). Die E-Mail unter «E-Mail *» muss bereits als Benutzer in einem Anbieter-Mandanten (PROVIDER) existieren; Plattform-Admins können diese Voraussetzung aussetzen. In Ihrer Organisation wird ein Datensatz mit der angegebenen E-Mail, dem Namen und dem Passwort angelegt. Text in Klammern ist der Organisationskontakt.',
+    'Nur Unternehmensorganisationen (COMPANY). In Ihrer Organisation wird ein Datensatz mit der angegebenen E-Mail, dem Namen und dem Passwort angelegt. Text in Klammern ist der Organisationskontakt.',
   ul_tenantsAll: 'Alle auswählen',
   ul_tenantsNone: 'Auswahl leeren',
   ul_createPickTenants: 'Wählen Sie mindestens eine Organisation (Mandant).',

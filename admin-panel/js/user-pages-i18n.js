@@ -180,10 +180,10 @@ const M = {
     ul_lblTenant: 'Conta (Tenant)',
     ul_lblTenantsMulti: 'Organizações (tenants) *',
     ul_tenantsHint:
-      'Apenas organizações empresa (COMPANY). O e-mail em «E-mail *» já deve existir como utilizador num tenant prestador (PROVIDER); administrador da plataforma pode criar sem esse pré-requisito. Um registo por organização selecionada com o mesmo e-mail, nome e senha. Junto a cada organização, slug e contacto são dados dessa organização — não confundir com o e-mail do novo utilizador.',
-    /** Mesma governança, modo admin de uma organização (sem selecção múltipla). */
+      'Apenas organizações empresa (COMPANY). Será criado um registo de utilizador por organização selecionada, com o mesmo e-mail, nome e senha. O slug e o contacto junto de cada nome são dados dessa organização — não confunda com o e-mail do novo utilizador.',
+    /** Modo admin de uma organização (sem selecção múltipla). */
     ul_tenantsHintScoped:
-      'Apenas organizações empresa (COMPANY). O e-mail em «E-mail *» já deve existir como utilizador num tenant prestador (PROVIDER); o administrador da plataforma dispensa este pré-requisito. Será criado um registo na sua organização com o e-mail, nome e senha indicados. No seletor, o texto entre parênteses é o contacto da organização.',
+      'Apenas organizações empresa (COMPANY). Será criado um registo na sua organização com o e-mail, nome e senha indicados. No seletor, o texto entre parênteses é o contacto da organização.',
     ul_tenantsAll: 'Marcar todas',
     ul_tenantsNone: 'Limpar seleção',
     ul_createPickTenants: 'Selecione pelo menos uma organização (tenant).',
@@ -984,9 +984,9 @@ const M = {
     ul_lblTenant: 'Account (tenant)',
     ul_lblTenantsMulti: 'Organizations (tenants) *',
     ul_tenantsHint:
-      'Company organizations (COMPANY) only. The address in «Email *» must already exist as a user on a provider (PROVIDER) tenant; platform admins can create without that prerequisite. One record per selected organization with the same email, name and password. Slug and contact shown under each organization are that tenant’s own fields — not the new user’s email.',
+      'Company organizations (COMPANY) only. One user record will be created per selected organization with the same email, name and password. Slug and contact shown under each name belong to that organization — not the new user’s email.',
     ul_tenantsHintScoped:
-      'Company organizations (COMPANY) only. The address in «Email *» must already exist as a user on a provider (PROVIDER) tenant; platform admins may skip that prerequisite. One user record will be created in your organization with the email, name and password you enter. Text in parentheses in the picker is the organization’s contact email.',
+      'Company organizations (COMPANY) only. One user record will be created in your organization with the email, name and password you enter. Text in parentheses in the picker is the organization’s contact email.',
     ul_tenantsAll: 'Select all',
     ul_tenantsNone: 'Clear selection',
     ul_createPickTenants: 'Select at least one organization (tenant).',

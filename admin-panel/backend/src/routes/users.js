@@ -361,32 +361,6 @@ router.get('/partnership-candidates', async (req, res) => {
   }
 });
 
-/**
- * Governança painel → POST / (criar utilizador em tenants COMPANY):
- * quem não é admin de plataforma (`isPlatformAdmin`) só pode criar se o e-mail já tiver assento
- * num tenant PROVIDER (User directo ou User ligado ao mesmo `AppAccount`).
- * @see comentários em `router.post('/')` (nonCompanyIds + bypass plataforma).
- */
-async function emailHasProviderTenantMembership(db, emailNorm) {
-  const norm = String(emailNorm || '').trim().toLowerCase();
-  if (!norm) return false;
-  const direct = await db.user.findFirst({
-    where: { email: norm, tenant: { kind: 'PROVIDER' } },
-    select: { id: true },
-  });
-  if (direct) return true;
-  const acc = await db.appAccount.findUnique({
-    where: { emailNorm: norm },
-    select: { id: true },
-  });
-  if (!acc?.id) return false;
-  const viaAcc = await db.user.findFirst({
-    where: { appAccountId: acc.id, tenant: { kind: 'PROVIDER' } },
-    select: { id: true },
-  });
-  return !!viaAcc;
-}
-
 // POST /api/users — `tenantId` (um) ou `tenantIds` (vários); cria um registo User por tenant com o mesmo e-mail e senha.
 router.post('/', async (req, res) => {
   try {
@@ -457,17 +431,6 @@ router.post('/', async (req, res) => {
         error:
           'Apenas tenants do tipo empresa (COMPANY) podem receber utilizadores criados por esta rota. Contas imobiliária (CLIENT) ou prestador (PROVIDER) usam outros fluxos.',
       });
-    }
-
-    if (!isPlatformAdmin(req.authorization)) {
-      const hasProvider = await emailHasProviderTenantMembership(prisma, emailNorm);
-      if (!hasProvider) {
-        return res.status(400).json({
-          error:
-            'Só é possível associar a organizações empresa contas que já existam como utilizador num tenant prestador (PROVIDER) com o mesmo e-mail (ou a mesma conta global). Conclua primeiro o cadastro na carteira do prestador ou contacte a plataforma.',
-          code: 'USER_CREATE_COMPANY_REQUIRES_PROVIDER_SEAT',
-        });
-      }
     }
 
     for (const scopedTenantId of tenantIdsResolved) {
