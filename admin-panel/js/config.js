@@ -57,7 +57,8 @@ export function restoreAdminSessionBundleIfNeeded() {
       sessionStorage.setItem('brspark_panel_tenant', String(b.panelTenant));
     }
     if (b.panelTenantListKind != null && String(b.panelTenantListKind).trim() !== '') {
-      sessionStorage.setItem('brspark_panel_tenant_list_kind', String(b.panelTenantListKind));
+      // Lista do seletor de plataforma é só tenants empresa; ignora valores antigos (ALL / CLIENT / …).
+      sessionStorage.setItem('brspark_panel_tenant_list_kind', 'COMPANY');
     }
     if (b.adminContext != null && String(b.adminContext).trim() !== '') {
       sessionStorage.setItem(SS_ADMIN_CONTEXT, String(b.adminContext));

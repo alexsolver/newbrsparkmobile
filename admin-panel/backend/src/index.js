@@ -22,6 +22,7 @@ const cors    = require('cors');
 const morgan  = require('morgan');
 
 const { adminAuthThenPanel } = require('./middleware/auth');
+const { prismaRlsInternalBridgeMiddleware } = require('./middleware/prismaRlsRequestContext');
 const prisma          = require('./db');
 const { runBackfillOsNumbers } = require('./lib/backfillOsNumbersLib');
 const { ensureChatLocaleSchema } = require('./lib/ensureChatLocaleSchema');
@@ -139,12 +140,13 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-/** Bridge servidor-a-servidor: Laravel → tokens JWT para o módulo de avaliações no BrsparkWeb */
-app.use('/api/internal', evaluationsWebBridgeRoutes);
-/** Laravel CMS → espelho de branding no PostgreSQL (`features.cmsBrandingMirror`) */
-app.use('/api/internal', cmsBrandingMirrorInternal);
-/** Laravel CMS → provisionamento tenant + resumo operacional (PostgreSQL) */
-app.use('/api/internal', cmsLaravelBridgeInternal);
+/** Bridge servidor-a-servidor (RLS: `app.bridge_internal` durante o pedido). */
+const internalApiRouter = express.Router();
+internalApiRouter.use(prismaRlsInternalBridgeMiddleware);
+internalApiRouter.use(evaluationsWebBridgeRoutes);
+internalApiRouter.use(cmsBrandingMirrorInternal);
+internalApiRouter.use(cmsLaravelBridgeInternal);
+app.use('/api/internal', internalApiRouter);
 
 // ── Health ─────────────────────────────────────────────────
 app.get('/health', (_req, res) => {

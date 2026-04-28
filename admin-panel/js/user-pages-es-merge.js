@@ -167,7 +167,9 @@ export const USER_PAGES_ES_MERGE = {
   ul_lblTenant: "Cuenta (inquilino)",
   ul_lblTenantsMulti: "Organizaciones (inquilinos) *",
   ul_tenantsHint:
-    "Solo organizaciones empresa (COMPANY). El correo ya debe existir como usuario en un inquilino proveedor (PROVIDER); el administrador de plataforma puede crear sin ese requisito. Un registro por organización seleccionada con el mismo correo, nombre y contraseña.",
+    "Solo organizaciones empresa (COMPANY). El correo en «Correo *» ya debe existir como usuario en un inquilino proveedor (PROVIDER); el administrador de plataforma puede crear sin ese requisito. Un registro por organización seleccionada con el mismo correo, nombre y contraseña. Slug y contacto bajo cada nombre son datos de esa organización — no lo confunda con el correo del nuevo usuario.",
+  ul_tenantsHintScoped:
+    "Solo organizaciones empresa (COMPANY). El correo en «Correo *» ya debe existir como usuario en un inquilino proveedor (PROVIDER); el administrador de plataforma puede omitir ese requisito. Se creará un registro en su organización con el correo, nombre y contraseña indicados. Entre paréntesis en el selector figura el contacto de la organización.",
   ul_tenantsAll: "Marcar todas",
   ul_tenantsNone: "Borrar selección",
   ul_createPickTenants: "Seleccione al menos una organización (inquilino).",

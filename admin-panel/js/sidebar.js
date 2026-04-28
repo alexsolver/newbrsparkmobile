@@ -67,22 +67,10 @@ function escSidebarAttr(s) {
 
 const SS_PANEL_TENANT_LIST_KIND = 'brspark_panel_tenant_list_kind';
 
-function getPanelTenantListKind() {
+/** Seletor de plataforma: só organizações empresa (alinhado a `GET /tenants?all=1` sem `kind=ALL`). */
+function setPanelTenantListKindCompanyOnly() {
   try {
-    const v = sessionStorage.getItem(SS_PANEL_TENANT_LIST_KIND);
-    const u = String(v || '').trim().toUpperCase();
-    if (u === 'COMPANY' || u === 'PROVIDER' || u === 'CLIENT' || u === 'ALL') return u;
-  } catch {
-    /* ignore */
-  }
-  return 'COMPANY';
-}
-
-function setPanelTenantListKind(v) {
-  try {
-    const u = String(v || 'COMPANY').trim().toUpperCase();
-    const ok = u === 'ALL' || u === 'CLIENT' || u === 'PROVIDER' || u === 'COMPANY';
-    sessionStorage.setItem(SS_PANEL_TENANT_LIST_KIND, ok ? u : 'COMPANY');
+    sessionStorage.setItem(SS_PANEL_TENANT_LIST_KIND, 'COMPANY');
   } catch {
     /* ignore */
   }
@@ -105,9 +93,9 @@ async function fetchTenantsForPickerKind(kindU) {
   return Array.isArray(j?.data) ? j.data : [];
 }
 
-async function refillPanelTenantSelectOptions(kindFilterEl, sel) {
-  const kindVal = kindFilterEl ? String(kindFilterEl.value || 'COMPANY').trim().toUpperCase() : 'COMPANY';
-  setPanelTenantListKind(kindVal);
+async function refillPanelTenantSelectOptions(sel) {
+  setPanelTenantListKindCompanyOnly();
+  const kindVal = 'COMPANY';
   const currentId = getCurrentContextTenantId();
   sel.innerHTML = `<option value="">${escSidebarAttr(t('nav_panel_tenant_all'))}</option>`;
   sel.disabled = true;
@@ -158,38 +146,22 @@ async function bindPanelTenantScopePicker() {
   const wrap = document.getElementById('sidebar-panel-scope-picker');
   if (!wrap || wrap.dataset.brsparkPickerInit === '1') return;
 
-  const kindSel = document.getElementById('sidebar-panel-tenant-kind-filter');
   const sel = document.getElementById('sidebar-panel-tenant-select');
-  if (!kindSel || !sel) return;
+  if (!sel) return;
 
-  kindSel.value = getPanelTenantListKind();
-  if (!['COMPANY', 'PROVIDER', 'CLIENT', 'ALL'].includes(kindSel.value)) kindSel.value = 'COMPANY';
-
-  await refillPanelTenantSelectOptions(kindSel, sel);
-
-  kindSel.addEventListener('change', async () => {
-    kindSel.disabled = true;
-    sel.disabled = true;
-    try {
-      await refillPanelTenantSelectOptions(kindSel, sel);
-    } finally {
-      kindSel.disabled = false;
-      sel.disabled = false;
-    }
-  });
+  setPanelTenantListKindCompanyOnly();
+  await refillPanelTenantSelectOptions(sel);
 
   sel.addEventListener('change', async () => {
     const v = String(sel.value || '').trim();
     const prev = sel.dataset.brsparkPrev || '';
     if (v === prev) return;
     sel.disabled = true;
-    kindSel.disabled = true;
     const res = await CONFIG.post('/auth/panel-select-tenant', { tenantId: v || null });
     if (!res || !res.token) {
       alert(typeof res?.error === 'string' && res.error ? res.error : t('nav_panel_tenant_apply_err'));
       sel.value = prev;
       sel.disabled = false;
-      kindSel.disabled = false;
       return;
     }
     sessionStorage.setItem('brspark_admin_token', res.token);
@@ -246,6 +218,13 @@ function seedAdminSessionFromOpenerIfNeeded() {
       try {
         const v = src.getItem(k);
         if (v != null && v !== '') sessionStorage.setItem(k, v);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (sessionStorage.getItem('brspark_admin_token')) {
+      try {
+        sessionStorage.setItem('brspark_panel_tenant_list_kind', 'COMPANY');
       } catch {
         /* ignore */
       }
@@ -571,13 +550,6 @@ export function renderSidebar(alertCount = 3) {
   }
   const scopePickerHtml = isPlatformCtx
     ? `<div class="sidebar-panel-scope-picker" id="sidebar-panel-scope-picker">
-        <span class="sidebar-panel-scope-picker__lbl">${escSidebarAttr(t('nav_panel_tenant_kind_lbl'))}</span>
-        <select id="sidebar-panel-tenant-kind-filter" class="sidebar-panel-scope-picker__select sidebar-panel-scope-picker__select--kind" aria-label="${escSidebarAttr(t('nav_panel_tenant_kind_lbl'))}">
-          <option value="COMPANY">${escSidebarAttr(t('nav_panel_tenant_kind_company'))}</option>
-          <option value="PROVIDER">${escSidebarAttr(t('nav_panel_tenant_kind_provider'))}</option>
-          <option value="CLIENT">${escSidebarAttr(t('nav_panel_tenant_kind_client'))}</option>
-          <option value="ALL">${escSidebarAttr(t('nav_panel_tenant_kind_all'))}</option>
-        </select>
         <span class="sidebar-panel-scope-picker__lbl">${escSidebarAttr(t('nav_panel_tenant_scope'))}</span>
         <select id="sidebar-panel-tenant-select" class="sidebar-panel-scope-picker__select" aria-label="${escSidebarAttr(t('nav_panel_tenant_scope'))}">
           <option value="">${escSidebarAttr(t('nav_panel_tenant_all'))}</option>

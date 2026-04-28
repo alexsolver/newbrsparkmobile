@@ -2,6 +2,7 @@
 
 const jwt = require('jsonwebtoken');
 const prisma = require('../db');
+const { continueWithRlsTransaction } = require('./prismaRlsRequestContext');
 
 /**
  * Preenche req.appUser se houver Bearer válido (sessão app); não responde 401.
@@ -10,7 +11,9 @@ module.exports = async function optionalAuthUser(req, res, next) {
   req.appUser = null;
   const header = req.headers.authorization || '';
   const raw = header.startsWith('Bearer ') ? header.slice(7) : null;
-  if (!raw) return next();
+  if (!raw) {
+    return next();
+  }
   try {
     const payload = jwt.verify(raw, process.env.JWT_SECRET);
     if (!payload.tenantId || !payload.sessionId) return next();
@@ -35,5 +38,8 @@ module.exports = async function optionalAuthUser(req, res, next) {
   } catch {
     /* token inválido — tratar como anónimo */
   }
-  next();
+  if (req.appUser) {
+    return await continueWithRlsTransaction(req, res, next);
+  }
+  return next();
 };

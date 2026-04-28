@@ -2,6 +2,7 @@
 const jwt = require('jsonwebtoken');
 const { enforcePanelPermissions } = require('./panelPermissions');
 const { buildAdminAuthorization } = require('../lib/authorization');
+const { continueWithRlsTransaction } = require('./prismaRlsRequestContext');
 
 function copyPanelContextFromPayload(payload) {
   const ptid = payload.panelContextTenantId != null ? String(payload.panelContextTenantId).trim() : '';
@@ -55,31 +56,50 @@ function attachAdminFromPayload(payload) {
   };
 }
 
-function adminAuth(req, res, next) {
+/**
+ * Valida Bearer admin e preenche `req.admin` / `req.authorization`.
+ * @returns {boolean} `false` se já respondeu 401.
+ */
+function loadAdminBearerOr401(req, res) {
   const header = req.headers['authorization'];
   if (!header || !header.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Token de autenticação ausente.' });
+    res.status(401).json({ error: 'Token de autenticação ausente.' });
+    return false;
   }
   const token = header.slice(7);
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     req.admin = attachAdminFromPayload(payload);
     req.authorization = buildAdminAuthorization(req.admin);
-    next();
+    return true;
   } catch {
-    return res.status(401).json({ error: 'Token inválido ou expirado.' });
+    res.status(401).json({ error: 'Token inválido ou expirado.' });
+    return false;
   }
 }
 
-/** Autenticação admin + restrições do perfil Gestor (MANAGER) nas rotas do painel. */
-function adminAuthThenPanel(req, res, next) {
-  adminAuth(req, res, () => enforcePanelPermissions(req, res, next));
+function adminAuth(req, res, next) {
+  if (!loadAdminBearerOr401(req, res)) return;
+  next();
+}
+
+/** Autenticação admin + restrições do perfil Gestor (MANAGER) + transacção RLS por pedido. */
+async function adminAuthThenPanel(req, res, next) {
+  if (!loadAdminBearerOr401(req, res)) return;
+  if (!enforcePanelPermissions(req, res, null)) return;
+  await continueWithRlsTransaction(req, res, next);
+}
+
+/** Admin JWT + transacção RLS (rotas isoladas sem `enforcePanelPermissions`). */
+async function adminAuthThenRls(req, res, next) {
+  if (!loadAdminBearerOr401(req, res)) return;
+  await continueWithRlsTransaction(req, res, next);
 }
 
 /**
  * Admin JWT OU Bearer igual a REPORTS_API_KEY (integrações externas).
  */
-function adminOrReportsApiKey(req, res, next) {
+async function adminOrReportsApiKey(req, res, next) {
   const header = req.headers['authorization'];
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Token de autenticação ausente.' });
@@ -88,23 +108,19 @@ function adminOrReportsApiKey(req, res, next) {
   const reportsKey = process.env.REPORTS_API_KEY && String(process.env.REPORTS_API_KEY).trim();
   if (reportsKey && token === reportsKey) {
     req.reportsApiKeyAuth = true;
-    return next();
+    req.admin = null;
+    req.authorization = null;
+    return continueWithRlsTransaction(req, res, next, { reportsApiKey: true });
   }
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.admin = attachAdminFromPayload(payload);
-    req.authorization = buildAdminAuthorization(req.admin);
-    return next();
-  } catch {
-    return res.status(401).json({ error: 'Token inválido ou expirado.' });
-  }
+  if (!loadAdminBearerOr401(req, res)) return;
+  return continueWithRlsTransaction(req, res, next);
 }
 
 /**
  * Recusa de OS a partir do app (Live Activity / push) ou do painel.
  * Aceita JWT de utilizador do app (`sessionId` no payload) ou JWT do painel / admin legado (via `adminAuth` + permissões).
  */
-function rejectOsAuth(req, res, next) {
+async function rejectOsAuth(req, res, next) {
   const header = req.headers['authorization'];
   if (!header || !header.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Token de autenticação ausente.' });
@@ -119,7 +135,8 @@ function rejectOsAuth(req, res, next) {
   if (payload.panel === true && payload.userId) {
     req.admin = attachAdminFromPayload(payload);
     req.authorization = buildAdminAuthorization(req.admin);
-    return enforcePanelPermissions(req, res, () => next());
+    if (!enforcePanelPermissions(req, res, null)) return;
+    return continueWithRlsTransaction(req, res, next);
   }
   if (payload.sessionId != null && payload.id) {
     req.appUser = {
@@ -128,16 +145,17 @@ function rejectOsAuth(req, res, next) {
       email: payload.email,
       role: payload.role,
     };
-    return next();
+    return continueWithRlsTransaction(req, res, next);
   }
   req.admin = attachAdminFromPayload(payload);
   req.authorization = buildAdminAuthorization(req.admin);
-  return next();
+  return continueWithRlsTransaction(req, res, next);
 }
 
 module.exports = {
   adminAuth,
   adminAuthThenPanel,
+  adminAuthThenRls,
   adminOrReportsApiKey,
   rejectOsAuth,
   attachAdminFromPayload,

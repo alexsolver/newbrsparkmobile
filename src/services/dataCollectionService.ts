@@ -103,7 +103,9 @@ class DataCollectionService {
     try {
       const raw = await AsyncStorage.getItem(POLICY_KEY);
       if (raw) this.policy = { ...DEFAULT_POLICY, ...JSON.parse(raw) };
-    } catch { /* use default */ }
+    } catch (e) {
+      console.warn('[DataCollection] loadPolicy: falha ao ler cache local, uso da política por defeito.', e);
+    }
   }
 
   getPolicy(): CollectionPolicy { return this.policy; }
@@ -126,7 +128,9 @@ class DataCollectionService {
         this.policy = { ...DEFAULT_POLICY, ...remote };
         await AsyncStorage.setItem(POLICY_KEY, JSON.stringify(this.policy));
       }
-    } catch { /* keep current */ }
+    } catch (e) {
+      console.warn('[DataCollection] refreshPolicy: rede/servidor indisponível, mantém política actual.', e);
+    }
   }
 
   // ── State machine ──────────────────────────────────────────────────────────
@@ -286,7 +290,11 @@ class DataCollectionService {
     this.subscription?.remove();
     this.subscription = null;
     if (this.geofenceRegions.length > 0) {
-      try { await Location.stopGeofencingAsync('brspark_geofence'); } catch {}
+      try {
+        await Location.stopGeofencingAsync('brspark_geofence');
+      } catch (e) {
+        console.warn('[DataCollection] stopGeofencingAsync:', e);
+      }
       this.geofenceRegions = [];
     }
   }

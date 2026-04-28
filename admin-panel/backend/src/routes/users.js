@@ -362,7 +362,10 @@ router.get('/partnership-candidates', async (req, res) => {
 });
 
 /**
- * Contas que já existem como User num tenant PROVIDER (ou mesmo AppAccount) podem ser associadas a tenants empresa.
+ * Governança painel → POST / (criar utilizador em tenants COMPANY):
+ * quem não é admin de plataforma (`isPlatformAdmin`) só pode criar se o e-mail já tiver assento
+ * num tenant PROVIDER (User directo ou User ligado ao mesmo `AppAccount`).
+ * @see comentários em `router.post('/')` (nonCompanyIds + bypass plataforma).
  */
 async function emailHasProviderTenantMembership(db, emailNorm) {
   const norm = String(emailNorm || '').trim().toLowerCase();

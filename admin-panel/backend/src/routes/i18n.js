@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const prisma = require('../db');
-const { adminAuth } = require('../middleware/auth');
+const { adminAuthThenRls } = require('../middleware/auth');
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -8,7 +8,7 @@ const path = require('path');
 const LOCALES_DIR = path.join(__dirname, '../../../../src/i18n/locales');
 
 // READ ALL ENTRIES (By Source) - Internal Admin Use
-router.get('/entries', adminAuth, async (req, res) => {
+router.get('/entries', adminAuthThenRls, async (req, res) => {
   try {
     const { source } = req.query;
     if (source === 'app') {
@@ -103,7 +103,7 @@ router.get('/entries', adminAuth, async (req, res) => {
 });
 
 // GET SPECIFIC OVERRIDES
-router.get('/overrides', adminAuth, async (req, res) => {
+router.get('/overrides', adminAuthThenRls, async (req, res) => {
   try {
     const { tenantId } = req.query;
     const overrides = await prisma.translationOverride.findMany({
@@ -115,7 +115,7 @@ router.get('/overrides', adminAuth, async (req, res) => {
 });
 
 // UPDATE GLOBAL ENTRIES
-router.post('/update', adminAuth, async (req, res) => {
+router.post('/update', adminAuthThenRls, async (req, res) => {
   try {
     const { source, entries } = req.body;
     if (source === 'app') {
@@ -141,7 +141,7 @@ router.post('/update', adminAuth, async (req, res) => {
 });
 
 // CREATE/UPDATE TENANT OVERRIDES
-router.post('/overrides', adminAuth, async (req, res) => {
+router.post('/overrides', adminAuthThenRls, async (req, res) => {
   try {
     const { tenantId, entries } = req.body; 
     if (!tenantId) return res.status(400).json({ error: 'TenantId is required' });
@@ -158,7 +158,7 @@ router.post('/overrides', adminAuth, async (req, res) => {
 });
 
 // UPDATE REGIONAL PROFILE
-router.post('/locales', adminAuth, async (req, res) => {
+router.post('/locales', adminAuthThenRls, async (req, res) => {
   try {
     const { id, ...data } = req.body;
     await prisma.localeProfile.update({ where: { id }, data });

@@ -105,7 +105,8 @@
 2. Instrumentar metrica/alerta para taxa de `laravel-error`.
 
 ## Checklist de validacao final
-- `npx tsc --noEmit` sem erros.
-- `node --check admin-panel/js/checklists-builder.js` sem erros.
-- `/api/providers` nao retorna 200 vazio quando CMS falha (sem fallback).
-- App mobile continua exibindo prestadores via cache local em indisponibilidade do CMS.
+- [x] `npx tsc --noEmit` sem erros (verificado 2026-04-28).
+- [x] `node --check admin-panel/js/checklists-builder.js` sem erros — duplicata `MAX_VISION_SIMNAO_QUESTIONS` corrigida no código actual.
+- [x] `/api/providers` não retorna **200** vazio quando CMS falha sem fallback — resposta **503** + `X-BrSpark-Directory-Source: laravel-error` + `error: CMS_DIRECTORY_UNAVAILABLE` (`admin-panel/backend/src/index.js`).
+- [x] App mobile: `ProviderService.search` usa cache local em `!res.ok` **e** se `res.ok` mas header `X-BrSpark-Directory-Source` ∈ `{ laravel-error, cms-not-configured }` (`src/services/api.ts`, 2026-04-28).
+- [ ] Testes automatizados da Fase 2 do plano (cenários CMS ok / indisponível / fallback PG) — pendente.

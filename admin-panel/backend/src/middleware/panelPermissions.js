@@ -46,21 +46,44 @@ function pathAllowedForManager(originalUrl) {
  * - SAAS_ADMIN / TENANT_ADMIN: acesso total.
  * - MANAGER: só prefixos em MANAGER_ALLOWED_PREFIXES.
  */
+/**
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction | null | undefined} next — se omitido, não chama `next` (uso com `await` em middleware async).
+ * @returns {boolean} `true` se o pedido pode continuar; `false` se já foi respondido 403.
+ */
 function enforcePanelPermissions(req, res, next) {
   const a = req.admin;
   const authz = req.authorization;
-  if (!a) return next();
-  if (!a.panelUser) return next();
-  if (isPlatformAdmin(authz)) return next();
+  if (!a) {
+    if (typeof next === 'function') next();
+    return true;
+  }
+  if (!a.panelUser) {
+    if (typeof next === 'function') next();
+    return true;
+  }
+  if (isPlatformAdmin(authz)) {
+    if (typeof next === 'function') next();
+    return true;
+  }
   const role = normalizeRole(a.role);
-  if (FULL_PANEL_ACCESS_ROLES.has(role) && hasCapability(authz, 'tenant.access.self')) return next();
+  if (FULL_PANEL_ACCESS_ROLES.has(role) && hasCapability(authz, 'tenant.access.self')) {
+    if (typeof next === 'function') next();
+    return true;
+  }
   if (role === 'MANAGER') {
-    if (pathAllowedForManager(req.originalUrl)) return next();
-    return res.status(403).json({
+    if (pathAllowedForManager(req.originalUrl)) {
+      if (typeof next === 'function') next();
+      return true;
+    }
+    res.status(403).json({
       error: 'Sem permissão para este recurso (perfil Gestor).',
     });
+    return false;
   }
-  return res.status(403).json({ error: 'Sem permissão para este recurso.' });
+  res.status(403).json({ error: 'Sem permissão para este recurso.' });
+  return false;
 }
 
 module.exports = {

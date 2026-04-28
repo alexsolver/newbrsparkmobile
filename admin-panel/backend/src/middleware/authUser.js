@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('../db');
 const { buildAppAuthorization } = require('../lib/authorization');
 const { resolveAppEffectiveTenantId } = require('../lib/appLoginEffectiveTenant');
+const { continueWithRlsTransaction } = require('./prismaRlsRequestContext');
 
 // Middleware para usuários do app (não admin)
 module.exports = async function authUser(req, res, next) {
@@ -46,7 +47,7 @@ module.exports = async function authUser(req, res, next) {
         panel: true,
       };
       req.userAuthorization = buildAppAuthorization(req.user);
-      return next();
+      return await continueWithRlsTransaction(req, res, next);
     }
 
     // Admin legado: sem tenantId. Utilizador do app (incl. cliente B2C) tem sempre `id` e `sessionId` no token.
@@ -84,7 +85,7 @@ module.exports = async function authUser(req, res, next) {
     // tenantId do contexto app: dedicado ativo → tenant da empresa; caso contrário, linha User (o JWT pode ficar desatualizado).
     req.user = { ...payload, tenantId: tenantIdForReq, role: user.role };
     req.userAuthorization = buildAppAuthorization(req.user);
-    next();
+    return await continueWithRlsTransaction(req, res, next);
   } catch(err) {
     res.status(401).json({ error: 'Token inválido ou expirado.' });
   }

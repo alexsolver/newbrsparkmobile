@@ -1,6 +1,6 @@
 /**
- * Diretório de prestadores (perfil técnico) — por omissão só quem não tem vínculo DEDICATED
- * bloqueante em nenhuma empresa; checkbox opcional para listar todos.
+ * Diretório de prestadores — por omissão oculta quem está numa janela exclusiva de dedicado a outra empresa;
+ * checkbox opcional para listar todos (ignora filtro por horário).
  */
 import { initPage } from './sidebar.js';
 import { CONFIG, getEffectivePanelCapabilities } from './config.js';

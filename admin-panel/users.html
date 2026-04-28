@@ -273,6 +273,7 @@
         <div class="form-group" id="new-tenant-single-wrap">
           <label class="form-label" id="ul-new-lbl-tenant">Conta (Tenant)</label>
           <select class="form-control" id="new-tenant"><option value="">Selecione...</option></select>
+          <p class="form-hint" id="ul-new-tenant-single-hint" style="font-size:12px;color:var(--text3);line-height:1.45;margin:8px 0 0" hidden></p>
         </div>
         <div class="form-group" id="new-role-wrap">
           <label class="form-label" id="ul-new-lbl-role">Papel</label>
@@ -400,8 +401,10 @@
     const multi = document.getElementById('new-tenant-multi-wrap');
     const single = document.getElementById('new-tenant-single-wrap');
     const roleW = document.getElementById('new-role-wrap');
+    const singleHint = document.getElementById('ul-new-tenant-single-hint');
     if (multi) multi.hidden = !isPlatformAdmin;
     if (single) single.hidden = isPlatformAdmin;
+    if (singleHint) singleHint.hidden = isPlatformAdmin;
     if (roleW) {
       roleW.style.gridColumn = isPlatformAdmin ? '1 / -1' : '';
     }

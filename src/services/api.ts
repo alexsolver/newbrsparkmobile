@@ -91,6 +91,11 @@ export const ProviderService = {
 
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const json = await res.json();
+      const dirSrc = (res.headers.get('X-BrSpark-Directory-Source') || '').trim();
+      // Defesa: BFF deve usar 4xx/5xx quando o CMS falha; se algum proxy devolver 200 + erro lógico, cai no cache local.
+      if (dirSrc === 'laravel-error' || dirSrc === 'cms-not-configured') {
+        return applyFilteredCache();
+      }
       const results: any[] = json.data || [];
 
       // Snapshot da 1.ª página sem filtros = espelho do servidor (remove empresas deslistadas do SQLite).

@@ -1183,6 +1183,32 @@ function canReadProviderDirectory(req) {
   );
 }
 
+/**
+ * Só aplica `tenantId` na query quando é vista **plataforma** com organização escolhida no filtro:
+ * membros da tenant OU prestadores com afiliação a essa tenant (identidade global noutro `User.tenantId`).
+ * Em sessão só-empresa, não restringir por `User.tenantId` — senão o diretório fica vazio (prestadores na app partilhada).
+ */
+function directoryDbTenantClause(tenantFilter, authorization) {
+  const tf = String(tenantFilter || '').trim();
+  if (!tf) return {};
+  if (!isPlatformAdmin(authorization)) return {};
+  return {
+    OR: [
+      { tenantId: tf },
+      {
+        providerIdentity: {
+          affiliations: {
+            some: {
+              tenantId: tf,
+              status: { notIn: ['REJECTED', 'INACTIVE'] },
+            },
+          },
+        },
+      },
+    ],
+  };
+}
+
 function rowMatchesDirectoryFilters(u, { qSearch, skill, locationId, hasSchedule, hasCoverage }) {
   const tp = u.technicianProfile;
   const pi = u.providerIdentity;
@@ -1259,7 +1285,7 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
 
     const where = {
       isActive: true,
-      ...(tenantFilter ? { tenantId: tenantFilter } : {}),
+      ...directoryDbTenantClause(tenantFilter, req.authorization),
       AND: [],
     };
     if (techStatus) {
@@ -1346,6 +1372,8 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
         email: u.loginEmailNorm || u.email,
         name: u.name,
         role: u.role,
+        tenantId: u.tenantId,
+        tenantName: u.tenant?.name || null,
         updatedAt: u.updatedAt,
         technician: {
           status: tp?.status ?? pi?.globalStatus ?? null,

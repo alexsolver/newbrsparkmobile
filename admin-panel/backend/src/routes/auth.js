@@ -3,7 +3,7 @@ const router  = require('express').Router();
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const prisma  = require('../db');
-const { adminAuthThenPanel, attachAdminFromPayload } = require('../middleware/auth');
+const { adminAuthThenPanel, adminAuthThenRls, attachAdminFromPayload } = require('../middleware/auth');
 const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const {
   buildPanelSessionBootstrap,
@@ -415,7 +415,7 @@ router.post('/impersonate-panel', adminAuthThenPanel, async (req, res) => {
 });
 
 // GET /api/auth/me
-router.get('/me', require('../middleware/auth').adminAuth, async (req, res) => {
+router.get('/me', adminAuthThenRls, async (req, res) => {
   try {
     if (req.admin.panelUser) {
       const session = buildPanelSessionBootstrap(req.admin);

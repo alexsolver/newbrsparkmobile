@@ -180,7 +180,10 @@ const M = {
     ul_lblTenant: 'Conta (Tenant)',
     ul_lblTenantsMulti: 'Organizações (tenants) *',
     ul_tenantsHint:
-      'Apenas organizações empresa (COMPANY). O e-mail já deve existir como utilizador num tenant prestador (PROVIDER); administrador da plataforma pode criar sem esse pré-requisito. Um registo por organização selecionada com o mesmo e-mail, nome e senha.',
+      'Apenas organizações empresa (COMPANY). O e-mail em «E-mail *» já deve existir como utilizador num tenant prestador (PROVIDER); administrador da plataforma pode criar sem esse pré-requisito. Um registo por organização selecionada com o mesmo e-mail, nome e senha. Junto a cada organização, slug e contacto são dados dessa organização — não confundir com o e-mail do novo utilizador.',
+    /** Mesma governança, modo admin de uma organização (sem selecção múltipla). */
+    ul_tenantsHintScoped:
+      'Apenas organizações empresa (COMPANY). O e-mail em «E-mail *» já deve existir como utilizador num tenant prestador (PROVIDER); o administrador da plataforma dispensa este pré-requisito. Será criado um registo na sua organização com o e-mail, nome e senha indicados. No seletor, o texto entre parênteses é o contacto da organização.',
     ul_tenantsAll: 'Marcar todas',
     ul_tenantsNone: 'Limpar seleção',
     ul_createPickTenants: 'Selecione pelo menos uma organização (tenant).',
@@ -765,9 +768,9 @@ const M = {
     pdc_bc_here: 'Diretório',
     pdc_hero_title: 'Diretório de prestadores',
     pdc_hero_sub:
-      'Inclui quem tem perfil técnico (tenant) ou identidade global de prestador (sem obrigar as duas). Por omissão exclui quem tem vínculo DEDICATED activo ou pendente (ACTIVE, INVITED, REQUESTED, SUSPENDED) nalguma empresa. Âmbito plataforma ou tenant. Filtros: texto, competências, bases, agenda e área (agenda/área/base exigem perfil técnico).',
+      'Inclui quem tem perfil técnico e/ou identidade global de prestador. Por omissão oculta apenas quem está **neste momento** numa **janela exclusiva** de vínculo dedicado (ACTIVE) com **outra** empresa do que o contexto da consulta. Em modo empresa, lista prestadores de toda a rede; o filtro de organização (modo plataforma) restringe a membros da tenant ou com afiliação a essa tenant. Filtros: texto, competências, bases, agenda e área.',
     pdc_filter_include_dedicated:
-      'Mostrar também quem já tem vínculo dedicado activo ou pendente nalguma empresa (lista completa, todas as tenants visíveis na consulta).',
+      'Incluir também quem está numa janela exclusiva dedicada (lista completa para auditoria, ignora o filtro por horário).',
     pdc_link_apps: 'Candidaturas (onboarding)',
     pdc_back_prestadores: 'Voltar a Prestadores',
     pdc_filter_q: 'Busca',
@@ -804,7 +807,7 @@ const M = {
     pdc_yes: 'Sim',
     pdc_no: 'Não',
     pdc_open_user: 'Ficha',
-    pdc_empty: 'Nenhum prestador corresponde aos filtros (ou todos têm vínculo dedicado bloqueante; marque a opção de lista completa se aplicável).',
+    pdc_empty: 'Nenhum prestador corresponde aos filtros (perfil técnico / identidade global, ou exclusão por janela dedicada).',
     pdc_err: 'Não foi possível carregar o diretório.',
     pdc_perm: 'Sem permissão para este recurso.',
     pdc_prev: 'Anterior',
@@ -981,7 +984,9 @@ const M = {
     ul_lblTenant: 'Account (tenant)',
     ul_lblTenantsMulti: 'Organizations (tenants) *',
     ul_tenantsHint:
-      'Company organizations (COMPANY) only. The email must already exist as a user on a provider (PROVIDER) tenant; platform admins can create without that prerequisite. One record per selected organization with the same email, name and password.',
+      'Company organizations (COMPANY) only. The address in «Email *» must already exist as a user on a provider (PROVIDER) tenant; platform admins can create without that prerequisite. One record per selected organization with the same email, name and password. Slug and contact shown under each organization are that tenant’s own fields — not the new user’s email.',
+    ul_tenantsHintScoped:
+      'Company organizations (COMPANY) only. The address in «Email *» must already exist as a user on a provider (PROVIDER) tenant; platform admins may skip that prerequisite. One user record will be created in your organization with the email, name and password you enter. Text in parentheses in the picker is the organization’s contact email.',
     ul_tenantsAll: 'Select all',
     ul_tenantsNone: 'Clear selection',
     ul_createPickTenants: 'Select at least one organization (tenant).',
@@ -1563,9 +1568,9 @@ const M = {
     pdc_bc_here: 'Directory',
     pdc_hero_title: 'Provider directory',
     pdc_hero_sub:
-      'Includes users with a technician profile and/or a global provider identity (either is enough). By default excludes anyone with a blocking DEDICATED tie (ACTIVE, INVITED, REQUESTED, SUSPENDED) at any company. Scoped to platform or tenant. Filters: text, skills, sites, schedule and area (schedule/area/site need a technician profile row).',
+      'Includes users with a technician profile and/or a global provider identity. By default hides only those currently inside an **exclusive dedicated time window** for a company **other** than the viewer context. In company mode, the directory reads across the network; the organization picker (platform mode) limits to members of that tenant or providers affiliated to it. Filters: text, skills, sites, schedule and area.',
     pdc_filter_include_dedicated:
-      'Also show providers who already have an active or pending dedicated tie with some company (full list for the rows your query can read).',
+      'Include rows even inside exclusive dedicated windows (full list / audit; ignores time-window filter).',
     pdc_link_apps: 'Applications (onboarding)',
     pdc_back_prestadores: 'Back to Providers',
     pdc_filter_q: 'Search',
@@ -1602,7 +1607,7 @@ const M = {
     pdc_yes: 'Yes',
     pdc_no: 'No',
     pdc_open_user: 'Profile',
-    pdc_empty: 'No providers match the filters (or everyone has a blocking dedicated tie; turn on the full-list option if needed).',
+    pdc_empty: 'No providers match the filters (technician profile / global identity, or exclusive-window exclusion).',
     pdc_err: 'Could not load the directory.',
     pdc_perm: 'No permission for this resource.',
     pdc_prev: 'Previous',
@@ -1955,6 +1960,8 @@ export function applyUsersListPageI18n() {
   setT('ul-new-lbl-tenants-multi', 'ul_lblTenantsMulti');
   const nth = document.getElementById('ul-new-tenants-hint');
   if (nth) nth.textContent = t('ul_tenantsHint');
+  const nthScoped = document.getElementById('ul-new-tenant-single-hint');
+  if (nthScoped) nthScoped.textContent = t('ul_tenantsHintScoped');
   setT('new-tenants-all', 'ul_tenantsAll');
   setT('new-tenants-none', 'ul_tenantsNone');
   setT('ul-new-lbl-role', 'ul_lblRole');
