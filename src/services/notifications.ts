@@ -87,7 +87,8 @@ export async function registerInteractivePushCategories(): Promise<void> {
       ],
       {
         showTitle: true,
-        showSubtitle: true,
+        /** iOS tintado/Liquid Glass: subtítulo costuma vir com contraste muito baixo — instruções vão no `body` do push. */
+        showSubtitle: false,
       }
     );
     await Notifications.setNotificationCategoryAsync(
@@ -99,7 +100,7 @@ export async function registerInteractivePushCategories(): Promise<void> {
           options: { opensAppToForeground: true },
         },
       ],
-      { showTitle: true, showSubtitle: true }
+      { showTitle: true, showSubtitle: false }
     );
   } catch (e) {
     console.warn('[BrSpark] Falha ao registar categorias de notificação:', e);

@@ -46,6 +46,7 @@ const {
   buildTenantScheduleJsonDedicatedExclusive,
 } = require('../lib/dedicatedExclusiveTime');
 const { assertNoDedicatedOverlapForProviderIdentity } = require('../lib/providerDedicatedExclusiveService');
+const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
 
 const MAX_AVATAR_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_DOC_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -109,6 +110,7 @@ function detectDocAttachmentExtFromBuffer(buf) {
 const userListSelect = {
   id: true,
   tenantId: true,
+  appAccountId: true,
   email: true,
   name: true,
   employeeMatricula: true,
@@ -126,6 +128,7 @@ const userListSelect = {
   addressJson: true,
   emailVerifiedAt: true,
   emailVerificationExpiresAt: true,
+  appAccount: { select: { emailNorm: true } },
 };
 
 const TECHNICIAN_STATUSES = new Set(['PENDING', 'ACTIVE', 'INACTIVE', 'SUSPENDED']);
@@ -262,7 +265,13 @@ router.get('/', async (req, res) => {
       }),
       prisma.user.count({ where }),
     ]);
-    res.json({ data: users, total, page: +page, sort: sortKey, sortDir: dir });
+    const data = await Promise.all(
+      users.map(async (u) => ({
+        ...u,
+        loginEmailNorm: await resolveCanonicalEmailNormForUser(prisma, u),
+      })),
+    );
+    res.json({ data, total, page: +page, sort: sortKey, sortDir: dir });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1604,6 +1613,7 @@ router.get('/:id', async (req, res) => {
       include: {
         tenant: { select: { id: true, name: true, email: true, locale: { select: { countryCode: true } } } },
         technicianProfile: true,
+        appAccount: { select: { emailNorm: true } },
       },
     });
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
@@ -1616,7 +1626,8 @@ router.get('/:id', async (req, res) => {
     }
 
     const { password, ...safe } = user;
-    res.json(safe);
+    const loginEmailNorm = await resolveCanonicalEmailNormForUser(prisma, user);
+    res.json({ ...safe, loginEmailNorm });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1996,10 +2007,12 @@ router.patch('/:id', express.json(), async (req, res) => {
       include: {
         tenant: { select: { id: true, name: true, email: true } },
         technicianProfile: true,
+        appAccount: { select: { emailNorm: true } },
       },
     });
     const { password, ...safe } = fresh;
-    res.json(safe);
+    const loginEmailNorm = await resolveCanonicalEmailNormForUser(prisma, fresh);
+    res.json({ ...safe, loginEmailNorm });
   } catch (err) {
     console.error('PATCH /users/:id', err);
     if (err.code === 'P2002') {

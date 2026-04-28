@@ -369,6 +369,15 @@
     /* ignore */
   }
   applyUsersListPageI18n();
+  /** Conta de login humana (`AppAccount.emailNorm`), não `User.email` sintético (+brspark.ws…). */
+  function ulHumanLoginEmail(u) {
+    const ln = u?.loginEmailNorm;
+    if (ln && String(ln).trim()) return String(ln).trim();
+    const an = u?.appAccount?.emailNorm;
+    if (an && String(an).trim()) return String(an).trim();
+    return String(u?.email || '').trim();
+  }
+
   /** Alinhado com `register-onboarding` / `appPasswordPolicy.js`. */
   function appPasswordPolicyError(pwd) {
     const s = String(pwd || '');
@@ -552,7 +561,7 @@
       role: sessionStorage.getItem('brspark_admin_role'),
       panelMode: sessionStorage.getItem('brspark_panel_mode'),
       panelTenant: sessionStorage.getItem('brspark_panel_tenant'),
-      targetLabel: u.name || u.email || id,
+      targetLabel: u.name || ulHumanLoginEmail(u) || id,
     };
     try {
       sessionStorage.setItem('brspark_impersonation_backup', JSON.stringify(backup));
@@ -799,7 +808,7 @@
       const te = tenantRow && tenantRow.email ? String(tenantRow.email).trim() : '';
       const sync = u.comprefaceRecognitionSync;
       const cf = sync && sync.status ? String(sync.status) : '';
-      const row = [csvEscape(u.name), csvEscape(u.email)];
+      const row = [csvEscape(u.name), csvEscape(ulHumanLoginEmail(u))];
       if (showId) row.push(csvEscape(u.id));
       if (showCreated) row.push(csvEscape(u.createdAt ? new Date(u.createdAt).toISOString() : ''));
       if (showCountry) row.push(csvEscape(extractCountry(u) || ''));
@@ -1524,7 +1533,8 @@
     } else {
       document.getElementById('users-tbody').innerHTML = data.map((u, idx) => {
         const co = extractCountry(u);
-        const rowSelLabel = t('ul_rowSelectAria').replace(/\{name\}/g, String(u.name || u.email || u.id));
+        const mailShown = ulHumanLoginEmail(u);
+        const rowSelLabel = t('ul_rowSelectAria').replace(/\{name\}/g, String(u.name || mailShown || u.id));
         return `
       <tr>
         <td class="ul-col-sel">
@@ -1535,7 +1545,7 @@
             ${avatarCell(u)}
             <div class="person-cell-text">
               <span class="person-name" title="${escAttr(u.name)}">${escAttr(u.name)}</span>
-              <span class="person-email" title="${escAttr(u.email)}">${escAttr(u.email)}</span>
+              <span class="person-email" title="${escAttr(mailShown)}">${escAttr(mailShown)}</span>
             </div>
           </div>
         </td>
@@ -1566,7 +1576,7 @@
                 ${canImpersonatePanelTarget(u) ? `<button type="button" class="ue-dropdown__item" role="menuitem" onclick="ulStartImpersonate(${JSON.stringify(u.id)})">${escAttr(t('ul_impersonateBtn'))}</button>` : ''}
                 <button type="button" class="ue-dropdown__item" role="menuitem" onclick="openReset('${uid(u.id)}')">${escAttr(t('ul_resetPwdBtn'))}</button>
                 <hr class="ue-dropdown__sep" />
-                ${canManageTenantUsers ? `<button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick="ulConfirmDeleteUser(${JSON.stringify(u.id)}, ${JSON.stringify(String(u.name || u.email || u.id))})">${escAttr(t('ul_deleteUser'))}</button>` : ''}
+                ${canManageTenantUsers ? `<button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick="ulConfirmDeleteUser(${JSON.stringify(u.id)}, ${JSON.stringify(String(u.name || mailShown || u.id))})">${escAttr(t('ul_deleteUser'))}</button>` : ''}
                 <button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick="toggleUser('${uid(u.id)}')">${escAttr(u.isActive ? t('ul_deactivate') : t('ul_activate'))}</button>
               </div>
             </div>

@@ -45,7 +45,11 @@ import {
   TRANSIT_ETA_GOOGLE_REFRESH_MS,
   TRANSIT_ETA_GOOGLE_MAX_CALLS_PER_TRIP,
   TRANSIT_ETA_TICK_MS,
+  TRANSIT_ETA_KM_BUCKET_M,
+  TRANSIT_ETA_MIN_SPEED_MPS,
+  TRANSIT_ETA_MAX_SPEED_MPS,
   computeTickingEtaMinutes,
+  computeEtaMinutesFromRemainingMetersAndSpeedMps,
 } from '../../src/services/transitEtaPolicy';
 import { haversineMeters, polylineLengthMeters } from '../../src/utils/polylineMetrics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -3260,6 +3264,19 @@ export default function ChecklistEngine() {
   const transitEtaLegKeyRef = useRef('');
   const transitEtaGoogleInvocationsRef = useRef(0);
   const transitEtaSnapshotRef = useRef<{ atMs: number; remainingMin: number } | null>(null);
+  /** Último progresso na polilinha (mapa) — resto ÷ v média entre refrescos Google. */
+  const transitEtaProgressRef = useRef<{
+    traveledArcM: number;
+    routeLenM: number;
+    speedMps: number | null;
+  } | null>(null);
+  /** Segmentos de 1 km para velocidade média ao longo da rota. */
+  const transitEtaKmBucketRef = useRef<{
+    segmentStartArcM: number;
+    segmentStartMs: number;
+    lastAvgMps: number | null;
+    hasCompletedFirstBucket: boolean;
+  } | null>(null);
   /** Para enviar `clear` ao servidor uma vez ao sair do deslocamento operacional (link público). */
   const prevHadOperationalTransitRef = useRef(false);
   const publicEtaPushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3387,6 +3404,51 @@ export default function ChecklistEngine() {
       }, 450);
     },
     [resolvedTaskId, isReadOnly, flushPublicTransitEtaDisplayNow]
+  );
+
+  const handleOperationalEtaProgress = useCallback(
+    (p: { traveledArcM: number; routeLenM: number; speedMps: number | null }) => {
+      if (!p || p.routeLenM < 80) return;
+      const now = Date.now();
+      transitEtaProgressRef.current = p;
+      const remainingM = Math.max(0, p.routeLenM - p.traveledArcM);
+
+      let buck = transitEtaKmBucketRef.current;
+      if (!buck) {
+        transitEtaKmBucketRef.current = {
+          segmentStartArcM: p.traveledArcM,
+          segmentStartMs: now,
+          lastAvgMps: null,
+          hasCompletedFirstBucket: false,
+        };
+      } else {
+        const deltaArc = p.traveledArcM - buck.segmentStartArcM;
+        if (deltaArc >= TRANSIT_ETA_KM_BUCKET_M) {
+          const dtSec = Math.max(1, (now - buck.segmentStartMs) / 1000);
+          let vAvg = TRANSIT_ETA_KM_BUCKET_M / dtSec;
+          vAvg = Math.min(TRANSIT_ETA_MAX_SPEED_MPS, Math.max(TRANSIT_ETA_MIN_SPEED_MPS, vAvg));
+          transitEtaKmBucketRef.current = {
+            segmentStartArcM: p.traveledArcM,
+            segmentStartMs: now,
+            lastAvgMps: vAvg,
+            hasCompletedFirstBucket: true,
+          };
+        }
+      }
+
+      const snap = transitEtaSnapshotRef.current;
+      const b = transitEtaKmBucketRef.current!;
+      let minutes: number;
+      if (b.hasCompletedFirstBucket && b.lastAvgMps != null && remainingM > 50) {
+        minutes = computeEtaMinutesFromRemainingMetersAndSpeedMps(remainingM, b.lastAvgMps);
+      } else if (snap) {
+        minutes = computeTickingEtaMinutes(snap.atMs, snap.remainingMin, now);
+      } else {
+        return;
+      }
+      setMapEtaMinutes(Math.max(1, Math.round(minutes)));
+    },
+    []
   );
 
   const resolvedRtNumber =
@@ -8125,8 +8187,8 @@ export default function ChecklistEngine() {
   }, [resolvedTaskId, isReadOnly, activeTransitLeg, responses, template?.schemaData]);
 
   /**
-   * Deslocamento operacional: ETA com Google (máx. 5 chamadas ao proxy por trecho), refresco a cada 7 min;
-   * entre chamadas o valor desce com o relógio.
+   * Deslocamento operacional: até 5 chamadas Google (proxy) por trecho; realinhamento a cada 10 min.
+   * Entre refrescos: média de 1 km × resto na polilinha (progresso do mapa) ou contagem do relógio até 1 km.
    */
   useEffect(() => {
     if (!resolvedTaskId || isReadOnly) return;
@@ -8148,6 +8210,8 @@ export default function ChecklistEngine() {
       prevHadOperationalTransitRef.current = false;
       transitEtaLegKeyRef.current = '';
       transitEtaSnapshotRef.current = null;
+      transitEtaProgressRef.current = null;
+      transitEtaKmBucketRef.current = null;
       return;
     }
 
@@ -8168,6 +8232,8 @@ export default function ChecklistEngine() {
       transitEtaLegKeyRef.current = legKey;
       transitEtaGoogleInvocationsRef.current = 0;
       transitEtaSnapshotRef.current = null;
+      transitEtaProgressRef.current = null;
+      transitEtaKmBucketRef.current = null;
     }
 
     const task = currentTaskRef.current || {};
@@ -8185,6 +8251,23 @@ export default function ChecklistEngine() {
       flushPublicTransitEtaDisplayNow(rm);
     };
 
+    const resetKmBucketAfterNetworkSnapshot = () => {
+      const pr = transitEtaProgressRef.current;
+      transitEtaKmBucketRef.current = pr
+        ? {
+            segmentStartArcM: pr.traveledArcM,
+            segmentStartMs: Date.now(),
+            lastAvgMps: null,
+            hasCompletedFirstBucket: false,
+          }
+        : {
+            segmentStartArcM: 0,
+            segmentStartMs: Date.now(),
+            lastAvgMps: null,
+            hasCompletedFirstBucket: false,
+          };
+    };
+
     const persistEta = async (minutes: number) => {
       let cloudTasks: any[] = [];
       try {
@@ -8200,9 +8283,6 @@ export default function ChecklistEngine() {
     };
 
     const fetchRouteEtaSnapshot = async () => {
-      if (transitEtaGoogleInvocationsRef.current >= TRANSIT_ETA_GOOGLE_MAX_CALLS_PER_TRIP) {
-        return;
-      }
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') return;
@@ -8213,18 +8293,23 @@ export default function ChecklistEngine() {
         const oLat = pos.coords.latitude;
         const oLng = pos.coords.longitude;
 
-        transitEtaGoogleInvocationsRef.current += 1;
         let minutes: number | null = null;
-        const google = await fetchGoogleDrivingLegMetricsOrNull(oLat, oLng, destPt.lat, destPt.lng);
-        if (google?.ok && google.durationSeconds != null) {
-          minutes = Math.max(1, Math.round(google.durationSeconds / 60));
-        } else {
+
+        if (transitEtaGoogleInvocationsRef.current < TRANSIT_ETA_GOOGLE_MAX_CALLS_PER_TRIP) {
+          const google = await fetchGoogleDrivingLegMetricsOrNull(oLat, oLng, destPt.lat, destPt.lng);
+          if (google?.ok && google.durationSeconds != null) {
+            transitEtaGoogleInvocationsRef.current += 1;
+            minutes = Math.max(1, Math.round(google.durationSeconds / 60));
+          }
+        }
+        if (minutes == null) {
           const osrm = await fetchDrivingLegEtaMinutes(oLat, oLng, destPt.lat, destPt.lng);
           if (osrm.ok && osrm.minutes != null) minutes = osrm.minutes;
         }
 
         if (minutes == null) return;
         applySnapshot(minutes);
+        resetKmBucketAfterNetworkSnapshot();
         await persistEta(minutes);
       } catch {
         /* ignore */
@@ -8240,6 +8325,20 @@ export default function ChecklistEngine() {
     const tickIv = setInterval(() => {
       const snap = transitEtaSnapshotRef.current;
       if (!snap) return;
+      const buck = transitEtaKmBucketRef.current;
+      const prog = transitEtaProgressRef.current;
+      if (
+        buck?.hasCompletedFirstBucket &&
+        buck.lastAvgMps != null &&
+        prog &&
+        prog.routeLenM > 80
+      ) {
+        const remainingM = Math.max(0, prog.routeLenM - prog.traveledArcM);
+        const m = computeEtaMinutesFromRemainingMetersAndSpeedMps(remainingM, buck.lastAvgMps);
+        setMapEtaMinutes(m);
+        flushPublicTransitEtaDisplayNow(m);
+        return;
+      }
       const m = computeTickingEtaMinutes(snap.atMs, snap.remainingMin, Date.now());
       setMapEtaMinutes(m);
       flushPublicTransitEtaDisplayNow(m);
@@ -9017,6 +9116,9 @@ export default function ChecklistEngine() {
          */
         const routeForCard = reimbursementMode ? [] : patrolMode ? routeCoords : [];
 
+        const operationalEtaProgress =
+          activeTransitLeg && !activeTransitLeg.reimbursement && !activeTransitLeg.patrol;
+
         return <LiveRouteMapCard 
                   route={routeForCard} 
                   visible={isVisible}
@@ -9025,6 +9127,9 @@ export default function ChecklistEngine() {
                   corridorToleranceM={corridorTol}
                   reimbursementMode={reimbursementMode}
                   patrolMode={patrolMode}
+                  onOperationalEtaProgress={
+                    operationalEtaProgress ? handleOperationalEtaProgress : undefined
+                  }
                   onPublicTrackingEtaChange={commitPublicTrackingEtaFromBadge}
                   onCommitReimbursementOptionalDestination={
                     reimbursementMode ? commitReimbursementOptionalNavDestination : undefined

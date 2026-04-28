@@ -33,6 +33,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../../src/services/api';
 import { enqueueTrackingSync } from '../../src/services/trackingSyncQueue';
 import { fetchDrivingLegEtaMinutes, fetchDrivingGeometryLatLng } from '../../src/services/osrmClient';
+import { polylineLengthMeters } from '../../src/utils/polylineMetrics';
+import {
+  TRANSIT_ETA_PROGRESS_EMIT_MIN_ARC_DELTA_M,
+  TRANSIT_ETA_PROGRESS_EMIT_MIN_MS,
+} from '../../src/services/transitEtaPolicy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -248,6 +253,15 @@ interface Props {
   } | null) => void;
   /** Rótulo do destino já guardado (morada), para preencher o campo de pesquisa. */
   reimbursementOptionalDestLabel?: string | null;
+  /**
+   * Deslocamento operacional: progresso ao longo da polilinha desenhada (OSRM ou template)
+   * para o pai recalcular ETA (1 km de média × resto) sem novos botões.
+   */
+  onOperationalEtaProgress?: (p: {
+    traveledArcM: number;
+    routeLenM: number;
+    speedMps: number | null;
+  }) => void;
 }
 
 /** Destino OSRM: target explícito ou último vértice da rota (evita lista vazia só com polígono) */
@@ -478,6 +492,16 @@ const MAP_INITIAL_LNG_DELTA = 0.000875;
 const OSRM_REFETCH_MIN_INTERVAL_MS = 18000;
 /** Se o GPS se afasta desta distância da polilinha OSRM actual, pede nova geometria. */
 const OSRM_OFF_DYNAMIC_PATH_M = 130;
+/** Geometria OSRM com poucos vértices = quase reta; não guardar como cache útil. */
+const OSRM_GEOMETRY_CACHE_MIN_POINTS = 4;
+/** Timeout do pedido de polilinha no mapa (failover mais cedo para outras bases / tentativas). */
+const OSRM_MAP_GEOMETRY_TIMEOUT_MS = 24000;
+
+/**
+ * Última polilinha rodoviária válida por tarefa+destino — ao reabrir o mapa evita a reta GPS→destino
+ * enquanto um novo pedido OSRM corre.
+ */
+let lastOsrmTransitGeometryByKey: { key: string; coords: number[][] } | null = null;
 
 function formatElapsedSinceTransitPt(isoStart: string): string {
   const t0 = Date.parse(isoStart);
@@ -726,6 +750,7 @@ export default function LiveRouteMapCard({
   onPublicTrackingEtaChange,
   onCommitReimbursementOptionalDestination,
   reimbursementOptionalDestLabel,
+  onOperationalEtaProgress,
 }: Props) {
   /** Reembolso e patrulhamento: sem destino/ETA/chat operacionais da OS (acompanhamento do cliente, ETA rodoviário até a morada). */
   const suppressOperationalDestinationUi = reimbursementMode || patrolMode;
@@ -958,8 +983,14 @@ export default function LiveRouteMapCard({
 
   /** Incrementado para voltar a pedir geometria OSRM (desvio ou saída da linha dinâmica). */
   const [osrmRefetchNonce, setOsrmRefetchNonce] = useState(0);
+  /** Evita mostrar geometria de outro despacho ao mudar `taskId` / destino. */
+  const osrmGeomCacheKeyRef = useRef<string | null>(null);
   const lastOsrmRefetchTriggerAtRef = useRef(0);
   const prevRouteTrackerEventRef = useRef<RouteUpdate['event'] | null>(null);
+  const onOperationalEtaProgressRef = useRef(onOperationalEtaProgress);
+  onOperationalEtaProgressRef.current = onOperationalEtaProgress;
+  const lastOperationalEtaEmitAtRef = useRef(0);
+  const lastOperationalEtaEmitArcRef = useRef(-1);
 
   // Subscribe to route tracker updates
   useEffect(() => {
@@ -1013,6 +1044,26 @@ export default function LiveRouteMapCard({
         const { arcM, distM } = closestPointOnPolylineArcM(paintLine, u.currentLat, u.currentLng);
         if (distM < 160) {
           setRoutePaintArcM((m) => Math.max(m, arcM));
+        }
+
+        const cb = onOperationalEtaProgressRef.current;
+        if (cb && !suppressOperationalDestinationUi) {
+          const routeLenM = polylineLengthMeters(paintLine);
+          if (routeLenM >= 80) {
+            const traveledArcM = Math.max(0, Math.min(arcM, routeLenM));
+            const tEmit = Date.now();
+            const since = tEmit - lastOperationalEtaEmitAtRef.current;
+            const arcDelta = Math.abs(traveledArcM - lastOperationalEtaEmitArcRef.current);
+            if (
+              lastOperationalEtaEmitArcRef.current < 0 ||
+              since >= TRANSIT_ETA_PROGRESS_EMIT_MIN_MS ||
+              arcDelta >= TRANSIT_ETA_PROGRESS_EMIT_MIN_ARC_DELTA_M
+            ) {
+              lastOperationalEtaEmitAtRef.current = tEmit;
+              lastOperationalEtaEmitArcRef.current = traveledArcM;
+              cb({ traveledArcM, routeLenM, speedMps: u.speedMps ?? null });
+            }
+          }
         }
       }
 
@@ -1087,7 +1138,17 @@ export default function LiveRouteMapCard({
       routeTracker.off('status_changed', statusHandler);
       routeTracker.off('traversed_update', traversedHandler);
     };
-  }, [visible, reimbursementMode, route, embedNativeMap, targetLoc?.lat, targetLoc?.lng, zoneType, corridorToleranceM]);
+  }, [
+    visible,
+    reimbursementMode,
+    patrolMode,
+    route,
+    embedNativeMap,
+    targetLoc?.lat,
+    targetLoc?.lng,
+    zoneType,
+    corridorToleranceM,
+  ]);
 
   const fetchTrackingChat = useCallback(async () => {
     if (!taskId) return;
@@ -1163,6 +1224,8 @@ export default function LiveRouteMapCard({
       lastCompassHeadingRef.current = null;
       lastOsrmRefetchTriggerAtRef.current = 0;
       prevRouteTrackerEventRef.current = null;
+      lastOperationalEtaEmitAtRef.current = 0;
+      lastOperationalEtaEmitArcRef.current = -1;
       setOsrmRefetchNonce(0);
       setFollowUser(true);
       setShowTransitHints(false);
@@ -1240,19 +1303,43 @@ export default function LiveRouteMapCard({
       : '';
 
   useEffect(() => {
-    if (!visible) {
-      setDynamicRoute(null);
-      return;
-    }
     if (!allowDestRouting) {
       setDynamicRoute(null);
+      osrmGeomCacheKeyRef.current = null;
+      return;
+    }
+    // Ao fechar o mapa não limpar `dynamicRoute` — ao reabrir mantém-se a última OSRM até chegar geometria nova.
+    if (!visible) {
       return;
     }
     // `osrmRefetchNonce` — novo pedido quando há desvio do corredor ou o GPS sai da polilinha OSRM (ver handler do tracker).
     // Sempre pedir geometria OSRM (GPS → destino): templates com ≥3 vértices em linha quase reta
     // não traziam pedido nenhum e o mapa ficava só com a polilinha “admin”.
     const dest = pickDestinationForOsrm(targetLoc, route);
-    if (!dest) return;
+    if (!dest) {
+      setDynamicRoute(null);
+      return;
+    }
+
+    const cacheKey = `${String(taskId ?? '')}|${routeDestKey}`;
+    const prevGeomKey = osrmGeomCacheKeyRef.current;
+    const geomKeyChanged = prevGeomKey != null && prevGeomKey !== cacheKey;
+    if (geomKeyChanged) {
+      setDynamicRoute(null);
+    }
+    osrmGeomCacheKeyRef.current = cacheKey;
+
+    const mem = lastOsrmTransitGeometryByKey;
+    const memHit = mem?.key === cacheKey && mem.coords.length >= OSRM_GEOMETRY_CACHE_MIN_POINTS;
+    if (memHit) {
+      setDynamicRoute(mem.coords);
+    }
+
+    const skipStraightPlaceholder =
+      memHit ||
+      (!geomKeyChanged &&
+        dynamicRouteRef.current != null &&
+        dynamicRouteRef.current.length > OSRM_GEOMETRY_CACHE_MIN_POINTS);
 
     let cancelled = false;
     let osrmGeometryOk = false;
@@ -1283,20 +1370,25 @@ export default function LiveRouteMapCard({
         [oLat, oLng],
         [dLat, dLng],
       ];
-      // Com template denso, não mostrar reta de fallback por cima — só polilinha OSRM ou o laranja do template.
-      if (!cancelled && (!route || route.length <= 2)) {
+      // Só placeholder em reta quando não há polilinha rodoviária anterior (reabrir ou cache).
+      if (!cancelled && (!route || route.length <= 2) && !skipStraightPlaceholder) {
         setDynamicRoute(straight);
       }
 
-      const line = await fetchDrivingGeometryLatLng(oLat, oLng, dLat, dLng);
+      const line = await fetchDrivingGeometryLatLng(oLat, oLng, dLat, dLng, {
+        timeoutMs: OSRM_MAP_GEOMETRY_TIMEOUT_MS,
+      });
       if (cancelled) return;
       if (line && line.length >= 2) {
         osrmGeometryOk = true;
         setDynamicRoute(line);
+        if (line.length >= OSRM_GEOMETRY_CACHE_MIN_POINTS) {
+          lastOsrmTransitGeometryByKey = { key: cacheKey, coords: line };
+        }
         if (intervalId) clearInterval(intervalId);
       } else if (!cancelled && route && route.length > 2) {
         setDynamicRoute(null);
-      } else if (!cancelled && (!route || route.length <= 2)) {
+      } else if (!cancelled && (!route || route.length <= 2) && !skipStraightPlaceholder) {
         setDynamicRoute(straight);
       }
     };
@@ -1307,7 +1399,16 @@ export default function LiveRouteMapCard({
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [visible, allowDestRouting, route?.length, routeDestKey, targetLoc?.lat, targetLoc?.lng, osrmRefetchNonce]);
+  }, [
+    visible,
+    allowDestRouting,
+    route?.length,
+    routeDestKey,
+    targetLoc?.lat,
+    targetLoc?.lng,
+    osrmRefetchNonce,
+    taskId,
+  ]);
 
   // Encaixe quando a polilinha principal muda (ex.: chega geometria OSRM), nunca por causa de myPos.
   // Em modo navegação (seguir GPS) não fazer fit da rota inteira — rotas longas (KML) afastavam o zoom

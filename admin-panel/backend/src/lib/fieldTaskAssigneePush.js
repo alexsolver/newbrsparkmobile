@@ -82,10 +82,9 @@ async function sendFieldTaskActivityPushToAssignee(prisma, opts) {
     return { sent: 0, skipped: 'no_tokens' };
   }
 
-  /** iOS: segunda linha; na tela bloqueada as ações aparecem ao expandir. */
-  const subtitle =
+  const hint =
     String(opts.pushSubtitle || '').trim() ||
-    'Deslize para baixo — Aceitar, Recusar ou OK.';
+    'Deslize para expandir. Ações: Aceitar, Recusar ou OK.';
 
   const baseData = {
     taskId: executionId,
@@ -94,10 +93,12 @@ async function sendFieldTaskActivityPushToAssignee(prisma, opts) {
     liveActivityBadgeKey,
   };
   const extra = opts.extraData && typeof opts.extraData === 'object' ? opts.extraData : {};
+  const main = String(opts.pushBody || 'Nova atividade na sua lista.').trim();
+  const body = `${main}\n\n${hint}`.slice(0, 240);
+
   const pushRes = await sendExpoPushToMany(pushTokens, {
     title: String(opts.pushTitle || `Nova atividade · ${appDisplayName}`).slice(0, 120),
-    body: String(opts.pushBody || 'Nova atividade na sua lista.').slice(0, 180),
-    subtitle: subtitle.slice(0, 120),
+    body,
     /** iOS 15+ (Expo): explícito; «time-sensitive» exige capability no App ID. */
     interruptionLevel: 'active',
     categoryId: 'BRSPARK_TECH_ACTIVITY',

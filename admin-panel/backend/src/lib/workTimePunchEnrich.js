@@ -66,7 +66,12 @@ function enrichPunchRow(row, opts = {}) {
   const u = row.user || null;
   const { user, ...rest } = row;
   const employeeFullName = u && u.name ? String(u.name) : '';
-  const employeeEmail = u && u.email ? String(u.email) : '';
+  const employeeEmail =
+    u && u.appAccount && u.appAccount.emailNorm
+      ? String(u.appAccount.emailNorm).trim()
+      : u && u.email
+        ? String(u.email)
+        : '';
   const employeeMatricula = deriveEmployeeMatriculaFromUser(u);
   const deviceSummary = formatDeviceSummary(rest.validationSnapshot, rest.rawPayload);
   const gpsLine = formatGpsLine(rest.lat, rest.lng, rest.accuracy);

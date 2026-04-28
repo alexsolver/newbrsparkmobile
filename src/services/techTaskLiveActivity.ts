@@ -4,8 +4,12 @@ import { requireOptionalNativeModule } from 'expo';
 
 const STORAGE_KEY = '@brspark_tech_live_activity_slot';
 
-type Slot = { activityId: string; taskId: string; appDisplayName?: string };
-const DEFAULT_LIVE_ACTIVITY_BADGE_KEY = 'brspark-badge';
+type Slot = { activityId: string; taskId: string };
+
+/** Cartão Live Activity: sempre identidade BrSpark (não segue branding do tenant no tema nem no push). */
+const LA_BADGE_ASSET = 'brspark-badge';
+const LA_BACKGROUND = '#0f172a';
+const LA_ACCENT = '#2563eb';
 
 async function readSlot(): Promise<Slot | null> {
   try {
@@ -30,14 +34,6 @@ async function writeSlot(slot: Slot | null): Promise<void> {
 
 function liveActivityModuleAvailable(): boolean {
   return Platform.OS === 'ios' && !!requireOptionalNativeModule('ExpoLiveActivity');
-}
-
-function normalizeHexColor(value: string | undefined | null): string | null {
-  const raw = String(value || '').trim();
-  if (!raw) return null;
-  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw;
-  if (/^#[0-9a-fA-F]{8}$/.test(raw)) return raw.slice(0, 7);
-  return null;
 }
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
@@ -65,25 +61,17 @@ function getContrastText(hex: string, dark = '#0F172A', light = '#F8FAFC'): stri
   return lum > 0.55 ? dark : light;
 }
 
-function resolveLiveActivityBadgeKey(value: string | undefined | null): string {
-  const raw = String(value || '').trim();
-  return raw === 'brspark-badge' ? raw : DEFAULT_LIVE_ACTIVITY_BADGE_KEY;
-}
-
 /**
  * Live Activity estilo «cartão em baixo» no Lock Screen (iOS 16.2+).
  * Só funciona em build com `expo-live-activity` (dev client / EAS); no Expo Go não há módulo nativo.
+ *
+ * Cores, ícone e nome curto de encerramento são **fixos BrSpark** — não usam `ThemeContext` nem
+ * `appDisplayName` / `liveActivityBadgeKey` do push (evita cartão distinto por tenant).
  */
 export async function startTechTaskLiveActivity(params: {
   taskId: string;
   title: string;
   subtitle?: string;
-  appDisplayName?: string;
-  liveActivityBadgeKey?: string;
-  primaryColor?: string;
-  accentColor?: string;
-  secondaryColor?: string;
-  surfaceColor?: string;
 }): Promise<void> {
   if (!liveActivityModuleAvailable()) return;
   const taskId = String(params.taskId || '').trim();
@@ -105,29 +93,18 @@ export async function startTechTaskLiveActivity(params: {
 
     const title = params.title.slice(0, 56);
     const subtitle = (params.subtitle || 'Toque para abrir no app.').slice(0, 120);
-    const appDisplayName = String(params.appDisplayName || 'BrSpark').trim() || 'BrSpark';
-    const liveActivityBadgeKey = resolveLiveActivityBadgeKey(params.liveActivityBadgeKey);
     const deepLinkUrl = `/checklist/${encodeURIComponent(taskId)}`;
-    const primaryColor = normalizeHexColor(params.primaryColor);
-    const accentColor = normalizeHexColor(params.accentColor);
-    const secondaryColor = normalizeHexColor(params.secondaryColor);
-    const surfaceColor = normalizeHexColor(params.surfaceColor);
-    const backgroundColor = primaryColor || surfaceColor || '#0f172a';
+    const backgroundColor = LA_BACKGROUND;
     const titleColor = getContrastText(backgroundColor);
-    const subtitleColor =
-      secondaryColor && secondaryColor.toLowerCase() !== backgroundColor.toLowerCase()
-        ? secondaryColor
-        : titleColor === '#0F172A'
-          ? '#334155'
-          : '#CBD5E1';
-    const progressViewTint = accentColor || primaryColor || '#2563eb';
+    const subtitleColor = titleColor === '#0F172A' ? '#334155' : '#CBD5E1';
+    const progressViewTint = LA_ACCENT;
 
     const activityId = LiveActivity.startActivity(
       {
         title,
         subtitle,
-        imageName: liveActivityBadgeKey,
-        dynamicIslandImageName: liveActivityBadgeKey,
+        imageName: LA_BADGE_ASSET,
+        dynamicIslandImageName: LA_BADGE_ASSET,
       },
       {
         backgroundColor,
@@ -145,7 +122,7 @@ export async function startTechTaskLiveActivity(params: {
       }
     );
 
-    if (activityId) await writeSlot({ activityId, taskId, appDisplayName });
+    if (activityId) await writeSlot({ activityId, taskId });
   } catch (e) {
     console.warn('[BrSpark LiveActivity] start:', e);
   }
@@ -163,7 +140,7 @@ export async function stopTechTaskLiveActivityForTask(taskId: string): Promise<v
   try {
     const LiveActivity = await import('expo-live-activity');
     LiveActivity.stopActivity(slot.activityId, {
-      title: slot.appDisplayName || 'BrSpark',
+      title: 'BrSpark',
       subtitle: 'Concluído.',
     });
   } catch (e) {

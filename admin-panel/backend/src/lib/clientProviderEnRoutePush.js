@@ -77,14 +77,14 @@ async function sendClientProviderEnRoutePush(opts) {
     etaRaw != null && Number.isFinite(Number(etaRaw)) ? Math.max(1, Math.round(Number(etaRaw))) : null;
 
   const title = 'Prestador a caminho';
-  const body = eta
+  const main = eta
     ? `Chegada prevista em cerca de ${eta} min. Toque para acompanhar o percurso.`
     : 'O prestador iniciou o deslocamento. Toque para acompanhar o percurso.';
+  const body = `${main}\n\nDeslize para expandir e toque em «Acompanhar percurso».`.slice(0, 240);
 
   const pushRes = await sendExpoPushToMany(pushTokens, {
     title,
     body,
-    subtitle: 'Deslize p/ baixo — Acompanhar percurso.',
     categoryId: PUSH_CATEGORY_CLIENT,
     channelId: ANDROID_CLIENT_CHANNEL,
     data: {

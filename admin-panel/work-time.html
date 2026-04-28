@@ -360,8 +360,16 @@
       const res = await CONFIG.get(
         '/users?tenantId=' + encodeURIComponent(tid) + '&workTime=1&limit=500'
       );
+      const mailShown = (u) => {
+        const ln = u?.loginEmailNorm;
+        if (ln && String(ln).trim()) return String(ln).trim();
+        const an = u?.appAccount?.emailNorm;
+        if (an && String(an).trim()) return String(an).trim();
+        return String(u?.email || '').trim();
+      };
       (res?.data || []).forEach((u) => {
-        const lab = `${u.name || u.email || u.id} — ${u.email || ''}`;
+        const m = mailShown(u);
+        const lab = `${u.name || m || u.id} — ${m}`;
         sel.innerHTML += `<option value="${u.id}">${escHtml(lab)}</option>`;
       });
     } catch {
@@ -400,7 +408,13 @@
           const lab = PUNCH_LABEL[r.type] || r.type;
           const u = r.user || {};
           const fullName = (r.employeeFullName && String(r.employeeFullName).trim()) || u.name || u.email || r.userId || '—';
-          const emailLine = u.email && String(u.email).trim() ? escHtml(u.email) : '';
+          const em =
+            r.employeeEmail && String(r.employeeEmail).trim()
+              ? String(r.employeeEmail).trim()
+              : u.email && String(u.email).trim()
+                ? String(u.email).trim()
+                : '';
+          const emailLine = em ? escHtml(em) : '';
           const matricula = (r.employeeMatricula && String(r.employeeMatricula).trim()) || '—';
           const device = (r.deviceSummary && String(r.deviceSummary).trim()) || '—';
           const gps = (r.gpsLine && String(r.gpsLine).trim()) || '—';

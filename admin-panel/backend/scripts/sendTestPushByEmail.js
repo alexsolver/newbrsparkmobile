@@ -56,8 +56,8 @@ async function main() {
       const taskId = `test-logo-la-${Date.now()}`;
       res = await sendExpoPushToMany(tokens, {
         title: 'Teste ícone · Live Activity',
-        body: 'Abrindo o cartão de técnico: verifique se o logo aparece à esquerda. FT de teste (não abrir OS).',
-        subtitle: 'Deslize para baixo — Aceitar, Recusar ou OK.',
+        body:
+          'Abrindo o cartão de técnico: verifique se o logo aparece à esquerda. FT de teste (não abrir OS).\n\nDeslize para expandir. Ações: Aceitar, Recusar ou OK.',
         interruptionLevel: 'active',
         categoryId: 'BRSPARK_TECH_ACTIVITY',
         channelId: ANDROID_CHANNEL_TECH,

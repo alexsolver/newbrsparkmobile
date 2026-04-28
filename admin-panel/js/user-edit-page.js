@@ -17,6 +17,9 @@ import { adminIntlLocale } from './admin-i18n-resolve.js';
 /** Atualizado em `bootUserEditPage` para acionar indicador «não guardado» */
 const dirtyHooks = { mark: () => {}, refreshWorkspace: () => {} };
 let ueSkillsWidgetBound = false;
+/** E-mail técnico no `User.email` da linha vs. o mostrado no painel (conta de login real / +brspark). */
+let ueBaselineRowEmail = '';
+let ueBaselineDisplayEmail = '';
 /** Definido em `bootUserEditPage` — atualiza a secção de ponto após alterar a galeria facial. */
 let bumpUserRefFaceState = null;
 /** Tenant com `locale.countryCode === 'BR'` — mostra vínculo CLT/PJ no registro de horas. */
@@ -67,6 +70,19 @@ function esc(s) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/"/g, '&quot;');
+}
+
+function humanLoginEmailDisplay(u) {
+  const fromApi = u?.loginEmailNorm;
+  if (fromApi && String(fromApi).trim()) return String(fromApi).trim();
+  const an = u?.appAccount?.emailNorm;
+  if (an && String(an).trim()) return String(an).trim();
+  return String(u?.email || '').trim();
+}
+
+function syncUserEditEmailBaselines(u) {
+  ueBaselineRowEmail = String(u?.email || '').trim();
+  ueBaselineDisplayEmail = humanLoginEmailDisplay(u);
 }
 
 const NAV_CTX_KEY = 'brspark_user_edit_nav';
@@ -733,7 +749,7 @@ async function initUserEditProviderAffiliations(userId, u) {
   const section = document.getElementById('sec-provider-affiliations');
   if (!section) return;
   uePaffLastUserId = String(userId || '').trim();
-  const email = String(u?.email || '').trim();
+  const email = humanLoginEmailDisplay(u);
   const intro = document.getElementById('ue-paff-intro');
   if (intro) intro.innerHTML = t('ue_paffIntro_html');
 
@@ -2525,9 +2541,17 @@ function buildUserPatchPayload() {
   const plRaw = (document.getElementById('f-preferred-locale')?.value || '').trim();
   const notes = document.getElementById('f-admin-notes')?.value ?? '';
 
+  const rawFormEmail = document.getElementById('f-email').value.trim();
+  const formNorm = rawFormEmail.toLowerCase();
+  const displayNorm = ueBaselineDisplayEmail.toLowerCase();
+  const emailForApi =
+    displayNorm && formNorm === displayNorm
+      ? ueBaselineRowEmail
+      : rawFormEmail.toLowerCase();
+
   return {
     name: document.getElementById('f-name').value.trim(),
-    email: document.getElementById('f-email').value.trim(),
+    email: emailForApi,
     employeeMatricula: (document.getElementById('f-employee-matricula')?.value || '').trim() || null,
     phone: document.getElementById('f-phone').value.trim() || null,
     role: selRole,
@@ -3054,6 +3078,7 @@ export async function bootUserEditPage() {
   if (backList) backList.href = 'users.html?resume=1';
 
   let uRef = u;
+  syncUserEditEmailBaselines(uRef);
   let baselineOriginalRole = normalizeRoleForForm(u.role);
   let initialPayloadJson = '';
   /** Evita bloquear o thread no clique (JSON grande / muitos campos). */
@@ -3080,18 +3105,19 @@ export async function bootUserEditPage() {
     paintTechSummary(uRef);
   };
 
-  document.getElementById('ue-title').textContent = u.name || u.email;
+  const emailShown = ueBaselineDisplayEmail || humanLoginEmailDisplay(u);
+  document.getElementById('ue-title').textContent = u.name || emailShown;
   const subBits = [u.tenant?.name, u.tenant?.email].filter(Boolean);
   document.getElementById('ue-sub').textContent =
     subBits.length ? subBits.join(' · ') : (u.tenantId || '—');
   const crumb = document.getElementById('ue-crumb-name');
   if (crumb) {
-    const display = String(u.name || u.email || 'Editar').trim() || 'Editar';
+    const display = String(u.name || emailShown || 'Editar').trim() || 'Editar';
     crumb.textContent = display.length > 36 ? `${display.slice(0, 33)}…` : display;
   }
 
   document.getElementById('f-name').value = u.name || '';
-  document.getElementById('f-email').value = u.email || '';
+  document.getElementById('f-email').value = emailShown;
   const fMat = document.getElementById('f-employee-matricula');
   if (fMat) fMat.value = u.employeeMatricula != null ? String(u.employeeMatricula) : '';
   document.getElementById('f-phone').value = u.phone || '';
@@ -3127,6 +3153,9 @@ export async function bootUserEditPage() {
         const u2 = await CONFIG.get('/users/' + encodeURIComponent(id));
         if (u2 && !u2.error) {
           uRef = u2;
+          syncUserEditEmailBaselines(u2);
+          const fe = document.getElementById('f-email');
+          if (fe) fe.value = ueBaselineDisplayEmail;
           paintSummaryBar(u2);
           paintWorkspaceBar(u2);
           paintEmailVerificationUx(u2);
@@ -3168,6 +3197,9 @@ export async function bootUserEditPage() {
       const res = await CONFIG.patch(`/users/${encodeURIComponent(id)}`, { emailVerifiedAt: true }).catch(() => null);
       if (res && !res.error) {
         uRef = res;
+        syncUserEditEmailBaselines(res);
+        const fe = document.getElementById('f-email');
+        if (fe) fe.value = ueBaselineDisplayEmail;
         paintWorkspaceBar(res);
         paintEmailVerificationUx(res);
         alert(t('ue_emailVerMarkOk'));
@@ -3791,7 +3823,7 @@ export async function bootUserEditPage() {
     }
     const newRole = body.role;
     if (needsElevateConfirm(baselineOriginalRole, newRole)) {
-      const ok = await openElevateConfirmModal(uRef.email);
+      const ok = await openElevateConfirmModal(humanLoginEmailDisplay(uRef));
       if (!ok) return;
     }
     const res = await CONFIG.patch('/users/' + encodeURIComponent(id), body);
@@ -3801,6 +3833,9 @@ export async function bootUserEditPage() {
     }
     baselineOriginalRole = normalizeRoleForForm(res.role);
     uRef = res;
+    syncUserEditEmailBaselines(res);
+    const feEmail = document.getElementById('f-email');
+    if (feEmail) feEmail.value = ueBaselineDisplayEmail;
     if (fAdminNotes) fAdminNotes.value = res.adminInternalNotes != null ? String(res.adminInternalNotes) : '';
     if (fPrefLoc) fPrefLoc.value = res.preferredChatLocale || '';
     paintSummaryBar(res);

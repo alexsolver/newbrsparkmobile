@@ -1016,13 +1016,13 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
           const liveActivityBadgeKey = await resolveGlobalLiveActivityBadgeKey(prisma, 'brspark-badge');
           const osNum = execution.osNumber ? String(execution.osNumber).trim() : '';
           const bodyLine = `A administração do ${appDisplayName} pediu uma nova revisão: ${taskTitle}`;
-          const body =
-            (osNum ? `${osNum} · ${bodyLine}` : bodyLine).slice(0, 200);
+          const core = (osNum ? `${osNum} · ${bodyLine}` : bodyLine).trim();
+          /** Sem `subtitle`: no iOS cartão tintado o subtítulo/corpo secundário fica ilegível; instruções no corpo. */
+          const body = `${core}\n\nDeslize para expandir. Ações: Aceitar, Recusar ou OK.`.slice(0, 240);
           /** Mesma categoria que o despacho de FT — botões Aceitar / Recusar / OK no iOS (expandir notificação). */
           const pushRes = await sendExpoPushToMany(pushTokens, {
             title: `Nova revisão · ${appDisplayName}`.slice(0, 120),
             body,
-            subtitle: 'Deslize para baixo — Aceitar, Recusar ou OK.',
             interruptionLevel: 'active',
             categoryId: 'BRSPARK_TECH_ACTIVITY',
             data: { taskId: id, type: 'os_reopened_revision', appDisplayName, liveActivityBadgeKey },
