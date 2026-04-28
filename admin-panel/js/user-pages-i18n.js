@@ -765,7 +765,9 @@ const M = {
     pdc_bc_here: 'Diretório',
     pdc_hero_title: 'Diretório de prestadores',
     pdc_hero_sub:
-      'Todos os utilizadores com perfil técnico na plataforma ou no tenant em contexto. Filtre por texto, competências, bases, agenda configurada e área de cobertura.',
+      'Prestadores com perfil técnico que não têm vínculo DEDICATED activo ou pendente (ACTIVE, INVITED, REQUESTED, SUSPENDED) com nenhuma empresa, em qualquer tenant — ou seja, acessíveis para parceria ou convite sem conflito de exclusividade. No âmbito da plataforma ou do tenant em contexto. Filtre por texto, competências, bases, agenda e área.',
+    pdc_filter_include_dedicated:
+      'Mostrar também quem já tem vínculo dedicado activo ou pendente nalguma empresa (lista completa, todas as tenants visíveis na consulta).',
     pdc_link_apps: 'Candidaturas (onboarding)',
     pdc_back_prestadores: 'Voltar a Prestadores',
     pdc_filter_q: 'Busca',
@@ -802,7 +804,7 @@ const M = {
     pdc_yes: 'Sim',
     pdc_no: 'Não',
     pdc_open_user: 'Ficha',
-    pdc_empty: 'Nenhum prestador corresponde aos filtros.',
+    pdc_empty: 'Nenhum prestador corresponde aos filtros (ou todos têm vínculo dedicado bloqueante; marque a opção de lista completa se aplicável).',
     pdc_err: 'Não foi possível carregar o diretório.',
     pdc_perm: 'Sem permissão para este recurso.',
     pdc_prev: 'Anterior',
@@ -1561,7 +1563,9 @@ const M = {
     pdc_bc_here: 'Directory',
     pdc_hero_title: 'Provider directory',
     pdc_hero_sub:
-      'All users with a technician profile on the platform or in the current tenant context. Filter by text, skills, locations, configured availability and service area.',
+      'Technicians who do not have a DEDICATED affiliation in a blocking state (ACTIVE, INVITED, REQUESTED, SUSPENDED) with any company, across tenants—so they remain reachable for partnership invites without dedicated exclusivity conflicts. Scoped to the platform or current tenant. Filter by text, skills, sites, schedule and coverage.',
+    pdc_filter_include_dedicated:
+      'Also show providers who already have an active or pending dedicated tie with some company (full list for the rows your query can read).',
     pdc_link_apps: 'Applications (onboarding)',
     pdc_back_prestadores: 'Back to Providers',
     pdc_filter_q: 'Search',
@@ -1598,7 +1602,7 @@ const M = {
     pdc_yes: 'Yes',
     pdc_no: 'No',
     pdc_open_user: 'Profile',
-    pdc_empty: 'No providers match the filters.',
+    pdc_empty: 'No providers match the filters (or everyone has a blocking dedicated tie; turn on the full-list option if needed).',
     pdc_err: 'Could not load the directory.',
     pdc_perm: 'No permission for this resource.',
     pdc_prev: 'Previous',
@@ -2367,6 +2371,7 @@ export function applyPrestadoresCatalogoPageI18n() {
   setT('pdc-lbl-schedule', 'pdc_filter_schedule');
   setT('pdc-lbl-coverage', 'pdc_filter_coverage');
   setT('pdc-lbl-tenant', 'pdc_filter_tenant');
+  setT('pdc-lbl-include-dedicated', 'pdc_filter_include_dedicated');
   setT('pdc-btn-apply', 'pdc_btn_apply');
   setT('pdc-btn-refresh', 'pdc_btn_refresh');
   setT('pdc-th-name', 'pdc_th_name');

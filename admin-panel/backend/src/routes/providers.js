@@ -1138,7 +1138,7 @@ adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
   }
 });
 
-/** Diretório de prestadores (perfil técnico) no painel — filtros avançados em memória após leitura limitada. */
+/** Diretório de prestadores (perfil técnico) — por omissão só quem não tem vínculo DEDICATED bloqueante em nenhuma empresa; `includeDedicatedBound=1` lista todos. */
 function scheduleHasEnabled(ws) {
   if (!ws || typeof ws !== 'object' || Array.isArray(ws)) return false;
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -1177,6 +1177,25 @@ function canReadProviderDirectory(req) {
     hasCapability(a, 'tenant.technicianRegistration.read.self') ||
     hasCapability(a, 'tenant.providers.read.self')
   );
+}
+
+/** Alinhado a `dedicatedAffiliationBlocksPartnershipInvite` em `users.js`: dedicado não terminal bloqueia outras empresas. */
+const DIRECTORY_DEDICATED_TERMINAL = new Set(['REJECTED', 'INACTIVE']);
+const DIRECTORY_DEDICATED_BLOCKING_STATUSES = new Set(['ACTIVE', 'INVITED', 'REQUESTED', 'SUSPENDED']);
+
+/**
+ * Prestador com vínculo DEDICATED em estado que reserva o prestador a uma empresa (qualquer tenant).
+ * Sem identidade global ou sem afiliações dedicadas activas/pendentes ⇒ pode ser listado como acessível.
+ */
+function hasGloballyBlockingDedicatedAffiliation(providerIdentity) {
+  if (!providerIdentity || typeof providerIdentity !== 'object') return false;
+  const list = Array.isArray(providerIdentity.affiliations) ? providerIdentity.affiliations : [];
+  return list.some((aff) => {
+    if (String(aff.relationshipType || '').toUpperCase() !== 'DEDICATED') return false;
+    const st = String(aff.status || '').toUpperCase();
+    if (DIRECTORY_DEDICATED_TERMINAL.has(st)) return false;
+    return DIRECTORY_DEDICATED_BLOCKING_STATUSES.has(st);
+  });
 }
 
 function rowMatchesDirectoryFilters(u, { qSearch, skill, locationId, hasSchedule, hasCoverage }) {
@@ -1225,6 +1244,7 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
     const hasSchedule = String(req.query.hasSchedule || '').trim() === '1' ? '1' : '';
     const hasCoverage = String(req.query.hasCoverage || '').trim() === '1' ? '1' : '';
     const techStatus = req.query.techStatus != null ? String(req.query.techStatus).trim().slice(0, 32) : '';
+    const includeDedicatedBound = String(req.query.includeDedicatedBound || '').trim() === '1';
 
     const page = Math.max(1, Math.min(500, parseInt(String(req.query.page || '1'), 10) || 1));
     const pageSize = Math.max(10, Math.min(100, parseInt(String(req.query.pageSize || '50'), 10) || 50));
@@ -1266,6 +1286,14 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
             updatedAt: true,
           },
         },
+        providerIdentity: {
+          select: {
+            id: true,
+            affiliations: {
+              select: { tenantId: true, status: true, relationshipType: true },
+            },
+          },
+        },
       },
     });
 
@@ -1276,7 +1304,11 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
         loginEmailNorm: (await resolveCanonicalEmailNormForUser(prisma, u)) || '',
       })),
     );
-    const filtered = enriched.filter((u) => rowMatchesDirectoryFilters(u, post));
+    const filtered = enriched.filter((u) => {
+      if (!rowMatchesDirectoryFilters(u, post)) return false;
+      if (includeDedicatedBound) return true;
+      return !hasGloballyBlockingDedicatedAffiliation(u.providerIdentity);
+    });
     const total = filtered.length;
     const start = (page - 1) * pageSize;
     const slice = filtered.slice(start, start + pageSize);
@@ -1314,6 +1346,8 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
         maxFetch,
         capped: rows.length >= maxFetch,
         tenantScoped: !!tenantFilter,
+        includeDedicatedBound,
+        directoryEligibility: includeDedicatedBound ? 'all' : 'withoutGloballyBlockingDedicated',
       },
     });
   } catch (err) {

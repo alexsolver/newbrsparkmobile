@@ -1,5 +1,6 @@
 /**
- * Diretório de prestadores (perfil técnico) com filtros — SaaS / tenant em contexto.
+ * Diretório de prestadores (perfil técnico) — por omissão só quem não tem vínculo DEDICATED
+ * bloqueante em nenhuma empresa; checkbox opcional para listar todos.
  */
 import { initPage } from './sidebar.js';
 import { CONFIG, getEffectivePanelCapabilities } from './config.js';
@@ -58,9 +59,20 @@ function readUrlState() {
       hasSchedule: String(sp.get('hasSchedule') || '').trim(),
       hasCoverage: String(sp.get('hasCoverage') || '').trim(),
       tenantId: String(sp.get('tenantId') || '').trim(),
+      includeDedicatedBound: String(sp.get('includeDedicatedBound') || '').trim() === '1',
     };
   } catch {
-    return { page: 1, q: '', skill: '', locationId: '', techStatus: '', hasSchedule: '', hasCoverage: '', tenantId: '' };
+    return {
+      page: 1,
+      q: '',
+      skill: '',
+      locationId: '',
+      techStatus: '',
+      hasSchedule: '',
+      hasCoverage: '',
+      tenantId: '',
+      includeDedicatedBound: false,
+    };
   }
 }
 
@@ -80,6 +92,7 @@ function writeUrlState() {
     if (sch) sp.set('hasSchedule', sch);
     const cov = document.getElementById('pdc-filter-coverage')?.value || '';
     if (cov) sp.set('hasCoverage', cov);
+    if (document.getElementById('pdc-filter-include-dedicated')?.checked) sp.set('includeDedicatedBound', '1');
     const ten = document.getElementById('pdc-filter-tenant')?.value || '';
     if (ten && canUsePlatformTenantPicker()) sp.set('tenantId', ten);
     const qs = sp.toString();
@@ -104,6 +117,8 @@ function applyUrlToForm(st, opts = {}) {
   if (tsEl && st.techStatus) tsEl.value = st.techStatus;
   if (schEl && st.hasSchedule) schEl.value = st.hasSchedule;
   if (covEl && st.hasCoverage) covEl.value = st.hasCoverage;
+  const incDed = document.getElementById('pdc-filter-include-dedicated');
+  if (incDed) incDed.checked = !!st.includeDedicatedBound;
   if (tenEl && st.tenantId && canUsePlatformTenantPicker() && !skipTenant) {
     if (Array.from(tenEl.options).some((o) => o.value === st.tenantId)) tenEl.value = st.tenantId;
   }
@@ -253,6 +268,7 @@ async function loadDirectory() {
   if (techStatus) sp.set('techStatus', techStatus);
   if (hasSchedule) sp.set('hasSchedule', hasSchedule);
   if (hasCoverage) sp.set('hasCoverage', hasCoverage);
+  if (document.getElementById('pdc-filter-include-dedicated')?.checked) sp.set('includeDedicatedBound', '1');
   const apiTenant = effectiveTenantIdForApi();
   if (apiTenant) sp.set('tenantId', apiTenant);
 
