@@ -416,27 +416,49 @@ async function main() {
   const nextMonth = new Date(now);
   nextMonth.setMonth(nextMonth.getMonth() + 1);
 
-  // Tenant padrão do app móvel (APP_DEFAULT_TENANT_SLUG=brspark-app) — usuários com role USER
-  const tenantBrsparkApp = await prisma.tenant.upsert({
-    where: { slug: 'brspark-app' },
-    update: { localeId: locBr.id, status: 'ACTIVE', kind: 'COMPANY' },
-    create: {
-      name: 'BrSpark App',
-      slug: 'brspark-app',
-      email: 'app-conta@brspark.internal',
-      ownerName: 'BrSpark',
-      kind: 'COMPANY',
-      localeId: locBr.id,
-      status: 'ACTIVE',
-      defaultLang: 'pt-BR',
-    },
+  // Tenant hospedeira do app (slug `master`; legado `brspark-app` é renomeada aqui, mesmo id).
+  const legacyShared = await prisma.tenant.findFirst({
+    where: { slug: { equals: 'brspark-app', mode: 'insensitive' } },
   });
+  const existingMaster = await prisma.tenant.findFirst({
+    where: { slug: { equals: 'master', mode: 'insensitive' } },
+  });
+  let tenantMaster;
+  if (existingMaster) {
+    tenantMaster = await prisma.tenant.update({
+      where: { id: existingMaster.id },
+      data: { localeId: locBr.id, status: 'ACTIVE', kind: 'COMPANY' },
+    });
+  } else if (legacyShared) {
+    tenantMaster = await prisma.tenant.update({
+      where: { id: legacyShared.id },
+      data: {
+        slug: 'master',
+        localeId: locBr.id,
+        status: 'ACTIVE',
+        kind: 'COMPANY',
+      },
+    });
+  } else {
+    tenantMaster = await prisma.tenant.create({
+      data: {
+        name: 'BrSpark App',
+        slug: 'master',
+        email: 'app-conta@brspark.internal',
+        ownerName: 'BrSpark',
+        kind: 'COMPANY',
+        localeId: locBr.id,
+        status: 'ACTIVE',
+        defaultLang: 'pt-BR',
+      },
+    });
+  }
   if (basicPlan) {
     await prisma.subscription.upsert({
-      where: { tenantId: tenantBrsparkApp.id },
+      where: { tenantId: tenantMaster.id },
       update: {},
       create: {
-        tenantId: tenantBrsparkApp.id,
+        tenantId: tenantMaster.id,
         planId: basicPlan.id,
         billingCycle: 'MONTHLY',
         status: 'ACTIVE',
@@ -445,7 +467,9 @@ async function main() {
       },
     });
   }
-  console.log(`✅ Tenant app padrão: ${tenantBrsparkApp.name} (slug brspark-app) — use APP_DEFAULT_TENANT_SLUG=brspark-app no .env`);
+  console.log(
+    `✅ Tenant app padrão: ${tenantMaster.name} (slug ${tenantMaster.slug}) — use APP_DEFAULT_TENANT_SLUG=master no .env`,
+  );
 
   const tenantDemo = await prisma.tenant.upsert({
     where: { email: 'conta-demo@brspark.com' },

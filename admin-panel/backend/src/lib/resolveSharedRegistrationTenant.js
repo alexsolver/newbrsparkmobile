@@ -4,9 +4,9 @@
  * Tenant `COMPANY` onde novos utilizadores da app (registo / espaço prestador) devem ser criados,
  * em vez de criar tenants `CLIENT` ou `PROVIDER` dedicadas.
  *
- * Ordem: `APP_REGISTRATION_SHARED_TENANT_ID` → `APP_REGISTRATION_SHARED_TENANT_SLUG` (omissão `brspark-app`).
+ * Ordem: `APP_REGISTRATION_SHARED_TENANT_ID` → `APP_REGISTRATION_SHARED_TENANT_SLUG` (omissão `master`).
  */
-const DEFAULT_SHARED_SLUG = 'brspark-app';
+const DEFAULT_SHARED_SLUG = 'master';
 
 /**
  * @param {import('@prisma/client').Prisma.TransactionClient | import('@prisma/client').PrismaClient} tx

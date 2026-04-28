@@ -31,6 +31,7 @@ const {
 } = require('../lib/providerIdentityMerge');
 const { endSiblingAffiliationsSameTenantAppAccount } = require('../lib/providerAffiliationSiblingEnd');
 const { invalidateAppEffectiveTenantIdCache } = require('../lib/appLoginEffectiveTenant');
+const { resolveSharedRegistrationTenant } = require('../lib/resolveSharedRegistrationTenant');
 const { parseDedicatedExclusiveFromTenantScheduleJson } = require('../lib/dedicatedExclusiveTime');
 const {
   isHiddenFromCompanyDirectoryAt,
@@ -1184,29 +1185,47 @@ function canReadProviderDirectory(req) {
 }
 
 /**
- * Só aplica `tenantId` na query quando é vista **plataforma** com organização escolhida no filtro:
+ * Só aplica `tenantId` na query em **modo plataforma** quando o filtro «organização» está preenchido:
  * membros da tenant OU prestadores com afiliação a essa tenant (identidade global noutro `User.tenantId`).
- * Em sessão só-empresa, não restringir por `User.tenantId` — senão o diretório fica vazio (prestadores na app partilhada).
+ *
+ * Em **sessão só-empresa** (admin de uma organização, não plataforma), não restringir aqui — o texto do
+ * diretório descreve «toda a rede»; após migração para tenant partilhada (`master`) os prestadores
+ * deixam de ter `User.tenantId` = empresa e o filtro actual fazia `fetchedFromDb: 0`.
+ *
+ * Com filtro de organização em **modo plataforma**, acrescenta ainda utilizadores na tenant COMPANY
+ * partilhada da app (`master` / `APP_REGISTRATION_SHARED_TENANT_*`) com perfil técnico ou identidade
+ * global — para o diretório não ficar vazio quando as afiliações ainda não estão todas ligadas à empresa.
  */
-function directoryDbTenantClause(tenantFilter, authorization) {
+async function directoryDbTenantClauseResolved(prismaClient, tenantFilter, authorization) {
   const tf = String(tenantFilter || '').trim();
   if (!tf) return {};
   if (!isPlatformAdmin(authorization)) return {};
-  return {
-    OR: [
-      { tenantId: tf },
-      {
-        providerIdentity: {
-          affiliations: {
-            some: {
-              tenantId: tf,
-              status: { notIn: ['REJECTED', 'INACTIVE'] },
-            },
+  const orBranches = [
+    { tenantId: tf },
+    {
+      providerIdentity: {
+        affiliations: {
+          some: {
+            tenantId: tf,
+            status: { notIn: ['REJECTED', 'INACTIVE'] },
           },
         },
       },
-    ],
-  };
+    },
+  ];
+  try {
+    const shared = await resolveSharedRegistrationTenant(prismaClient);
+    const sid = shared?.id ? String(shared.id).trim() : '';
+    if (sid && sid !== tf) {
+      orBranches.push({
+        tenantId: sid,
+        OR: [{ technicianProfile: { isNot: null } }, { providerIdentity: { isNot: null } }],
+      });
+    }
+  } catch {
+    /* ignore */
+  }
+  return { OR: orBranches };
 }
 
 function rowMatchesDirectoryFilters(u, { qSearch, skill, locationId, hasSchedule, hasCoverage }) {
@@ -1266,7 +1285,9 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
       if (qTenant && !assertTenantAccess(req.authorization, qTenant)) {
         return res.status(403).json({ error: 'Sem permissão para este tenant.' });
       }
-      tenantFilter = resolveScopedTenantId(req.authorization, qTenant || null);
+      // Não usar `resolveScopedTenantId` aqui: o painel envia sempre o tenant da sessão, mas o diretório
+      // em modo empresa deve listar a rede (prestadores em `master`, etc.), não só membros/afilhados.
+      tenantFilter = null;
     }
 
     const qSearch = req.query.q != null ? String(req.query.q).trim().slice(0, 200) : '';
@@ -1285,7 +1306,7 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
 
     const where = {
       isActive: true,
-      ...directoryDbTenantClause(tenantFilter, req.authorization),
+      ...(await directoryDbTenantClauseResolved(prisma, tenantFilter, req.authorization)),
       AND: [],
     };
     if (techStatus) {

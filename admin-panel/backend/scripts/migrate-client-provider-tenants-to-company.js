@@ -2,7 +2,7 @@
 
 /**
  * Migra todos os utilizadores e dados directamente ligados a tenants `CLIENT` ou `PROVIDER`
- * para uma tenant destino do tipo `COMPANY` (por omissão: slug `brspark-app`), e apaga essas tenants.
+ * para uma tenant destino do tipo `COMPANY` (por omissão: slug `master`), e apaga essas tenants.
  *
  * AVISOS:
  * - Todos os `User` nas tenants de origem passam a partilhar a mesma tenant destino (comportamento tipo «app público»).
@@ -19,7 +19,7 @@
  *   node scripts/migrate-client-provider-tenants-to-company.js --apply --confirm=MERGE-CLIENT-PROVIDER-TO-COMPANY
  *
  * Variáveis opcionais:
- *   MIGRATION_TARGET_TENANT_ID=cuid   ou   MIGRATION_TARGET_TENANT_SLUG=brspark-app
+ *   MIGRATION_TARGET_TENANT_ID=cuid   ou   MIGRATION_TARGET_TENANT_SLUG=master
  */
 
 const path = require('path');
@@ -30,7 +30,7 @@ require('dotenv').config({
 
 const prisma = require('../src/db');
 
-const DEFAULT_TARGET_SLUG = 'brspark-app';
+const DEFAULT_TARGET_SLUG = 'master';
 const REQUIRED_CONFIRM = 'MERGE-CLIENT-PROVIDER-TO-COMPANY';
 
 function parseArgs(argv) {

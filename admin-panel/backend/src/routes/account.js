@@ -1789,7 +1789,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
     if (!shared) {
       return res.status(503).json({
         error:
-          'Serviço indisponível: falta tenant COMPANY partilhada (slug «brspark-app» ou APP_REGISTRATION_SHARED_TENANT_*).',
+          'Serviço indisponível: falta tenant COMPANY partilhada (slug «master» ou APP_REGISTRATION_SHARED_TENANT_*).',
       });
     }
 

@@ -5,11 +5,11 @@ Referência de produto alinhada ao app + backend. Última revisão: fluxo tenant
 ## 1. Cliente comum
 
 1. Instala o app e regista-se (e-mail + senha).
-2. Com `APP_DEFAULT_TENANT_SLUG=brspark-app` (recomendado), o utilizador é criado na **tenant partilhada** «BrSpark App» com papel **USER** — não cria empresa própria.
+2. Com a tenant COMPANY partilhada resolvida por `APP_REGISTRATION_SHARED_TENANT_*` (omissão de slug: `master` no seed), o utilizador é criado na **tenant partilhada** «BrSpark App» com papel **USER** — não cria empresa própria.
 3. Usa os serviços como cliente (tabs, funcionalidades de consumidor).
 
 **Backend:** `POST /api/register` em `admin-panel/backend/src/routes/account.js`.  
-**Seed:** tenant `slug: brspark-app` em `src/seed.js`.
+**Seed:** tenant `slug: master` em `src/seed.js` (renomeia legado `brspark-app` se existir).
 
 ## 2. Prestador (técnico)
 
@@ -34,4 +34,4 @@ Referência de produto alinhada ao app + backend. Última revisão: fluxo tenant
 
 ## Modo legado de registo
 
-Se **não** estiver definido `APP_DEFAULT_TENANT_SLUG` nem `APP_DEFAULT_TENANT_ID`, cada registo continua a criar **um tenant novo** e utilizador **TENANT_ADMIN** (comportamento anterior).
+O `POST /api/register` actual exige a tenant COMPANY partilhada (`resolveSharedRegistrationTenant`); sem ela o registo falha com erro de configuração.

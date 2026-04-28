@@ -63,7 +63,7 @@ async function tombstoneUserRowFully(prisma, userId) {
 
 /** Tenants onde o registo app pode «limpar» e-mails/telefones inactivos: espaços CLIENT e tenant master legada. */
 function registerCleanupTenantWhere() {
-  const slugSet = new Set(['brspark', 'brspark-app']);
+  const slugSet = new Set(['brspark', 'master', 'brspark-app']);
   const envSlug = String(process.env.APP_DEFAULT_TENANT_SLUG || '').trim().toLowerCase();
   if (envSlug) slugSet.add(envSlug);
   const slugOr = [...slugSet].map((slug) => ({ slug: { equals: slug, mode: 'insensitive' } }));

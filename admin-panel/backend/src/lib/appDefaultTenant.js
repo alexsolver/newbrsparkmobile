@@ -3,9 +3,9 @@
 const prisma = require('../db');
 
 /**
- * Tenant master BrSpark (seed: nome «BrSpark», slug `brspark`).
- * Usada por fluxos administrativos / legado; o registo público no app cria uma tenant `CLIENT` pessoal
- * (`registerPersonalClientTenant.js`), não esta tenant por omissão.
+ * Tenant org BrSpark (seed: nome «BrSpark», slug `brspark`).
+ * Usada por fluxos administrativos / legado. O registo público no app usa a tenant COMPANY partilhada
+ * (`resolveSharedRegistrationTenant`, slug omissão `master`), não esta tenant.
  *
  * Opcional: `APP_DEFAULT_TENANT_ID` ou `APP_DEFAULT_TENANT_SLUG` substituem (staging / testes).
  */
