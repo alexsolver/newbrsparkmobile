@@ -697,7 +697,7 @@ const M = {
     pr_bc_here: 'Prestadores',
     pr_hero_title: 'Prestadores',
     pr_hero_sub:
-      'Convites de parceria, vínculos provider-first (pedidos e activações) e candidaturas de onboarding — num só lugar.',
+      'Convites de vínculo, provider-first (pedidos e activações) e candidaturas de onboarding — num só lugar.',
     pr_perm_none: 'Sem permissão para gestão de prestadores nesta sessão.',
     pr_card_bonds_title: 'Vínculos e pedidos (organização)',
     pr_card_bonds_hint:
@@ -733,7 +733,7 @@ const M = {
     pr_candidates_filter_ph: 'Filtrar por nome ou e-mail…',
     pr_lbl_invite_tenant: 'Tenant (empresa) *',
     pr_invite_tenant_hint: 'Necessário no modo global. Em modo organização, usamos automaticamente o contexto actual.',
-    pr_lbl_type: 'Tipo de vínculo',
+    pr_lbl_type: 'Convites utilizam apenas vínculo com a empresa.',
     pr_invite_opt_dedicated: 'Vínculo com a empresa',
     pr_type_hint:
       'Só é possível convidar com vínculo dedicado. Ao activar, outros vínculos activos do prestador podem ser desactivados automaticamente.',
@@ -1499,7 +1499,7 @@ const M = {
     pr_bc_here: 'Providers',
     pr_hero_title: 'Providers',
     pr_hero_sub:
-      'Partnership invites, provider-first links (requests and activations), and onboarding applications — in one place.',
+      'Company-link invites, provider-first links (requests and activations), and onboarding applications — in one place.',
     pr_perm_none: 'No permission to manage providers in this session.',
     pr_card_bonds_title: 'Links & requests (organization)',
     pr_card_bonds_hint:
@@ -1535,7 +1535,7 @@ const M = {
     pr_candidates_filter_ph: 'Filter by name or email…',
     pr_lbl_invite_tenant: 'Tenant (company) *',
     pr_invite_tenant_hint: 'Required in platform mode. In organization mode the current context is used automatically.',
-    pr_lbl_type: 'Link type',
+    pr_lbl_type: 'Invites use a company link only.',
     pr_invite_opt_dedicated: 'Company link',
     pr_type_hint: 'Only company-link invites are supported. Activating may turn off other active links automatically.',
     pr_lbl_note: 'Message (optional)',
