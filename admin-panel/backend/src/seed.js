@@ -419,12 +419,13 @@ async function main() {
   // Tenant padrão do app móvel (APP_DEFAULT_TENANT_SLUG=brspark-app) — usuários com role USER
   const tenantBrsparkApp = await prisma.tenant.upsert({
     where: { slug: 'brspark-app' },
-    update: { localeId: locBr.id, status: 'ACTIVE' },
+    update: { localeId: locBr.id, status: 'ACTIVE', kind: 'COMPANY' },
     create: {
       name: 'BrSpark App',
       slug: 'brspark-app',
       email: 'app-conta@brspark.internal',
       ownerName: 'BrSpark',
+      kind: 'COMPANY',
       localeId: locBr.id,
       status: 'ACTIVE',
       defaultLang: 'pt-BR',

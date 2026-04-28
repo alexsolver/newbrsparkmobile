@@ -40,6 +40,7 @@ const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncW
 const { hasActiveDedicatedAffiliationForAppUser } = require('../lib/providerOnboardingGuards');
 const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
 const { createPersonalClientTenantAndUserInTransaction } = require('../lib/registerPersonalClientTenant');
+const { resolveSharedRegistrationTenant } = require('../lib/resolveSharedRegistrationTenant');
 const {
   ensureMembershipRoleMatchesTenantKind,
   verifyAppLoginPasswordAndEnsureAccount,
@@ -1765,7 +1766,7 @@ function syntheticTenantEmailForWorkspace(userEmail, tag) {
   return `workspace-${tail}@brspark.internal.invalid`;
 }
 
-/** POST /api/me/workspaces — cria tenant CLIENT ou PROVIDER e utilizador com a mesma senha; emite novo JWT. */
+/** POST /api/me/workspaces — cria filiação USER ou PROVIDER na tenant COMPANY partilhada (sem novas tenants CLIENT/PROVIDER). */
 router.post('/me/workspaces', authUser, async (req, res) => {
   try {
     const kind = String(req.body?.kind || '').trim().toUpperCase();
@@ -1780,52 +1781,74 @@ router.post('/me/workspaces', authUser, async (req, res) => {
     if (!me) return res.status(404).json({ error: 'Utilizador não encontrado.' });
 
     const emailCanon = await resolveCanonicalEmailNormForUser(prisma, me);
+    const accountFilter = me.appAccountId
+      ? { appAccountId: me.appAccountId }
+      : { email: { equals: emailCanon, mode: 'insensitive' } };
 
-    const existsKind = await prisma.user.findFirst({
-      where: {
-        ...(me.appAccountId
-          ? { appAccountId: me.appAccountId }
-          : { email: { equals: emailCanon, mode: 'insensitive' } }),
-        tenant: { kind },
-      },
-      select: { id: true, tenantId: true },
-    });
-    if (existsKind) {
-      return res.status(409).json({
+    const shared = await resolveSharedRegistrationTenant(prisma);
+    if (!shared) {
+      return res.status(503).json({
         error:
-          kind === 'PROVIDER'
-            ? 'Já existe um espaço prestador para este e-mail.'
-            : 'Já existe um espaço cliente pessoal para este e-mail.',
-        tenantId: existsKind.tenantId,
-        userId: existsKind.id,
+          'Serviço indisponível: falta tenant COMPANY partilhada (slug «brspark-app» ou APP_REGISTRATION_SHARED_TENANT_*).',
       });
     }
 
-    const baseName = String(req.body?.name || me.name || 'Organização').trim();
-    const slugPrefix = kind === 'PROVIDER' ? 'prestador' : 'cliente';
-    let slug = '';
-    for (let i = 0; i < 8; i++) {
-      slug = `${slugPrefix}-${me.id.replace(/[^a-z0-9]/gi, '').slice(0, 6)}-${Date.now().toString(36)}${i}${Math.random().toString(36).slice(2, 8)}`.toLowerCase();
-      const clash = await prisma.tenant.findUnique({ where: { slug } });
-      if (!clash) break;
+    if (kind === 'PROVIDER') {
+      const existsProv = await prisma.user.findFirst({
+        where: { ...accountFilter, tenantId: shared.id, role: 'PROVIDER' },
+        select: { id: true, tenantId: true },
+      });
+      if (existsProv) {
+        return res.status(409).json({
+          error: 'Já existe um espaço prestador para este e-mail.',
+          tenantId: existsProv.tenantId,
+          userId: existsProv.id,
+        });
+      }
+    } else {
+      const existsPersonal = await prisma.user.findFirst({
+        where: {
+          ...accountFilter,
+          tenantId: shared.id,
+          role: 'USER',
+          id: { not: me.id },
+        },
+        select: { id: true, tenantId: true },
+      });
+      if (existsPersonal) {
+        return res.status(409).json({
+          error: 'Já existe um perfil de utilizador na BrSpark App para este e-mail.',
+          tenantId: existsPersonal.tenantId,
+          userId: existsPersonal.id,
+        });
+      }
+      if (String(me.tenantId) === String(shared.id) && me.role === 'USER') {
+        return res.status(409).json({
+          error: 'A sua sessão já está na organização partilhada da app.',
+          tenantId: me.tenantId,
+          userId: me.id,
+        });
+      }
     }
-    const tenantEmail = syntheticTenantEmailForWorkspace(emailCanon, slugPrefix);
-    /** Título da organização; discriminação por `Tenant.kind` (CLIENT | PROVIDER). */
+
+    const baseName = String(req.body?.name || me.name || 'Organização').trim();
     const tenantName = baseName;
 
     const seatRole = kind === 'PROVIDER' ? 'PROVIDER' : 'USER';
 
     const { tenant: newTenant, user: newUser } = await prisma.$transaction(async (tx) => {
-      const tenant = await tx.tenant.create({
-        data: {
-          name: tenantName,
-          slug,
-          email: tenantEmail,
-          ownerName: baseName,
-          kind,
-          status: 'TRIAL',
-        },
-      });
+      const sharedRow = await resolveSharedRegistrationTenant(tx);
+      if (!sharedRow) {
+        const e = new Error('Tenant partilhada não encontrada.');
+        e.code = 'SHARED_TENANT_MISSING';
+        throw e;
+      }
+      const tenant = await tx.tenant.findUnique({ where: { id: sharedRow.id } });
+      if (!tenant) {
+        const e = new Error('Tenant partilhada não encontrada.');
+        e.code = 'SHARED_TENANT_MISSING';
+        throw e;
+      }
       const seatCheck = await assertTechnicianSeatForNewUser(tx, tenant.id, seatRole);
       if (!seatCheck.ok) {
         const e = new Error(seatCheck.error || 'Limite do plano.');
@@ -1861,7 +1884,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
           action: 'WORKSPACE_CREATE',
           resource: emailCanon,
           category: 'AUTH',
-          metadata: { kind, sourceUserId: me.id },
+          metadata: { kind, sourceUserId: me.id, sharedTenant: true },
         },
       });
       return { tenant, user: u };
@@ -1874,8 +1897,8 @@ router.post('/me/workspaces', authUser, async (req, res) => {
       workspace: { tenantId: newTenant.id, kind },
       message:
         kind === 'PROVIDER'
-          ? 'Espaço prestador criado. A sessão foi alterada para esta organização.'
-          : 'Espaço cliente criado. A sessão foi alterada para esta organização.',
+          ? 'Espaço prestador criado na organização partilhada. A sessão foi alterada para este perfil.'
+          : 'Perfil criado na organização partilhada. A sessão foi alterada para este perfil.',
     });
   } catch (err) {
     console.error('[account] POST /me/workspaces', err);
@@ -1883,8 +1906,11 @@ router.post('/me/workspaces', authUser, async (req, res) => {
     if (code === 'PLAN_MAX_TECHNICIANS') {
       return res.status(403).json({ error: err.message, code });
     }
+    if (code === 'SHARED_TENANT_MISSING') {
+      return res.status(503).json({ error: err.message });
+    }
     if (err && err.code === 'P2002') {
-      return res.status(409).json({ error: 'Slug ou e-mail da organização já em uso. Tente novamente.' });
+      return res.status(409).json({ error: 'E-mail de filiação já em uso. Tente novamente.' });
     }
     res.status(500).json({ error: err.message });
   }

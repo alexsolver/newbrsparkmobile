@@ -1,9 +1,13 @@
 'use strict';
 
 const { assertTechnicianSeatForNewUser } = require('./planQuotaService');
+const {
+  resolveSharedRegistrationTenant,
+  DEFAULT_SHARED_SLUG,
+} = require('./resolveSharedRegistrationTenant');
 
 /**
- * E-mail técnico único para `Tenant.email` (o login do utilizador mantém o e-mail real).
+ * E-mail técnico único para `Tenant.email` (legado: tenants `CLIENT` dedicadas; mantido para scripts de migração).
  */
 function syntheticTenantOwnerEmailForClientSpace(userEmail) {
   const e = String(userEmail || '').trim().toLowerCase();
@@ -45,26 +49,21 @@ async function createPersonalClientTenantAndUserInTransaction(tx, opts) {
     throw new Error('createPersonalClientTenantAndUser: name, emailNorm e passwordHash são obrigatórios.');
   }
 
-  let slug = '';
-  for (let i = 0; i < 8; i++) {
-    slug = `cliente-${Date.now().toString(36)}${i}${Math.random().toString(36).slice(2, 10)}`.toLowerCase();
-    const clash = await tx.tenant.findUnique({ where: { slug } });
-    if (!clash) break;
+  const shared = await resolveSharedRegistrationTenant(tx);
+  if (!shared) {
+    throw new Error(
+      `Registo na app requer uma tenant COMPANY partilhada (slug omissão «${DEFAULT_SHARED_SLUG}»). ` +
+        'Crie-a no seed ou defina APP_REGISTRATION_SHARED_TENANT_ID / APP_REGISTRATION_SHARED_TENANT_SLUG.',
+    );
   }
-  const tenantEmail = syntheticTenantOwnerEmailForClientSpace(emailNorm);
-  const tenantName = name;
 
-  const tenant = await tx.tenant.create({
-    data: {
-      name: tenantName,
-      slug,
-      email: tenantEmail,
-      ownerName: name,
-      kind: 'CLIENT',
-      status: 'TRIAL',
-      phone: phone || null,
-    },
+  const tenant = await tx.tenant.findUnique({
+    where: { id: shared.id },
+    include: { subscription: { include: { plan: true } } },
   });
+  if (!tenant) {
+    throw new Error('Tenant partilhada de registo não encontrada após resolução.');
+  }
 
   const seat = await assertTechnicianSeatForNewUser(tx, tenant.id, 'USER');
   if (!seat.ok) {
@@ -107,7 +106,7 @@ async function createPersonalClientTenantAndUserInTransaction(tx, opts) {
 }
 
 /**
- * Cria tenant `CLIENT` (espaço pessoal) e o primeiro utilizador `USER` com a palavra-passe indicada.
+ * Cria o primeiro utilizador `USER` na tenant COMPANY partilhada da app (sem criar tenant `CLIENT`).
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {{
