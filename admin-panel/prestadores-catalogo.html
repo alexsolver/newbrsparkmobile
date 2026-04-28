@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BrSpark Admin — Diretório de prestadores</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <style>
+    .pdc-filters {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px 16px;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+    .pdc-filters .filter-field { margin: 0; }
+    .pdc-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .pdc-meta { font-size: 12px; color: var(--text2); margin-bottom: 10px; }
+    .pdc-banner { display: none; padding: 12px 14px; border-radius: 10px; background: var(--amber-dim); border: 1px solid var(--border); margin-bottom: 14px; font-size: 13px; }
+  </style>
+</head>
+<body>
+<div class="admin-layout">
+  <div class="main-content">
+    <div class="topbar topbar--data">
+      <nav class="topbar-breadcrumb" aria-label="Trilha">
+        <a href="dashboard.html" style="color:inherit;text-decoration:none;font-weight:600" id="pdc-bc-panel">Painel</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <a href="prestadores.html" style="color:inherit;text-decoration:none;font-weight:600" id="pdc-bc-prestadores">Prestadores</a>
+        <span class="topbar-breadcrumb-sep">/</span>
+        <span id="pdc-bc-here">Diretório</span>
+      </nav>
+    </div>
+    <div class="page-body">
+      <header class="page-hero fade-in">
+        <h1 class="page-hero-title" id="pdc-hero-title">Diretório de prestadores</h1>
+        <p class="page-hero-sub" id="pdc-hero-sub"></p>
+      </header>
+
+      <div class="data-toolbar" style="margin-bottom:20px;flex-wrap:wrap;gap:10px">
+        <div class="data-toolbar-main" style="min-width:0">
+          <a href="technician-applications.html" class="btn btn-outline btn-sm" id="pdc-link-apps" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+            Candidaturas (onboarding)
+          </a>
+        </div>
+        <div class="data-toolbar-actions">
+          <a href="prestadores.html" class="btn btn-outline btn-sm" id="pdc-back-prestadores" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+            <ion-icon name="arrow-back-outline" style="font-size:17px;vertical-align:-3px" aria-hidden="true"></ion-icon>
+            Voltar a Prestadores
+          </a>
+        </div>
+      </div>
+
+      <p id="pdc-banner" class="pdc-banner" role="status"></p>
+
+      <section class="data-shell fade-in">
+        <div class="pdc-filters" id="pdc-filters">
+          <label class="filter-field" id="pdc-wrap-tenant" style="display:none;grid-column:1/-1;max-width:420px">
+            <span class="filter-field-label" id="pdc-lbl-tenant">Organização</span>
+            <select class="form-control filter-field-control" id="pdc-filter-tenant">
+              <option value="">Todas</option>
+            </select>
+          </label>
+          <label class="filter-field" style="grid-column:1/-1;max-width:480px">
+            <span class="filter-field-label" id="pdc-lbl-q">Busca</span>
+            <input type="search" class="form-control filter-field-control" id="pdc-filter-q" autocomplete="off" />
+          </label>
+          <label class="filter-field" style="max-width:360px">
+            <span class="filter-field-label" id="pdc-lbl-skill">Habilidade</span>
+            <input type="search" class="form-control filter-field-control" id="pdc-filter-skill" autocomplete="off" />
+          </label>
+          <label class="filter-field" style="max-width:360px">
+            <span class="filter-field-label" id="pdc-lbl-location">Base / local</span>
+            <select class="form-control filter-field-control" id="pdc-filter-location">
+              <option value="">Qualquer</option>
+            </select>
+          </label>
+          <label class="filter-field" style="max-width:220px">
+            <span class="filter-field-label" id="pdc-lbl-status">Estado técnico</span>
+            <select class="form-control filter-field-control" id="pdc-filter-tech-status">
+              <option value="">Qualquer</option>
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="PENDING">PENDING</option>
+              <option value="INACTIVE">INACTIVE</option>
+              <option value="SUSPENDED">SUSPENDED</option>
+            </select>
+          </label>
+          <label class="filter-field" style="max-width:240px">
+            <span class="filter-field-label" id="pdc-lbl-schedule">Agenda</span>
+            <select class="form-control filter-field-control" id="pdc-filter-schedule">
+              <option value="">Indiferente</option>
+              <option value="1">Com horários</option>
+            </select>
+          </label>
+          <label class="filter-field" style="max-width:240px">
+            <span class="filter-field-label" id="pdc-lbl-coverage">Área</span>
+            <select class="form-control filter-field-control" id="pdc-filter-coverage">
+              <option value="">Indiferente</option>
+              <option value="1">Com cobertura</option>
+            </select>
+          </label>
+        </div>
+        <p id="pdc-location-hint" style="display:none;font-size:12px;color:var(--text3);margin:-6px 0 12px"></p>
+        <div class="pdc-actions">
+          <button type="button" class="btn btn-primary btn-sm" id="pdc-btn-apply">Aplicar filtros</button>
+          <button type="button" class="btn btn-outline btn-sm" id="pdc-btn-refresh">Atualizar</button>
+        </div>
+        <p class="pdc-meta" id="pdc-meta"></p>
+        <div class="table-wrap">
+          <table class="table-data">
+            <thead>
+              <tr>
+                <th id="pdc-th-name">Nome</th>
+                <th id="pdc-th-email">E-mail</th>
+                <th id="pdc-th-tenant">Organização</th>
+                <th id="pdc-th-tech">Perfil</th>
+                <th id="pdc-th-specialty">Especialidade</th>
+                <th id="pdc-th-schedule">Agenda</th>
+                <th id="pdc-th-coverage">Área</th>
+                <th id="pdc-th-updated">Actualizado</th>
+                <th class="text-right" id="pdc-th-actions">Acções</th>
+              </tr>
+            </thead>
+            <tbody id="pdc-tbody">
+              <tr><td colspan="9" style="text-align:center;padding:28px;color:var(--text3)" id="pdc-loading">…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pdc-actions" style="margin-top:14px">
+          <button type="button" class="btn btn-outline btn-sm" id="pdc-btn-prev">Anterior</button>
+          <button type="button" class="btn btn-outline btn-sm" id="pdc-btn-next">Seguinte</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/prestadores-catalogo-page.js"></script>
+<script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+</body>
+</html>

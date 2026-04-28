@@ -750,8 +750,8 @@ const M = {
     pr_invite_push_none: 'Push: nenhum token Expo (o prestador tem de abrir a app com notificações activas).',
     pr_card_apps_title: 'Candidaturas (onboarding)',
     pr_apps_sub:
-      'Resumo das últimas linhas. Para convidar por e-mail ao formulário, filtros completos e aprovação, abra a lista dedicada.',
-    pr_apps_see_all: 'Abrir lista completa',
+      'Resumo das últimas candidaturas. O botão laranja abre o diretório de todos os prestadores (filtros por bases, competências, agenda e área). Para convidar ao formulário e aprovar candidaturas, use «Candidaturas» no menu ou abra technician-applications.html.',
+    pr_apps_see_all: 'Abrir diretório de prestadores',
     pr_apps_refresh: 'Atualizar',
     pr_apps_summary: 'Total na API: {n} (mostramos até 12).',
     pr_apps_empty: 'Nenhuma candidatura listada neste contexto.',
@@ -759,6 +759,54 @@ const M = {
     pr_apps_th_tenant: 'Tenant',
     pr_apps_th_status: 'Estado',
     pr_apps_th_updated: 'Atualizado',
+    pdc_pageTitle: 'BrSpark Admin — Diretório de prestadores',
+    pdc_bc_panel: 'Painel',
+    pdc_bc_prestadores: 'Prestadores',
+    pdc_bc_here: 'Diretório',
+    pdc_hero_title: 'Diretório de prestadores',
+    pdc_hero_sub:
+      'Todos os utilizadores com perfil técnico na plataforma ou no tenant em contexto. Filtre por texto, competências, bases, agenda configurada e área de cobertura.',
+    pdc_link_apps: 'Candidaturas (onboarding)',
+    pdc_back_prestadores: 'Voltar a Prestadores',
+    pdc_filter_q: 'Busca',
+    pdc_filter_q_ph: 'Nome, e-mail, especialidade ou CFT…',
+    pdc_filter_skill: 'Habilidade / competência',
+    pdc_filter_skill_ph: 'Texto em competências (tags, JSON)…',
+    pdc_filter_location: 'Base / local',
+    pdc_filter_location_any: 'Qualquer base',
+    pdc_filter_location_hint: 'Seleccione primeiro o tenant (modo plataforma) ou use o contexto da organização.',
+    pdc_filter_status: 'Estado do perfil técnico',
+    pdc_filter_status_any: 'Qualquer estado',
+    pdc_filter_schedule: 'Agenda de disponibilidade',
+    pdc_filter_schedule_any: 'Indiferente',
+    pdc_filter_schedule_yes: 'Com horários activos',
+    pdc_filter_coverage: 'Área de atendimento',
+    pdc_filter_coverage_any: 'Indiferente',
+    pdc_filter_coverage_yes: 'Com raio ou base geográfica',
+    pdc_filter_tenant: 'Organização (filtro)',
+    pdc_filter_tenant_all: 'Todas (plataforma)',
+    pdc_btn_apply: 'Aplicar filtros',
+    pdc_btn_refresh: 'Atualizar',
+    pdc_meta: 'Total: {total} · Página {page} de {pages} · Lidos da base: {fetched}{capped}',
+    pdc_banner_capped: 'A lista foi limitada pela leitura na base de dados. Use filtros ou escolha uma organização para ver mais linhas.',
+    pdc_meta_capped: ' (limite de leitura; afinar filtros ou tenant)',
+    pdc_th_name: 'Nome',
+    pdc_th_email: 'E-mail',
+    pdc_th_tenant: 'Organização',
+    pdc_th_tech: 'Perfil técnico',
+    pdc_th_specialty: 'Especialidade',
+    pdc_th_schedule: 'Agenda',
+    pdc_th_coverage: 'Área',
+    pdc_th_updated: 'Actualizado',
+    pdc_th_actions: 'Acções',
+    pdc_yes: 'Sim',
+    pdc_no: 'Não',
+    pdc_open_user: 'Ficha',
+    pdc_empty: 'Nenhum prestador corresponde aos filtros.',
+    pdc_err: 'Não foi possível carregar o diretório.',
+    pdc_perm: 'Sem permissão para este recurso.',
+    pdc_prev: 'Anterior',
+    pdc_next: 'Seguinte',
     ue_prefLocaleDefault: '(Padrão do dispositivo / tenant)',
   },
   'en-US': {
@@ -1498,8 +1546,8 @@ const M = {
     pr_invite_push_none: 'Push: no Expo tokens (the technician must open the app with notifications on).',
     pr_card_apps_title: 'Applications (onboarding)',
     pr_apps_sub:
-      'Summary of the latest rows. For email invites to the form, full filters and approval, open the dedicated list.',
-    pr_apps_see_all: 'Open full list',
+      'Summary of the latest applications. The orange button opens the full provider directory (sites, skills, schedule, coverage). For form invites and approvals, use Applications (onboarding) in the menu or technician-applications.html.',
+    pr_apps_see_all: 'Open provider directory',
     pr_apps_refresh: 'Refresh',
     pr_apps_summary: 'Total from API: {n} (showing up to 12).',
     pr_apps_empty: 'No applications in this context.',
@@ -1507,6 +1555,54 @@ const M = {
     pr_apps_th_tenant: 'Tenant',
     pr_apps_th_status: 'Status',
     pr_apps_th_updated: 'Updated',
+    pdc_pageTitle: 'BrSpark Admin — Provider directory',
+    pdc_bc_panel: 'Home',
+    pdc_bc_prestadores: 'Providers',
+    pdc_bc_here: 'Directory',
+    pdc_hero_title: 'Provider directory',
+    pdc_hero_sub:
+      'All users with a technician profile on the platform or in the current tenant context. Filter by text, skills, locations, configured availability and service area.',
+    pdc_link_apps: 'Applications (onboarding)',
+    pdc_back_prestadores: 'Back to Providers',
+    pdc_filter_q: 'Search',
+    pdc_filter_q_ph: 'Name, email, specialty or council ID…',
+    pdc_filter_skill: 'Skill / competency',
+    pdc_filter_skill_ph: 'Text inside skills (tags, JSON)…',
+    pdc_filter_location: 'Site / location',
+    pdc_filter_location_any: 'Any site',
+    pdc_filter_location_hint: 'Pick a tenant first (platform mode) or use your organization context.',
+    pdc_filter_status: 'Technician profile status',
+    pdc_filter_status_any: 'Any status',
+    pdc_filter_schedule: 'Availability schedule',
+    pdc_filter_schedule_any: 'Any',
+    pdc_filter_schedule_yes: 'With active hours',
+    pdc_filter_coverage: 'Service area',
+    pdc_filter_coverage_any: 'Any',
+    pdc_filter_coverage_yes: 'With radius or geo base',
+    pdc_filter_tenant: 'Organization (filter)',
+    pdc_filter_tenant_all: 'All (platform)',
+    pdc_btn_apply: 'Apply filters',
+    pdc_btn_refresh: 'Refresh',
+    pdc_meta: 'Total: {total} · Page {page} of {pages} · Rows read: {fetched}{capped}',
+    pdc_banner_capped: 'Results are capped by the database read limit. Narrow filters or pick an organization to see more rows.',
+    pdc_meta_capped: ' (read cap reached; narrow filters or tenant)',
+    pdc_th_name: 'Name',
+    pdc_th_email: 'Email',
+    pdc_th_tenant: 'Organization',
+    pdc_th_tech: 'Technician',
+    pdc_th_specialty: 'Specialty',
+    pdc_th_schedule: 'Schedule',
+    pdc_th_coverage: 'Area',
+    pdc_th_updated: 'Updated',
+    pdc_th_actions: 'Actions',
+    pdc_yes: 'Yes',
+    pdc_no: 'No',
+    pdc_open_user: 'Profile',
+    pdc_empty: 'No providers match the filters.',
+    pdc_err: 'Could not load the directory.',
+    pdc_perm: 'No permission for this resource.',
+    pdc_prev: 'Previous',
+    pdc_next: 'Next',
     ue_prefLocaleDefault: '(Device / tenant default)',
   },
 };
@@ -2244,4 +2340,74 @@ export function applyPrestadoresPageI18n() {
   setT('pr-apps-th-tenant', 'pr_apps_th_tenant');
   setT('pr-apps-th-status', 'pr_apps_th_status');
   setT('pr-apps-th-updated', 'pr_apps_th_updated');
+}
+
+/** Página diretório de prestadores (SaaS / tenant). */
+export function applyPrestadoresCatalogoPageI18n() {
+  if (typeof document === 'undefined') return;
+  const setT = (id, key) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = t(key);
+  };
+  setT('pdc-bc-panel', 'pdc_bc_panel');
+  setT('pdc-bc-prestadores', 'pdc_bc_prestadores');
+  setT('pdc-bc-here', 'pdc_bc_here');
+  setT('pdc-hero-title', 'pdc_hero_title');
+  setT('pdc-hero-sub', 'pdc_hero_sub');
+  setT('pdc-link-apps', 'pdc_link_apps');
+  setT('pdc-back-prestadores', 'pdc_back_prestadores');
+  setT('pdc-lbl-q', 'pdc_filter_q');
+  const iq = document.getElementById('pdc-filter-q');
+  if (iq) iq.placeholder = t('pdc_filter_q_ph');
+  setT('pdc-lbl-skill', 'pdc_filter_skill');
+  const isk = document.getElementById('pdc-filter-skill');
+  if (isk) isk.placeholder = t('pdc_filter_skill_ph');
+  setT('pdc-lbl-location', 'pdc_filter_location');
+  setT('pdc-lbl-status', 'pdc_filter_status');
+  setT('pdc-lbl-schedule', 'pdc_filter_schedule');
+  setT('pdc-lbl-coverage', 'pdc_filter_coverage');
+  setT('pdc-lbl-tenant', 'pdc_filter_tenant');
+  setT('pdc-btn-apply', 'pdc_btn_apply');
+  setT('pdc-btn-refresh', 'pdc_btn_refresh');
+  setT('pdc-th-name', 'pdc_th_name');
+  setT('pdc-th-email', 'pdc_th_email');
+  setT('pdc-th-tenant', 'pdc_th_tenant');
+  setT('pdc-th-tech', 'pdc_th_tech');
+  setT('pdc-th-specialty', 'pdc_th_specialty');
+  setT('pdc-th-schedule', 'pdc_th_schedule');
+  setT('pdc-th-coverage', 'pdc_th_coverage');
+  setT('pdc-th-updated', 'pdc_th_updated');
+  setT('pdc-th-actions', 'pdc_th_actions');
+  setT('pdc-btn-prev', 'pdc_prev');
+  setT('pdc-btn-next', 'pdc_next');
+
+  const locSel = document.getElementById('pdc-filter-location');
+  if (locSel) {
+    const first = locSel.querySelector('option[value=""]');
+    if (first) first.textContent = t('pdc_filter_location_any');
+  }
+  const stSel = document.getElementById('pdc-filter-tech-status');
+  if (stSel) {
+    const first = stSel.querySelector('option[value=""]');
+    if (first) first.textContent = t('pdc_filter_status_any');
+  }
+  const schSel = document.getElementById('pdc-filter-schedule');
+  if (schSel) {
+    const o0 = schSel.querySelector('option[value=""]');
+    const o1 = schSel.querySelector('option[value="1"]');
+    if (o0) o0.textContent = t('pdc_filter_schedule_any');
+    if (o1) o1.textContent = t('pdc_filter_schedule_yes');
+  }
+  const covSel = document.getElementById('pdc-filter-coverage');
+  if (covSel) {
+    const o0 = covSel.querySelector('option[value=""]');
+    const o1 = covSel.querySelector('option[value="1"]');
+    if (o0) o0.textContent = t('pdc_filter_coverage_any');
+    if (o1) o1.textContent = t('pdc_filter_coverage_yes');
+  }
+  const tenSel = document.getElementById('pdc-filter-tenant');
+  if (tenSel) {
+    const first = tenSel.querySelector('option[value=""]');
+    if (first) first.textContent = t('pdc_filter_tenant_all');
+  }
 }

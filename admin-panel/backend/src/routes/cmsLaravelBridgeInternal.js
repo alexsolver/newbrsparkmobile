@@ -6,6 +6,7 @@ const prisma = require('../db');
 const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
 const { escapeHtmlEmailFragment } = require('../lib/emailEscapeHtml');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
+const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
 const { sendExpoPushToMany } = require('../services/expoPush');
 
 const AFFILIATION_ACCEPT_BASE_URL =
@@ -173,20 +174,23 @@ router.post('/cms-directory-providers-snapshot', express.json({ limit: '64kb' })
       include: {
         tenant: { select: { id: true, slug: true, name: true, status: true, kind: true } },
         technicianProfile: true,
+        appAccount: { select: { emailNorm: true } },
       },
       orderBy: [{ createdAt: 'asc' }],
       take: 5000,
     });
 
-    const providers = rows.map((u) => ({
-      userId: u.id,
-      email: u.email,
-      name: u.name,
-      role: u.role,
-      phone: u.phone || null,
-      city: u.technicianProfile?.city || null,
-      tenant: u.tenant,
-    }));
+    const providers = await Promise.all(
+      rows.map(async (u) => ({
+        userId: u.id,
+        email: (await resolveCanonicalEmailNormForUser(prisma, u)) || u.email,
+        name: u.name,
+        role: u.role,
+        phone: u.phone || null,
+        city: u.technicianProfile?.city || null,
+        tenant: u.tenant,
+      })),
+    );
 
     return res.json({ ok: true, providers });
   } catch (err) {

@@ -323,6 +323,8 @@ router.get('/partnership-candidates', async (req, res) => {
             id: true,
             email: true,
             name: true,
+            appAccountId: true,
+            appAccount: { select: { emailNorm: true } },
             technicianProfile: { select: { city: true } },
           },
         },
@@ -341,11 +343,13 @@ router.get('/partnership-candidates', async (req, res) => {
       const blocked = list.some((a) => dedicatedAffiliationBlocksPartnershipInvite(a, invitingTenantId));
       if (blocked) continue;
       const u = pi.user;
-      if (!u?.email) continue;
+      const emailOut =
+        (await resolveCanonicalEmailNormForUser(prisma, u)) || String(u?.email || '').trim().toLowerCase();
+      if (!emailOut) continue;
       data.push({
         providerIdentityId: pi.id,
         userId: u.id,
-        email: u.email,
+        email: emailOut,
         name: u.name,
         city: u.technicianProfile?.city || null,
       });
@@ -1428,6 +1432,15 @@ router.post('/:id/provider-onboarding/approve', express.json(), async (req, res)
     }
     const { user, piFull, app } = resolved;
     const now = new Date();
+
+    const fromPiScore = Number(piFull.score);
+    const fromPi = {
+      score: Number.isFinite(fromPiScore) && fromPiScore >= 0 && fromPiScore <= 10 ? fromPiScore : undefined,
+      cft: piFull.cft != null && String(piFull.cft).trim() ? String(piFull.cft).trim() : undefined,
+      specialty: piFull.specialty != null && String(piFull.specialty).trim() ? String(piFull.specialty).trim() : undefined,
+      skillsJson: piFull.skillsJson != null ? piFull.skillsJson : undefined,
+    };
+
     await prisma.$transaction(async (tx) => {
       await tx.providerOnboardingApplication.update({
         where: { id: app.id },
@@ -1442,7 +1455,54 @@ router.post('/:id/provider-onboarding/approve', express.json(), async (req, res)
           kycReviewNote: null,
         },
       });
+
+      /** Imediatamente após aprovação de documentos/KYC: operação como prestador na plataforma (os & sincronização). */
+      await tx.technicianProfile.upsert({
+        where: { userId: user.id },
+        create: {
+          userId: user.id,
+          status: 'ACTIVE',
+          score: fromPi.score ?? 5,
+          cft: fromPi.cft ?? null,
+          specialty: fromPi.specialty ?? null,
+          ...(fromPi.skillsJson !== undefined ? { skillsJson: fromPi.skillsJson } : {}),
+        },
+        update: {
+          status: 'ACTIVE',
+          ...(fromPi.score !== undefined ? { score: fromPi.score } : {}),
+          ...(fromPi.cft !== undefined ? { cft: fromPi.cft } : {}),
+          ...(fromPi.specialty !== undefined ? { specialty: fromPi.specialty } : {}),
+          ...(fromPi.skillsJson !== undefined ? { skillsJson: fromPi.skillsJson } : {}),
+        },
+      });
     });
+
+    try {
+      const [tp, freshUser, tenantRow] = await Promise.all([
+        prisma.technicianProfile.findUnique({
+          where: { userId: user.id },
+          select: { status: true },
+        }),
+        prisma.user.findUnique({ where: { id: user.id }, select: { isActive: true } }),
+        prisma.user.findUnique({
+          where: { id: user.id },
+          select: { tenantId: true, tenant: { select: { kind: true } } },
+        }),
+      ]);
+      const techSt = String(tp?.status || '').toUpperCase();
+      const userActive = freshUser?.isActive !== false;
+      if (tp && techSt === 'ACTIVE' && userActive && tenantRow?.tenantId) {
+        await syncActiveAffiliationFromTechnicianStatus(prisma, {
+          userId: user.id,
+          tenantId: tenantRow.tenantId,
+          tenantKind: tenantRow.tenant?.kind,
+        });
+      }
+      invalidateAppEffectiveTenantIdCache(user.id);
+    } catch (e) {
+      console.error('[POST /users/:id/provider-onboarding/approve] sync affiliation:', e?.message || e);
+    }
+
     await prisma.auditLog
       .create({
         data: {
@@ -1459,7 +1519,12 @@ router.post('/:id/provider-onboarding/approve', express.json(), async (req, res)
         },
       })
       .catch(() => {});
-    res.json({ ok: true, kycStatus: 'APPROVED', globalStatus: 'VERIFIED' });
+    res.json({
+      ok: true,
+      kycStatus: 'APPROVED',
+      globalStatus: 'VERIFIED',
+      technicianStatus: 'ACTIVE',
+    });
   } catch (err) {
     console.error('POST /users/:id/provider-onboarding/approve', err);
     res.status(500).json({ error: err.message });

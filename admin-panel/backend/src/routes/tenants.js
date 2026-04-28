@@ -18,6 +18,7 @@ const {
 } = require('../lib/authorization');
 const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
 const { resolveMergedProviderIdentityForUserId, normalizeEmail } = require('../lib/providerIdentityMerge');
+const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
 
 function auditFromReq(req, action, resource, tenantId = null, metadata = undefined) {
   const { adminId, userId } = auditActor(req);
@@ -472,7 +473,15 @@ router.get('/:id/providers', async (req, res) => {
         providerIdentity: {
           include: {
             user: {
-              select: { id: true, email: true, name: true, avatarUrl: true, phone: true },
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                avatarUrl: true,
+                phone: true,
+                appAccountId: true,
+                appAccount: { select: { emailNorm: true } },
+              },
             },
           },
         },
@@ -499,31 +508,51 @@ router.get('/:id/providers', async (req, res) => {
       const m = mergedKycByUserId.get(uid) || '';
       return line === 'APPROVED' || m === 'APPROVED';
     };
+    const loginNormCache = new Map();
+    async function loginNormForUser(u) {
+      if (!u?.id) return '';
+      const id = String(u.id);
+      if (loginNormCache.has(id)) return loginNormCache.get(id);
+      const v = (await resolveCanonicalEmailNormForUser(prisma, u)) || '';
+      loginNormCache.set(id, v);
+      return v;
+    }
+    const data = await Promise.all(
+      rows.map(async (row) => {
+        const u = row.providerIdentity.user;
+        const loginEmailNorm = u ? await loginNormForUser(u) : '';
+        return {
+          id: row.id,
+          status: row.status,
+          relationshipType: row.relationshipType || 'PARTNER',
+          note: row.note,
+          invitedAt: row.invitedAt,
+          requestedAt: row.requestedAt,
+          activatedAt: row.activatedAt,
+          activationKycOk: activationKycOkForRow(row),
+          providerIdentity: {
+            id: row.providerIdentity.id,
+            globalStatus: row.providerIdentity.globalStatus,
+            kycStatus: row.providerIdentity.kycStatus,
+            score: row.providerIdentity.score,
+            cft: row.providerIdentity.cft,
+            specialty: row.providerIdentity.specialty,
+            user: u
+              ? {
+                  id: u.id,
+                  email: u.email,
+                  name: u.name,
+                  avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl),
+                  phone: u.phone,
+                  loginEmailNorm: loginEmailNorm || null,
+                }
+              : null,
+          },
+        };
+      }),
+    );
     return res.json({
-      data: rows.map((row) => ({
-        id: row.id,
-        status: row.status,
-        relationshipType: row.relationshipType || 'PARTNER',
-        note: row.note,
-        invitedAt: row.invitedAt,
-        requestedAt: row.requestedAt,
-        activatedAt: row.activatedAt,
-        activationKycOk: activationKycOkForRow(row),
-        providerIdentity: {
-          id: row.providerIdentity.id,
-          globalStatus: row.providerIdentity.globalStatus,
-          kycStatus: row.providerIdentity.kycStatus,
-          score: row.providerIdentity.score,
-          cft: row.providerIdentity.cft,
-          specialty: row.providerIdentity.specialty,
-          user: row.providerIdentity.user
-            ? {
-                ...row.providerIdentity.user,
-                avatarUrl: ensureHttpsUrlForPublicInternet(row.providerIdentity.user.avatarUrl),
-              }
-            : null,
-        },
-      })),
+      data,
       total: rows.length,
     });
   } catch (err) {

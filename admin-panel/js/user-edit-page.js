@@ -1849,7 +1849,7 @@ function collectSchedule() {
   const root = document.getElementById('schedule-rows');
   weekdaysForLocale().forEach(({ key }) => {
     const slots = [];
-    root?.querySelectorAll(`.sched-day[data-day="${key}"] .sched-slot`).forEach((slotEl) => {
+    (root?.querySelectorAll(`.sched-day[data-day="${key}"] .sched-slot`) ?? []).forEach((slotEl) => {
       const en = slotEl.querySelector('.sch-en')?.checked;
       const start = slotEl.querySelector('.sch-start')?.value || '08:00';
       const end = slotEl.querySelector('.sch-end')?.value || '18:00';
@@ -2541,22 +2541,22 @@ function buildUserPatchPayload() {
   const plRaw = (document.getElementById('f-preferred-locale')?.value || '').trim();
   const notes = document.getElementById('f-admin-notes')?.value ?? '';
 
-  const rawFormEmail = document.getElementById('f-email').value.trim();
+  const rawFormEmail = (document.getElementById('f-email')?.value ?? '').trim();
   const formNorm = rawFormEmail.toLowerCase();
-  const displayNorm = ueBaselineDisplayEmail.toLowerCase();
+  const displayNorm = String(ueBaselineDisplayEmail ?? '').toLowerCase();
   const emailForApi =
     displayNorm && formNorm === displayNorm
       ? ueBaselineRowEmail
       : rawFormEmail.toLowerCase();
 
   return {
-    name: document.getElementById('f-name').value.trim(),
+    name: (document.getElementById('f-name')?.value ?? '').trim(),
     email: emailForApi,
     employeeMatricula: (document.getElementById('f-employee-matricula')?.value || '').trim() || null,
-    phone: document.getElementById('f-phone').value.trim() || null,
+    phone: (document.getElementById('f-phone')?.value ?? '').trim() || null,
     role: selRole,
-    avatarUrl: document.getElementById('f-avatar').value.trim() || null,
-    isActive: document.getElementById('f-active').checked,
+    avatarUrl: (document.getElementById('f-avatar')?.value ?? '').trim() || null,
+    isActive: !!document.getElementById('f-active')?.checked,
     workTimeTrackingEnabled: !!document.getElementById('f-work-time')?.checked,
     ...(function wtBrPayload() {
       const wtOn = !!document.getElementById('f-work-time')?.checked;
@@ -2565,13 +2565,13 @@ function buildUserPatchPayload() {
       return { workTimeBrazilRegime: readWtBrRegimeFromDom() === 'PJ' ? 'PJ' : 'CLT' };
     })(),
     addressJson: {
-      line1: document.getElementById('a-line1').value.trim() || null,
-      line2: document.getElementById('a-line2').value.trim() || null,
-      district: document.getElementById('a-district').value.trim() || null,
-      city: document.getElementById('a-city').value.trim() || null,
-      state: document.getElementById('a-state').value.trim() || null,
-      postalCode: document.getElementById('a-postal').value.trim() || null,
-      countryCode: document.getElementById('a-country').value.trim() || 'BR',
+      line1: (document.getElementById('a-line1')?.value ?? '').trim() || null,
+      line2: (document.getElementById('a-line2')?.value ?? '').trim() || null,
+      district: (document.getElementById('a-district')?.value ?? '').trim() || null,
+      city: (document.getElementById('a-city')?.value ?? '').trim() || null,
+      state: (document.getElementById('a-state')?.value ?? '').trim() || null,
+      postalCode: (document.getElementById('a-postal')?.value ?? '').trim() || null,
+      countryCode: (document.getElementById('a-country')?.value ?? '').trim() || 'BR',
     },
     personalDocuments: collectDocTable('tbody-docs-personal'),
     preferredChatLocale: plRaw || null,
@@ -2579,10 +2579,10 @@ function buildUserPatchPayload() {
     isProvider: isProviderRole,
     technician: includeTechnician
       ? {
-          status: document.getElementById('t-status').value,
-          cft: document.getElementById('t-cft').value.trim() || null,
-          specialty: document.getElementById('t-specialty').value.trim() || null,
-          score: Number(document.getElementById('t-score').value) || 5,
+          status: document.getElementById('t-status')?.value || 'PENDING',
+          cft: (document.getElementById('t-cft')?.value ?? '').trim() || null,
+          specialty: (document.getElementById('t-specialty')?.value ?? '').trim() || null,
+          score: Number(document.getElementById('t-score')?.value) || 5,
           workScheduleJson: collectSchedule(),
           skillsJson,
           serviceCoverageGeoJson: hasCoverage

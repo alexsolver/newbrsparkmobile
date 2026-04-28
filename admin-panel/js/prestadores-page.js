@@ -240,7 +240,7 @@ async function loadBondsTable() {
       .map((r) => {
         const u = r.providerIdentity?.user || {};
         const name = String(u.name || '').trim() || '—';
-        const em = String(u.email || '').trim();
+        const em = String(u.loginEmailNorm || u.email || '').trim();
         const rel =
           String(r.relationshipType || 'PARTNER').toUpperCase() === 'DEDICATED'
             ? t('pr_rel_dedicated')

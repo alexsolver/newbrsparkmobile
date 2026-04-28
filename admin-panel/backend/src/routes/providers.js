@@ -8,7 +8,13 @@ const authUser = require('../middleware/authUser');
 const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
 const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
-const { assertTenantAccess, resolveScopedTenantId } = require('../lib/authorization');
+const {
+  assertTenantAccess,
+  hasCapability,
+  isPlatformAdmin,
+  resolveScopedTenantId,
+  nonPlatformUserReadWhere,
+} = require('../lib/authorization');
 const { escapeHtmlEmailFragment } = require('../lib/emailEscapeHtml');
 const {
   ensureProviderIdentityForUserId,
@@ -27,6 +33,7 @@ const { endSiblingAffiliationsSameTenantAppAccount } = require('../lib/providerA
 const { invalidateAppEffectiveTenantIdCache } = require('../lib/appLoginEffectiveTenant');
 const { parseDedicatedExclusiveFromTenantScheduleJson } = require('../lib/dedicatedExclusiveTime');
 const { hasActiveDedicatedAffiliationForAppUser } = require('../lib/providerOnboardingGuards');
+const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
 
 const publicRouter = express.Router();
 const adminRouter = express.Router();
@@ -1127,6 +1134,190 @@ adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
       },
     });
   } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/** Diretório de prestadores (perfil técnico) no painel — filtros avançados em memória após leitura limitada. */
+function scheduleHasEnabled(ws) {
+  if (!ws || typeof ws !== 'object' || Array.isArray(ws)) return false;
+  const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  for (const d of days) {
+    const slot = ws[d];
+    if (!slot) continue;
+    if (Array.isArray(slot)) {
+      if (slot.some((s) => s && typeof s === 'object' && s.enabled)) return true;
+    } else if (typeof slot === 'object' && slot.enabled) return true;
+  }
+  return false;
+}
+
+function coverageHasArea(cov) {
+  if (!cov || typeof cov !== 'object') return false;
+  const r = Number(cov.radiusKm);
+  if (Number.isFinite(r) && r > 0) return true;
+  const hb = cov.homeBase;
+  if (hb && typeof hb === 'object' && Number.isFinite(hb.latitude) && Number.isFinite(hb.longitude)) return true;
+  return false;
+}
+
+function serviceLocationIdsArray(raw) {
+  if (Array.isArray(raw)) return raw.map((x) => String(x));
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) return Object.values(raw).map((x) => String(x));
+  return [];
+}
+
+function canReadProviderDirectory(req) {
+  const a = req.authorization;
+  return (
+    hasCapability(a, 'platform.users.read') ||
+    hasCapability(a, 'tenant.users.read.any') ||
+    hasCapability(a, 'tenant.users.read.self') ||
+    hasCapability(a, 'tenant.technicianRegistration.read.any') ||
+    hasCapability(a, 'tenant.technicianRegistration.read.self') ||
+    hasCapability(a, 'tenant.providers.read.self')
+  );
+}
+
+function rowMatchesDirectoryFilters(u, { qSearch, skill, locationId, hasSchedule, hasCoverage }) {
+  const tp = u.technicianProfile;
+  if (!tp) return false;
+  if (qSearch) {
+    const q = qSearch.toLowerCase();
+    const emTech = u.email ? String(u.email).toLowerCase() : '';
+    const emCanon = u.loginEmailNorm ? String(u.loginEmailNorm).toLowerCase() : '';
+    const hit =
+      emTech.includes(q) ||
+      emCanon.includes(q) ||
+      (u.name && String(u.name).toLowerCase().includes(q)) ||
+      (tp.specialty && String(tp.specialty).toLowerCase().includes(q)) ||
+      (tp.cft && String(tp.cft).toLowerCase().includes(q));
+    if (!hit) return false;
+  }
+  if (skill) {
+    const hay = JSON.stringify(tp.skillsJson ?? '').toLowerCase();
+    if (!hay.includes(skill.toLowerCase())) return false;
+  }
+  if (locationId) {
+    const ids = serviceLocationIdsArray(tp.serviceLocationIds);
+    if (!ids.includes(String(locationId))) return false;
+  }
+  if (hasSchedule === '1' && !scheduleHasEnabled(tp.workScheduleJson)) return false;
+  if (hasCoverage === '1' && !coverageHasArea(tp.serviceCoverageGeoJson)) return false;
+  return true;
+}
+
+// GET /api/providers/panel/saas-provider-directory
+adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
+  try {
+    if (!canReadProviderDirectory(req)) {
+      return res.status(403).json({ error: 'Sem permissão para consultar o diretório de prestadores.' });
+    }
+    const qTenant = req.query.tenantId != null ? String(req.query.tenantId).trim() : '';
+    if (qTenant && !assertTenantAccess(req.authorization, qTenant)) {
+      return res.status(403).json({ error: 'Sem permissão para este tenant.' });
+    }
+    const tenantFilter = resolveScopedTenantId(req.authorization, qTenant || null);
+
+    const qSearch = req.query.q != null ? String(req.query.q).trim().slice(0, 200) : '';
+    const skill = req.query.skill != null ? String(req.query.skill).trim().slice(0, 120) : '';
+    const locationId = req.query.locationId != null ? String(req.query.locationId).trim() : '';
+    const hasSchedule = String(req.query.hasSchedule || '').trim() === '1' ? '1' : '';
+    const hasCoverage = String(req.query.hasCoverage || '').trim() === '1' ? '1' : '';
+    const techStatus = req.query.techStatus != null ? String(req.query.techStatus).trim().slice(0, 32) : '';
+
+    const page = Math.max(1, Math.min(500, parseInt(String(req.query.page || '1'), 10) || 1));
+    const pageSize = Math.max(10, Math.min(100, parseInt(String(req.query.pageSize || '50'), 10) || 50));
+    const maxFetch = Math.min(5000, Math.max(500, page * pageSize + 800));
+
+    const where = {
+      isActive: true,
+      technicianProfile: techStatus ? { is: { status: techStatus } } : { isNot: null },
+      ...(tenantFilter ? { tenantId: tenantFilter } : {}),
+    };
+    const andParts = [];
+    if (!isPlatformAdmin(req.authorization)) andParts.push(nonPlatformUserReadWhere(req.authorization));
+    if (andParts.length) where.AND = andParts;
+
+    const rows = await prisma.user.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      take: maxFetch,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        tenantId: true,
+        updatedAt: true,
+        appAccountId: true,
+        appAccount: { select: { emailNorm: true } },
+        tenant: { select: { id: true, name: true } },
+        technicianProfile: {
+          select: {
+            status: true,
+            specialty: true,
+            cft: true,
+            score: true,
+            skillsJson: true,
+            workScheduleJson: true,
+            serviceLocationIds: true,
+            serviceCoverageGeoJson: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+
+    const post = { qSearch, skill, locationId, hasSchedule, hasCoverage };
+    const enriched = await Promise.all(
+      rows.map(async (u) => ({
+        ...u,
+        loginEmailNorm: (await resolveCanonicalEmailNormForUser(prisma, u)) || '',
+      })),
+    );
+    const filtered = enriched.filter((u) => rowMatchesDirectoryFilters(u, post));
+    const total = filtered.length;
+    const start = (page - 1) * pageSize;
+    const slice = filtered.slice(start, start + pageSize);
+
+    const data = slice.map((u) => ({
+      userId: u.id,
+      email: u.loginEmailNorm || u.email,
+      name: u.name,
+      role: u.role,
+      tenantId: u.tenantId,
+      tenantName: u.tenant?.name || null,
+      updatedAt: u.updatedAt,
+      technician: {
+        status: u.technicianProfile?.status,
+        specialty: u.technicianProfile?.specialty,
+        cft: u.technicianProfile?.cft,
+        score: u.technicianProfile?.score,
+        skillsJson: u.technicianProfile?.skillsJson,
+        workScheduleJson: u.technicianProfile?.workScheduleJson,
+        serviceLocationIds: u.technicianProfile?.serviceLocationIds,
+        serviceCoverageGeoJson: u.technicianProfile?.serviceCoverageGeoJson,
+        hasSchedule: scheduleHasEnabled(u.technicianProfile?.workScheduleJson),
+        hasCoverageArea: coverageHasArea(u.technicianProfile?.serviceCoverageGeoJson),
+        updatedAt: u.technicianProfile?.updatedAt,
+      },
+    }));
+
+    return res.json({
+      data,
+      meta: {
+        total,
+        page,
+        pageSize,
+        fetchedFromDb: rows.length,
+        maxFetch,
+        capped: rows.length >= maxFetch,
+        tenantScoped: !!tenantFilter,
+      },
+    });
+  } catch (err) {
+    console.error('GET /panel/saas-provider-directory', err);
     return res.status(500).json({ error: err.message });
   }
 });
