@@ -25,6 +25,8 @@ export const USER_PAGES_DE_MERGE = {
   nav_sec_multi: 'Standorte',
   nav_sec_plat: 'Plattform',
   nav_sec_sys: 'System',
+  nav_sec_tenant: 'Organisation & Betrieb',
+  nav_sec_saas: 'SaaS-Admin',
   nav_dashboard: 'Dashboard',
   nav_tenants: 'Mandanten',
   nav_my_org: 'Meine Organisation',

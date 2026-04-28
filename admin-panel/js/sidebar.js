@@ -254,30 +254,35 @@ export function setSidebarCollapsed(collapsed) {
   }
 }
 
+/**
+ * Menu em duas áreas: contexto da organização (tenant) vs gestão global da plataforma (só SAAS_ADMIN vê o bloco completo).
+ * `sectionKey` muda o rótulo de secção quando difere do item anterior.
+ */
 export const NAV_ITEMS = [
-  { page: 'dashboard.html', icon: 'grid-outline', labelKey: 'nav_dashboard', sectionKey: null },
-  { page: 'tenants.html', icon: 'business-outline', labelKey: 'nav_tenants', sectionKey: 'nav_sec_mgmt' },
-  { page: 'users.html', icon: 'people-outline', labelKey: 'nav_users', sectionKey: null },
+  { page: 'users.html', icon: 'people-outline', labelKey: 'nav_users', sectionKey: 'nav_sec_tenant' },
   {
     page: 'prestadores.html',
     icon: 'people-circle-outline',
     labelKey: 'nav_prestadores',
     sectionKey: null,
   },
-  { page: 'checklists.html', icon: 'list-circle-outline', labelKey: 'nav_forms_builder', sectionKey: 'nav_sec_ops' },
+  { page: 'checklists.html', icon: 'list-circle-outline', labelKey: 'nav_forms_builder', sectionKey: null },
   { page: 'operations.html', icon: 'git-branch-outline', labelKey: 'nav_operations', sectionKey: null },
   { page: 'routine-tasks.html', icon: 'repeat-outline', labelKey: 'nav_routine_tasks', sectionKey: null },
   { page: 'reports.html', icon: 'document-text-outline', labelKey: 'nav_reports_pdf', sectionKey: null },
   { page: 'evaluations.html', icon: 'star-half-outline', labelKey: 'nav_evaluations', sectionKey: null },
   { page: 'cockpit.html', icon: 'pulse-outline', labelKey: 'nav_cockpit', sectionKey: null },
-  { page: 'locations.html', icon: 'location-outline', labelKey: 'nav_locations', sectionKey: 'nav_sec_multi' },
-  { page: 'i18n.html', icon: 'globe-outline', labelKey: 'nav_i18n', sectionKey: null },
-  { page: 'metatags.html', icon: 'pricetags-outline', labelKey: 'nav_metatags', sectionKey: 'nav_sec_plat' },
+  { page: 'locations.html', icon: 'location-outline', labelKey: 'nav_locations', sectionKey: null },
   { page: 'subscriptions.html', icon: 'card-outline', labelKey: 'nav_subscriptions', sectionKey: null },
+  { page: 'notifications.html', icon: 'notifications-outline', labelKey: 'nav_notifications', sectionKey: null },
+  { page: 'chat.html', icon: 'chatbubbles-outline', labelKey: 'nav_chat', sectionKey: null },
+  { page: 'work-time.html', icon: 'finger-print-outline', labelKey: 'nav_work_time', sectionKey: null },
+  { page: 'dashboard.html', icon: 'grid-outline', labelKey: 'nav_dashboard', sectionKey: 'nav_sec_saas' },
+  { page: 'tenants.html', icon: 'business-outline', labelKey: 'nav_tenants', sectionKey: null },
+  { page: 'i18n.html', icon: 'globe-outline', labelKey: 'nav_i18n', sectionKey: null },
+  { page: 'metatags.html', icon: 'pricetags-outline', labelKey: 'nav_metatags', sectionKey: null },
   { page: 'plans.html', icon: 'layers-outline', labelKey: 'nav_plans', sectionKey: null },
   { page: 'integrations.html', icon: 'flash-outline', labelKey: 'nav_integrations', sectionKey: null },
-  { page: 'notifications.html', icon: 'notifications-outline', labelKey: 'nav_notifications', sectionKey: null },
-  { page: 'chat.html', icon: 'chatbubbles-outline', labelKey: 'nav_chat', sectionKey: 'nav_sec_ops' },
   { page: 'compliance.html', icon: 'shield-checkmark-outline', labelKey: 'nav_compliance', sectionKey: null },
   {
     page: 'tracking-chat-moderation.html',
@@ -286,10 +291,9 @@ export const NAV_ITEMS = [
     sectionKey: null,
   },
   { page: 'data-collection.html', icon: 'pulse-outline', labelKey: 'nav_data_collection', sectionKey: null },
-  { page: 'work-time.html', icon: 'finger-print-outline', labelKey: 'nav_work_time', sectionKey: null },
   { page: 'telemetry.html', icon: 'navigate-circle-outline', labelKey: 'nav_telemetry', sectionKey: null },
   { page: 'api-docs.html', icon: 'document-text-outline', labelKey: 'nav_api_docs', sectionKey: null },
-  { page: 'audit.html', icon: 'time-outline', labelKey: 'nav_audit', sectionKey: 'nav_sec_sys' },
+  { page: 'audit.html', icon: 'time-outline', labelKey: 'nav_audit', sectionKey: null },
   { page: 'system.html', icon: 'settings-outline', labelKey: 'nav_system', sectionKey: null },
 ];
 

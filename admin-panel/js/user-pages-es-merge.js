@@ -25,6 +25,8 @@ export const USER_PAGES_ES_MERGE = {
   nav_sec_multi: "Multi-location",
   nav_sec_plat: "Platform",
   nav_sec_sys: "System",
+  nav_sec_tenant: "Organización y operaciones",
+  nav_sec_saas: "Admin SaaS",
   nav_dashboard: "Dashboard",
   nav_tenants: "Inquilinos",
   nav_my_org: "Mi organización",
