@@ -22,6 +22,7 @@ import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
 import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryBridge';
 import { pollStaleGpsReminders } from '../src/services/syncService';
 import { NotificationService, preparePushNotificationInfrastructure } from '../src/services/notifications';
+import { agentPushDebugLog } from '../src/debug/agentPushDebugLog';
 import { PushNotificationResponseBridge } from '../src/components/PushNotificationResponseBridge';
 import { ProviderBroadcastOfferProvider } from '../src/context/ProviderBroadcastOfferContext';
 import {
@@ -178,6 +179,14 @@ function AppInitializer() {
   // Registre token Expo Push ao iniciar sessão (antes só ao abrir o separador Notificações)
   useEffect(() => {
     if (loading || !user) return;
+    // #region agent log
+    agentPushDebugLog({
+      hypothesisId: 'H2',
+      location: '_layout.tsx:AppInitializer',
+      message: 'schedule_push_register',
+      data: { platform: Platform.OS, userIdLen: String(user?.id || '').length },
+    });
+    // #endregion
     NotificationService.registerForPushNotificationsAsync().catch(() => {});
     /** iOS: APNs/Expo por vezes só entregam token após o 1.º frame — re-tentar em silêncio. */
     if (Platform.OS !== 'ios') return;
