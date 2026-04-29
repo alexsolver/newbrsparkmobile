@@ -31,6 +31,7 @@ import { useAppContext } from '../context/AppContext';
 import { computeJourneyUiState, type WorkTimeJourneyPhase } from '../lib/workTimeJourney';
 import { getWorkTimeOutboxForDisplay } from '../services/workTimePunchOutbox';
 import { fetchWorkTimeMe, fetchWorkTimePunchesWithLocalFallback } from '../services/workTimeService';
+import { fetchGpsCapturePolicyMe } from '../services/gpsCapturePolicyStore';
 import { readWorkTimeMeCacheForUser, writeWorkTimeMeCache } from '../services/workTimeMeCache';
 import { mergePendingWithServerPunches } from '../services/workTimePunchesCache';
 import { pushWorkTimePunchOutbox } from '../services/workTimePunchOutbox';
@@ -143,6 +144,9 @@ function CustomTabBar({
           }
         }
         const show = !!(d && d.ok && d.showWorkTimeInApp);
+        if (d?.ok) {
+          void fetchGpsCapturePolicyMe();
+        }
         if (meSource === 'network_ok' && d && d.ok) {
           try {
             await writeWorkTimeMeCache(d);

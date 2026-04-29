@@ -140,6 +140,8 @@ import { ChecklistTechnicianFinanceField } from '../../src/components/ChecklistT
 import { ChecklistTechnicianRevenueField } from '../../src/components/ChecklistTechnicianRevenueField';
 import { useAuth } from '../../src/hooks/useAuth';
 import { evaluateBusinessCondition } from '../../src/lib/businessRuleCondition';
+import { getCurrentPositionWithGpsPolicy } from '../../src/lib/getCurrentPositionWithAccuracyFallback';
+import { startChecklistGpsWarmup } from '../../src/lib/checklistGpsWarmup';
 import { effectiveSchemaFieldType } from '../../src/services/checklistTemplateSchema';
 import {
   formatCalculatedResultDisplay,
@@ -4201,7 +4203,7 @@ export default function ChecklistEngine() {
       
       if (status === 'granted') {
           try {
-              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+              const loc = await getCurrentPositionWithGpsPolicy();
               lat = loc.coords.latitude;
               lng = loc.coords.longitude;
               const acc = loc.coords.accuracy;
@@ -4717,8 +4719,10 @@ export default function ChecklistEngine() {
           dataCollectionService.syncExecutionContext(String(resolvedTaskId), email || undefined);
         }
       });
+      const gpsWarmup = startChecklistGpsWarmup();
       return () => {
         cancelled = true;
+        gpsWarmup.cancel();
       };
     }, [resolvedTaskId, isReadOnly])
   );

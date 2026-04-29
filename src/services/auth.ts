@@ -789,7 +789,7 @@ export class AuthService {
     }
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await persistAppSessionPayload({
-      token: data.token,
+      token: String(data.token ?? ''),
       user: data.user as User,
       refreshToken: (data as { refreshToken?: string }).refreshToken,
     });
@@ -836,7 +836,7 @@ export class AuthService {
     }
     await AuthService.wipeLocalDataBeforeNewSession(data.user as User);
     await persistAppSessionPayload({
-      token: data.token,
+      token: String(data.token ?? ''),
       user: data.user as User,
       refreshToken: (data as { refreshToken?: string }).refreshToken,
     });

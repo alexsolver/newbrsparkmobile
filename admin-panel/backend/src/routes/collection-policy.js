@@ -1,56 +1,9 @@
 'use strict';
 const router = require('express').Router();
-const prisma  = require('../db');
+const prisma = require('../db');
 const { auditActor } = require('../lib/auditActor');
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Retorna a política efetiva para um tenant:
- * Começa com a política global (tenantId null) e aplica override do tenant se existir.
- */
-async function getEffectivePolicy(tenantId, sectorCode) {
-  // 1. Política global padrão (tenantId null, sectorCode null)
-  let global = await prisma.collectionPolicy.findFirst({
-    where: { tenantId: null, sectorCode: null, isActive: true },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  if (!global) {
-    // Cria a política global padrão automaticamente se não existir
-    global = await prisma.collectionPolicy.create({
-      data: { tenantId: null, sectorCode: null, label: 'Padrão Global', isActive: true },
-    });
-  }
-
-  if (!tenantId) return { ...global, _source: 'global' };
-
-  // 2. Override por tenant + setor (mais específico)
-  const tenantSector = sectorCode
-    ? await prisma.collectionPolicy.findFirst({
-        where: { tenantId, sectorCode, isActive: true },
-        orderBy: { createdAt: 'desc' },
-      })
-    : null;
-
-  // 3. Override por tenant sem setor específico
-  const tenantOnly = await prisma.collectionPolicy.findFirst({
-    where: { tenantId, sectorCode: null, isActive: true },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  const override = tenantSector || tenantOnly;
-  if (!override) return { ...global, _source: 'global' };
-
-  // Merge: global como base, override sobrescreve apenas campos definidos
-  return {
-    ...global,
-    ...override,
-    id: override.id,
-    _source: tenantSector ? 'tenant_sector' : 'tenant',
-    _globalId: global.id,
-  };
-}
+const { getEffectivePolicy } = require('../lib/effectiveCollectionPolicy');
+const { normalizeGpsCapturePolicy, mergeGpsCapturePolicy } = require('../lib/gpsCapturePolicy');
 
 // ─── PUBLIC (mobile app) ──────────────────────────────────────────────────────
 
@@ -59,7 +12,12 @@ router.get('/effective', async (req, res) => {
   try {
     const { tenantId, sectorCode } = req.query;
     const policy = await getEffectivePolicy(tenantId || null, sectorCode || null);
-    res.json(policy);
+    const publicPolicy = { ...policy };
+    delete publicPolicy.requireCheckinPhoto;
+    delete publicPolicy.allowOfflineCheckin;
+    delete publicPolicy._source;
+    delete publicPolicy._globalId;
+    res.json(publicPolicy);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -99,8 +57,9 @@ router.post('/', async (req, res) => {
       retentionGpsRawDays, retentionEventsYears, retentionAuditDays, retentionMetricsDays,
       mockGpsAction, rootJailbreakAction, clockDriftMaxSeconds,
       requireExplicitConsent, consentGranular, legalBasis,
-      requireCheckinPhoto, allowOfflineCheckin, minOnSiteMinutes,
+      minOnSiteMinutes,
       outOfPolicyAction,
+      gpsCapturePolicy,
     } = req.body;
 
     const data = {
@@ -130,10 +89,9 @@ router.post('/', async (req, res) => {
       ...(requireExplicitConsent !== undefined && { requireExplicitConsent }),
       ...(consentGranular        !== undefined && { consentGranular }),
       ...(legalBasis             !== undefined && { legalBasis }),
-      ...(requireCheckinPhoto    !== undefined && { requireCheckinPhoto }),
-      ...(allowOfflineCheckin    !== undefined && { allowOfflineCheckin }),
       ...(minOnSiteMinutes       !== undefined && { minOnSiteMinutes: parseInt(minOnSiteMinutes) }),
       ...(outOfPolicyAction      !== undefined && { outOfPolicyAction }),
+      ...(gpsCapturePolicy !== undefined && { gpsCapturePolicy: normalizeGpsCapturePolicy(gpsCapturePolicy) }),
     };
 
     const policy = await prisma.collectionPolicy.create({ data });
@@ -162,7 +120,7 @@ router.patch('/:id', async (req, res) => {
       'retentionGpsRawDays', 'retentionEventsYears', 'retentionAuditDays', 'retentionMetricsDays',
       'mockGpsAction', 'rootJailbreakAction', 'clockDriftMaxSeconds',
       'requireExplicitConsent', 'consentGranular', 'legalBasis',
-      'requireCheckinPhoto', 'allowOfflineCheckin', 'minOnSiteMinutes',
+      'minOnSiteMinutes',
       'outOfPolicyAction', 'isActive',
     ];
     const intFields = new Set([
@@ -190,6 +148,11 @@ router.patch('/:id', async (req, res) => {
       }
       data[key] = req.body[key];
     }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'gpsCapturePolicy')) {
+      const existing = await prisma.collectionPolicy.findUnique({ where: { id: req.params.id } });
+      if (!existing) return res.status(404).json({ error: 'Política não encontrada.' });
+      data.gpsCapturePolicy = mergeGpsCapturePolicy(existing.gpsCapturePolicy, req.body.gpsCapturePolicy);
+    }
     const updated = await prisma.collectionPolicy.update({ where: { id: req.params.id }, data });
     res.json(updated);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -211,7 +174,12 @@ module.exports.effectiveHandler = async (req, res) => {
   try {
     const { tenantId, sectorCode } = req.query;
     const policy = await getEffectivePolicy(tenantId || null, sectorCode || null);
-    res.json(policy);
+    const publicPolicy = { ...policy };
+    delete publicPolicy.requireCheckinPhoto;
+    delete publicPolicy.allowOfflineCheckin;
+    delete publicPolicy._source;
+    delete publicPolicy._globalId;
+    res.json(publicPolicy);
   } catch (err) { res.status(500).json({ error: err.message }); }
 };
 

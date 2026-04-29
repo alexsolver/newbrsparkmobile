@@ -12,6 +12,7 @@
  *   IDLE → DISPATCHED → IN_TRANSIT → ARRIVED → IN_SERVICE → DEPARTING → IDLE
  */
 import * as Location from 'expo-location';
+import { getCurrentPositionWithGpsPolicy } from '../lib/getCurrentPositionWithAccuracyFallback';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getIntegritySnapshot, detectMockLocation } from './integrityService';
 import { apiFetch } from './auth';
@@ -55,7 +56,6 @@ export interface CollectionPolicy {
   clockDriftMaxSeconds: number;
   requireExplicitConsent: boolean;
   legalBasis: string;
-  allowOfflineCheckin: boolean;
   outOfPolicyAction: 'PROCEED_FLAG' | 'BLOCK' | 'WARN';
 }
 
@@ -75,7 +75,6 @@ const DEFAULT_POLICY: CollectionPolicy = {
   clockDriftMaxSeconds: 300,
   requireExplicitConsent: true,
   legalBasis: 'LGPD',
-  allowOfflineCheckin: true,
   outOfPolicyAction: 'PROCEED_FLAG',
 };
 
@@ -364,8 +363,7 @@ class DataCollectionService {
   // ── Burst capture (for critical milestones) ───────────────────────────────
 
   /**
-   * High-precision burst: waits up to 8 seconds for a reading with accuracy < 20m.
-   * Use for CHECKIN, CHECKOUT, OS_START — moments that have judicial relevance.
+   * Tenta alta precisão com timeout (8s) e cai para Balanced — marcos CHECKIN/OS_START, etc.
    */
   async burstCapture(): Promise<{
     lat: number;
@@ -376,9 +374,7 @@ class DataCollectionService {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return null;
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.BestForNavigation,
-      });
+      const loc = await getCurrentPositionWithGpsPolicy();
       return {
         lat: loc.coords.latitude,
         lng: loc.coords.longitude,

@@ -180,6 +180,40 @@
           </div>
         </div>
 
+        <!-- Captura GPS (app) -->
+        <div class="dc-panel">
+          <div class="dc-panel-title"><ion-icon name="navigate-outline"></ion-icon> Política de captura GPS (app)</div>
+          <p class="dc-panel-desc">Deslocamentos, checklist, ponto e trilha: precisão, timeout, filtro de outliers na rota e aquecimento GNSS ao focar a OS.</p>
+          <div class="dc-grid">
+            <div class="dc-field">
+              <label>Modo de precisão na captura</label>
+              <select id="dc-gps-accuracy-mode" style="max-width:100%">
+                <option value="high_then_balanced">Alta precisão com fallback (Balanced após timeout)</option>
+                <option value="high_only">Apenas alta precisão (sem fallback)</option>
+              </select>
+            </div>
+            <div class="dc-field">
+              <label>Timeout alta precisão (ms, 2000–120000)</label>
+              <input type="number" id="dc-gps-high-timeout" min="2000" max="120000" step="500" value="8000" />
+              <span class="dc-field-hint">Só com modo «com fallback»</span>
+            </div>
+            <div class="dc-field">
+              <label>Trilha: velocidade implícita máx. (m/s) — vazio = desligado</label>
+              <input type="number" id="dc-gps-trail-speed" min="0" max="200" step="1" placeholder="Ex.: 45" />
+            </div>
+            <div class="dc-field">
+              <label>Trilha: ignorar accuracy pior que (m) — vazio = desligado</label>
+              <input type="number" id="dc-gps-trail-ignore-acc" min="5" max="500" step="1" placeholder="Ex.: 80" />
+            </div>
+          </div>
+          <div class="dc-grid">
+            <div class="dc-toggle-row">
+              <div class="dc-toggle-label"><strong>Aquecimento GNSS no checklist</strong><span>Watch leve enquanto a OS está em foco</span></div>
+              <label class="dc-toggle"><input type="checkbox" id="dc-gps-warmup" checked><span class="dc-slider"></span></label>
+            </div>
+          </div>
+        </div>
+
         <!-- Retenção -->
         <div class="dc-panel">
           <div class="dc-panel-title"><ion-icon name="time-outline"></ion-icon> Retenção de Dados</div>
@@ -245,14 +279,6 @@
             <div class="dc-toggle-row">
               <div class="dc-toggle-label"><strong>Consentimento Explícito</strong><span>Técnico aceita no onboarding</span></div>
               <label class="dc-toggle"><input type="checkbox" id="requireExplicitConsent" checked><span class="dc-slider"></span></label>
-            </div>
-            <div class="dc-toggle-row">
-              <div class="dc-toggle-label"><strong>Foto Obrigatória no Check-in</strong><span>Captura foto ao registrar chegada</span></div>
-              <label class="dc-toggle"><input type="checkbox" id="requireCheckinPhoto"><span class="dc-slider"></span></label>
-            </div>
-            <div class="dc-toggle-row">
-              <div class="dc-toggle-label"><strong>Check-in Offline</strong><span>Sincroniza depois sem conexão</span></div>
-              <label class="dc-toggle"><input type="checkbox" id="allowOfflineCheckin" checked><span class="dc-slider"></span></label>
             </div>
           </div>
         </div>
@@ -513,6 +539,49 @@ async function loadGlobalPolicy() {
   } catch(e) { console.warn(e); }
 }
 
+function fillGpsPolicyForm(p) {
+  const raw = p && typeof p.gpsCapturePolicy === 'object' ? p.gpsCapturePolicy : {};
+  const mode = raw.accuracyMode === 'high_only' ? 'high_only' : 'high_then_balanced';
+  const sel = document.getElementById('dc-gps-accuracy-mode');
+  if (sel) sel.value = mode;
+  const ht = document.getElementById('dc-gps-high-timeout');
+  if (ht) ht.value = raw.highAccuracyTimeoutMs != null ? String(raw.highAccuracyTimeoutMs) : '8000';
+  const sp = document.getElementById('dc-gps-trail-speed');
+  if (sp) sp.value = raw.trailOutlierMaxSpeedMps != null && raw.trailOutlierMaxSpeedMps !== '' ? String(raw.trailOutlierMaxSpeedMps) : '';
+  const ig = document.getElementById('dc-gps-trail-ignore-acc');
+  if (ig) ig.value = raw.trailIgnoreAccuracyAboveM != null ? String(raw.trailIgnoreAccuracyAboveM) : '';
+  const wu = document.getElementById('dc-gps-warmup');
+  if (wu) wu.checked = raw.warmupBalancedWhileChecklistFocused !== false;
+}
+
+function buildGpsPolicyFromForm() {
+  const modeEl = document.getElementById('dc-gps-accuracy-mode');
+  const mode = modeEl && modeEl.value === 'high_only' ? 'high_only' : 'high_then_balanced';
+  const htEl = document.getElementById('dc-gps-high-timeout');
+  const ht = parseInt(String(htEl && htEl.value ? htEl.value : '8000'), 10) || 8000;
+  const spdRaw = (document.getElementById('dc-gps-trail-speed') || {}).value;
+  const spdTrim = String(spdRaw || '').trim();
+  let trailOutlierMaxSpeedMps = null;
+  if (spdTrim !== '') {
+    const n = parseFloat(spdTrim);
+    if (Number.isFinite(n) && n > 0) trailOutlierMaxSpeedMps = n;
+  }
+  const ignRaw = String((document.getElementById('dc-gps-trail-ignore-acc') || {}).value || '').trim();
+  let trailIgnoreAccuracyAboveM = null;
+  if (ignRaw !== '') {
+    const n = parseInt(ignRaw, 10);
+    if (Number.isFinite(n)) trailIgnoreAccuracyAboveM = n;
+  }
+  const warmupEl = document.getElementById('dc-gps-warmup');
+  return {
+    accuracyMode: mode,
+    highAccuracyTimeoutMs: Math.min(120000, Math.max(2000, ht)),
+    trailOutlierMaxSpeedMps,
+    trailIgnoreAccuracyAboveM,
+    warmupBalancedWhileChecklistFocused: !!(warmupEl && warmupEl.checked),
+  };
+}
+
 function populateForm(p) {
   const set = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = v; };
   const chk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
@@ -538,8 +607,7 @@ function populateForm(p) {
   chk('locationEnabled',               p.locationEnabled);
   chk('locationBackgroundEnabled',     p.locationBackgroundEnabled);
   chk('requireExplicitConsent',        p.requireExplicitConsent);
-  chk('requireCheckinPhoto',           p.requireCheckinPhoto);
-  chk('allowOfflineCheckin',           p.allowOfflineCheckin);
+  fillGpsPolicyForm(p);
   updateRetentionDisplay(p);
   const badge = document.getElementById('dc-policy-source-badge');
   if (badge) badge.textContent = p._source === 'global' ? 'Política global' : `Override ${p._source}`;
@@ -587,10 +655,9 @@ window.saveGlobalPolicy = async () => {
     clockDriftMaxSeconds:         +gv('clockDriftMaxSeconds'),
     minOnSiteMinutes:             +gv('minOnSiteMinutes'),
     requireExplicitConsent:       gc('requireExplicitConsent'),
-    requireCheckinPhoto:          gc('requireCheckinPhoto'),
-    allowOfflineCheckin:          gc('allowOfflineCheckin'),
     mockGpsAction:                gv('mockGpsAction'),
     rootJailbreakAction:          gv('rootJailbreakAction'),
+    gpsCapturePolicy:            buildGpsPolicyFromForm(),
   };
   try {
     let res;

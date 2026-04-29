@@ -202,6 +202,7 @@ app.use('/api/routine-tasks', require('./routes/routineTasks')); // app: tarefas
 app.use('/api/evaluations/public', evaluationsPublicRoutes); // cliente: formulário sem login
 app.use('/api/evaluations', evaluationsRoutes); // app: Minha Produtividade / avaliações
 app.use('/api/work-time', workTimePublicRouter); // app: GET /me, GET/POST punches (JWT usuário)
+app.use('/api/gps-capture-policy', require('./routes/gpsCapturePolicy')); // app: GET /me — política GPS por tenant
 app.use('/api/materials-receipt-inputs', require('./routes/materialsReceiptInputs'));
 app.use('/api/technician-revenue-inputs', require('./routes/technicianRevenueInputs'));
 // Rotas IA (Excel → formulário): montagem explícita para não depender só de router.use no checklists.js

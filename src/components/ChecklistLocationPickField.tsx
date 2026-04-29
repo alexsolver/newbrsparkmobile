@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import MapView, { Marker, type Region } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { getCurrentPositionWithGpsPolicy } from '../lib/getCurrentPositionWithAccuracyFallback';
 import * as Network from 'expo-network';
 import i18next from 'i18next';
 import { useTranslation } from 'react-i18next';
@@ -280,7 +281,7 @@ export function ChecklistLocationPickField({
         Alert.alert(t('appAlerts.location.gpsTitle'), t('appAlerts.location.gpsDenied'));
         return;
       }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const loc = await getCurrentPositionWithGpsPolicy();
       const lat = loc.coords.latitude;
       const lng = loc.coords.longitude;
       const acc = loc.coords.accuracy;

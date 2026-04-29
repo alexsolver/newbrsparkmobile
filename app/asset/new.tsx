@@ -11,6 +11,7 @@ import { Asset } from '../../src/types/asset';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureCameraPermissionAfterRationale, ensureLibraryPermissionAfterRationale } from '../../src/lib/jitPermissions';
 import * as Location from 'expo-location';
+import { getCurrentPositionWithGpsPolicy } from '../../src/lib/getCurrentPositionWithAccuracyFallback';
 import { ApiService } from '../../src/services/api';
 import { pushSyncQueue } from '../../src/services/syncService';
 import { useTranslation } from 'react-i18next';
@@ -191,26 +192,8 @@ export default function NewAssetScreen() {
         return;
       }
 
-      // 3. Tenta alta precisão (10s timeout), cai para Balanced se demorar
-      let loc: Location.LocationObject | null = null;
-      try {
-        loc = await Promise.race([
-          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('timeout')), 10000)
-          ),
-        ]) as Location.LocationObject;
-      } catch (err: any) {
-        if (err?.message === 'timeout') {
-          // Fallback para Balanced se HIGH demorar demais (comum em simulador)
-          loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        } else {
-          throw err;
-        }
-      }
-
-      if (!loc) throw new Error('Nenhuma localização obtida');
-
+      // 3. Alta precisão (10s timeout), cai para Balanced — mesmo helper do checklist
+      const loc = await getCurrentPositionWithGpsPolicy({ highTimeoutMs: 10000 });
       const { latitude, longitude, accuracy } = loc.coords;
       const coordStr = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
       setGpsCoordinates(coordStr);

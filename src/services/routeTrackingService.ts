@@ -4,6 +4,8 @@
  * (ex.: Waze). watchPositionAsync só funciona em primeiro plano (documentação expo-location).
  */
 import * as Location from 'expo-location';
+import { getCurrentPositionWithGpsPolicy } from '../lib/getCurrentPositionWithAccuracyFallback';
+import { getGpsCapturePolicy } from './gpsCapturePolicyStore';
 import { Platform } from 'react-native';
 import type { LocationObject } from 'expo-location';
 import {
@@ -64,6 +66,11 @@ class RouteTrackingService {
   private lastLat: number | null = null;
   private lastLng: number | null = null;
   private lastEmittedUpdate: RouteUpdate | null = null;
+
+  /** Última amostra aceite para filtro de outliers (política tenant). */
+  private trailFilterLastTs: number | null = null;
+  private trailFilterLastLat: number | null = null;
+  private trailFilterLastLng: number | null = null;
 
   on(event: string, fn: Listener) {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set());
@@ -132,6 +139,40 @@ class RouteTrackingService {
     const lng = loc.coords.longitude;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
+    const policy = getGpsCapturePolicy();
+    const acc = loc.coords.accuracy;
+    if (
+      policy.trailIgnoreAccuracyAboveM != null &&
+      Number.isFinite(policy.trailIgnoreAccuracyAboveM) &&
+      typeof acc === 'number' &&
+      Number.isFinite(acc) &&
+      acc > policy.trailIgnoreAccuracyAboveM
+    ) {
+      return;
+    }
+
+    const ts = typeof loc.timestamp === 'number' ? loc.timestamp : Date.now();
+    const maxSpd = policy.trailOutlierMaxSpeedMps;
+    if (
+      maxSpd != null &&
+      maxSpd > 0 &&
+      this.trailFilterLastTs != null &&
+      this.trailFilterLastLat != null &&
+      this.trailFilterLastLng != null
+    ) {
+      const dt = (ts - this.trailFilterLastTs) / 1000;
+      if (dt > 0 && dt <= 7200) {
+        const d = this.haversine(this.trailFilterLastLat, this.trailFilterLastLng, lat, lng);
+        if (d / dt > maxSpd) {
+          return;
+        }
+      }
+    }
+
+    this.trailFilterLastTs = ts;
+    this.trailFilterLastLat = lat;
+    this.trailFilterLastLng = lng;
+
     const { distM: dist, arcM, idx } = this.projectToRoute(lat, lng);
 
     if (this.sessionBaselineArcM === null) {
@@ -152,7 +193,6 @@ class RouteTrackingService {
 
     this.traversedPath.push([lat, lng]);
 
-    const acc = loc.coords.accuracy;
     const accOk =
       acc == null ||
       !Number.isFinite(acc) ||
@@ -255,7 +295,7 @@ class RouteTrackingService {
     }
 
     try {
-      const initLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const initLoc = await getCurrentPositionWithGpsPolicy();
       const ila = initLoc.coords.latitude;
       const ilg = initLoc.coords.longitude;
       this.traversedPath.push([ila, ilg]);
@@ -346,6 +386,9 @@ class RouteTrackingService {
     this.lastLat = null;
     this.lastLng = null;
     this.lastEmittedUpdate = null;
+    this.trailFilterLastTs = null;
+    this.trailFilterLastLat = null;
+    this.trailFilterLastLng = null;
   }
 
   pause() {

@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { getCurrentPositionWithGpsPolicy } from './getCurrentPositionWithAccuracyFallback';
 import { Platform } from 'react-native';
 import * as Network from 'expo-network';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -75,7 +76,7 @@ export async function collectPunchInputs(
     collectionNotes.push('GPS: permissão de localização negada.');
   } else {
     try {
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const pos = await getCurrentPositionWithGpsPolicy();
       lat = pos.coords.latitude;
       lng = pos.coords.longitude;
       accuracy = pos.coords.accuracy ?? undefined;

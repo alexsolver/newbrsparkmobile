@@ -1446,6 +1446,9 @@ model CollectionPolicy {
   // ── Comportamento fora da política ───────────────────
   outOfPolicyAction  String @default("PROCEED_FLAG") // PROCEED_FLAG | BLOCK | WARN
 
+  /// Política de captura GPS (app): precisão, trilha, aquecimento. JSON; ver `gpsCapturePolicy.js`.
+  gpsCapturePolicy Json?
+
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

@@ -18,6 +18,7 @@ import { dataCollectionService } from '../services/dataCollectionService';
 import { warmAvatarCacheForUser } from '../services/avatarLocalCache';
 import { normalizeUserAvatarUrl } from '../utils/normalizeUserAvatarUrl';
 import { NotificationService } from '../services/notifications';
+import { resetGpsCapturePolicyToDefaults } from '../services/gpsCapturePolicyStore';
 import i18n from '../i18n';
 interface AuthContextType {
   user: User | null;
@@ -424,12 +425,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    resetGpsCapturePolicyToDefaults();
     await AuthService.logout();
     setUser(null);
     _setUserRole('CLIENT');
   };
 
   const deleteAccount = async () => {
+    resetGpsCapturePolicyToDefaults();
     await AuthService.deleteAccount();
     setUser(null);
     _setUserRole('CLIENT');

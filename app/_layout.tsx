@@ -33,6 +33,7 @@ import { AutomaticTimeGate } from '../src/components/AutomaticTimeGate';
 import { GpsIntegrityGate } from '../src/components/GpsIntegrityGate';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { VECTOR_ICON_FONT_MAP } from '../src/lib/vectorIconFonts';
+import { fetchGpsCapturePolicyMe, resetGpsCapturePolicyToDefaults } from '../src/services/gpsCapturePolicyStore';
 
 function RouteGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -180,6 +181,15 @@ function AppInitializer() {
       clearTimeout(a);
       clearTimeout(b);
     };
+  }, [user?.id, loading]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user?.id) {
+      resetGpsCapturePolicyToDefaults();
+      return;
+    }
+    void fetchGpsCapturePolicyMe();
   }, [user?.id, loading]);
 
   useEffect(() => {

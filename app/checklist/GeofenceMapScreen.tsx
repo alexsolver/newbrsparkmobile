@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import MapView, { Circle, Marker, Polygon, Polyline } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { getCurrentPositionWithGpsPolicy } from '../../src/lib/getCurrentPositionWithAccuracyFallback';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -169,7 +170,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
     (async () => {
       const { status: perm } = await Location.requestForegroundPermissionsAsync();
       if (perm !== 'granted') { setLoading(false); setStatus('unknown'); setStatusMsg('GPS negado.'); return; }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const loc = await getCurrentPositionWithGpsPolicy();
       const { latitude: lat, longitude: lng } = loc.coords;
       setMyPos({ lat, lng });
       evaluate(lat, lng);

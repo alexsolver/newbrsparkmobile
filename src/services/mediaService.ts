@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { getCurrentPositionWithGpsPolicy } from '../lib/getCurrentPositionWithAccuracyFallback';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Alert } from 'react-native';
 import i18n from '../i18n';
@@ -89,7 +90,7 @@ export async function getGeoStamp(): Promise<GeoStamp | null> {
   if (status !== 'granted') return null;
 
   try {
-    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    const loc = await getCurrentPositionWithGpsPolicy();
     const { latitude, longitude } = loc.coords;
 
     let address = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;

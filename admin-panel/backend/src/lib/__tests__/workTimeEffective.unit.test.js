@@ -59,6 +59,8 @@ function buildMockDb(opts) {
         }
         return null;
       },
+      /** Usado por `resolveSharedRegistrationTenant` → `isSharedAppRegistrationTenantId` em `getWorkTimeEffectiveForUser`. */
+      findFirst: async () => null,
     },
     featureFlag: {
       findFirst: async () => null,
