@@ -69,9 +69,8 @@ async function main() {
         title: 'Teste ícone · Live Activity',
         body:
           'Abrindo o cartão de técnico: verifique se o logo aparece à esquerda. FT de teste (não abrir OS).\n\nDeslize para expandir. Ações: Aceitar, Recusar ou OK.',
-        interruptionLevel: 'active',
         categoryId: 'BRSPARK_TECH_ACTIVITY',
-        channelId: ANDROID_CHANNEL_TECH,
+        android: { channelId: ANDROID_CHANNEL_TECH, sound: 'default' },
         data: {
           taskId,
           type: 'os_reopened_revision',
@@ -84,7 +83,7 @@ async function main() {
       res = await sendExpoPushToMany(tokens, {
         title: 'Teste BrSpark',
         body: 'Push de teste do backend do painel. Se vê isto, o canal está OK.',
-        channelId: ANDROID_CHANNEL_TECH,
+        android: { channelId: ANDROID_CHANNEL_TECH, sound: 'default' },
         data: { type: 'admin_test_push', at: new Date().toISOString() },
       });
     }

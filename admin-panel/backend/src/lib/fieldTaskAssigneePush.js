@@ -89,11 +89,8 @@ function buildFieldTaskActivityPushPayload(opts, appDisplayName, liveActivityBad
     return {
         title: String(opts.pushTitle || `Nova atividade · ${appDisplayName}`).slice(0, 120),
         body,
-        /** iOS 15+ (Expo): explícito; «time-sensitive» exige capability no App ID. */
-        interruptionLevel: 'active',
         categoryId: 'BRSPARK_TECH_ACTIVITY',
-        /** Top-level + android.* — em Android em background o canal explícito evita cair em «Miscellaneous» sem som/cabeçalho. */
-        channelId: 'brspark-tecnico',
+        /** Canal só em `android` (Expo: `channelId` de raiz é Android-only e não deve ir no payload APNs). */
         android: {
             channelId: 'brspark-tecnico',
             sound: 'default',

@@ -558,6 +558,7 @@ router.get('/tasks', async (req, res) => {
     const tenantId = String(req.user?.tenantId || '').trim();
     if (!tenantId) {
       console.warn('[sync/tasks] JWT sem tenantId — retorno vazio (isolamento multi-tenant).');
+      res.set('X-BrSpark-Sync-Tasks-Reason', 'no-tenant');
       return res.json([]);
     }
 
@@ -568,8 +569,9 @@ router.get('/tasks', async (req, res) => {
     });
     if (!canReceiveOs) {
       console.log(
-        `[sync/tasks] ${ownerEmail} — inelegível para FT/OS neste contexto (papel ≠ PROVIDER ou tenant ≠ sessão efetiva); retorno vazio.`
+        `[sync/tasks] ${ownerEmail} — inelegível para FT/OS (papel ≠ PROVIDER ou e-mail da sessão fora dos candidatos de ownerEmail); retorno vazio.`
       );
+      res.set('X-BrSpark-Sync-Tasks-Reason', 'field-tasks-ineligible');
       return res.json([]);
     }
 

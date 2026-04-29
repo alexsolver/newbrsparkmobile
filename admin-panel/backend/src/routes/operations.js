@@ -1056,8 +1056,11 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
           const pushRes = await sendExpoPushToMany(pushTokens, {
             title: `Nova revisão · ${appDisplayName}`.slice(0, 120),
             body,
-            interruptionLevel: 'active',
             categoryId: 'BRSPARK_TECH_ACTIVITY',
+            android: {
+              channelId: 'brspark-tecnico',
+              sound: 'default',
+            },
             data: { taskId: id, type: 'os_reopened_revision', appDisplayName, liveActivityBadgeKey },
           });
           if (pushRes && pushRes.ok === false) {

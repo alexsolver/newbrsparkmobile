@@ -86,7 +86,10 @@ async function sendClientProviderEnRoutePush(opts) {
     title,
     body,
     categoryId: PUSH_CATEGORY_CLIENT,
-    channelId: ANDROID_CLIENT_CHANNEL,
+    android: {
+      channelId: ANDROID_CLIENT_CHANNEL,
+      sound: 'default',
+    },
     data: {
       type: 'client_provider_en_route',
       executionId,

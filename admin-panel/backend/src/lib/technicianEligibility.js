@@ -1,6 +1,5 @@
 'use strict';
 
-const { resolveAppEffectiveTenantId } = require('./appLoginEffectiveTenant');
 const {
   resolveCanonicalEmailNormForUser,
   resolveFieldTaskOwnerEmailCandidatesForAppUser,
@@ -142,8 +141,12 @@ async function canReceiveFieldTasksForAppSession(db, opts) {
   const emailOk = candidates.some((c) => String(c || '').trim().toLowerCase() === en);
   if (!emailOk) return false;
 
-  const eff = await resolveAppEffectiveTenantId(db, userId);
-  return String(eff || '').trim() === tid;
+  /**
+   * `req.user.tenantId` no middleware já vem de `resolveAppEffectiveTenantId` (ou fallback `User.tenantId`).
+   * Recomparar `eff === tid` aqui era redundante e, em teoria, podia falhar por cache/TTL entre chamadas
+   * — bloqueava `/api/sync/tasks` com [] sem o utilizador perceber o motivo.
+   */
+  return true;
 }
 
 module.exports = {

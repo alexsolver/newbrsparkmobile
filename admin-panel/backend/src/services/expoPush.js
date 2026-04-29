@@ -7,6 +7,8 @@ const path = require('path');
 function appendAgentPushDebugLine(obj) {
   try {
     const logPath = path.join(__dirname, '../../../..', '.cursor', 'debug-63633b.log');
+    const dir = path.dirname(logPath);
+    if (!fs.existsSync(dir)) return;
     fs.appendFileSync(
       logPath,
       `${JSON.stringify({
@@ -32,14 +34,34 @@ const EXPO_PUSH_URL = 'https://api.expo.dev/v2/push/send';
 const ANDROID_CHANNEL_ID = 'brspark-alerts';
 const MAX_MESSAGES_PER_REQUEST = 100;
 
+/**
+ * Expo: `channelId` é só Android; no nível superior pode ir par ao JSON para iOS/APNs.
+ * Garantimos canal em `android.channelId` e removemos o campo de raiz.
+ * @param {Record<string, unknown>} msg
+ */
+function normalizeExpoPushMessage(msg) {
+  const m = { ...msg };
+  const inner =
+    typeof m.android === 'object' && m.android != null && !Array.isArray(m.android) ? { ...m.android } : {};
+  const ch =
+    (typeof inner.channelId === 'string' && inner.channelId.trim()) ||
+    (typeof m.channelId === 'string' && m.channelId.trim()) ||
+    ANDROID_CHANNEL_ID;
+  inner.channelId = ch;
+  if (inner.sound == null) inner.sound = 'default';
+  m.android = inner;
+  delete m.channelId;
+  return m;
+}
+
 async function sendExpoPush(to, payload) {
-  const body = {
+  const body = normalizeExpoPushMessage({
     to,
     sound: 'default',
     channelId: ANDROID_CHANNEL_ID,
     priority: 'high',
     ...payload,
-  };
+  });
 
   const res = await fetch(EXPO_PUSH_URL, {
     method: 'POST',
@@ -102,7 +124,7 @@ async function sendExpoPushToMany(entries, payload) {
 
   for (let i = 0; i < tokens.length; i += MAX_MESSAGES_PER_REQUEST) {
     const chunk = tokens.slice(i, i + MAX_MESSAGES_PER_REQUEST);
-    const messages = chunk.map((to) => ({ to, ...baseMsg }));
+    const messages = chunk.map((to) => normalizeExpoPushMessage({ to, ...baseMsg }));
 
     const res = await fetch(EXPO_PUSH_URL, {
       method: 'POST',
@@ -166,7 +188,11 @@ async function sendExpoPushToMany(entries, payload) {
       errors,
       titleLen: typeof payload?.title === 'string' ? payload.title.length : 0,
       bodyLen: typeof payload?.body === 'string' ? payload.body.length : 0,
-      channelId: payload?.channelId ?? baseMsg?.channelId ?? null,
+      channelId:
+        (payload && payload.android && payload.android.channelId) ||
+        payload?.channelId ||
+        baseMsg?.channelId ||
+        null,
       hasData: !!(payload && payload.data && typeof payload.data === 'object'),
     },
   });

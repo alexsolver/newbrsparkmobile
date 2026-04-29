@@ -90,8 +90,10 @@ async function sendTrackingClientChatPushToTechnician(prisma, opts) {
     title,
     body,
     priority: 'high',
-    interruptionLevel: 'active',
-    channelId: CHANNEL_TRACKING_CLIENT_CHAT,
+    android: {
+      channelId: CHANNEL_TRACKING_CLIENT_CHAT,
+      sound: 'default',
+    },
     data: {
       type: 'tracking_client_chat',
       taskId: executionId,

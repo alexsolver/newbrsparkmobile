@@ -960,9 +960,9 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
       notify.pushTokenCount = tokens.length;
       if (tokens.length) {
         const pushRes = await sendExpoPushToMany(tokens, {
-          channelId: 'brspark-tecnico',
           title: 'Convite — organizações e parcerias',
           body: `${tenantLabel}: novo convite (dedicado). Abra a app.`,
+          android: { channelId: 'brspark-tecnico', sound: 'default' },
           data: {
             type: 'PROVIDER_AFFILIATION_INVITED',
             tenantId: String(tenantId),

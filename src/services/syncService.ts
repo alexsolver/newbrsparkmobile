@@ -2680,7 +2680,40 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
     const res = await apiFetch(`/api/sync/tasks${q}`);
     console.log(`[pullTasks] HTTP status: ${res.status}`);
     if (res.ok) {
-        const remoteTasks = await res.json();
+        let syncReason: string | null = null;
+        try {
+          syncReason = res.headers.get('X-BrSpark-Sync-Tasks-Reason');
+        } catch {
+          syncReason = null;
+        }
+        let remoteTasks: any[] = [];
+        try {
+          const parsed = await res.json();
+          remoteTasks = Array.isArray(parsed) ? parsed : [];
+        } catch {
+          remoteTasks = [];
+        }
+        /**
+         * Sem isto: GET [] com `field-tasks-ineligible` / `no-tenant` gravava `saveFtCloudTasks([])`
+         * e apagava todo o cache local — o servidor mantinha RECEIVED de um pull anterior e o painel
+         * mentia «Aparelho Recebeu» sem a OS existir no telemóvel.
+         */
+        if (
+          remoteTasks.length === 0 &&
+          (syncReason === 'field-tasks-ineligible' || syncReason === 'no-tenant')
+        ) {
+          if (syncReason === 'field-tasks-ineligible') {
+            console.warn(
+              '[pullTasks] Lista vazia (inelegível para FT/OS) — cache local preservado. Confirme perfil PROVIDER e o mesmo e-mail do despacho.',
+            );
+          } else {
+            console.warn(
+              '[pullTasks] Lista vazia (JWT sem tenantId) — cache local preservado. Verifique sessão / dados de utilizador.',
+            );
+          }
+          return;
+        }
+
         console.log(`[pullTasks] ✅ Recebidas ${remoteTasks.length} OS(s) do servidor`);
         if (remoteTasks.length > 0) {
           console.log(`[pullTasks] Primeira OS: id=${remoteTasks[0].id} | title=${remoteTasks[0].title}`);
@@ -2728,8 +2761,18 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
           if (st === 'CANCELLED' || st === 'CANCELED') return false;
           return true;
         });
+        /** Igual ao RT: sem isto, um GET que devolva só parte das OS apaga as outras do AsyncStorage
+         *  (painel continua RECEIVED; só uma OS «aparece» no telemóvel). */
+        const carriedFt = ftExisting.filter((t: any) => {
+          if (taskRowIsRoutineTask(t)) return false;
+          const rid = String(t?.id || '');
+          if (!rid || remoteAllIds.has(rid)) return false;
+          const st = String(t?.status || '').toUpperCase();
+          if (st === 'CANCELLED' || st === 'CANCELED') return false;
+          return true;
+        });
 
-        let processedFt = await overlayExecutionStatusOutboxOnTasks(mergedRemoteFt);
+        let processedFt = await overlayExecutionStatusOutboxOnTasks([...carriedFt, ...mergedRemoteFt]);
         let processedRt = await overlayExecutionStatusOutboxOnTasks([...carriedRt, ...mergedRemoteRt]);
 
         await clearLocalAcceptedTasksForRevisionReopen([...processedFt, ...processedRt]);

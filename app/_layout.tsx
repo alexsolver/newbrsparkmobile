@@ -7,7 +7,6 @@ import { useTheme } from '../src/theme/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, getDatabaseOwner, clearLocalDatabase } from '../src/database';
 import { ApiService } from '../src/services/api';
-import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from '../src/hooks/useAuth';
 import { isTechnicianProfileActive } from '../src/services/auth';
 import { ThemeProvider } from '../src/theme/ThemeContext';
@@ -35,16 +34,6 @@ import { AutomaticTimeGate } from '../src/components/AutomaticTimeGate';
 import { GpsIntegrityGate } from '../src/components/GpsIntegrityGate';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { VECTOR_ICON_FONT_MAP } from '../src/lib/vectorIconFonts';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 
 function RouteGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();

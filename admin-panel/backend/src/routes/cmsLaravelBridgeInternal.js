@@ -466,9 +466,9 @@ router.post('/provider-affiliations/invite', express.json({ limit: '64kb' }), as
     if (tokens.length) {
       try {
         const pushRes = await sendExpoPushToMany(tokens, {
-          channelId: 'brspark-tecnico',
           title: pushTitle,
           body: pushBody,
+          android: { channelId: 'brspark-tecnico', sound: 'default' },
           data: {
             type: 'PROVIDER_AFFILIATION_INVITED',
             tenantId: String(tenantId),
