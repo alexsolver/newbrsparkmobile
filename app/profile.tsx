@@ -1213,7 +1213,7 @@ export default function ProfileScreen() {
           <Text style={[styles.headerName, { color: '#191C1D' }]}>{profile.name}</Text>
           <Text style={[styles.headerSub, { color: C.textSecondary }]}>{profile.email}</Text>
 
-          {user.technicianProfile && !isTechnicianProfileActive(user) ? (
+          {user.technicianProfile && !isTechnicianProfileActive(user) && activePersona === 'provider' ? (
             <View style={[styles.listCard, { marginHorizontal: 16, marginTop: 12, maxWidth: SCREEN_W - 32, alignSelf: 'center', width: '100%', padding: 16 }]}>
               <Text style={{ fontSize: 14, fontWeight: '700', color: '#0f172a', marginBottom: 6 }}>
                 Prestador, aguardando habilitação
