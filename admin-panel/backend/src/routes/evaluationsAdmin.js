@@ -10,6 +10,7 @@ const { buildClientSurveyLinks } = require('../lib/evaluationSurveyUrl');
 const { buildChatTranscriptForEvaluationInstance } = require('../lib/disputeChatTranscript');
 const { extractClientEmailFromMetadata } = require('../lib/technicianClientChatGate');
 const { sendTransactionalEmailWithFallback } = require('../lib/transactionalEmailSend');
+const { resolveActiveUserIdsForDispatchOwnerEmail } = require('../lib/userEmailUnique');
 
 const router = express.Router();
 
@@ -481,14 +482,14 @@ router.post('/instances/:id/notify', express.json(), async (req, res) => {
             'É necessário um e-mail para localizar o cliente na app. Use o e-mail detetado na OS ou preencha o campo no convite.',
         };
       } else {
-        const clientUser = await prisma.user.findFirst({
-          where: {
-            tenantId: inst.tenantId,
-            email: { equals: pushEmail, mode: 'insensitive' },
-            role: 'USER',
-          },
-          select: { id: true },
+        const clientUserIds = await resolveActiveUserIdsForDispatchOwnerEmail(prisma, pushEmail, {
+          tenantId: inst.tenantId,
         });
+        const clientUser = clientUserIds.length ? await prisma.user.findFirst({
+          where: { id: { in: clientUserIds }, role: 'USER', isActive: true },
+          select: { id: true },
+          orderBy: { updatedAt: 'desc' },
+        }) : null;
         if (!clientUser) {
           results.push = {
             skipped: true,

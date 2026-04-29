@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Alert, AppState, Linking } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
@@ -25,7 +25,6 @@ import {
 } from '../services/techTaskLiveActivity';
 import { emitTrackingClientChatPing } from '../lib/trackingClientChatPing';
 import { NotificationService } from '../services/notifications';
-import { agentPushDebugLog } from '../debug/agentPushDebugLog';
 
 function getRejectReasonFromPush(): string {
   return i18n.t('appAlerts.push.rejectReasonFromDevice');
@@ -299,27 +298,6 @@ export function PushNotificationResponseBridge() {
   /** Com o app em primeiro plano, mostra Live Activity ao chegar OS/revisão (cartão no Lock Screen ao bloquear de novo). */
   useEffect(() => {
     const sub = Notifications.addNotificationReceivedListener((notification) => {
-      // #region agent log
-      {
-        const c = notification.request.content;
-        const raw0 = c.data;
-        const d0 =
-          raw0 && typeof raw0 === 'object' && !Array.isArray(raw0)
-            ? (raw0 as Record<string, unknown>)
-            : null;
-        agentPushDebugLog({
-          hypothesisId: 'H6',
-          location: 'PushNotificationResponseBridge.tsx:addNotificationReceivedListener',
-          message: 'remote_notification_received_in_js',
-          data: {
-            appState: AppState.currentState,
-            type: d0 ? String(d0.type || '') : '',
-            titleLen: typeof c.title === 'string' ? c.title.length : 0,
-            bodyLen: typeof c.body === 'string' ? c.body.length : 0,
-          },
-        });
-      }
-      // #endregion
       const raw = notification.request.content.data;
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
       const d = raw as Record<string, unknown>;

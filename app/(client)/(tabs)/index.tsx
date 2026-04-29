@@ -98,6 +98,7 @@ import { taskOsLabel } from '../../../src/utils/taskOsLabel';
 import { stripFormTemplateTitleLabelPrefix } from '../../../src/utils/stripFormTemplateTitleLabelPrefix';
 import {
   effectiveProviderTaskStatus,
+  providerTaskIsBroadcastOfferAwaitingClaim,
   taskMetadataIndicatesRevisionVisit,
 } from '../../../src/utils/providerTaskStatus';
 import {
@@ -1068,13 +1069,18 @@ function providerTaskMiniMapPolygonCoords(t: any): { latitude: number; longitude
   return out.length >= 3 ? out : null;
 }
 
-/** Região inicial do mapa compacto (ponto, trecho, rota ou polígono). */
+/** Região inicial do mapa compacto: abre centrado no destino; geometria/KML fica como fallback. */
 function providerTaskMiniMapInitialRegion(t: any): {
   latitude: number;
   longitude: number;
   latitudeDelta: number;
   longitudeDelta: number;
 } {
+  const c = providerTaskMapTargetCoords(t);
+  if (c) {
+    return { latitude: c.lat, longitude: c.lng, latitudeDelta: 0.012, longitudeDelta: 0.012 };
+  }
+
   const pad = 1.45;
   const line = providerTaskMiniMapPolylineCoords(t);
   const poly = providerTaskMiniMapPolygonCoords(t);
@@ -1101,10 +1107,6 @@ function providerTaskMiniMapInitialRegion(t: any): {
       latitudeDelta: Math.max(latSpan, 0.006),
       longitudeDelta: Math.max(lngSpan, 0.006),
     };
-  }
-  const c = providerTaskMapTargetCoords(t);
-  if (c) {
-    return { latitude: c.lat, longitude: c.lng, latitudeDelta: 0.022, longitudeDelta: 0.022 };
   }
   return { latitude: -15.793889, longitude: -47.882778, latitudeDelta: 0.4, longitudeDelta: 0.4 };
 }
@@ -2227,7 +2229,7 @@ export default function DashboardScreen() {
   /** Limite de linhas na aba Concluídas (lista completa continua em memória após sync). */
   const [providerCompletedListCap, setProviderCompletedListCap] = useState(PROVIDER_OS_COMPLETED_INITIAL);
   const [providerTasks, setProviderTasks] = useState<any[]>([]);
-  /** Lista prestador (abas, rota, contagens). Ofertas broadcast (`broadcastClaimPending`) entram em Pendentes — o cartão já trata claim (alinhado à agenda). */
+  /** Lista prestador (abas, rota, contagens). Ofertas em aberto ficam fora de Pendentes até claim — ver `BroadcastOfferRootBridge`. */
   const providerTasksForTabs = useMemo(() => providerTasks, [providerTasks]);
   const [inprogressIds, setInprogressIds] = useState<Set<string>>(new Set());
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
@@ -2354,6 +2356,7 @@ export default function DashboardScreen() {
     const base = providerTasksForTabs.filter((t) => {
       const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
       if (!providerTabMatchesTask(providerTab, s)) return false;
+      if (providerTab === 'PENDING' && providerTaskIsBroadcastOfferAwaitingClaim(t)) return false;
       return parseCoordLatLng(t) != null;
     });
     const ordered = sortTasksForOsrmRoute(base, providerSortMode, osrmDurations);
@@ -2377,8 +2380,10 @@ export default function DashboardScreen() {
     let completed = 0;
     for (const task of providerTasksForTabs) {
       const s = effectiveProviderTaskStatus(task, completedIds, inprogressIds, acceptedIds);
-      if (providerTabMatchesTask('PENDING', s)) pending += 1;
-      else if (providerTabMatchesTask('IN_PROGRESS', s)) inProgress += 1;
+      if (providerTabMatchesTask('PENDING', s)) {
+        if (providerTaskIsBroadcastOfferAwaitingClaim(task)) continue;
+        pending += 1;
+      } else if (providerTabMatchesTask('IN_PROGRESS', s)) inProgress += 1;
       else if (providerTabMatchesTask('COMPLETED', s)) completed += 1;
     }
     return { pending, inProgress, completed };
@@ -2418,7 +2423,9 @@ export default function DashboardScreen() {
   const providerOsListSorted = useMemo(() => {
     const filtered = providerTasksForTabs.filter((t) => {
       const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
-      return providerTabMatchesTask(providerTab, s);
+      if (!providerTabMatchesTask(providerTab, s)) return false;
+      if (providerTab === 'PENDING' && providerTaskIsBroadcastOfferAwaitingClaim(t)) return false;
+      return true;
     });
     const sorted = sortTasksForOsrmRoute(filtered, providerSortMode, osrmDurations);
     if (providerTab === 'IN_PROGRESS') {
@@ -2609,7 +2616,9 @@ export default function DashboardScreen() {
   const handleOptimizeRoute = async (mode: 'OSRM_ROUTE' | 'OSRM_SLA_ROUTE') => {
     const pendentesAll = providerTasksForTabs.filter((t) => {
       const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
-      return providerTabMatchesTask(providerTab, s);
+      if (!providerTabMatchesTask(providerTab, s)) return false;
+      if (providerTab === 'PENDING' && providerTaskIsBroadcastOfferAwaitingClaim(t)) return false;
+      return true;
     });
     const pendentes = pendentesAll
       .map((t) => ({ t, c: parseCoordLatLng(t) }))
@@ -2694,7 +2703,9 @@ export default function DashboardScreen() {
       const pendentesIds = providerTasksForTabs
         .filter((t) => {
           const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
-          return providerTabMatchesTask(providerTab, s);
+          if (!providerTabMatchesTask(providerTab, s)) return false;
+          if (providerTab === 'PENDING' && providerTaskIsBroadcastOfferAwaitingClaim(t)) return false;
+          return true;
         })
         .filter((t) => parseCoordLatLng(t) !== null)
         .map((t) => String(t.id));
@@ -2717,7 +2728,9 @@ export default function DashboardScreen() {
               const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
               const pendentesAll = providerTasksForTabs.filter((t) => {
                 const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
-                return providerTabMatchesTask(providerTab, s);
+                if (!providerTabMatchesTask(providerTab, s)) return false;
+                if (providerTab === 'PENDING' && providerTaskIsBroadcastOfferAwaitingClaim(t)) return false;
+                return true;
               });
               const pendentes = pendentesAll
                 .map((t) => ({ t, c: parseCoordLatLng(t) }))

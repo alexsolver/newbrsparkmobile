@@ -63,9 +63,16 @@ function slugifyDomain(domain) {
 async function tenantUserEmailsLower(tenantId) {
   const rows = await prisma.user.findMany({
     where: { tenantId },
-    select: { email: true },
+    select: { email: true, appAccount: { select: { emailNorm: true } } },
   });
-  return rows.map((r) => String(r.email || '').trim().toLowerCase()).filter(Boolean);
+  return [
+    ...new Set(
+      rows
+        .flatMap((r) => [r.email, r.appAccount?.emailNorm])
+        .map((v) => String(v || '').trim().toLowerCase())
+        .filter(Boolean)
+    ),
+  ];
 }
 
 async function executionScopeWhere(tenantId) {

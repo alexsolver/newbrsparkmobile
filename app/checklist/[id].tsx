@@ -107,6 +107,7 @@ import {
   checklistOutboxIdentityKey,
   clearExecutionStatusOutboxForTask,
 } from '../../src/services/syncService';
+import { enqueueTrackingSync } from '../../src/services/trackingSyncQueue';
 import { metadataIndicatesAdminRevisionCycle } from '../../src/services/syncPolicy';
 import {
   appendUniqueStringToStoredArray,
@@ -4083,9 +4084,13 @@ export default function ChecklistEngine() {
     const tid = String(resolvedTaskId || '').trim();
     if (!tid) return;
     try {
-      await apiFetch(`/api/tracking/end/${encodeURIComponent(tid)}`, { method: 'POST' });
+      const res = await apiFetch(`/api/tracking/end/${encodeURIComponent(tid)}`, { method: 'POST' });
+      if (!res.ok) {
+        await enqueueTrackingSync(tid, 'end');
+      }
     } catch (e) {
       console.warn('[tracking] could not end link', e);
+      await enqueueTrackingSync(tid, 'end');
     }
   };
   // ───────────────────────────────────────────────────

@@ -61,6 +61,15 @@ export const SERVER_COMPLETED_STATUSES = new Set([
 /** Estados ativos na fila do prestador; não podem ser mascarados por cache local de concluídas. */
 const SERVER_ACTIVE_STATUSES = new Set(['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED']);
 
+/**
+ * Oferta (sync: `assignmentMode=BROADCAST` + `claimStatus=OPEN`):
+ * o técnico só deve ver no fluxo de aceite global (`BroadcastOfferRootBridge`), não na aba Pendentes até fazer claim.
+ */
+export function providerTaskIsBroadcastOfferAwaitingClaim(t: unknown): boolean {
+  const row = t && typeof t === 'object' ? (t as Record<string, unknown>) : {};
+  return Boolean(row.broadcastClaimPending);
+}
+
 export function effectiveProviderTaskStatus(
   t: any,
   completedIds: Set<string>,

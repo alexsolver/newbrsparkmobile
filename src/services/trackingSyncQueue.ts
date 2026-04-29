@@ -1,5 +1,5 @@
 /**
- * Fila offline para POST /api/tracking/pause|resume — o link do cliente só atualiza no servidor
+ * Fila offline para POST /api/tracking/pause|resume|end — o link do cliente só atualiza no servidor
  * quando a rede voltar; a navegação local do técnico não depende disso.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -7,7 +7,7 @@ import { apiFetch } from './auth';
 
 const KEY = '@brspark_tracking_sync_queue';
 
-export type TrackingSyncAction = 'pause' | 'resume';
+export type TrackingSyncAction = 'pause' | 'resume' | 'end';
 
 export interface TrackingSyncItem {
   taskId: string;
@@ -62,7 +62,13 @@ export async function pushTrackingSyncQueue(): Promise<void> {
     for (const item of q) {
       const tid = (item.taskId || '').trim();
       const act =
-        item.action === 'resume' ? 'resume' : item.action === 'pause' ? 'pause' : null;
+        item.action === 'resume'
+          ? 'resume'
+          : item.action === 'pause'
+            ? 'pause'
+            : item.action === 'end'
+              ? 'end'
+              : null;
       if (!tid || !act) continue;
       try {
         const r = await apiFetch(`/api/tracking/${act}/${encodeURIComponent(tid)}`, {

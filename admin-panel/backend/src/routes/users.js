@@ -46,7 +46,11 @@ const {
   buildTenantScheduleJsonDedicatedExclusive,
 } = require('../lib/dedicatedExclusiveTime');
 const { assertNoDedicatedOverlapForProviderIdentity } = require('../lib/providerDedicatedExclusiveService');
-const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
+const {
+  allocateUniqueUserRowEmail,
+  resolveActiveUserIdsForDispatchOwnerEmail,
+  resolveCanonicalEmailNormForUser,
+} = require('../lib/userEmailUnique');
 
 const MAX_AVATAR_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_DOC_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -433,6 +437,10 @@ router.post('/', async (req, res) => {
       });
     }
 
+    const existingAccForEmail = await prisma.appAccount.findUnique({
+      where: { emailNorm },
+      select: { id: true },
+    });
     for (const scopedTenantId of tenantIdsResolved) {
       if (employeeMatricula) {
         const dup = await prisma.user.findFirst({ where: { tenantId: scopedTenantId, employeeMatricula } });
@@ -444,7 +452,13 @@ router.post('/', async (req, res) => {
         }
       }
       const dupEmail = await prisma.user.findFirst({
-        where: { tenantId: scopedTenantId, email: emailNorm },
+        where: {
+          tenantId: scopedTenantId,
+          OR: [
+            { email: { equals: emailNorm, mode: 'insensitive' } },
+            ...(existingAccForEmail?.id ? [{ appAccountId: existingAccForEmail.id }] : []),
+          ],
+        },
       });
       if (dupEmail) {
         return res.status(400).json({
@@ -488,10 +502,14 @@ router.post('/', async (req, res) => {
         if (k === 'CLIENT') roleForRow = 'USER';
         if (k === 'PROVIDER') roleForRow = 'PROVIDER';
 
+        const rowEmail = await allocateUniqueUserRowEmail(tx, {
+          appAccountId: acc.id,
+          loginEmailNorm: emailNorm,
+        });
         const u = await tx.user.create({
           data: {
             name: String(name).trim(),
-            email: emailNorm,
+            email: rowEmail,
             password: hash,
             tenantId: scopedTenantId,
             role: roleForRow,
@@ -630,35 +648,25 @@ router.patch('/reset-password-by-email', async (req, res) => {
     }
     const em = String(email).toLowerCase().trim();
     const tid = scopedTenantIdFromReq(req, tenantId);
-    let user;
-    if (tid) {
-      user = await prisma.user.findFirst({
-        where: {
-          email: em,
-          tenantId: tid,
-          ...(isPlatformAdmin(req.authorization) ? {} : { NOT: { role: 'SAAS_ADMIN' } }),
-        },
-      });
-    } else {
-      const matches = await prisma.user.findMany({
-        where: {
-          email: em,
-          ...(tid ? { tenantId: tid } : {}),
-          ...(isPlatformAdmin(req.authorization) ? {} : { NOT: { role: 'SAAS_ADMIN' } }),
-        },
-        take: 12,
-        select: { id: true },
-      });
-      if (matches.length === 0) {
-        return res.status(404).json({ error: 'Nenhum utilizador encontrado com este e-mail.' });
-      }
-      user = await findScopedUserOrNull(req, matches[0].id);
+    const candidateIds = await resolveActiveUserIdsForDispatchOwnerEmail(prisma, em, { tenantId: tid });
+    const matches = candidateIds.length ? await prisma.user.findMany({
+      where: {
+        id: { in: candidateIds },
+        ...(isPlatformAdmin(req.authorization) ? {} : { NOT: { role: 'SAAS_ADMIN' } }),
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 12,
+      select: { id: true },
+    }) : [];
+    if (matches.length === 0) {
+      return res.status(404).json({ error: 'Nenhum utilizador encontrado com este e-mail.' });
     }
+    const user = await findScopedUserOrNull(req, matches[0].id);
     if (!user) return res.status(404).json({ error: 'Utilizador não encontrado.' });
     const hash = await bcrypt.hash(newPassword, 10);
     await setUnifiedPasswordHashForEmail(prisma, em, hash);
     await prisma.user.updateMany({
-      where: { email: em },
+      where: { id: { in: candidateIds } },
       data: { currentSessionId: null, currentDeviceId: null },
     });
     const updated = await prisma.user.findUnique({ where: { id: user.id } });
@@ -693,12 +701,11 @@ router.patch('/:id/reset-password', async (req, res) => {
     const existing = await findScopedUserOrNull(req, req.params.id);
     if (!existing) return res.status(404).json({ error: 'Usuário não encontrado.' });
     const hash = await bcrypt.hash(newPassword, 10);
-    const em = String(existing.email || '')
-      .trim()
-      .toLowerCase();
+    const em = await resolveCanonicalEmailNormForUser(prisma, existing);
     await setUnifiedPasswordHashForEmail(prisma, em, hash);
+    const resetUserIds = await resolveActiveUserIdsForDispatchOwnerEmail(prisma, em);
     await prisma.user.updateMany({
-      where: { email: em },
+      where: { id: { in: resetUserIds.length ? resetUserIds : [existing.id] } },
       data: { currentSessionId: null, currentDeviceId: null },
     });
     const user = await prisma.user.findUnique({ where: { id: existing.id } });

@@ -2034,55 +2034,64 @@ export default function ProfileScreen() {
 
       {/* Modal 2FA — fora do ScrollView para persistir ao mudar de aba */}
       {show2FaModal && (
-        <View
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
           style={[
             StyleSheet.absoluteFillObject,
             { backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', zIndex: 1001 },
           ]}
         >
-          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 44 }}>
-            <Text style={{ fontSize: 16, fontWeight: '900', color: C.primary, marginBottom: 6 }}>
-              {tfa2Action === 'enable' ? 'Confirmar ativação do 2FA' : 'Desativar 2FA'}
-            </Text>
-            <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 16 }}>
-              {tfa2Action === 'enable'
-                ? t('profile.twoFaModalEnableHint')
-                : t('profile.twoFaModalDisableHint')}
-            </Text>
-            <TextInput
-              style={[
-                { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: C.accent, paddingVertical: 16, paddingHorizontal: 16 },
-                { fontSize: 28, letterSpacing: 10, textAlign: 'center', fontWeight: '900', color: C.primary },
-              ]}
-              value={tfa2Action === 'enable' ? tfaOtp : tfaDisableOtp}
-              onChangeText={(v) =>
-                tfa2Action === 'enable'
-                  ? setTfaOtp(v.replace(/[^0-9]/g, '').slice(0, 6))
-                  : setTfaDisableOtp(v.replace(/[^0-9]/g, '').slice(0, 6))
-              }
-              keyboardType="number-pad"
-              maxLength={6}
-              placeholder="------"
-              placeholderTextColor="#CBD5E1"
-              autoFocus
-            />
-            <TouchableOpacity
-              style={[
-                { backgroundColor: C.accent, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginBottom: 8, marginTop: 12 },
-                { opacity: twoFaLoading ? 0.6 : 1 },
-              ]}
-              onPress={handle2FaConfirm}
-              disabled={twoFaLoading}
-            >
-              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
-                {twoFaLoading ? 'Verificando...' : tfa2Action === 'enable' ? 'Ativar 2FA' : 'Desativar 2FA'}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={{ flexGrow: 0, maxHeight: '82%' }}
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+          >
+            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 28 }}>
+              <Text style={{ fontSize: 16, fontWeight: '900', color: C.primary, marginBottom: 6 }}>
+                {tfa2Action === 'enable' ? 'Confirmar ativação do 2FA' : 'Desativar 2FA'}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{ alignItems: 'center', paddingTop: 12 }} onPress={() => setShow2FaModal(false)}>
-              <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+              <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 16 }}>
+                {tfa2Action === 'enable'
+                  ? t('profile.twoFaModalEnableHint')
+                  : t('profile.twoFaModalDisableHint')}
+              </Text>
+              <TextInput
+                style={[
+                  { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: C.accent, paddingVertical: 16, paddingHorizontal: 16 },
+                  { fontSize: 28, letterSpacing: 10, textAlign: 'center', fontWeight: '900', color: C.primary },
+                ]}
+                value={tfa2Action === 'enable' ? tfaOtp : tfaDisableOtp}
+                onChangeText={(v) =>
+                  tfa2Action === 'enable'
+                    ? setTfaOtp(v.replace(/[^0-9]/g, '').slice(0, 6))
+                    : setTfaDisableOtp(v.replace(/[^0-9]/g, '').slice(0, 6))
+                }
+                keyboardType="number-pad"
+                maxLength={6}
+                placeholder="------"
+                placeholderTextColor="#CBD5E1"
+                autoFocus
+              />
+              <TouchableOpacity
+                style={[
+                  { backgroundColor: C.accent, borderRadius: 14, paddingVertical: 16, alignItems: 'center', marginBottom: 8, marginTop: 12 },
+                  { opacity: twoFaLoading ? 0.6 : 1 },
+                ]}
+                onPress={handle2FaConfirm}
+                disabled={twoFaLoading}
+              >
+                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
+                  {twoFaLoading ? 'Verificando...' : tfa2Action === 'enable' ? 'Ativar 2FA' : 'Desativar 2FA'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ alignItems: 'center', paddingTop: 12 }} onPress={() => setShow2FaModal(false)}>
+                <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       )}
 
       {/* ─── Change Password Modal ─── */}

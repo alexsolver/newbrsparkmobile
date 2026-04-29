@@ -5,6 +5,7 @@ const fs = require('fs').promises;
 const { REGISTRATION_PRIMARY_FACE_ID, isRegistrationPrimaryFacePhoto } = require('./faceEnrollmentPrimary');
 const { isProviderFirstNetworkEnabled } = require('./providerFirstNetwork');
 const { normalizeServiceCoverageGeo } = require('./technicianServiceCoverage');
+const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('./userEmailUnique');
 
 const UPLOADS_ROOT = path.join(__dirname, '../../public/uploads');
 
@@ -338,8 +339,8 @@ async function materializeApprovedApplication(prisma, applicationId) {
   const technician = raw.technician && typeof raw.technician === 'object' ? raw.technician : {};
   const faceBefore = normalizeFacePhotos(raw.faceEnrollmentPhotos);
 
-  let existingUser = await prisma.user.findFirst({
-    where: { tenantId: app.tenantId, email: { equals: email, mode: 'insensitive' } },
+  let existingUser = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, email, {
+    tenantId: app.tenantId,
   });
   if (!existingUser && app.candidateUserId) {
     existingUser = await prisma.user.findFirst({

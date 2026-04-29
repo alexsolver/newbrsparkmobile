@@ -1,6 +1,7 @@
 'use strict';
 
 const prisma = require('../db');
+const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('./userEmailUnique');
 
 /** Campos comuns em metadata de despacho / integrações — email do cliente final. */
 const META_CLIENT_EMAIL_KEYS = [
@@ -142,26 +143,30 @@ async function resolveTechnicianClientPair(roomId) {
   const emails = room.members.map((m) => String(m.userId || '').trim().toLowerCase()).filter(Boolean);
   if (emails.length !== 2) return null;
 
-  const users = await prisma.user.findMany({
-    where: {
-      OR: emails.map((e) => ({ email: { equals: e, mode: 'insensitive' } })),
-    },
-    include: { technicianProfile: true },
-  });
+  const users = (
+    await Promise.all(
+      emails.map(async (memberEmail) => {
+        const user = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, memberEmail, {
+          include: { technicianProfile: true },
+        });
+        return user ? { memberEmail, user } : null;
+      })
+    )
+  ).filter(Boolean);
   if (users.length !== 2) return null;
 
-  const withTech = users.filter((u) => u.technicianProfile != null);
-  const withoutTech = users.filter((u) => u.technicianProfile == null);
+  const withTech = users.filter((row) => row.user.technicianProfile != null);
+  const withoutTech = users.filter((row) => row.user.technicianProfile == null);
   if (withTech.length !== 1 || withoutTech.length !== 1) return null;
 
-  const nonTechUser = withoutTech[0];
+  const nonTechUser = withoutTech[0].user;
   if (String(nonTechUser.role || '').toUpperCase() !== CLIENT_USER_ROLE) {
     return null;
   }
 
   return {
-    techEmail: String(withTech[0].email).trim().toLowerCase(),
-    clientEmail: String(nonTechUser.email).trim().toLowerCase(),
+    techEmail: String(withTech[0].memberEmail).trim().toLowerCase(),
+    clientEmail: String(withoutTech[0].memberEmail).trim().toLowerCase(),
   };
 }
 

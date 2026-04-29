@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../db'); 
 const authUser = require('../middleware/authUser');
+const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('../lib/userEmailUnique');
 
 router.use(authUser);
 
@@ -47,8 +48,8 @@ router.post('/invite', async (req, res) => {
     }
 
     // Check if the invited user exists just to see if we can dispatch push vs email
-    const invitedUser = await prisma.user.findFirst({
-       where: { email: sharedWithEmail.toLowerCase() }
+    const invitedUser = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, sharedWithEmail, {
+       select: { id: true }
     });
     // ALWAYS start as PENDING so the user has to accept it.
     const status = 'PENDING';

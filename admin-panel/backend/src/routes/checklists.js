@@ -48,6 +48,12 @@ const {
     stripTransitEtaDisplayFields,
 } = require('../lib/transitEtaDisplaySnapshot');
 
+const TRACKING_GRACE_AFTER_END_MS = (() => {
+    const n = Number(process.env.TRACKING_EXPIRE_AFTER_END_MINUTES);
+    const minutes = Number.isFinite(n) && n > 0 ? n : 30;
+    return minutes * 60 * 1000;
+})();
+
 const DUPLICATE_TEMPLATE_TITLE_PT =
     'Já existe um formulário ativo com este nome nesta pasta. Escolha outro título ou pasta.';
 
@@ -108,6 +114,72 @@ function stripClientTrackingDisplacementFields(meta) {
     if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return;
     delete meta.trackingPaused;
     delete meta.trackingPausedAt;
+}
+
+function parseTransitEvidence(raw) {
+    if (raw == null) return null;
+    if (typeof raw === 'string') {
+        const s = raw.trim();
+        if (!s) return null;
+        try {
+            const parsed = JSON.parse(s);
+            return parsed && typeof parsed === 'object' ? parsed : { value: s };
+        } catch {
+            return { value: s };
+        }
+    }
+    return raw && typeof raw === 'object' ? raw : { value: raw };
+}
+
+function responseValueForFieldId(responses, fieldId) {
+    if (!responses || typeof responses !== 'object' || Array.isArray(responses) || !fieldId) return null;
+    if (Object.prototype.hasOwnProperty.call(responses, fieldId)) return responses[fieldId];
+    for (const value of Object.values(responses)) {
+        if (!value || typeof value !== 'object') continue;
+        if (Array.isArray(value)) {
+            for (const row of value) {
+                const nested = responseValueForFieldId(row, fieldId);
+                if (nested != null) return nested;
+            }
+        } else {
+            const nested = responseValueForFieldId(value, fieldId);
+            if (nested != null) return nested;
+        }
+    }
+    return null;
+}
+
+function responsesContainOperationalTransitEnd(responses, template) {
+    const schema = Array.isArray(template?.schemaData) ? template.schemaData : [];
+    if (!responses || typeof responses !== 'object' || !schema.length) return false;
+    let pendingStart = null;
+    for (const f of schema) {
+        if (!f || typeof f !== 'object') continue;
+        if (f.type === 'transit_start') {
+            pendingStart = f;
+            continue;
+        }
+        if (f.type !== 'transit_end') continue;
+        const isOperational = pendingStart?.transitPurpose !== 'reimbursement' && pendingStart?.transitPurpose !== 'patrol';
+        pendingStart = null;
+        if (!isOperational) continue;
+        const evidence = parseTransitEvidence(responseValueForFieldId(responses, f.id));
+        if (!evidence) continue;
+        const action = String(evidence.action || '').trim().toUpperCase();
+        if (!action || action === 'CHEGADA') return true;
+    }
+    return false;
+}
+
+function markTrackingEndedFromTransitEvidence(meta, responses, template) {
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return false;
+    if (!meta.trackingToken || meta.trackingEndedAt) return false;
+    if (!responsesContainOperationalTransitEnd(responses, template)) return false;
+    const endedAt = new Date();
+    stripTransitEtaDisplayFields(meta);
+    meta.trackingEndedAt = endedAt.toISOString();
+    meta.trackingExpiredAt = new Date(endedAt.getTime() + TRACKING_GRACE_AFTER_END_MS).toISOString();
+    return true;
 }
 
 /** `executionPaused: false` vindo do app (JSON às vezes chega como string em clientes antigos). */
@@ -1006,6 +1078,12 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
             }
         }
 
+        markTrackingEndedFromTransitEvidence(
+            mergedMeta,
+            updateData.responses || existing.responses,
+            existing.template
+        );
+
         mergedMeta = preserveDispatchClientContactMetadata(metadataSnapshotBeforePatch, mergedMeta);
         updateData.metadata = mergedMeta;
 
@@ -1346,6 +1424,7 @@ router.post('/executions', authUser, async (req, res) => {
                     const nm = { ...existingMeta, ...metaIn };
                     delete nm.revisionVisitActive;
                     delete nm.reopenForRevisionPending;
+                    markTrackingEndedFromTransitEvidence(nm, responses || {}, existing.template);
                     return preserveDispatchClientContactMetadata(existing.metadata, nm);
                 })();
                 const finalStartedAt = startedAt ? new Date(startedAt) : existing.startedAt;

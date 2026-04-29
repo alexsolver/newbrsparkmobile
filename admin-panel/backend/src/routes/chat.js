@@ -12,6 +12,7 @@ const {
 } = require('../lib/chatTranslation');
 const { canManageTenantAppData } = require('../lib/authorization');
 const { ensureHttpsUrlForPublicInternet } = require('../lib/publicHttpsUrl');
+const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('../lib/userEmailUnique');
 
 router.use(authUser);
 
@@ -36,8 +37,7 @@ function isChatPeerRole(role) {
 async function findActiveUserByEmailForChat(emailRaw) {
   const e = normEmail(emailRaw);
   if (!e) return null;
-  const u = await prisma.user.findFirst({
-    where: { email: { equals: e, mode: 'insensitive' }, isActive: true },
+  const u = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, e, {
     select: { id: true, email: true, name: true, avatarUrl: true, role: true, tenantId: true },
   });
   if (!u) return null;
@@ -52,8 +52,8 @@ async function findActiveUserInTenantForChat(tenantId, emailRaw) {
   if (!tid) return null;
   const e = normEmail(emailRaw);
   if (!e) return null;
-  const u = await prisma.user.findFirst({
-    where: { tenantId: tid, email: { equals: e, mode: 'insensitive' }, isActive: true },
+  const u = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, e, {
+    tenantId: tid,
     select: { id: true, email: true, name: true, avatarUrl: true, role: true, tenantId: true },
   });
   if (!u) return null;
@@ -90,11 +90,16 @@ async function validateTenantScopedParticipants(requester, participantEmails) {
   if (!requester?.tenantId) {
     return { ok: false, code: 403, error: 'Tenant do usuário não identificado.' };
   }
-  const rows = await prisma.user.findMany({
-    where: { email: { in: uniq }, isActive: true },
-    select: { email: true, tenantId: true },
-  });
-  const map = new Map(rows.map((u) => [normEmail(u.email), u]));
+  const pairs = await Promise.all(
+    uniq.map(async (email) => [
+      email,
+      await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, email, {
+        tenantId: requester.tenantId,
+        select: { email: true, tenantId: true },
+      }),
+    ]),
+  );
+  const map = new Map(pairs.filter(([, u]) => u).map(([email, u]) => [email, u]));
   const missing = uniq.filter((e) => !map.has(e));
   if (missing.length) {
     return { ok: false, code: 404, error: 'Um ou mais participantes não foram encontrados.' };
@@ -127,8 +132,7 @@ async function getOtherMemberEmail(roomId, senderEmail) {
  * @returns {Promise<string>}
  */
 async function resolvePreferredLocaleForEmail(recipientEmail) {
-  const u = await prisma.user.findFirst({
-    where: { email: { equals: recipientEmail, mode: 'insensitive' } },
+  const u = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, recipientEmail, {
     select: { preferredChatLocale: true, tenantId: true },
   });
   if (!u) return 'pt-BR';
@@ -140,6 +144,28 @@ async function resolvePreferredLocaleForEmail(recipientEmail) {
     select: { defaultLang: true },
   });
   return normalizeChatLocale(t?.defaultLang || 'pt-BR');
+}
+
+async function buildChatUserDictByEmails(emails, selectExtra = {}) {
+  const uniq = Array.from(new Set((Array.isArray(emails) ? emails : []).map(normEmail).filter(Boolean)));
+  const pairs = await Promise.all(
+    uniq.map(async (email) => [
+      email,
+      await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, email, {
+        select: { email: true, name: true, avatarUrl: true, role: true, tenantId: true, ...selectExtra },
+      }),
+    ]),
+  );
+  const dict = {};
+  for (const [email, u] of pairs) {
+    if (!u) continue;
+    dict[email] = {
+      ...u,
+      email: normEmail(u.email),
+      avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl),
+    };
+  }
+  return dict;
 }
 
 /**
@@ -309,16 +335,7 @@ router.get('/contacts/pending', async (req, res) => {
 
     // Dados dos solicitantes (qualquer tenant — ex.: convite de SAAS_ADMIN BrSpark)
     const emails = pending.map(p => p.requesterId);
-    const users = await prisma.user.findMany({
-      where: { email: { in: emails }, isActive: true },
-      select: { email: true, name: true, avatarUrl: true, role: true, tenantId: true },
-    });
-    const usersSan = users.map((u) => ({
-      ...u,
-      email: normEmail(u.email),
-      avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl),
-    }));
-    const byEmail = new Map(usersSan.map((u) => [normEmail(u.email), u]));
+    const byEmail = new Map(Object.entries(await buildChatUserDictByEmails(emails)));
 
     const results = pending.map((p) => {
       const u = byEmail.get(normEmail(p.requesterId));
@@ -560,18 +577,7 @@ router.get('/rooms', async (req, res) => {
     const memberEmails = new Set();
     rooms.forEach(r => r.members.forEach(m => memberEmails.add(m.userId)));
 
-    const users = await prisma.user.findMany({
-      where: { email: { in: Array.from(memberEmails) } },
-      select: { email: true, name: true, avatarUrl: true }
-    });
-
-    const userDict = {};
-    users.forEach((u) => {
-      userDict[u.email] = {
-        ...u,
-        avatarUrl: ensureHttpsUrlForPublicInternet(u.avatarUrl),
-      };
-    });
+    const userDict = await buildChatUserDictByEmails(Array.from(memberEmails));
 
     const mapped = await Promise.all(rooms.map(async (r) => {
       let displayName = r.name;
@@ -603,9 +609,9 @@ router.get('/rooms', async (req, res) => {
       if (!r.isGroup) {
         // Encontra o outro membro
         const other = r.members.find((m) => normEmail(m.userId) !== email)?.userId;
-        if (other && userDict[other]) {
-          displayName = userDict[other].name;
-          displayAvatar = userDict[other].avatarUrl;
+        if (other && userDict[normEmail(other)]) {
+          displayName = userDict[normEmail(other)].name;
+          displayAvatar = userDict[normEmail(other)].avatarUrl;
         }
       }
 
@@ -629,14 +635,14 @@ router.get('/rooms', async (req, res) => {
         avatarUrl: displayAvatar,
         unreadCount,
         lastMessage: lastMsg?.content || (lastMsg?.mediaUrl ? 'Mídia enviada' : null),
-        lastSender: lastMsg && normEmail(lastMsg.senderId) === email ? 'Você' : (userDict[lastMsg?.senderId]?.name || null),
+        lastSender: lastMsg && normEmail(lastMsg.senderId) === email ? 'Você' : (userDict[normEmail(lastMsg?.senderId)]?.name || null),
         lastMessageAt: lastMsg ? lastMsg.createdAt.getTime() : r.createdAt.getTime(),
         memberCount: r.members.length,
         members: r.members.map(m => ({
           userId: m.userId,
           role: m.role,
-          name: userDict[m.userId]?.name || m.userId,
-          avatarUrl: userDict[m.userId]?.avatarUrl
+          name: userDict[normEmail(m.userId)]?.name || m.userId,
+          avatarUrl: userDict[normEmail(m.userId)]?.avatarUrl
         }))
       };
     }));
@@ -785,14 +791,10 @@ router.get('/rooms/:roomId/messages', async (req, res) => {
     });
 
     const senderEmails = Array.from(new Set(messages.map((m) => m.senderId)));
-    const senders = await prisma.user.findMany({
-      where: { email: { in: senderEmails } },
-      select: { email: true, avatarUrl: true },
-    });
-    const senderDict = {};
-    senders.forEach((s) => {
-      senderDict[s.email] = ensureHttpsUrlForPublicInternet(s.avatarUrl);
-    });
+    const senders = await buildChatUserDictByEmails(senderEmails, {});
+    const senderDict = Object.fromEntries(
+      Object.entries(senders).map(([email, s]) => [email, ensureHttpsUrlForPublicInternet(s.avatarUrl)])
+    );
 
     const mapped = await Promise.all(
       messages.map(async (m) => {
@@ -802,7 +804,7 @@ router.get('/rooms/:roomId/messages', async (req, res) => {
           roomId: m.roomId,
           senderId: m.senderId,
           senderName: m.senderName,
-          senderAvatarUrl: senderDict[m.senderId],
+          senderAvatarUrl: senderDict[normEmail(m.senderId)],
           type: m.type,
           content: m.content,
           displayContent,

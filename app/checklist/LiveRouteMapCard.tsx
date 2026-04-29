@@ -488,10 +488,14 @@ const NAV_MIN_ACCEPTABLE_ZOOM = 14.25;
 const MAP_INITIAL_LAT_DELTA = 0.000875;
 const MAP_INITIAL_LNG_DELTA = 0.000875;
 
-/** Mínimo entre pedidos OSRM ao desviar / sair da linha azul (evita martelar backend/OSRM). */
-const OSRM_REFETCH_MIN_INTERVAL_MS = 18000;
+/**
+ * Mínimo entre pedidos OSRM quando o GPS sai da linha azul (evita martelar backend/OSRM).
+ * Desvio explícito do corredor (`ROUTE_DEVIATION`) ignora este intervalo — o utilizador notava a linha
+ * “partida” durante ~18 s antes de voltar a pedir geometria.
+ */
+const OSRM_REFETCH_MIN_INTERVAL_MS = 9000;
 /** Se o GPS se afasta desta distância da polilinha OSRM actual, pede nova geometria. */
-const OSRM_OFF_DYNAMIC_PATH_M = 130;
+const OSRM_OFF_DYNAMIC_PATH_M = 110;
 /** Geometria OSRM com poucos vértices = quase reta; não guardar como cache útil. */
 const OSRM_GEOMETRY_CACHE_MIN_POINTS = 4;
 /** Timeout do pedido de polilinha no mapa (failover mais cedo para outras bases / tentativas). */
@@ -985,6 +989,8 @@ export default function LiveRouteMapCard({
   const [osrmRefetchNonce, setOsrmRefetchNonce] = useState(0);
   /** Evita mostrar geometria de outro despacho ao mudar `taskId` / destino. */
   const osrmGeomCacheKeyRef = useRef<string | null>(null);
+  /** Invalida `fetchDrivingGeometryLatLng` em voo quando o efeito reinicia (nonce, destino, visibilidade). */
+  const osrmGeometryRunGenRef = useRef(0);
   const lastOsrmRefetchTriggerAtRef = useRef(0);
   const prevRouteTrackerEventRef = useRef<RouteUpdate['event'] | null>(null);
   const onOperationalEtaProgressRef = useRef(onOperationalEtaProgress);
@@ -1017,19 +1023,20 @@ export default function LiveRouteMapCard({
       const deviationEdge =
         u.event === 'ROUTE_DEVIATION' && prevEv !== 'ROUTE_DEVIATION';
 
-      if (nowTick - lastOsrmRefetchTriggerAtRef.current >= OSRM_REFETCH_MIN_INTERVAL_MS) {
-        let wantOsrmRefetch = deviationEdge;
-        if (!wantOsrmRefetch) {
-          const poly = dynamicRouteRef.current;
-          if (poly && poly.length >= 2) {
-            const { distM } = closestPointOnPolylineArcM(poly, u.currentLat, u.currentLng);
-            if (distM > OSRM_OFF_DYNAMIC_PATH_M) wantOsrmRefetch = true;
-          }
+      let wantOsrmRefetch = deviationEdge;
+      if (!wantOsrmRefetch) {
+        const poly = dynamicRouteRef.current;
+        if (poly && poly.length >= 2) {
+          const { distM } = closestPointOnPolylineArcM(poly, u.currentLat, u.currentLng);
+          if (distM > OSRM_OFF_DYNAMIC_PATH_M) wantOsrmRefetch = true;
         }
-        if (wantOsrmRefetch) {
-          lastOsrmRefetchTriggerAtRef.current = nowTick;
-          setOsrmRefetchNonce((n) => n + 1);
-        }
+      }
+      if (
+        wantOsrmRefetch &&
+        (deviationEdge || nowTick - lastOsrmRefetchTriggerAtRef.current >= OSRM_REFETCH_MIN_INTERVAL_MS)
+      ) {
+        lastOsrmRefetchTriggerAtRef.current = nowTick;
+        setOsrmRefetchNonce((n) => n + 1);
       }
 
       const dyn = dynamicRouteRef.current;
@@ -1303,6 +1310,9 @@ export default function LiveRouteMapCard({
       : '';
 
   useEffect(() => {
+    osrmGeometryRunGenRef.current += 1;
+    const runId = osrmGeometryRunGenRef.current;
+
     if (!allowDestRouting) {
       setDynamicRoute(null);
       osrmGeomCacheKeyRef.current = null;
@@ -1361,7 +1371,7 @@ export default function LiveRouteMapCard({
           return;
         }
       }
-      if (cancelled) return;
+      if (cancelled || runId !== osrmGeometryRunGenRef.current) return;
       const dLat = dest.lat;
       const dLng = dest.lng;
       if (!Number.isFinite(dLat) || !Number.isFinite(dLng)) return;
@@ -1378,7 +1388,7 @@ export default function LiveRouteMapCard({
       const line = await fetchDrivingGeometryLatLng(oLat, oLng, dLat, dLng, {
         timeoutMs: OSRM_MAP_GEOMETRY_TIMEOUT_MS,
       });
-      if (cancelled) return;
+      if (cancelled || runId !== osrmGeometryRunGenRef.current) return;
       if (line && line.length >= 2) {
         osrmGeometryOk = true;
         setDynamicRoute(line);
@@ -1398,6 +1408,7 @@ export default function LiveRouteMapCard({
     return () => {
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
+      osrmGeometryRunGenRef.current += 1;
     };
   }, [
     visible,
@@ -2487,16 +2498,6 @@ export default function LiveRouteMapCard({
           >
             <View style={{ flex: 1 }}>
               <Text style={styles.headerTitle}>{transitHeaderLong}</Text>
-              {patrolMode && hasRoute ? (
-                <Text style={{ fontSize: 11, color: '#0f766e', fontWeight: '800', marginTop: 4 }}>
-                  Mesmo que «apenas registro» (sem ETA, chat, acompanhamento) + referência KML no mapa
-                </Text>
-              ) : null}
-              {patrolMode && !hasRoute ? (
-                <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600', marginTop: 4 }}>
-                  Apenas registro de deslocamento (sem KML no despacho)
-                </Text>
-              ) : null}
               {hasRoute && !isComplete && !isPaused ? (
                 <View style={styles.miniBar}>
                   <View style={[styles.miniBarFill, { width: `${pct}%` as any, backgroundColor: statusColor }]} />

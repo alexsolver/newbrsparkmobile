@@ -5,6 +5,7 @@ const {
   reconcileRoutineBuffersForAssignment,
   ACTIVE_STATUSES,
 } = require('./routineTaskMobileBuffer');
+const { resolveActiveUserIdsForDispatchOwnerEmail } = require('./userEmailUnique');
 
 /**
  * Cria a próxima execução RT (PENDING → tratada como fluxo direto no app) após submissão concluída.
@@ -28,10 +29,13 @@ async function createNextRoutineTaskAfterComplete(prisma, { completedExecutionId
   const st = String(ex.status || '').toUpperCase();
   if (st !== 'COMPLETED' && st !== 'SYNCED') return null;
 
+  const ownerUserIds = await resolveActiveUserIdsForDispatchOwnerEmail(prisma, ex.ownerEmail);
+  if (ownerUserIds.length === 0) return null;
+
   const assign = await prisma.routineTaskAssignment.findFirst({
     where: {
       templateId: ex.templateId,
-      user: { email: { equals: ex.ownerEmail, mode: 'insensitive' } },
+      userId: { in: ownerUserIds },
     },
   });
   if (!assign) return null;

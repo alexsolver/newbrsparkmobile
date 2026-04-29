@@ -1,28 +1,5 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-
-/** NDJSON para debug Cursor (apenas se o ficheiro for gravável — típico: API Node na máquina de desenvolvimento). */
-function appendAgentPushDebugLine(obj) {
-  try {
-    const logPath = path.join(__dirname, '../../../..', '.cursor', 'debug-63633b.log');
-    const dir = path.dirname(logPath);
-    if (!fs.existsSync(dir)) return;
-    fs.appendFileSync(
-      logPath,
-      `${JSON.stringify({
-        sessionId: '63633b',
-        timestamp: Date.now(),
-        ...obj,
-      })}\n`,
-      'utf8'
-    );
-  } catch {
-    /* produção / path inexistente */
-  }
-}
-
 /**
  * Envio via Expo Push API (HTTPS).
  * No Android 8+, o channelId deve coincidir com o criado no app (notifications.ts):
@@ -160,43 +137,11 @@ async function sendExpoPushToMany(entries, payload) {
       if (t.status === 'error') {
         errors++;
         console.error('[ExpoPush] ticket error:', t.message, JSON.stringify(t.details || '').slice(0, 300));
-        // #region agent log
-        appendAgentPushDebugLine({
-          hypothesisId: 'H4',
-          location: 'expoPush.js:sendExpoPushToMany',
-          message: 'expo_ticket_error',
-          data: {
-            ticketMessage: String(t.message || '').slice(0, 200),
-            detailsSnippet: JSON.stringify(t.details || '').slice(0, 200),
-          },
-        });
-        // #endregion
       } else if (t.status === 'ok') {
         sent++;
       }
     }
   }
-
-  // #region agent log
-  appendAgentPushDebugLine({
-    hypothesisId: 'H1',
-    location: 'expoPush.js:sendExpoPushToMany',
-    message: 'expo_push_batch_summary',
-    data: {
-      tokenCount: tokens.length,
-      sent,
-      errors,
-      titleLen: typeof payload?.title === 'string' ? payload.title.length : 0,
-      bodyLen: typeof payload?.body === 'string' ? payload.body.length : 0,
-      channelId:
-        (payload && payload.android && payload.android.channelId) ||
-        payload?.channelId ||
-        baseMsg?.channelId ||
-        null,
-      hasData: !!(payload && payload.data && typeof payload.data === 'object'),
-    },
-  });
-  // #endregion
 
   return { ok: errors === 0, sent, errors, tickets };
 }

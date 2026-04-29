@@ -19,7 +19,6 @@ import {
   TECH_PUSH_ACTION_OPEN,
   TECH_PUSH_ACTION_REJECT,
 } from '../constants/pushNotifications';
-import { agentPushDebugLog } from '../debug/agentPushDebugLog';
 
 LogBox.ignoreLogs(['expo-notifications: Android Push notifications']);
 
@@ -459,14 +458,6 @@ export const NotificationService = {
   // ─── Permissão e Token Push ─────────────────────────────────────────────────
   async registerForPushNotificationsAsync(): Promise<string | null> {
     if (!Device.isDevice) {
-      // #region agent log
-      agentPushDebugLog({
-        hypothesisId: 'H2',
-        location: 'notifications.ts:registerForPushNotificationsAsync',
-        message: 'push_skipped_not_physical_device',
-        data: { platform: Platform.OS },
-      });
-      // #endregion
       console.log('Push apenas em dispositivos físicos.');
       return null;
     }
@@ -474,14 +465,6 @@ export const NotificationService = {
     // Expo Go no Android: push remoto não suportado (SDK 53+; continua em SDK 54)
     const isExpoGo = Constants.appOwnership === 'expo';
     if (Platform.OS === 'android' && isExpoGo) {
-      // #region agent log
-      agentPushDebugLog({
-        hypothesisId: 'H2',
-        location: 'notifications.ts:registerForPushNotificationsAsync',
-        message: 'push_skipped_expo_go_android',
-        data: { platform: Platform.OS },
-      });
-      // #endregion
       console.log('[BrSpark] Push remoto não disponível no Expo Go Android (use dev/production build com EAS).');
       return null;
     }
@@ -503,14 +486,6 @@ export const NotificationService = {
     }
 
     if (finalStatus !== 'granted') {
-      // #region agent log
-      agentPushDebugLog({
-        hypothesisId: 'H2',
-        location: 'notifications.ts:registerForPushNotificationsAsync',
-        message: 'push_permission_not_granted',
-        data: { platform: Platform.OS, finalStatus, existingStatus },
-      });
-      // #endregion
       console.warn(
         '[BrSpark] Permissão de push negada. iOS: Ajustes → BrSpark → Notificações → Permitir alertas.',
       );
@@ -537,42 +512,11 @@ export const NotificationService = {
         if (!res.ok) {
           const txt = await res.text().catch(() => '');
           console.warn('[BrSpark] push_token HTTP', res.status, txt.slice(0, 200));
-          // #region agent log
-          agentPushDebugLog({
-            hypothesisId: 'H2',
-            location: 'notifications.ts:push_token_sync',
-            message: 'push_token_http_fail',
-            data: {
-              platform: Platform.OS,
-              httpStatus: res.status,
-              tokenLen: String(tokenData.data || '').length,
-            },
-          });
-          // #endregion
         } else {
           console.log('[BrSpark] push_token registrado no servidor (OK)');
-          // #region agent log
-          agentPushDebugLog({
-            hypothesisId: 'H2',
-            location: 'notifications.ts:push_token_sync',
-            message: 'push_token_http_ok',
-            data: {
-              platform: Platform.OS,
-              tokenLen: String(tokenData.data || '').length,
-            },
-          });
-          // #endregion
         }
       } catch (err) {
         console.log('[BrSpark] Falha ao sincronizar token push no backend', err);
-        // #region agent log
-        agentPushDebugLog({
-          hypothesisId: 'H2',
-          location: 'notifications.ts:push_token_sync',
-          message: 'push_token_network_error',
-          data: { platform: Platform.OS, err: String((err as Error)?.message || err).slice(0, 120) },
-        });
-        // #endregion
       }
       return tokenData.data;
     } catch (e: unknown) {

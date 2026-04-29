@@ -94,7 +94,7 @@ router.post('/laravel-evaluations-bridge', express.json(), async (req, res) => {
           panel: true,
           userId: user.id,
           tenantId: user.tenantId,
-          email: user.email,
+          email: jwtEmail,
           name: user.name,
           role: user.role,
           tenantSlug: user.tenant.slug,
@@ -112,7 +112,7 @@ router.post('/laravel-evaluations-bridge', express.json(), async (req, res) => {
         id: user.id,
         role: user.role,
         name: user.name,
-        email: user.email,
+        email: jwtEmail,
       },
       tenantId: user.tenantId,
     });
