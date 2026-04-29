@@ -23,8 +23,10 @@ const { assertTenantAccess, isPlatformAdmin, resolveScopedTenantId } = require('
 const {
   findChecklistExecutionForAppUser,
   canAppUserAccessFieldTaskExecution,
+  broadcastCandidateArray,
 } = require('../lib/fieldTaskExecutionAccess');
 const { FIELD_TASK_CONTEXT_TENANT_KEY } = require('../lib/fieldTaskExecutionTenantScope');
+const { resolveActiveUsersForDispatchOwnerEmail } = require('../lib/userEmailUnique');
 
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
@@ -438,13 +440,7 @@ router.post('/tasks/:id/ops-chat', rejectOsAuth, async (req, res) => {
       await maybePrefetchOpsChatTranslationForTechnician(ex, row).catch(() => {});
       const notifyEmail = String(ex.ownerEmail || '').trim();
       try {
-        const users = await prisma.user.findMany({
-          where: {
-            isActive: true,
-            email: { equals: notifyEmail, mode: 'insensitive' },
-          },
-          select: { id: true },
-        });
+        const users = await resolveActiveUsersForDispatchOwnerEmail(prisma, notifyEmail);
         if (users.length) {
           const userIds = users.map((u) => u.id);
           const pushTokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
@@ -863,11 +859,11 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
 
     const previousOwner = String(existing.ownerEmail || '').trim();
     let resolvedOwner = previousOwner;
-
+    const templateTenantId = existing.template?.tenantId || null;
     const rawTarget =
       req.body && typeof req.body.targetOwnerEmail === 'string' ? req.body.targetOwnerEmail.trim() : '';
-    if (rawTarget && rawTarget.toLowerCase() !== previousOwner.toLowerCase()) {
-      const templateTenantId = existing.template?.tenantId || null;
+
+    if (rawTarget) {
       const resolved = await resolveFieldTaskAssigneeEmail(
         prisma,
         rawTarget,
@@ -876,10 +872,39 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
       if (!resolved) {
         return res.status(400).json({
           error:
-            'O e-mail indicado não corresponde a um usuário ativo elegível (contas cliente não recebem OS). Use o e-mail de login do app.',
+            'O e-mail indicado não corresponde a um utilizador PROVIDER ativo nesta organização. Apenas prestadores (papel PROVIDER) recebem OS.',
         });
       }
       resolvedOwner = resolved;
+    } else if (!resolvedOwner) {
+      const bc = broadcastCandidateArray(existing.broadcastCandidates);
+      if (bc.length === 1) {
+        const resolved = await resolveFieldTaskAssigneeEmail(
+          prisma,
+          bc[0],
+          templateTenantId || undefined
+        );
+        if (resolved) resolvedOwner = resolved;
+      }
+      if (!resolvedOwner) {
+        const em =
+          existing.metadata &&
+          typeof existing.metadata === 'object' &&
+          !Array.isArray(existing.metadata)
+            ? String(existing.metadata.broadcastDeclinedByEmail || '').trim()
+            : '';
+        if (em) {
+          const resolved = await resolveFieldTaskAssigneeEmail(prisma, em, templateTenantId || undefined);
+          if (resolved) resolvedOwner = resolved;
+        }
+      }
+    }
+
+    if (!resolvedOwner) {
+      return res.status(400).json({
+        error:
+          'Não há titular definido nesta OS (frequente em oferta sem aceite no cartão). Escolha «Atribuir a outro técnico», seleccione o e-mail na lista e confirme — o reenvio fica como OS directa para esse prestador.',
+      });
     }
 
     let mergedMeta =
@@ -923,11 +948,22 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
       delete mergedMeta.cancelledAt;
       delete mergedMeta.cancelReason;
     }
+    delete mergedMeta.broadcastDeclinedByEmail;
+    delete mergedMeta.broadcastDeclinedAt;
+    delete mergedMeta.dispatchBroadcast;
+    delete mergedMeta.broadcastCandidateCount;
 
     const stripped = stripResponsesForRevision(existing.responses, existing.template?.schemaData);
 
+    /** Oferta (BROADCAST): após reabertura a OS deve voltar como atribuição DIRECT ao titular escolhido — caso contrário o app mantém regras de leilão incompatíveis com revisão. */
     const updateData = {
       ownerEmail: resolvedOwner,
+      assignmentMode: 'DIRECT',
+      claimStatus: null,
+      broadcastCandidates: null,
+      broadcastClaimExpiresAt: null,
+      claimedByUserId: null,
+      claimedAt: null,
       status: 'PENDING',
       responses: stripped,
       metadata: mergedMeta,
@@ -986,15 +1022,12 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
 
     const notifyEmail = String(resolvedOwner || '').trim();
     try {
-      const users = await prisma.user.findMany({
-        where: {
-          isActive: true,
-          email: { equals: notifyEmail, mode: 'insensitive' },
-        },
-        select: { id: true, email: true },
-      });
+      const users = await resolveActiveUsersForDispatchOwnerEmail(prisma, notifyEmail);
       if (users.length === 0) {
-        console.warn('[operations/reopen-for-revision] Push ignorado: nenhum User ativo para email', notifyEmail);
+        console.warn(
+          '[operations/reopen-for-revision] Push ignorado: nenhum User ativo (email/AppAccount) para',
+          notifyEmail
+        );
       } else {
         const userIds = users.map((u) => u.id);
         const pushTokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });

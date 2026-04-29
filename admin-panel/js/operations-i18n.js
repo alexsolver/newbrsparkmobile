@@ -32,12 +32,12 @@ const M = {
     ops_col_progress: 'Em campo',
     ops_col_completed: 'Concluídas',
     ops_col_error: 'Erro / bloqueadas',
-    ops_col_cancelled: 'Canceladas',
+    ops_col_cancelled: 'Canceladas / Rejeitadas',
     ops_col_filter_pending: 'Filtrar pendentes…',
     ops_col_filter_progress: 'Filtrar em campo…',
     ops_col_filter_completed: 'Filtrar concluídas…',
     ops_col_filter_error: 'Filtrar erros…',
-    ops_col_filter_cancelled: 'Filtrar canceladas…',
+    ops_col_filter_cancelled: 'Filtrar canceladas ou rejeitadas…',
     ops_sort_toggle_title: 'Alterar ordenação',
     ops_sort_new_first: 'Novas primeiro',
     ops_sort_old_first: 'Antigas primeiro',
@@ -84,7 +84,8 @@ const M = {
     ops_rev_snap_tab_meta: 'Metadados do envio',
     ops_rev_snap_tab_json: 'Respostas (JSON)',
     ops_reopen_title: 'Reabrir para revisão',
-    ops_reopen_intro_before: 'A FT',
+    /** Só «A » — o rótulo já inclui o prefixo FT-/RT-; «A FT» + «FT-…» gerava «FTFT» na UI. */
+    ops_reopen_intro_before: 'A ',
     ops_reopen_intro_after:
       'volta para "Em campo" (mesmo número). Quem deve executar esta revisão?',
     ops_reopen_same: 'Manter o mesmo técnico',
@@ -92,6 +93,12 @@ const M = {
     ops_reopen_other_hint: 'Usuário com login no app móvel',
     ops_reopen_tech_label: 'Técnico',
     ops_reopen_confirm: 'Reabrir OS',
+    ops_reopen_broadcast_need_pick:
+      'Esta OS não tem titular no cartão (oferta sem aceite ou cancelada antes). Marque «Atribuir a outro técnico» e escolha o prestador na lista.',
+    ops_reopen_declined_offer_note: 'Recusa na oferta (broadcast). Pode manter este prestador para a revisão.',
+    ops_card_declined_offer_suffix: '· recusa na oferta (broadcast)',
+    ops_card_broadcast_offer_one: '· oferta (aguardando aceite)',
+    ops_card_broadcast_offer_multi: '· oferta · {n} candidatos',
     ops_card_chat_title: 'Chat desta FT (gestor e técnico)',
     ops_card_reopen_revision: 'Reabrir p/ revisão',
     ops_card_resend: 'Enviar novamente',
@@ -121,12 +128,14 @@ const M = {
     ops_dispatch_email_ph: 'Nome ou e-mail, sugestões ao digitar',
     ops_dispatch_email_required: 'Indique pelo menos um e-mail de técnico (adicione à lista ou preencha o campo).',
     ops_dispatch_email_invalid: 'Formato de e-mail inválido. Use «nome@domínio.com».',
-    ops_dispatch_broadcast_hint: '2 ou mais na lista = modo «primeiro a aceitar» (leilão).',
+    ops_dispatch_broadcast_hint:
+      'Vários candidatos = «primeiro a aceitar». Com um só, marque «Oferta» para convite com aceite explícito.',
     ops_dispatch_broadcast_expires_lbl: 'Prazo para aceitar a oferta (opcional)',
-    ops_dispatch_broadcast_expires_need_two:
-      'Disponível quando houver dois ou mais técnicos na lista (modo «primeiro a aceitar»). Adicione candidatos acima.',
+    ops_dispatch_broadcast_expires_need_assignee: 'Adicione pelo menos um técnico à lista para usar este campo.',
+    ops_dispatch_broadcast_expires_need_oferta_single:
+      'Com um único técnico, marque «Oferta» acima para poder definir o prazo de aceite (ou adicione outro candidato).',
     ops_dispatch_broadcast_expires_hint:
-      'Opcional. Fim da janela em que o prestador pode aceitar (UTC no servidor; o app mostra contagem regressiva). Só aplica com 2+ técnicos.',
+      'Opcional. Fim da janela em que o prestador pode aceitar (UTC no servidor; o app mostra contagem regressiva). Aplica em modo oferta.',
     ops_dispatch_add_candidate_btn: 'Adicionar candidato',
     ops_dispatch_suggest_aria: 'Técnicos sugeridos',
     ops_dispatch_client_email_lbl: 'E-mail do cliente',
@@ -153,12 +162,10 @@ const M = {
     ops_dispatch_due_hint:
       'Prazo comercial explícito para o técnico. Se vazio, o app não mostra a linha «Vencimento» no cartão.',
     ops_dispatch_due_invalid: 'Data/hora de vencimento inválida.',
-    ops_dispatch_urgent_lbl: 'Urgente',
-    ops_dispatch_urgent_need_two:
-      'Só disponível com dois ou mais técnicos (oferta — primeiro a aceitar). Adicione candidatos acima.',
-    ops_dispatch_urgent_hint:
-      'Só em oferta: grava prioridade na OS e destaca «URGENTE» na notificação push para os convidados.',
-    ops_card_urgent_offer_badge: 'Oferta urgente',
+    ops_dispatch_offer_lbl: 'Oferta',
+    ops_dispatch_offer_need_assignee: 'Adicione pelo menos um técnico (e-mail na lista ou no campo).',
+    ops_dispatch_offer_hint:
+      'Com um prestador: envia em modo convite (aceite no app). Com vários: «primeiro a aceitar». Se marcado, também destaca prioridade na notificação push.',
     ops_dispatch_planned_end_preview:
       'Fim previsto (formulário): {when}, {mins} min de preenchimento (sem deslocamento).',
     ops_dispatch_section_geo: 'Local de serviço (cerca eletrônica)',
@@ -245,12 +252,12 @@ const M = {
     ops_col_progress: 'In the field',
     ops_col_completed: 'Completed',
     ops_col_error: 'Error / blocked',
-    ops_col_cancelled: 'Cancelled',
+    ops_col_cancelled: 'Cancelled / Rejected',
     ops_col_filter_pending: 'Filter pending…',
     ops_col_filter_progress: 'Filter in progress…',
     ops_col_filter_completed: 'Filter completed…',
     ops_col_filter_error: 'Filter errors…',
-    ops_col_filter_cancelled: 'Filter cancelled…',
+    ops_col_filter_cancelled: 'Filter cancelled or rejected…',
     ops_sort_toggle_title: 'Change sort order',
     ops_sort_new_first: 'Newest first',
     ops_sort_old_first: 'Oldest first',
@@ -305,6 +312,12 @@ const M = {
     ops_reopen_other_hint: 'User signed in on the mobile app',
     ops_reopen_tech_label: 'Technician',
     ops_reopen_confirm: 'Reopen work order',
+    ops_reopen_broadcast_need_pick:
+      'This work order has no assignee on the card (offer not accepted or cancelled early). Choose «Assign to another technician» and pick the provider in the list.',
+    ops_reopen_declined_offer_note: 'Declined the broadcast offer. You can keep this provider for the revision.',
+    ops_card_declined_offer_suffix: '· declined the broadcast offer',
+    ops_card_broadcast_offer_one: '· broadcast offer (pending acceptance)',
+    ops_card_broadcast_offer_multi: '· broadcast · {n} candidates',
     ops_card_chat_title: 'Chat for this job (manager & technician)',
     ops_card_reopen_revision: 'Reopen for revision',
     ops_card_resend: 'Send again',
@@ -334,12 +347,14 @@ const M = {
     ops_dispatch_email_ph: 'Name or email, suggestions as you type',
     ops_dispatch_email_required: 'Enter at least one technician email (add to the list or fill the field).',
     ops_dispatch_email_invalid: 'Invalid email format. Use name@domain.com.',
-    ops_dispatch_broadcast_hint: 'Two or more in the list = «first to accept» (broadcast) mode.',
+    ops_dispatch_broadcast_hint:
+      'Multiple candidates = «first to accept». With one technician, check «Offer» for an explicit accept step.',
     ops_dispatch_broadcast_expires_lbl: 'Offer acceptance deadline (optional)',
-    ops_dispatch_broadcast_expires_need_two:
-      'Available once there are two or more technicians in the list («first to accept»). Add candidates above.',
+    ops_dispatch_broadcast_expires_need_assignee: 'Add at least one technician to the list to use this field.',
+    ops_dispatch_broadcast_expires_need_oferta_single:
+      'With a single technician, check «Offer» above to set an acceptance deadline (or add another candidate).',
     ops_dispatch_broadcast_expires_hint:
-      'Optional. End of the window when the provider may accept (UTC on the server; the app shows a countdown). Only applies with 2+ technicians.',
+      'Optional. End of the window when the provider may accept (UTC on the server; the app shows a countdown). Applies in offer/broadcast mode.',
     ops_dispatch_add_candidate_btn: 'Add candidate',
     ops_dispatch_suggest_aria: 'Suggested technicians',
     ops_dispatch_client_email_lbl: 'Client email',
@@ -366,12 +381,10 @@ const M = {
     ops_dispatch_due_hint:
       'Optional commercial deadline for the technician. If empty, the app hides the «Due» line on the card.',
     ops_dispatch_due_invalid: 'Invalid due date/time.',
-    ops_dispatch_urgent_lbl: 'Urgent',
-    ops_dispatch_urgent_need_two:
-      'Only available with two or more technicians (broadcast — first to accept). Add candidates above.',
-    ops_dispatch_urgent_hint:
-      'Broadcast only: saves priority on the work order and highlights «URGENT» in the push to invited technicians.',
-    ops_card_urgent_offer_badge: 'Urgent offer',
+    ops_dispatch_offer_lbl: 'Offer',
+    ops_dispatch_offer_need_assignee: 'Add at least one technician (email in the list or in the field).',
+    ops_dispatch_offer_hint:
+      'With one provider: sends as an invite (accept in the app). With several: «first to accept». When checked, also highlights priority in the push notification.',
     ops_dispatch_planned_end_preview:
       'Expected end (form): {when}, {mins} min of filling (no travel).',
     ops_dispatch_section_geo: 'Service location (geofence)',
@@ -435,18 +448,32 @@ const M = {
 };
 M['es-ES'] = {
   ...M['en-US'],
+  ops_col_cancelled: 'Canceladas / Rechazadas',
+  ops_col_filter_cancelled: 'Filtrar canceladas o rechazadas…',
+  ops_reopen_broadcast_need_pick:
+    'Esta OS no tiene titular en la tarjeta (oferta sin aceptar o cancelada antes). Marque «Asignar a otro técnico» y elija al prestador en la lista.',
+  ops_reopen_declined_offer_note:
+    'Rechazo en la oferta (broadcast). Puede mantener a este prestador para la revisión.',
+  ops_card_declined_offer_suffix: '· rechazo en la oferta (broadcast)',
+  ops_card_broadcast_offer_one: '· oferta (pendiente de aceptación)',
+  ops_card_broadcast_offer_multi: '· oferta · {n} candidatos',
   ops_card_reopen_revision: 'Reabrir p/ revisión',
   ops_card_resend: 'Enviar de nuevo',
   ops_card_cancel_confirm: '¿Cancelar esta OS? Quedará marcada como cancelada.',
   ops_card_cancel_ok: 'OS cancelada correctamente.',
   ops_card_cancel_err: 'Error al cancelar:',
   ops_dispatch_sending: 'Enviando…',
-  ops_dispatch_urgent_lbl: 'Urgente',
-  ops_dispatch_urgent_need_two:
-    'Solo con dos o más técnicos (oferta — el primero en aceptar). Añada candidatos arriba.',
-  ops_dispatch_urgent_hint:
-    'Solo en oferta: guarda la prioridad en la OS y resalta «URGENTE» en el push a los invitados.',
-  ops_card_urgent_offer_badge: 'Oferta urgente',
+  ops_dispatch_broadcast_hint:
+    'Varios candidatos = «el primero en aceptar». Con un solo técnico, marque «Oferta» para un aceptación explícita.',
+  ops_dispatch_broadcast_expires_need_assignee: 'Añada al menos un técnico a la lista para usar este campo.',
+  ops_dispatch_broadcast_expires_need_oferta_single:
+    'Con un solo técnico, marque «Oferta» arriba para poder definir el plazo de aceptación (o añada otro candidato).',
+  ops_dispatch_broadcast_expires_hint:
+    'Opcional. Fin de la ventana en la que el prestador puede aceptar (UTC en el servidor; la app muestra cuenta atrás). Aplica en modo oferta.',
+  ops_dispatch_offer_lbl: 'Oferta',
+  ops_dispatch_offer_need_assignee: 'Añada al menos un técnico (correo en la lista o en el campo).',
+  ops_dispatch_offer_hint:
+    'Con un prestador: envío como invitación (aceptar en la app). Con varios: «el primero en aceptar». Si está marcado, también resalta la prioridad en el push.',
 };
 
 function interpolate(str, vars) {
@@ -721,7 +748,7 @@ export function applyOperationsModalsStaticI18n() {
   setLabelFor('d-desc', 'ops_dispatch_desc_lbl');
   const dDesc = document.getElementById('d-desc');
   if (dDesc) dDesc.setAttribute('placeholder', opsT('ops_dispatch_desc_ph'));
-  set('d-urgente-lbl', 'ops_dispatch_urgent_lbl');
+  set('d-oferta-lbl', 'ops_dispatch_offer_lbl');
 
   setLabelFor('d-scheduled-start', 'ops_dispatch_sched_lbl');
   setHtml('d-hint-scheduled', 'ops_dispatch_sched_hint');

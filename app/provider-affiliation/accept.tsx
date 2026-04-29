@@ -6,21 +6,21 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import { ProviderAffiliationsApi, ProviderAffiliation } from '../../src/services/providerAffiliations';
 import { useAuth } from '../../src/hooks/useAuth';
 
-function relationshipTitle(type: string) {
+function relationshipTitle(type: string, t: (k: string) => string) {
   const u = String(type || '').toUpperCase();
-  if (u === 'OWNER') return 'Espaço próprio';
-  return 'Vínculo com a empresa';
+  if (u === 'OWNER') return t('profile.affiliationsAcceptOwnerTitle');
+  return t('profile.affiliationsAcceptDedicatedTitle');
 }
 
-function consequenceBullets(type: string) {
+function consequenceBullets(type: string, t: (k: string) => string) {
   const u = String(type || '').toUpperCase();
   if (u === 'OWNER') {
-    return ['Convite associado ao seu espaço de prestador na plataforma.'];
+    return [t('profile.affiliationsAcceptOwnerBullet')];
   }
   return [
-    'Vínculo operacional com a empresa (horários de exclusividade podem ser acordados).',
-    'Ao ativar, outros vínculos ativos com a mesma conta podem ser encerrados automaticamente.',
-    'A empresa ainda precisará confirmar a ativação após o seu aceite.',
+    t('profile.affiliationsAcceptDedicatedB1'),
+    t('profile.affiliationsAcceptDedicatedB2'),
+    t('profile.affiliationsAcceptDedicatedB3'),
   ];
 }
 
@@ -83,7 +83,7 @@ export default function ProviderAffiliationAcceptScreen() {
     ]);
   };
 
-  const title = invite ? relationshipTitle(invite.relationshipType) : 'Convite';
+  const title = invite ? relationshipTitle(invite.relationshipType, t) : t('profile.affiliationsAcceptScreenFallbackTitle');
   const companyName = invite?.tenant?.name || 'Empresa';
 
   return (
@@ -102,7 +102,7 @@ export default function ProviderAffiliationAcceptScreen() {
           </View>
         ) : invite ? (
           <View style={{ gap: 8, marginBottom: 12 }}>
-            {consequenceBullets(invite.relationshipType).map((b, idx) => (
+            {consequenceBullets(invite.relationshipType, t).map((b, idx) => (
               <Text key={idx} style={{ fontSize: 12, color: '#334155', lineHeight: 18 }}>
                 {'• '}{b}
               </Text>

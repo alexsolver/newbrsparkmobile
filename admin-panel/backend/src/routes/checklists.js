@@ -7,7 +7,7 @@ const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncW
 const authUser = require('../middleware/authUser');
 const { adminAuthThenPanel } = require('../middleware/auth');
 const { recordSync } = require('../services/cockpitMetrics');
-const { sendFieldTaskActivityPushToAssignee } = require('../lib/fieldTaskAssigneePush');
+const { sendFieldTaskActivityPushToAssignees } = require('../lib/fieldTaskAssigneePush');
 const { allocateNextFtOsNumber } = require('../lib/ftOsNumber');
 const { createNextRoutineTaskAfterComplete } = require('../lib/routineTaskLifecycle');
 const { stripRevisionSessionEvidenceInPlace } = require('../lib/revisionSessionFields');
@@ -1593,9 +1593,9 @@ router.post('/dispatch', async (req, res) => {
             });
         }
         if (resolvedList.length === 0) {
-            const scoped = scopedTenantId ? ' nesta organização' : '';
             return res.status(400).json({
-                error: `Nenhum e-mail válido para prestador elegível (ativo)${scoped}. A OS não foi criada.`,
+                error:
+                    'Nenhum e-mail válido para utilizador PROVIDER ativo (ou e-mail ambíguo entre contas). A OS não foi criada.',
             });
         }
 
@@ -1607,7 +1607,7 @@ router.post('/dispatch', async (req, res) => {
         if (!fieldTaskContextTenantId) {
             return res.status(400).json({
                 error:
-                    'Não foi possível determinar a organização desta OS (formulário sem tenant associado e prestador ambíguo). Associe o modelo a uma organização no Form Builder ou use um técnico sem ambiguidade de conta.',
+                    'Não foi possível determinar a organização desta OS (formulário sem tenant associado e prestador PROVIDER ambíguo). Associe o modelo a uma organização no Form Builder ou use um e-mail de PROVIDER sem duplicidade entre organizações.',
             });
         }
 
@@ -1616,7 +1616,16 @@ router.post('/dispatch', async (req, res) => {
             resolvedList,
             fieldTaskContextTenantId
         );
-        const isBroadcast = resolvedList.length >= 2 || !allDedicatedToDispatch;
+        const ofertaRequested =
+            payload.oferta === true ||
+            payload.oferta === 1 ||
+            String(payload.oferta ?? '')
+                .trim()
+                .toLowerCase() === 'true';
+        const isBroadcast =
+            resolvedList.length >= 2 ||
+            !allDedicatedToDispatch ||
+            (ofertaRequested && resolvedList.length >= 1);
 
         let broadcastClaimExpiresAt = null;
         if (isBroadcast && payload.broadcastClaimExpiresAt != null && String(payload.broadcastClaimExpiresAt).trim() !== '') {
@@ -1631,12 +1640,6 @@ router.post('/dispatch', async (req, res) => {
             });
         }
 
-        if (multi && resolvedList.length < 2) {
-            return res.status(400).json({
-                error: 'Indique pelo menos dois técnicos distintos e elegíveis para o modo «primeiro a aceitar» (verifique duplicados ou e-mails fora da organização).',
-            });
-        }
-
         const urgenteRequested =
             payload.urgente === true ||
             payload.urgente === 1 ||
@@ -1647,7 +1650,7 @@ router.post('/dispatch', async (req, res) => {
         if (urgenteRequested && !isBroadcast) {
             return res.status(400).json({
                 error:
-                    'Urgente só se aplica ao despacho em oferta (vários técnicos ou técnico sem vínculo dedicado com esta empresa). Omita urgente ou use modo oferta.',
+                    'A marcação de prioridade na notificação só se aplica em modo oferta (vários técnicos, técnico sem vínculo dedicado exclusivo, ou campo «oferta» ativo no despacho). Omita urgente ou ative oferta.',
             });
         }
 
@@ -1817,9 +1820,10 @@ router.post('/dispatch', async (req, res) => {
             if (pushBody.length > 180) pushBody = `${pushBody.slice(0, 177)}…`;
 
             const pushTargets = isBroadcast ? broadcastList : resolvedList;
-            for (const emailRaw of pushTargets) {
-                await sendFieldTaskActivityPushToAssignee(prisma, {
-                    ownerEmail: String(emailRaw || '').trim(),
+            const ownerEmails = pushTargets.map((e) => String(e || '').trim()).filter(Boolean);
+            if (ownerEmails.length) {
+                await sendFieldTaskActivityPushToAssignees(prisma, {
+                    ownerEmails,
                     templateTenantId: loadedTemplate?.tenantId ?? null,
                     assigneeTenantId: fieldTaskContextTenantId,
                     executionId: execution.id,

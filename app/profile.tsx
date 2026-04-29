@@ -1608,7 +1608,11 @@ export default function ProfileScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 14, fontWeight: '900', color: '#0369A1' }}>{t('profile.workScheduleCardTitle')}</Text>
-                        <Text style={{ fontSize: 11, color: '#0C4A6E', marginTop: 2 }}>{t('profile.workScheduleCardSub')}</Text>
+                        <Text style={{ fontSize: 11, color: '#0C4A6E', marginTop: 2 }}>
+                          {skipSelfServiceOnboarding
+                            ? t('profile.workScheduleCardSubDedicated')
+                            : t('profile.workScheduleCardSub')}
+                        </Text>
                       </View>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color="#0369A1" />

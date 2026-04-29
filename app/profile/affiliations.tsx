@@ -282,7 +282,7 @@ export default function ProviderAffiliationsScreen() {
             </View>
             <View style={{ backgroundColor: col.chipBg, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 }}>
               <Text style={{ color: '#fff', fontWeight: '900', fontSize: 10 }}>
-                {isDedicated(a) ? 'DEDICADO' : 'PARCERIA'}
+                {t('profile.affiliationsChipDedicated')}
               </Text>
             </View>
           </View>

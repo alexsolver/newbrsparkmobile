@@ -1289,7 +1289,7 @@ router.get('/:id/provider-affiliations', async (req, res) => {
 });
 
 // PATCH /api/users/:id/provider-affiliations/:affiliationId/dedicated-exclusive
-// Janelas de exclusividade partner (tempo) em vínculo DEDICATED+ACTIVE — acordadas com o prestador.
+// Janelas de exclusividade (tempo) em vínculo DEDICATED+ACTIVE — acordadas com o prestador.
 router.patch('/:id/provider-affiliations/:affiliationId/dedicated-exclusive', express.json({ limit: '64kb' }), async (req, res) => {
   try {
     const userId = String(req.params.id || '').trim();

@@ -5845,49 +5845,6 @@ export default function DashboardScreen() {
 
                   <ProviderTaskDetailSections task={selectedTask} />
 
-                  {(selectedTask.status === 'PENDING' || selectedTask.status === 'RECEIVED') &&
-                    !selectedTask.isAccepted &&
-                    rejectingTaskId === selectedTask.id && (
-                      <View
-                        style={{
-                          backgroundColor: C.status.danger.bg,
-                          padding: 16,
-                          borderRadius: 12,
-                          borderWidth: 1,
-                          borderColor: C.status.danger.border,
-                          marginBottom: 8,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 13,
-                            fontWeight: '800',
-                            color: C.status.danger.fg,
-                            marginBottom: 8,
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {t('home.providerRejectReasonTitle')}
-                        </Text>
-                        <TextInput
-                          style={{
-                            backgroundColor: C.cardWhite,
-                            borderRadius: 8,
-                            padding: 12,
-                            borderWidth: 1,
-                            borderColor: C.status.danger.border,
-                            minHeight: 80,
-                            textAlignVertical: 'top',
-                            color: C.slate,
-                          }}
-                          placeholder={t('home.providerRejectReasonPlaceholder')}
-                          multiline
-                          value={rejectReason}
-                          onChangeText={setRejectReason}
-                        />
-                      </View>
-                    )}
-
                   {selectedTask.status === 'PAUSED' && (selectedTask as any).pauseReasonSummary ? (
                     <View
                       style={{
@@ -5909,6 +5866,50 @@ export default function DashboardScreen() {
                   ) : null}
                 </ScrollView>
 
+                {(selectedTask.status === 'PENDING' || selectedTask.status === 'RECEIVED') &&
+                  !selectedTask.isAccepted &&
+                  String(rejectingTaskId || '') === String(selectedTask.id || '') && (
+                    <View
+                      style={{
+                        backgroundColor: C.status.danger.bg,
+                        padding: 12,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: C.status.danger.border,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          fontWeight: '800',
+                          color: C.status.danger.fg,
+                          marginBottom: 8,
+                          textTransform: 'uppercase',
+                        }}
+                      >
+                        {t('home.providerRejectReasonTitle')}
+                      </Text>
+                      <TextInput
+                        style={{
+                          backgroundColor: C.cardWhite,
+                          borderRadius: 8,
+                          padding: 12,
+                          borderWidth: 1,
+                          borderColor: C.status.danger.border,
+                          minHeight: 72,
+                          maxHeight: 120,
+                          textAlignVertical: 'top',
+                          color: C.slate,
+                        }}
+                        placeholder={t('home.providerRejectReasonPlaceholder')}
+                        multiline
+                        value={rejectReason}
+                        onChangeText={setRejectReason}
+                      />
+                    </View>
+                  )}
+
                 <View
                   style={{
                     paddingTop: 8,
@@ -5920,7 +5921,7 @@ export default function DashboardScreen() {
                 >
                   {(selectedTask.status === 'PENDING' || selectedTask.status === 'RECEIVED') && !selectedTask.isAccepted && (
                     <>
-                      {rejectingTaskId === selectedTask.id ? (
+                      {String(rejectingTaskId || '') === String(selectedTask.id || '') ? (
                         <View style={{ flexDirection: 'row', gap: 10 }}>
                           <TouchableOpacity
                             onPress={() => {

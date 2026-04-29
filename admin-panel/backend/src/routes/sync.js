@@ -568,7 +568,7 @@ router.get('/tasks', async (req, res) => {
     });
     if (!canReceiveOs) {
       console.log(
-        `[sync/tasks] ${ownerEmail} — inelegível para FT/OS neste contexto (perfil cliente ou tenant ≠ sessão efetiva); retorno vazio.`
+        `[sync/tasks] ${ownerEmail} — inelegível para FT/OS neste contexto (papel ≠ PROVIDER ou tenant ≠ sessão efetiva); retorno vazio.`
       );
       return res.json([]);
     }

@@ -1,7 +1,7 @@
 import '../src/tasks/routeTrackingTask';
 import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useFonts } from 'expo-font';
 import { useTheme } from '../src/theme/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -179,6 +179,18 @@ function AppInitializer() {
   useEffect(() => {
     if (loading || !user) return;
     NotificationService.registerForPushNotificationsAsync().catch(() => {});
+    /** iOS: APNs/Expo por vezes só entregam token após o 1.º frame — re-tentar em silêncio. */
+    if (Platform.OS !== 'ios') return;
+    const a = setTimeout(() => {
+      NotificationService.registerForPushNotificationsAsync().catch(() => {});
+    }, 5000);
+    const b = setTimeout(() => {
+      NotificationService.registerForPushNotificationsAsync().catch(() => {});
+    }, 20000);
+    return () => {
+      clearTimeout(a);
+      clearTimeout(b);
+    };
   }, [user?.id, loading]);
 
   useEffect(() => {

@@ -4,6 +4,7 @@ const {
   parseTemplateSchemaArray,
   effectiveFormFieldType,
 } = require('./revisionSessionFields');
+const { broadcastCandidateArray } = require('./fieldTaskExecutionAccess');
 
 /** @param {object|null|undefined} field */
 function resolveSectionBreakLabel(field) {
@@ -106,6 +107,8 @@ function mapExecutionToPanelTask(ex, opts = {}) {
     expectedFormDurationMinutes: ex.expectedFormDurationMinutes ?? null,
     assignmentMode: ex.assignmentMode || 'DIRECT',
     claimStatus: ex.claimStatus ?? null,
+    /** E-mails na oferta (modo BROADCAST); já normalizados em minúsculas. */
+    broadcastCandidates: broadcastCandidateArray(ex.broadcastCandidates),
     urgente: ex.urgente === true,
     etaMinutes: ex.etaMinutes,
     businessMetrics: ex.businessMetrics ?? null,

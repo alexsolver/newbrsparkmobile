@@ -11,6 +11,7 @@ require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const { sendExpoPushToMany } = require('../src/services/expoPush');
 const { resolveGlobalLiveActivityBadgeKey, resolveTenantAppDisplayName } = require('../src/lib/mobileTenantBranding');
+const { resolveActiveUsersForDispatchOwnerEmail } = require('../src/lib/userEmailUnique');
 
 const ANDROID_CHANNEL_TECH = 'brspark-tecnico';
 
@@ -31,20 +32,30 @@ async function main() {
 
   const prisma = new PrismaClient();
   try {
-    const user = await prisma.user.findFirst({
-      where: { isActive: true, email: { equals: email, mode: 'insensitive' } },
-      select: { id: true, email: true, name: true, role: true, tenantId: true },
-    });
+    const rows = await resolveActiveUsersForDispatchOwnerEmail(prisma, email);
+    if (!rows.length) {
+      console.error('Nenhum utilizador ativo com este e-mail (nem via AppAccount):', email);
+      process.exit(2);
+    }
+    const userIds = rows.map((r) => r.id);
+    const user =
+      (await prisma.user.findFirst({
+        where: { id: { in: userIds } },
+        select: { id: true, email: true, name: true, role: true, tenantId: true },
+        orderBy: { createdAt: 'asc' },
+      })) || null;
     if (!user) {
-      console.error('Nenhum utilizador ativo com este e-mail:', email);
+      console.error('Resolução de utilizador inconsistente.');
       process.exit(2);
     }
 
-    const tokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
+    const tokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
     if (!tokens.length) {
       console.error(
-        'Utilizador encontrado mas sem token Expo (abrir o app com login e notificações activas):',
-        user.email
+        'Utilizador(es) encontrado(s) mas sem token Expo (iPhone: abrir app com login, Ajustes → BrSpark → Notificações):',
+        user.email,
+        '| userIds:',
+        userIds.join(',')
       );
       process.exit(3);
     }

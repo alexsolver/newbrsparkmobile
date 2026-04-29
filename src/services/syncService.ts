@@ -2770,16 +2770,22 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         );
 
         // Notify backend we RECEIVED them — só FT/OS (RT não usa fila «Pendentes» do técnico).
-        const unreceived = remoteFt.filter(
-          (t: any) => t.status === 'PENDING' && !t.metadata?.receivedAt,
-        );
+        const unreceived = remoteFt.filter((t: any) => {
+          const st = String(t?.status || '').toUpperCase();
+          const meta =
+            t?.metadata && typeof t.metadata === 'object' && !Array.isArray(t.metadata)
+              ? t.metadata
+              : {};
+          return st === 'PENDING' && !(meta as Record<string, unknown>).receivedAt;
+        });
         if (unreceived.length > 0) {
-            const recvTs = new Date().toISOString();
-            Promise.all(
-              unreceived.map((t: any) =>
-                enqueueExecutionStatusPatch(String(t.id), { status: 'RECEIVED', timestamp: recvTs })
-              )
-            ).catch(() => {});
+          const recvTs = new Date().toISOString();
+          /** Aguardar envio: evita perder RECEIVED se o utilizador fechar o app logo após abrir pelo push. */
+          await Promise.allSettled(
+            unreceived.map((t: any) =>
+              enqueueExecutionStatusPatch(String(t.id), { status: 'RECEIVED', timestamp: recvTs })
+            )
+          );
         }
 
         // Igual ao chat: aviso local quando a sync traz OS novas (push remoto do painel é independente).

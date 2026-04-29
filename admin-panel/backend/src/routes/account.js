@@ -41,7 +41,10 @@ const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncW
 const { hasActiveDedicatedAffiliationForAppUser } = require('../lib/providerOnboardingGuards');
 const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
 const { createPersonalClientTenantAndUserInTransaction } = require('../lib/registerPersonalClientTenant');
-const { resolveSharedRegistrationTenant } = require('../lib/resolveSharedRegistrationTenant');
+const {
+  resolveSharedRegistrationTenant,
+  tenantIsSharedAppRegistrationPool,
+} = require('../lib/resolveSharedRegistrationTenant');
 const {
   ensureMembershipRoleMatchesTenantKind,
   verifyAppLoginPasswordAndEnsureAccount,
@@ -231,6 +234,22 @@ async function buildSafeAppUserPayloadAsync(user, db = prisma) {
       payload.tenant.visionDetectionEngine = await resolveVisionDetectionEngineLabelForApp(db, user.tenant.features);
     } catch (e) {
       console.warn('[account] visionDetectionEngine', e && e.message);
+    }
+    /** Nome técnico «master» / piscina partilhada: não expor no app para não confundir o utilizador. */
+    try {
+      if (await tenantIsSharedAppRegistrationPool(db, user.tenant.id)) {
+        const appLabel = 'BrSpark';
+        payload.tenant.name = appLabel;
+        payload.tenant.ownerName = null;
+        const branding = buildEffectiveTenantBranding({
+          tenantName: appLabel,
+          planFeatures: user.tenant.subscription?.plan?.features,
+          tenantFeatures: user.tenant.features,
+        });
+        payload.tenant.branding = branding.effective;
+      }
+    } catch (e) {
+      console.warn('[account] maskSharedRegistrationTenantName', e && e.message);
     }
   }
   return payload;
@@ -1511,11 +1530,15 @@ router.get('/me/sibling-workspaces', authUser, async (req, res) => {
       countMap[g.tenantId] = g._count.id;
     }
 
+    const sharedPool = await resolveSharedRegistrationTenant(basePrisma);
+    const sharedPoolId = sharedPool?.id ? String(sharedPool.id).trim() : '';
+
     const workspaces = tenantIds.map((tid) => {
       const u = byTenant.get(tid);
+      const isSharedPool = sharedPoolId && tid === sharedPoolId;
       return {
         id: tid,
-        name: u.tenant?.name || tid,
+        name: isSharedPool ? 'BrSpark' : u.tenant?.name || tid,
         slug: u.tenant?.slug || null,
         kind: u.tenant?.kind || 'COMPANY',
         memberCount: countMap[tid] || 0,
@@ -2038,6 +2061,20 @@ router.put('/me', authUser, async (req, res) => {
       return res.status(400).json({
         error: 'Só contas com perfil técnico podem guardar horários, regiões e bases de atendimento.',
       });
+    }
+
+    if (
+      technicianCoverageGeoJson !== undefined ||
+      technicianWorkScheduleJson !== undefined ||
+      technicianServiceLocationIds !== undefined
+    ) {
+      const dedicatedLock = await hasActiveDedicatedAffiliationForAppUser(prisma, req.user.id);
+      if (dedicatedLock) {
+        return res.status(403).json({
+          error:
+            'Com vínculo dedicado ativo, horários, bases e área de atendimento são definidos pela empresa vinculante no painel BrSpark. Contacte o gestor se precisar de alterações.',
+        });
+      }
     }
 
     let normalizedWorkSchedule = undefined;

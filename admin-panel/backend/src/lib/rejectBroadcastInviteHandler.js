@@ -47,7 +47,14 @@ async function rejectBroadcastInviteFromApp(req, res) {
 
     let meta =
       ex.metadata && typeof ex.metadata === 'object' && !Array.isArray(ex.metadata) ? { ...ex.metadata } : {};
-    meta = { ...meta, rejectionReason: reasonText, rejectedAt: new Date().toISOString() };
+    const declinedAt = new Date().toISOString();
+    meta = {
+      ...meta,
+      rejectionReason: reasonText,
+      rejectedAt: declinedAt,
+      broadcastDeclinedByEmail: email,
+      broadcastDeclinedAt: declinedAt,
+    };
 
     await prisma.checklistExecution.update({
       where: { id: taskId },

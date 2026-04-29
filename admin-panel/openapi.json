@@ -5195,19 +5195,23 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "description": "Despacho: refId e scheduledStartAt obrigatórios; ownerEmail OU candidateEmails (2+ = modo broadcast). Campo opcional broadcastClaimExpiresAt só em broadcast: ISO 8601 ou epoch (s/ms).",
+                "description": "Despacho: refId e scheduledStartAt obrigatórios; ownerEmail OU candidateEmails. Modo BROADCAST (oferta / primeiro a aceitar) quando há 2+ candidatos, vínculo não exclusivamente dedicado, ou quando oferta=true com ≥1 candidato. broadcastClaimExpiresAt só em broadcast.",
                 "properties": {
                   "refId": { "type": "string", "description": "ID do modelo de checklist" },
                   "ownerEmail": { "type": "string", "description": "Único destinatário (modo DIRECT)" },
                   "candidateEmails": {
                     "type": "array",
                     "items": { "type": "string" },
-                    "description": "Vários convidados; 2+ ativa modo BROADCAST (primeiro a aceitar)"
+                    "description": "Lista de e-mails de prestadores convidados; 1 ou mais. Com um só, use oferta=true para forçar fluxo de aceite (broadcast)."
+                  },
+                  "oferta": {
+                    "type": "boolean",
+                    "description": "Se true, força modo oferta (BROADCAST) mesmo com um único candidato (aceite explícito no app)."
                   },
                   "scheduledStartAt": { "type": "string", "format": "date-time" },
                   "broadcastClaimExpiresAt": {
                     "type": "string",
-                    "description": "Opcional, só com candidateEmails ≥ 2. Instantâneo UTC em que expira a janela de aceite (ISO 8601 ou Unix segundos/milissegundos). Deve ser no futuro."
+                    "description": "Opcional em modo broadcast. Instantâneo UTC em que expira a janela de aceite (ISO 8601 ou Unix segundos/milissegundos). Deve ser no futuro."
                   }
                 }
               }

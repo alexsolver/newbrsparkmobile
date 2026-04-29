@@ -15,7 +15,7 @@ export type ProviderAffiliationTenant = {
   slug?: string | null;
 };
 
-/** Janelas de exclusividade partner (leitura — definidas pela empresa no painel). */
+/** Janelas de exclusividade do vínculo dedicado (leitura — definidas pela empresa no painel). */
 export type DedicatedExclusiveSchedule = {
   timezone: string;
   weeklyWindows: { weekday: string; start: string; end: string }[];

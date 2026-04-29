@@ -285,14 +285,19 @@ publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
       });
     }
     const latest = providerIdentity.applications[0] || null;
+    const sharedReg = await resolveSharedRegistrationTenant(prisma);
+    const sharedTenantId = sharedReg?.id ? String(sharedReg.id).trim() : '';
     /**
      * Ocultar só espaços pessoais (CLIENT/PROVIDER). Incluir COMPANY e convites cujo `kind` ainda
      * venha vazio ou fora de sync (evita lista vazia em «Organizações e parcerias»).
+     * Ocultar a tenant COMPANY partilhada da app (piscina `master` / APP_REGISTRATION_SHARED_TENANT_*):
+     * o vínculo técnico permanece na BD, mas não deve aparecer no telemóvel.
      */
     const affiliationsForApp = (providerIdentity.affiliations || []).filter((row) => {
       if (String(row.relationshipType || '').toUpperCase() === 'OWNER') return false;
       const k = String(row.tenant?.kind || '').toUpperCase();
       if (k === 'CLIENT' || k === 'PROVIDER') return false;
+      if (sharedTenantId && String(row.tenantId || '') === sharedTenantId) return false;
       return true;
     });
     const aligned = await ensureAffiliationRowStatusesMatchTechnicianProfiles(

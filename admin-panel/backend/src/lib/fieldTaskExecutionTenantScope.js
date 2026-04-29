@@ -1,5 +1,10 @@
 'use strict';
 
+/** Igual a `fieldTaskExecutionAccess.normalizeEmail` — não importar daí (dependência circular). */
+function normEmail(e) {
+  return String(e || '').trim().toLowerCase();
+}
+
 /**
  * Chave em `ChecklistExecution.metadata` gravada no despacho quando o template não tem `tenantId`
  * (formulário «global») — permite à API móvel filtrar por org sem fuga de dados homónimos, desde que
@@ -81,6 +86,44 @@ async function prismaWhereExecutionBelongsToAppFieldTaskScope(prisma, { effectiv
 }
 
 /**
+ * Utilizadores PROVIDER ativos para e-mails de despacho (canónico de login ou `User.email`).
+ * Alinha-se a `resolveFieldTaskAssigneeEmail`: prestadores na pool usam e-mail sintético na linha `User`.
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string[]} rawEmails
+ */
+async function usersForFieldTaskContextByDispatchEmails(prisma, rawEmails) {
+  const list = [...new Set((rawEmails || []).map((e) => String(e || '').trim()).filter(Boolean))];
+  const seen = new Set();
+  const out = [];
+  for (const raw of list) {
+    const em = normEmail(raw);
+    if (!em) continue;
+    const acc = await prisma.appAccount.findUnique({
+      where: { emailNorm: em },
+      select: { id: true },
+    });
+    const where = {
+      isActive: true,
+      role: 'PROVIDER',
+      ...(acc?.id ? { appAccountId: String(acc.id) } : { email: { equals: raw, mode: 'insensitive' } }),
+    };
+    const rows = await prisma.user.findMany({
+      where,
+      select: { id: true, tenantId: true, email: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+      take: 24,
+    });
+    for (const r of rows) {
+      if (r.id && !seen.has(r.id)) {
+        seen.add(r.id);
+        out.push(r);
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Resolve a tenant a gravar em metadata no despacho.
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {{
@@ -100,18 +143,11 @@ async function resolveFieldTaskContextTenantIdForDispatch(prisma, { loadedTempla
   if (!Array.isArray(resolvedList) || !resolvedList.length) {
     return null;
   }
-  const emails = [...new Set(resolvedList.map((e) => String(e || '').trim().toLowerCase()).filter(Boolean))];
+  const emails = [...new Set(resolvedList.map((e) => String(e || '').trim()).filter(Boolean))];
   if (!emails.length) return null;
 
-  const users = await prisma.user.findMany({
-    where: {
-      isActive: true,
-      role: { in: FIELD_ROLES },
-      OR: emails.map((em) => ({ email: { equals: em, mode: 'insensitive' } })),
-    },
-    select: { tenantId: true, email: true },
-  });
-  const tids = [...new Set(users.map((u) => u.tenantId).filter(Boolean))];
+  const users = await usersForFieldTaskContextByDispatchEmails(prisma, emails);
+  const tids = [...new Set(users.map((u) => String(u.tenantId || '').trim()).filter(Boolean))];
   if (tids.length === 1) {
     return String(tids[0]);
   }
@@ -120,17 +156,9 @@ async function resolveFieldTaskContextTenantIdForDispatch(prisma, { loadedTempla
       '[fieldTaskContextTenant] Vários tenants para candidatos; uso preferencial por primeiro e-mail resolvido.',
       tids
     );
-    const first = String(resolvedList[0] || '').trim();
-    const u0 = await prisma.user.findFirst({
-      where: {
-        isActive: true,
-        email: { equals: first, mode: 'insensitive' },
-        role: { in: FIELD_ROLES },
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { tenantId: true },
-    });
-    if (u0 && u0.tenantId) return String(u0.tenantId);
+    const firstBatch = await usersForFieldTaskContextByDispatchEmails(prisma, [String(resolvedList[0] || '').trim()]);
+    const u0 = firstBatch[0];
+    if (u0?.tenantId) return String(u0.tenantId);
   }
   if (tids[0]) return String(tids[0]);
   return null;

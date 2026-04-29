@@ -750,11 +750,11 @@
         <div class="kanban-col col-cancelled">
           <div class="kanban-col-header">
             <ion-icon name="close-circle-outline" style="font-size:15px"></ion-icon>
-            <span id="ops-h-cancelled">Canceladas</span>
+            <span id="ops-h-cancelled">Canceladas / Rejeitadas</span>
             <span class="kanban-count" id="cnt-cancelled">—</span>
           </div>
           <div class="kanban-col-controls">
-            <input type="text" id="ops-f-cancelled" placeholder="Filtrar canceladas..." onkeyup="updateColFilter('cancelled', this.value)" />
+            <input type="text" id="ops-f-cancelled" placeholder="Filtrar canceladas ou rejeitadas…" onkeyup="updateColFilter('cancelled', this.value)" />
             <div class="kanban-col-sort-row">
               <select id="ops-sort-key-cancelled" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('cancelled', this.value)">
                 <option value="created" data-ops-sort-key="created">Data de criação</option>
@@ -859,7 +859,7 @@
     </div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
       <p style="font-size:13px;color:var(--text2);line-height:1.45;margin:0 0 12px;">
-        <span id="ops-reopen-intro-before">A FT </span><strong id="reopen-revision-ft-label">—</strong><span id="ops-reopen-intro-after"> volta para "Em campo" (mesmo número). Quem deve executar esta revisão?</span>
+        <span id="ops-reopen-intro-before">A </span><strong id="reopen-revision-ft-label">—</strong><span id="ops-reopen-intro-after"> volta para "Em campo" (mesmo número). Quem deve executar esta revisão?</span>
       </p>
       <div style="display:flex;flex-direction:column;gap:12px;">
         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
@@ -933,12 +933,12 @@
             <span id="d-dispatch-broadcast-hint" style="font-size:10px;color:var(--text3);line-height:1.35;">2+ na lista = «primeiro a aceitar».</span>
           </div>
           <div id="d-dispatch-candidate-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:6px;"></div>
-          <div id="d-urgente-offer-wrap" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border,#e2e8f0);">
-            <label for="d-urgente" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:700;color:var(--text2);margin:0;">
-              <input type="checkbox" id="d-urgente" disabled style="margin-top:3px;flex-shrink:0;" />
+          <div id="d-oferta-wrap" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border,#e2e8f0);">
+            <label for="d-oferta" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:700;color:var(--text2);margin:0;">
+              <input type="checkbox" id="d-oferta" disabled style="margin-top:3px;flex-shrink:0;" onchange="if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') window.syncDispatchBroadcastOfferExpiresUi();" />
               <span style="flex:1;min-width:0;">
-                <span id="d-urgente-lbl">Urgente</span>
-                <div id="d-hint-urgente" style="font-size:10px;color:var(--text3);font-weight:500;margin-top:4px;line-height:1.45;"></div>
+                <span id="d-oferta-lbl">Oferta</span>
+                <div id="d-hint-oferta" style="font-size:10px;color:var(--text3);font-weight:500;margin-top:4px;line-height:1.45;"></div>
               </span>
             </label>
           </div>
@@ -1352,6 +1352,52 @@ function displayOsLabel(task) {
   return shortId(task && task.id);
 }
 
+/** Titular no cartão / modal reabrir: `ownerEmail`, recusa na oferta, ou 1.º candidato em BROADCAST (API: `broadcastCandidates`). */
+function opsEffectiveTitularEmail(task) {
+  if (!task) return '';
+  const o = String(task.ownerEmail || '').trim();
+  if (o) return o;
+  const m = task.metadata && typeof task.metadata === 'object' && !Array.isArray(task.metadata) ? task.metadata : {};
+  const dec = String(m.broadcastDeclinedByEmail || '').trim();
+  if (dec) return dec;
+  const arr = Array.isArray(task.broadcastCandidates) ? task.broadcastCandidates : [];
+  const first = String(arr[0] || '').trim();
+  return first;
+}
+
+/**
+ * Linha do cartão (HTML): e-mail titular ou declarante da oferta + indicação curta.
+ * Só usar onde o cartão já é montado como HTML (ex. `buildCard`).
+ */
+function opsCardOwnerDisplayHtml(task) {
+  const o = String(task?.ownerEmail || '').trim();
+  if (o) return escOpsChatHtml(o);
+  const m = task?.metadata && typeof task.metadata === 'object' && !Array.isArray(task.metadata) ? task.metadata : {};
+  const d = String(m.broadcastDeclinedByEmail || '').trim();
+  if (d) {
+    const hint =
+      typeof opsT === 'function' ? String(opsT('ops_card_declined_offer_suffix') || '').trim() : '· recusa na oferta';
+    const hintHtml = hint ? ` <span style="color:var(--text3);font-weight:600;font-size:11px">${escOpsChatHtml(hint)}</span>` : '';
+    return `${escOpsChatHtml(d)}${hintHtml}`;
+  }
+  const bc = Array.isArray(task?.broadcastCandidates) ? task.broadcastCandidates.map((e) => String(e || '').trim()).filter(Boolean) : [];
+  if (bc.length === 1) {
+    const hint =
+      typeof opsT === 'function' ? String(opsT('ops_card_broadcast_offer_one') || '').trim() : 'oferta';
+    const hintHtml = hint ? ` <span style="color:var(--text3);font-weight:600;font-size:11px">${escOpsChatHtml(hint)}</span>` : '';
+    return `${escOpsChatHtml(bc[0])}${hintHtml}`;
+  }
+  if (bc.length > 1) {
+    const more =
+      typeof opsT === 'function'
+        ? String(opsT('ops_card_broadcast_offer_multi', { n: String(bc.length) }) || '').trim()
+        : `${bc.length} candidatos`;
+    const hintHtml = more ? ` <span style="color:var(--text3);font-weight:600;font-size:11px">${escOpsChatHtml(more)}</span>` : '';
+    return `${escOpsChatHtml(bc[0])}${hintHtml}`;
+  }
+  return '—';
+}
+
 let _reportPresetListCache = [];
 
 async function refreshReportPresetsDropdown() {
@@ -1615,25 +1661,25 @@ function renderDispatchCandidateChips() {
   if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') window.syncDispatchBroadcastOfferExpiresUi();
 }
 
-/** «Urgente» só em despacho com oferta (2+ técnicos / primeiro a aceitar). */
-function syncDispatchUrgenteOfferUi() {
-  const wrap = document.getElementById('d-urgente-offer-wrap');
-  const cb = document.getElementById('d-urgente');
-  const hint = document.getElementById('d-hint-urgente');
+/** «Oferta»: modo convite / broadcast; com um só prestador, marque para obrigar aceite explícito (e prazo opcional). */
+function syncDispatchOfertaUi() {
+  const wrap = document.getElementById('d-oferta-wrap');
+  const cb = document.getElementById('d-oferta');
+  const hint = document.getElementById('d-hint-oferta');
   if (!wrap || !cb) return;
   const n =
     typeof window.normalizeDispatchCandidateEmails === 'function'
       ? window.normalizeDispatchCandidateEmails().length
       : 0;
-  const ok = n >= 2;
+  const ok = n >= 1;
   if (!ok) {
     cb.checked = false;
     cb.disabled = true;
     if (hint) {
       hint.textContent =
         typeof opsT === 'function'
-          ? opsT('ops_dispatch_urgent_need_two')
-          : 'Disponível com dois ou mais técnicos (modo oferta / primeiro a aceitar).';
+          ? opsT('ops_dispatch_offer_need_assignee')
+          : 'Adicione pelo menos um técnico (e-mail na lista).';
     }
     wrap.style.opacity = '0.88';
     wrap.style.pointerEvents = 'none';
@@ -1642,37 +1688,48 @@ function syncDispatchUrgenteOfferUi() {
     wrap.style.opacity = '1';
     wrap.style.pointerEvents = '';
     if (hint) {
-      hint.textContent = typeof opsT === 'function' ? opsT('ops_dispatch_urgent_hint') : '';
+      hint.textContent = typeof opsT === 'function' ? opsT('ops_dispatch_offer_hint') : '';
     }
   }
 }
-window.syncDispatchUrgenteOfferUi = syncDispatchUrgenteOfferUi;
+window.syncDispatchOfertaUi = syncDispatchOfertaUi;
+window.syncDispatchUrgenteOfferUi = syncDispatchOfertaUi;
 
 function syncDispatchBroadcastOfferExpiresUi() {
   const wrap = document.getElementById('d-broadcast-claim-expires-wrap');
   const input = document.getElementById('d-broadcast-claim-expires');
   const hint = document.getElementById('d-broadcast-claim-expires-hint');
   if (!wrap || !input) {
-    syncDispatchUrgenteOfferUi();
+    syncDispatchOfertaUi();
     return;
   }
   const n =
     typeof window.normalizeDispatchCandidateEmails === 'function'
       ? window.normalizeDispatchCandidateEmails().length
       : 0;
-  const ok = n >= 2;
+  const ofertaCb = document.getElementById('d-oferta');
+  const ofertaOn = !!(ofertaCb && ofertaCb.checked);
+  const ok = n >= 2 || (n >= 1 && ofertaOn);
   input.disabled = !ok;
   if (hint) {
     if (typeof opsT === 'function') {
-      hint.textContent = ok ? opsT('ops_dispatch_broadcast_expires_hint') : opsT('ops_dispatch_broadcast_expires_need_two');
+      if (ok) {
+        hint.textContent = opsT('ops_dispatch_broadcast_expires_hint');
+      } else if (n >= 1) {
+        hint.textContent = opsT('ops_dispatch_broadcast_expires_need_oferta_single');
+      } else {
+        hint.textContent = opsT('ops_dispatch_broadcast_expires_need_assignee');
+      }
     } else {
       hint.textContent = ok
         ? 'Opcional. Contagem regressiva no app do prestador.'
-        : 'Disponível com dois ou mais técnicos (modo primeiro a aceitar).';
+        : n >= 1
+          ? 'Marque «Oferta» para definir prazo com um único técnico, ou adicione outro candidato.'
+          : 'Adicione pelo menos um técnico.';
     }
   }
   wrap.style.opacity = ok ? '1' : '0.88';
-  syncDispatchUrgenteOfferUi();
+  syncDispatchOfertaUi();
 }
 window.syncDispatchBroadcastOfferExpiresUi = syncDispatchBroadcastOfferExpiresUi;
 
@@ -2001,7 +2058,7 @@ window.openOpsChatModal = async function (taskId) {
     )}`;
   }
   if (subEl) {
-    const tech = task && task.ownerEmail ? String(task.ownerEmail) : '—';
+    const tech = task && opsEffectiveTitularEmail(task) ? String(opsEffectiveTitularEmail(task)) : '—';
     subEl.textContent = opsT('ops_chat_modal_sub', { tech });
   }
   const ta = document.getElementById('ops-chat-input');
@@ -2099,9 +2156,32 @@ window.openReopenRevisionModal = async function (taskId) {
     return;
   }
   document.getElementById('reopen-revision-ft-label').textContent = displayOsLabel(task);
-  document.getElementById('reopen-revision-current-email').textContent = task.ownerEmail || '—';
-  document.getElementById('reopen-revision-same').checked = true;
-  document.getElementById('reopen-revision-other').checked = false;
+  const titularEff = opsEffectiveTitularEmail(task);
+  const curEmailEl = document.getElementById('reopen-revision-current-email');
+  if (curEmailEl) {
+    const directOwner = String(task.ownerEmail || '').trim();
+    if (directOwner) {
+      curEmailEl.textContent = directOwner;
+    } else if (titularEff) {
+      curEmailEl.innerHTML = `${escOpsChatHtml(titularEff)}<br><span style="font-size:11px;color:var(--text3);font-weight:600">${escOpsChatHtml(
+        typeof opsT === 'function' ? opsT('ops_reopen_declined_offer_note') : 'Recusa na oferta (broadcast).',
+      )}</span>`;
+    } else {
+      curEmailEl.textContent = '—';
+    }
+  }
+  const hasTitular = !!String(titularEff || '').trim();
+  const sameEl = document.getElementById('reopen-revision-same');
+  const otherEl = document.getElementById('reopen-revision-other');
+  if (sameEl && otherEl) {
+    if (hasTitular) {
+      sameEl.checked = true;
+      otherEl.checked = false;
+    } else {
+      sameEl.checked = false;
+      otherEl.checked = true;
+    }
+  }
   window.toggleReopenRevisionTechUi();
 
   const sel = document.getElementById('reopen-revision-tech-select');
@@ -2116,7 +2196,7 @@ window.openReopenRevisionModal = async function (taskId) {
 
   try {
     await ensureOpsActiveUsersCache();
-    const curRaw = String(task.ownerEmail || '').toLowerCase().trim();
+    const curRaw = String(opsEffectiveTitularEmail(task) || '').toLowerCase().trim();
     const curCanon = resolveOpsOwnerEmailToCanonicalInCache(curRaw, _reopenUsersCacheRaw || _reopenUsersCache);
     const sorted = [..._reopenUsersCache].sort((a, b) =>
       String(a.name || '').localeCompare(String(b.name || ''), opsSortLocale(), { sensitivity: 'base' })
@@ -2170,8 +2250,21 @@ window.submitReopenRevision = async function () {
   const same = sameRadio ? sameRadio.checked : true;
   let body = {};
   if (same) {
-    const keep = String(task?.ownerEmail || '').trim();
-    if (keep) body = { targetOwnerEmail: keep };
+    const keep = String(opsEffectiveTitularEmail(task) || '').trim();
+    if (keep) {
+      body = { targetOwnerEmail: keep };
+    } else {
+      alert(
+        typeof opsT === 'function'
+          ? opsT('ops_reopen_broadcast_need_pick')
+          : 'Esta OS não tem titular no cartão. Marque «Atribuir a outro técnico» e escolha o prestador na lista.',
+      );
+      if (btn) {
+        btn.disabled = false;
+        if (btnLabel) btn.textContent = btnLabel;
+      }
+      return;
+    }
   } else {
     const v = String(document.getElementById('reopen-revision-tech-select').value || '').trim();
     if (!v) {
@@ -2306,8 +2399,6 @@ window.clearOpsUiFilters = function () {
 
 window.loadBoard = async function() {
   try {
-    const rpDlg = document.getElementById('revision-picker-modal');
-    if (rpDlg && rpDlg.open) return;
     const scope = getOpsScopeForApi();
     const limSel = document.getElementById('ops-limit-select');
     let limit = 200;
@@ -2357,7 +2448,18 @@ function populateEmailFilter(tasks) {
   const sel = document.getElementById('filter-email');
   if (!sel) return;
   const coll = opsSortLocale();
-  const emails = [...new Set(tasks.map(t => t.ownerEmail).filter(Boolean))].sort((a, b) =>
+  const emailSet = new Set();
+  for (const t of tasks) {
+    const eff = opsEffectiveTitularEmail(t);
+    if (eff) emailSet.add(eff);
+    if (Array.isArray(t.broadcastCandidates)) {
+      for (const e of t.broadcastCandidates) {
+        const s = String(e || '').trim();
+        if (s) emailSet.add(s);
+      }
+    }
+  }
+  const emails = [...emailSet].sort((a, b) =>
     String(a || '').localeCompare(String(b || ''), coll, { sensitivity: 'base' })
   );
   const current = sel.value;
@@ -2375,11 +2477,16 @@ window.applyFilters = function() {
     const voiceFilter = String(document.getElementById('filter-voice-sync')?.value || '').toLowerCase();
 
     const filtered = allTasks.filter(t => {
-      const matchEmail  = !emailFilter  || (t.ownerEmail || '').toLowerCase() === emailFilter;
+      const effMail = (opsEffectiveTitularEmail(t) || '').toLowerCase();
+      const bcList = Array.isArray(t.broadcastCandidates) ? t.broadcastCandidates : [];
+      const matchEmail =
+        !emailFilter ||
+        effMail === emailFilter ||
+        bcList.some((e) => String(e || '').trim().toLowerCase() === emailFilter);
       const matchSearch = !searchFilter ||
         (t.id   || '').toLowerCase().includes(searchFilter) ||
         (t.title|| '').toLowerCase().includes(searchFilter) ||
-        (t.ownerEmail||'').toLowerCase().includes(searchFilter) ||
+        effMail.includes(searchFilter) ||
         (t.refId||'').toLowerCase().includes(searchFilter) ||
         String(t.osNumber || '').toLowerCase().includes(searchFilter) ||
         String(t.routineTaskNumber || '').toLowerCase().includes(searchFilter) ||
@@ -2480,8 +2587,10 @@ function renderKanban(tasks) {
            (t.osNumber || '').toLowerCase().includes(st.text) || 
            String(t.routineTaskNumber || '').toLowerCase().includes(st.text) ||
            (t.title || '').toLowerCase().includes(st.text) || 
-           (t.ownerEmail || '').toLowerCase().includes(st.text) ||
-           (t.refId || '').toLowerCase().includes(st.text)
+           (opsEffectiveTitularEmail(t) || '').toLowerCase().includes(st.text) ||
+           (t.refId || '').toLowerCase().includes(st.text) ||
+           String(t.metadata?.rejectionReason || '').toLowerCase().includes(st.text) ||
+           String(t.metadata?.cancelReason || '').toLowerCase().includes(st.text)
         );
      }
      const sk = st.sortKey || 'created';
@@ -2610,20 +2719,6 @@ function buildCard(task, colClass) {
     ? 'background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);color:#fff;border:1px solid #9a3412;box-shadow:0 2px 8px rgba(234,88,12,0.35)'
     : 'background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);color:#fff;border:1px solid #1e40af;box-shadow:0 2px 8px rgba(37,99,235,0.35)';
   const ftRtBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:900;letter-spacing:0.02em;${ftRtPillStyle}"><ion-icon name="${isRt ? 'reader-outline' : 'pricetag-outline'}" style="font-size:16px;vertical-align:-2px;opacity:0.95"></ion-icon><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace">#${osLabelEsc}</span></span>`;
-  const isUrgentBroadcastOffer =
-    !isRt &&
-    task.urgente === true &&
-    String(task.assignmentMode || '').toUpperCase() === 'BROADCAST';
-  const urgentOfferRaw =
-    typeof opsT === 'function' ? opsT('ops_card_urgent_offer_badge') : 'Oferta urgente';
-  const urgentOfferHtml = String(urgentOfferRaw)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  const urgentOfferTitleAttr = urgentOfferHtml.replace(/"/g, '&quot;');
-  const urgentOfferBadgeHtml = isUrgentBroadcastOffer
-    ? `<span class="badge" title="${urgentOfferTitleAttr}" style="display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:7px 12px;border-radius:9px;font-size:10px;font-weight:900;letter-spacing:0.06em;text-transform:uppercase;background:#dc2626;color:#fff;border:1px solid #991b1b;box-shadow:0 2px 10px rgba(220,38,38,0.4)"><ion-icon name="flash-outline" style="font-size:16px;flex-shrink:0"></ion-icon><span style="line-height:1.2">${urgentOfferHtml}</span></span>`
-    : '';
   const formNameHtml = formDisplayName
     ? `<span style="display:inline-flex;align-self:flex-start;max-width:100%;margin-top:2px;padding:6px 11px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:0.02em;line-height:1.35;word-break:break-word;background:linear-gradient(135deg,#7c3aed 0%,#6d28d9 100%);color:#fff;border:1px solid #5b21b6;box-shadow:0 2px 8px rgba(124,58,237,0.28)">${String(formDisplayName)
         .replace(/&/g, '&amp;')
@@ -2665,7 +2760,20 @@ function buildCard(task, colClass) {
          subBadge = `<div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap"><span class="badge" style="background:#fef3c7;color:#b45309;font-size:9px"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> ${badgeLabel}</span>${etaBadge}</div>`;
      }
   } else if (task.status === 'REJECTED') {
-     subBadge = '<span class="badge" style="background:#fee2e2;color:#991b1b;font-size:9px;margin-bottom:6px"><ion-icon name="close-circle-outline" style="vertical-align:-2px"></ion-icon> Técnico Rejeitou</span>';
+     const rejTxt = String(task.metadata?.rejectionReason || '').trim();
+     const rejEsc = rejTxt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+     const rejBody = rejEsc
+       ? `<div style="font-size:10px;line-height:1.35;color:#7f1d1d;margin-top:6px;padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;word-break:break-word"><span style="font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:0.04em;color:#991b1b;display:block;margin-bottom:4px">Motivo da rejeição</span>${rejEsc}</div>`
+       : `<div style="font-size:10px;color:var(--text3);margin-top:6px;font-style:italic">Sem motivo registado.</div>`;
+     subBadge = `<div style="margin-bottom:6px"><span class="badge" style="background:#fee2e2;color:#991b1b;font-size:9px"><ion-icon name="close-circle-outline" style="vertical-align:-2px"></ion-icon> Técnico rejeitou</span>${rejBody}</div>`;
+  } else if (task.status === 'CANCELLED') {
+     const cx = String(task.metadata?.cancelReason || '').trim();
+     if (cx) {
+       const cxEsc = cx.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+       subBadge = `<div style="margin-bottom:6px"><span class="badge" style="background:#e2e8f0;color:#475569;font-size:9px"><ion-icon name="ban-outline" style="vertical-align:-2px"></ion-icon> Cancelada</span><div style="font-size:10px;line-height:1.35;color:#334155;margin-top:6px;padding:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;word-break:break-word"><span style="font-size:8px;font-weight:900;text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:4px">Motivo do cancelamento</span>${cxEsc}</div></div>`;
+     } else {
+       subBadge = '<span class="badge" style="background:#e2e8f0;color:#475569;font-size:9px;margin-bottom:6px"><ion-icon name="ban-outline" style="vertical-align:-2px"></ion-icon> Cancelada</span>';
+     }
   }
   const voicePendingBadge = taskHasPendingVoiceTranscription(task)
     ? '<span class="badge" style="background:#fffbeb;color:#92400e;font-size:9px;margin-bottom:6px;border:1px solid #fde68a"><ion-icon name="mic-outline" style="vertical-align:-2px"></ion-icon> Voz pendente</span>'
@@ -2704,10 +2812,9 @@ function buildCard(task, colClass) {
     <div class="task-card ${colClass}" onclick="openDetail('${task.id}')" id="card-${task.id}">
       <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
         ${ftRtBadgeHtml}
-        ${urgentOfferBadgeHtml}
         <div class="task-card-email" style="margin-bottom:0">
           <ion-icon name="person-outline"></ion-icon>
-          ${task.ownerEmail || '—'}
+          ${opsCardOwnerDisplayHtml(task)}
         </div>
       ${formNameHtml}
       ${locationBlock}
@@ -4907,8 +5014,15 @@ function buildRevisionHistoryHtml(t) {
 
 function buildInfoTab(t) {
   const statusBadgeMap = {
-    PENDING: 'badge-amber', IN_PROGRESS: 'badge-blue',
-    COMPLETED: 'badge-green', SYNCED: 'badge-green',
+    PENDING: 'badge-amber',
+    RECEIVED: 'badge-blue',
+    ACCEPTED: 'badge-blue',
+    IN_PROGRESS: 'badge-blue',
+    PAUSED: 'badge-red',
+    COMPLETED: 'badge-green',
+    SYNCED: 'badge-green',
+    CANCELLED: 'badge-red',
+    REJECTED: 'badge-red',
   };
   const statusBadge = `<span class="badge ${statusBadgeMap[t.status]||'badge-red'}">${t.status||'DESCONHECIDO'}</span>`;
   const desc = t.description || t.metadata?.description || '';
@@ -4966,6 +5080,27 @@ function buildInfoTab(t) {
         <div class="report-field-label">Status</div>
         <div class="report-field-value" style="background:transparent;padding:0">${statusBadge}</div>
       </div>
+      ${(() => {
+        const stI = String(t.status || '').toUpperCase();
+        const rj = String(t.metadata?.rejectionReason || '').trim();
+        const cj = String(t.metadata?.cancelReason || '').trim();
+        if (stI === 'REJECTED') {
+          return `<div class="report-field" style="grid-column:1/-1;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;margin-top:2px">
+            <div class="report-field-label" style="color:#991b1b">Motivo da rejeição (técnico)</div>
+            <div class="report-field-value" style="line-height:1.5;padding-top:4px">
+              ${t.metadata?.rejectedAt ? `<div style="font-size:11px;color:var(--text2);margin-bottom:8px"><strong>Registado em:</strong> ${new Date(t.metadata.rejectedAt).toLocaleString('pt-BR')}</div>` : ''}
+              <div style="font-size:13px;font-weight:600;color:var(--text)">${rj ? escI(rj) : '<span style="color:var(--text3)">—</span>'}</div>
+            </div>
+          </div>`;
+        }
+        if (stI === 'CANCELLED' && cj) {
+          return `<div class="report-field" style="grid-column:1/-1;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:2px">
+            <div class="report-field-label">Motivo do cancelamento</div>
+            <div class="report-field-value" style="font-size:13px;line-height:1.5;padding-top:4px">${escI(cj)}</div>
+          </div>`;
+        }
+        return '';
+      })()}
       <div class="report-field" style="grid-column:1/-1">
         <div class="report-field-label">N.º FT</div>
         <div class="report-field-value mono">${ftDisplay}</div>
@@ -4976,7 +5111,7 @@ function buildInfoTab(t) {
       </div>
       <div class="report-field">
         <div class="report-field-label">Técnico Designado</div>
-        <div class="report-field-value">${t.ownerEmail || '—'}</div>
+        <div class="report-field-value">${escI(opsEffectiveTitularEmail(t) || '—')}</div>
       </div>
       <div class="report-field">
         <div class="report-field-label">Formulário (refId)</div>
@@ -5102,7 +5237,8 @@ function buildReportTab(t) {
       (endGPS && Number.isFinite(Number(endGPS.lat))) ||
       (startGPS && Number.isFinite(Number(startGPS.lat))));
 
-  if (!hasResp) {
+  const reportStatusEarly = String(t.status || '').toUpperCase();
+  if (!hasResp && reportStatusEarly !== 'REJECTED' && reportStatusEarly !== 'CANCELLED') {
     return `<div style="text-align:center;padding:40px 20px;color:var(--text3)">
       <div style="font-size:32px;margin-bottom:8px"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon></div>
       <div style="font-weight:700;font-size:13px;margin-bottom:4px">Sem respostas registradas</div>
@@ -5913,7 +6049,7 @@ function buildReportTab(t) {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div>
         <div style="font-size:14px;font-weight:800;color:var(--text)">${title}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${t.ownerEmail}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${escHtml(opsEffectiveTitularEmail(t) || '—')}</div>
       </div>
     </div>
     
@@ -5941,7 +6077,8 @@ function buildReportTab(t) {
          <div style="grid-column:1/-1">${fmtTransitPctVsPlannedLine(tmRep.plannedDurationSec, tmRep.actualDurationSec, 'Tempo', false)}${fmtTransitPctVsPlannedLine(tmRep.plannedDistanceM, tmRep.actualDistanceM, 'Distância', false)}</div>
          <div style="font-size:10px;grid-column:1/-1;line-height:1.45"><strong style="color:var(--text2)">Tempo por etapa:</strong> ${secLineRep}</div>
          <div style="font-size:10px;grid-column:1/-1">${buildPauseProductivityBlockHtml(t)}</div>
-         ${t.status === 'REJECTED' ? `<div style="font-size:10px; grid-column:1/-1; background:#fecaca; color:#7f1d1d; padding:8px; border-radius:6px; margin-top:4px;"><strong>Rejeitada pelo Técnico em:</strong> ${fDate(t.metadata?.rejectedAt)}<br/><span style="display:block; margin-top:4px;"><strong>Motivo:</strong> ${t.metadata?.rejectionReason}</span></div>` : ''}
+         ${t.status === 'REJECTED' ? `<div style="font-size:10px; grid-column:1/-1; background:#fecaca; color:#7f1d1d; padding:8px; border-radius:6px; margin-top:4px;"><strong>Rejeitada pelo técnico em:</strong> ${fDate(t.metadata?.rejectedAt)}<br/><span style="display:block; margin-top:6px;"><strong>Motivo da rejeição:</strong> ${escHtml(String(t.metadata?.rejectionReason || '').trim() || '—')}</span></div>` : ''}
+         ${t.status === 'CANCELLED' && String(t.metadata?.cancelReason || '').trim() ? `<div style="font-size:10px; grid-column:1/-1; background:#f1f5f9; color:#334155; padding:8px; border-radius:6px; margin-top:4px;border:1px solid #e2e8f0"><strong>Cancelada</strong>${t.metadata?.cancelledAt ? ` · <span style="color:var(--text2)">${fDate(t.metadata.cancelledAt)}</span>` : ''}<br/><span style="display:block; margin-top:6px;"><strong>Motivo do cancelamento:</strong> ${escHtml(String(t.metadata.cancelReason).trim())}</span></div>` : ''}
       </div>
     </div>
     
@@ -7837,6 +7974,26 @@ window.printReport = async function() {
     </div>`
     : '';
 
+  const pdfStatusUp = String(t.status || '').toUpperCase();
+  const pdfRejR = String(t.metadata?.rejectionReason || '').trim();
+  const pdfCanR = String(t.metadata?.cancelReason || '').trim();
+  const pdfTimelineRejectCancel =
+    pdfStatusUp === 'REJECTED'
+      ? `<div class="pdf-timeline-node">
+             <div class="pdf-timeline-icon" style="background:#dc2626!important;color:#fff"><ion-icon name="close-circle-outline"></ion-icon></div>
+             <div class="pdf-timeline-label">Rejeição pelo técnico</div>
+             <div class="pdf-timeline-date">${fd(t.metadata?.rejectedAt)}</div>
+             <div style="font-size:8px;color:#7f1d1d;margin-top:5px;line-height:1.45;font-weight:600;max-width:240px;word-break:break-word">${escPdf(pdfRejR || '—')}</div>
+          </div>`
+      : pdfStatusUp === 'CANCELLED' && pdfCanR
+        ? `<div class="pdf-timeline-node">
+             <div class="pdf-timeline-icon" style="background:#64748b!important;color:#fff"><ion-icon name="ban-outline"></ion-icon></div>
+             <div class="pdf-timeline-label">Cancelamento</div>
+             <div class="pdf-timeline-date">${fd(t.metadata?.cancelledAt || t.createdAt)}</div>
+             <div style="font-size:8px;color:#334155;margin-top:5px;line-height:1.45;font-weight:600;max-width:240px;word-break:break-word">${escPdf(pdfCanR)}</div>
+          </div>`
+        : '';
+
   const pieceTimeline = mod.timeline
     ? `<div class="pdf-box" style="margin-top:6px;margin-bottom:6px;padding-bottom:8px;border-color:${th.colorBorder};background:${th.colorSurface}">
        <div class="pdf-box-title" style="margin-bottom:8px;color:${th.colorText}">LINHA DO TEMPO OPERACIONAL</div>
@@ -7867,6 +8024,7 @@ window.printReport = async function() {
              <div class="pdf-timeline-label">Conclusão</div>
              <div class="pdf-timeline-date">${fd(t.completedAt)}</div>
           </div>
+          ${pdfTimelineRejectCancel}
        </div>
     </div>`
     : '';
@@ -8260,8 +8418,8 @@ window.openDispatchModal = async function() {
   if (dClient) dClient.value = '';
   document.getElementById('d-title').value = '';
   document.getElementById('d-desc').value  = '';
-  const dUrg = document.getElementById('d-urgente');
-  if (dUrg) dUrg.checked = false;
+  const dOferta = document.getElementById('d-oferta');
+  if (dOferta) dOferta.checked = false;
   const dSched = document.getElementById('d-scheduled-start');
   const dDurOv = document.getElementById('d-expected-duration-override');
   if (dDurOv) dDurOv.value = '';
@@ -9100,14 +9258,16 @@ window.confirmDispatch = async function() {
     }
   }
 
-    const urgenteEl = document.getElementById('d-urgente');
-    const urgente = candidateEmails.length >= 2 && !!(urgenteEl && urgenteEl.checked);
+    const ofertaEl = document.getElementById('d-oferta');
+    const ofertaOn = !!(ofertaEl && ofertaEl.checked);
+    const useCandidateList = candidateEmails.length >= 2 || (candidateEmails.length >= 1 && ofertaOn);
+    const urgente = useCandidateList && ofertaOn;
 
     const dispatchBody = {
       refId,
       title: title || 'Nova OS Designada',
       description: desc,
-      ...(candidateEmails.length >= 2 ? { urgente } : {}),
+      ...(useCandidateList && ofertaOn ? { urgente, oferta: true } : {}),
       metadata: {
         icon: 'build-outline',
         ...(clientEmail ? { clientEmail } : {}),
@@ -9117,7 +9277,7 @@ window.confirmDispatch = async function() {
       scheduledStartAt: schedDt.toISOString(),
       ...locationPayload
     };
-    if (candidateEmails.length >= 2) {
+    if (useCandidateList) {
       dispatchBody.candidateEmails = candidateEmails;
       const expEl = document.getElementById('d-broadcast-claim-expires');
       const expRaw = expEl && String(expEl.value || '').trim();

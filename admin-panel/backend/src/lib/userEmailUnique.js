@@ -86,9 +86,44 @@ async function resolveFieldTaskOwnerEmailCandidatesForAppUser(prisma, userId) {
   return [...out];
 }
 
+/**
+ * Utilizadores ativos para envio de push quando `ChecklistExecution.ownerEmail` (ou equivalente)
+ * é o login canónico (`AppAccount.emailNorm`) mas a linha `User.email` é sintética (`+brspark.ws.…`).
+ *
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} db
+ * @param {string} emailRaw
+ * @returns {Promise<Array<{ id: string, tenantId: string|null }>>}
+ */
+async function resolveActiveUsersForDispatchOwnerEmail(db, emailRaw) {
+  const em = String(emailRaw || '').trim();
+  if (!em) return [];
+
+  const byRowEmail = await db.user.findMany({
+    where: { isActive: true, email: { equals: em, mode: 'insensitive' } },
+    select: { id: true, tenantId: true },
+  });
+  if (byRowEmail.length) return byRowEmail;
+
+  const norm = em.trim().toLowerCase();
+  if (!norm) return [];
+
+  const acc = await db.appAccount.findUnique({
+    where: { emailNorm: norm },
+    select: { id: true },
+  });
+  if (!acc?.id) return [];
+
+  const viaAccount = await db.user.findMany({
+    where: { appAccountId: String(acc.id), isActive: true },
+    select: { id: true, tenantId: true },
+  });
+  return viaAccount;
+}
+
 module.exports = {
   buildSyntheticUserEmail,
   allocateUniqueUserRowEmail,
   resolveCanonicalEmailNormForUser,
   resolveFieldTaskOwnerEmailCandidatesForAppUser,
+  resolveActiveUsersForDispatchOwnerEmail,
 };

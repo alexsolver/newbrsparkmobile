@@ -1,6 +1,6 @@
 'use strict';
 
-const { sendFieldTaskActivityPushToAssignee } = require('./fieldTaskAssigneePush');
+const { sendFieldTaskActivityPushToAssignees } = require('./fieldTaskAssigneePush');
 const { resolveTenantAppDisplayName } = require('./mobileTenantBranding');
 
 /**
@@ -21,28 +21,22 @@ async function notifyBroadcastLosers(prisma, opts) {
 
   const appDisplayName = await resolveTenantAppDisplayName(prisma, templateTenantId, 'BrSpark');
 
-  let total = 0;
-  for (const em of losers) {
-    const raw = String(em || '').trim();
-    if (!raw) continue;
-    const r = await sendFieldTaskActivityPushToAssignee(prisma, {
-      ownerEmail: raw,
-      templateTenantId,
-      assigneeTenantId: null,
-      executionId,
-      pushTitle: 'Essa OS não está mais disponível',
-      pushBody: `${osLabel}: a ordem já foi atribuída a outro prestador.`.slice(0, 180),
-      pushSubtitle: 'A OS foi removida da sua lista pendente.',
-      logLabel: 'BROADCAST_LOST',
-      extraData: {
-        type: 'os_broadcast_taken',
-        taskId: executionId,
-        appDisplayName,
-      },
-    });
-    total += Number(r?.sent) || 0;
-  }
-  return { sent: total };
+  const r = await sendFieldTaskActivityPushToAssignees(prisma, {
+    ownerEmails: losers,
+    templateTenantId,
+    assigneeTenantId: null,
+    executionId,
+    pushTitle: 'Essa OS não está mais disponível',
+    pushBody: `${osLabel}: a ordem já foi atribuída a outro prestador.`.slice(0, 180),
+    pushSubtitle: 'A OS foi removida da sua lista pendente.',
+    logLabel: 'BROADCAST_LOST',
+    extraData: {
+      type: 'os_broadcast_taken',
+      taskId: executionId,
+      appDisplayName,
+    },
+  });
+  return { sent: Number(r?.sent) || 0 };
 }
 
 module.exports = {

@@ -139,17 +139,16 @@ router.get('/templates', async (req, res) => {
 });
 
 /**
- * GET /api/admin/routine-tasks/technicians — contas da tenant para o painel (rótulo: prestadores).
- * A associação em massa só grava contas ativas que não sejam clientes (papel ≠ USER).
+ * GET /api/admin/routine-tasks/technicians — contas PROVIDER da tenant (mesma regra que OS/RT no app).
  */
 router.get('/technicians', async (req, res) => {
   try {
     const tenantId = requireTenant(req, res);
     if (!tenantId) return;
     const rows = await prisma.user.findMany({
-      where: { tenantId },
+      where: { tenantId, role: 'PROVIDER' },
       select: { id: true, name: true, email: true, isActive: true, role: true },
-      orderBy: [{ isActive: 'desc' }, { role: 'asc' }, { name: 'asc' }],
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     });
     res.json({ technicians: rows });
   } catch (err) {
@@ -231,7 +230,7 @@ router.post('/assignments/bulk', async (req, res) => {
         if (!FIELD_TASK_ASSIGNEE_ROLES.includes(roleNorm)) {
           skipped.push({
             userId,
-            reason: `Só contas internas recebem RT (prestador, gestor, admin da organização ou SaaS). Papel atual: ${roleNorm || '—'}.`,
+            reason: `Só contas com papel PROVIDER recebem RT e OS no app. Papel atual: ${roleNorm || '—'}.`,
           });
           continue;
         }

@@ -299,6 +299,10 @@ export function BroadcastOfferRootBridge() {
 
           setBroadcastOfferTasks((prev) => prev.filter((x) => String(x.id) !== idStr));
           try {
+            const declinedAt = new Date().toISOString();
+            const declEmail = String(user?.email || '')
+              .trim()
+              .toLowerCase();
             await patchCloudTaskById(idStr, (row) => ({
               ...row,
               status: 'REJECTED',
@@ -308,7 +312,10 @@ export function BroadcastOfferRootBridge() {
                   ? row.metadata
                   : {}),
                 rejectionReason: reason,
-                rejectedAt: new Date().toISOString(),
+                rejectedAt: declinedAt,
+                ...(declEmail
+                  ? { broadcastDeclinedByEmail: declEmail, broadcastDeclinedAt: declinedAt }
+                  : {}),
               },
             }));
           } catch {

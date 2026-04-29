@@ -29,6 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useAuth } from '../../src/hooks/useAuth';
 import { AuthService, isTechnicianProfileActive, type User } from '../../src/services/auth';
+import { ProviderAffiliationsApi } from '../../src/services/providerAffiliations';
 import {
   TECH_SCHEDULE_DAY_ORDER,
   type TechScheduleDayKey,
@@ -112,6 +113,8 @@ export default function ScheduleRegionsScreen() {
   const { user, refreshUser } = useAuth();
 
   const [loading, setLoading] = useState(true);
+  /** Vínculo DEDICATED+ACTIVE: agenda e regiões vêm da empresa — só leitura na app. */
+  const [readOnlyDedicated, setReadOnlyDedicated] = useState(false);
   const [saving, setSaving] = useState(false);
   const [schedule, setSchedule] = useState(() => defaultSchedule());
   const [serviceLocIds, setServiceLocIds] = useState<string[]>([]);
@@ -305,6 +308,12 @@ export default function ScheduleRegionsScreen() {
             ]);
             return;
           }
+          try {
+            const aff = await ProviderAffiliationsApi.getMeStatus();
+            setReadOnlyDedicated(!!aff.skipSelfServiceOnboarding);
+          } catch {
+            setReadOnlyDedicated(false);
+          }
           hydrateFromUser(fresh);
           await loadBases();
         } finally {
@@ -314,7 +323,10 @@ export default function ScheduleRegionsScreen() {
     }, [loadBases, hydrateFromUser, refreshUser, t, router])
   );
 
+  const canEdit = !readOnlyDedicated;
+
   const openRegionsMap = async () => {
+    if (!canEdit) return;
     const addr = user?.addressJson;
     const line1 = String(addr?.line1 || '').trim();
     const district = String(addr?.district || '').trim();
@@ -397,6 +409,7 @@ export default function ScheduleRegionsScreen() {
 
   const openSlotLocsModal = useCallback(
     (day: DayKey, slotIndex: number) => {
+      if (readOnlyDedicated) return;
       const slot = schedule[day]?.[slotIndex];
       if (!slot) return;
       setSlotLocsDraft([...(slot.locationIds || [])]);
@@ -443,7 +456,7 @@ export default function ScheduleRegionsScreen() {
         setSlotMapRegion({ latitude: -14.235, longitude: -51.9253, latitudeDelta: 8, longitudeDelta: 8 });
       })();
     },
-    [schedule, bases]
+    [schedule, bases, readOnlyDedicated]
   );
 
   const closeSlotLocsModal = useCallback(() => {
@@ -583,6 +596,7 @@ export default function ScheduleRegionsScreen() {
   }, [bases, slotLocsFilter]);
 
   const onSave = async () => {
+    if (!canEdit) return;
     if (!user || !isTechnicianProfileActive(user)) return;
     const inv = findFirstInvalidEnabledTime(schedule);
     if (inv) {
@@ -869,6 +883,23 @@ export default function ScheduleRegionsScreen() {
       </View>
       <Text style={styles.headTitle}>{t('profile.scheduleRegions.title')}</Text>
       <Text style={styles.headSub}>{t('profile.scheduleRegions.subtitle')}</Text>
+      {readOnlyDedicated ? (
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginTop: 10,
+            padding: 12,
+            borderRadius: 12,
+            backgroundColor: `${C.accent}14`,
+            borderWidth: 1,
+            borderColor: `${C.accent}55`,
+          }}
+        >
+          <Text style={{ fontSize: 13, color: C.slate, lineHeight: 20, fontWeight: '600' }}>
+            {t('profile.scheduleRegions.readOnlyDedicatedBanner')}
+          </Text>
+        </View>
+      ) : null}
 
       <ScrollView
         contentContainerStyle={{ paddingBottom: 24 }}
@@ -884,9 +915,13 @@ export default function ScheduleRegionsScreen() {
               <View key={key} style={styles.dayCard}>
                 <View style={styles.dayHeaderRow}>
                   <Text style={styles.dayName}>{dayLabelFixed(key)}</Text>
-                  <TouchableOpacity style={styles.addSlotBtn} onPress={() => addSlotForDay(key)} activeOpacity={0.85}>
-                    <Text style={styles.addSlotBtnText}>{t('profile.scheduleRegions.addShiftOnDay')}</Text>
-                  </TouchableOpacity>
+                  {canEdit ? (
+                    <TouchableOpacity style={styles.addSlotBtn} onPress={() => addSlotForDay(key)} activeOpacity={0.85}>
+                      <Text style={styles.addSlotBtnText}>{t('profile.scheduleRegions.addShiftOnDay')}</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ minWidth: 8 }} />
+                  )}
                 </View>
                 {slots.map((slot, idx) => {
                   const startTrim = String(slot.start || '').trim();
@@ -904,6 +939,7 @@ export default function ScheduleRegionsScreen() {
                           <Text style={{ fontSize: 13, color: C.textSecondary }}>{t('profile.scheduleRegions.activeLabel')}</Text>
                           <Switch
                             value={slot.enabled}
+                            disabled={!canEdit}
                             onValueChange={(v) => {
                               setSchedule((prev) => {
                                 const n = { ...prev };
@@ -917,7 +953,7 @@ export default function ScheduleRegionsScreen() {
                             thumbColor={slot.enabled ? C.accent : '#f4f4f5'}
                           />
                         </View>
-                        {slots.length > 1 ? (
+                        {canEdit && slots.length > 1 ? (
                           <TouchableOpacity
                             style={styles.removeSlotBtn}
                             onPress={() => removeSlotForDay(key, idx, slot.id)}
@@ -937,7 +973,7 @@ export default function ScheduleRegionsScreen() {
                           <TextInput
                             style={[styles.input, startErr && { borderColor: '#DC2626', borderWidth: 2 }]}
                             value={slot.start}
-                            editable={slot.enabled}
+                            editable={canEdit && slot.enabled}
                             onChangeText={(txt) => {
                               setSchedule((prev) => {
                                 const n = { ...prev };
@@ -963,7 +999,7 @@ export default function ScheduleRegionsScreen() {
                           <TextInput
                             style={[styles.input, endErr && { borderColor: '#DC2626', borderWidth: 2 }]}
                             value={slot.end}
-                            editable={slot.enabled}
+                            editable={canEdit && slot.enabled}
                             onChangeText={(txt) => {
                               setSchedule((prev) => {
                                 const n = { ...prev };
@@ -1001,7 +1037,12 @@ export default function ScheduleRegionsScreen() {
                           ) : (
                             (slot.locationIds || []).map((locId) => {
                               const b = bases.find((x) => x.id === locId);
-                              return (
+                              const chipInner = (
+                                <Text style={styles.locChipText} numberOfLines={1}>
+                                  {(b?.name || locId) + (canEdit ? ' ×' : '')}
+                                </Text>
+                              );
+                              return canEdit ? (
                                 <TouchableOpacity
                                   key={locId}
                                   onPress={() => {
@@ -1021,10 +1062,15 @@ export default function ScheduleRegionsScreen() {
                                   style={[styles.locChip, { borderColor: C.accent, backgroundColor: `${C.accent}18` }]}
                                   activeOpacity={0.75}
                                 >
-                                  <Text style={styles.locChipText} numberOfLines={1}>
-                                    {(b?.name || locId) + ' ×'}
-                                  </Text>
+                                  {chipInner}
                                 </TouchableOpacity>
+                              ) : (
+                                <View
+                                  key={locId}
+                                  style={[styles.locChip, { borderColor: C.accent, backgroundColor: `${C.accent}18` }]}
+                                >
+                                  {chipInner}
+                                </View>
                               );
                             })
                           )}
@@ -1033,6 +1079,7 @@ export default function ScheduleRegionsScreen() {
                           style={styles.slotMapOpenBtn}
                           onPress={() => openSlotLocsModal(key, idx)}
                           activeOpacity={0.85}
+                          disabled={!canEdit}
                         >
                           <Ionicons name="map-outline" size={18} color={C.accent} />
                           <Text style={{ color: C.accent, fontWeight: '800', fontSize: 13 }}>
@@ -1068,11 +1115,13 @@ export default function ScheduleRegionsScreen() {
                   <TouchableOpacity
                     key={b.id}
                     onPress={() => toggleBase(b.id)}
+                    disabled={!canEdit}
                     style={[
                       styles.baseChip,
                       {
                         borderColor: on ? C.accent : C.border,
                         backgroundColor: on ? `${C.accent}20` : C.cardWhite,
+                        opacity: canEdit ? 1 : 0.85,
                       },
                     ]}
                     activeOpacity={0.7}
@@ -1102,12 +1151,13 @@ export default function ScheduleRegionsScreen() {
             onChangeText={(v) => setServiceCoverageRadiusKm(v.replace(/[^0-9.,]/g, '').replace(',', '.'))}
             placeholder="50"
             keyboardType="decimal-pad"
+            editable={canEdit}
           />
           <Text style={{ fontSize: 11, color: C.textLight, marginBottom: 10, lineHeight: 16 }}>{t('profile.scheduleRegions.radiusHint')}</Text>
           <TouchableOpacity
-            style={[styles.mapBtn, { opacity: mapOpenLoading ? 0.65 : 1 }]}
+            style={[styles.mapBtn, { opacity: mapOpenLoading || !canEdit ? 0.65 : 1 }]}
             onPress={() => void openRegionsMap()}
-            disabled={mapOpenLoading}
+            disabled={mapOpenLoading || !canEdit}
           >
             {mapOpenLoading ? <ActivityIndicator color={C.accent} size="small" /> : <Ionicons name="map-outline" size={22} color={C.accent} />}
             <Text style={{ color: C.accent, fontWeight: '800', fontSize: 15 }}>{t('profile.scheduleRegions.openMap')}</Text>
@@ -1132,17 +1182,38 @@ export default function ScheduleRegionsScreen() {
             onChangeText={setServiceCoverageNotes}
             placeholder={t('profile.scheduleRegions.notesPlaceholder')}
             multiline
+            editable={canEdit}
           />
         </View>
       </ScrollView>
 
-      <TouchableOpacity
-        style={[styles.saveBtn, { marginBottom: 16 + insets.bottom }]}
-        onPress={() => void onSave()}
-        disabled={saving}
-      >
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{t('profile.scheduleRegions.save')}</Text>}
-      </TouchableOpacity>
+      {canEdit ? (
+        <TouchableOpacity
+          style={[styles.saveBtn, { marginBottom: 16 + insets.bottom }]}
+          onPress={() => void onSave()}
+          disabled={saving}
+        >
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>{t('profile.scheduleRegions.save')}</Text>}
+        </TouchableOpacity>
+      ) : (
+        <View
+          style={{
+            marginHorizontal: 16,
+            marginTop: 12,
+            marginBottom: 16 + insets.bottom,
+            paddingVertical: 12,
+            paddingHorizontal: 14,
+            borderRadius: 12,
+            backgroundColor: C.surfaceLow,
+            borderWidth: 1,
+            borderColor: C.border,
+          }}
+        >
+          <Text style={{ fontSize: 13, color: C.textSecondary, lineHeight: 20, textAlign: 'center', fontWeight: '600' }}>
+            {t('profile.scheduleRegions.readOnlyFooter')}
+          </Text>
+        </View>
+      )}
 
       <Modal visible={regionMapVisible} animationType="slide" onRequestClose={() => setRegionMapVisible(false)}>
         <View style={[styles.mapModalRoot, { paddingTop: Platform.OS === 'ios' ? 52 : 36 }]}>
@@ -1163,12 +1234,16 @@ export default function ScheduleRegionsScreen() {
               style={{ flex: 1 }}
               initialRegion={mapInitialRegion}
               showsUserLocation={false}
-              onPress={(e) => {
-                setCoverageCenter({
-                  latitude: e.nativeEvent.coordinate.latitude,
-                  longitude: e.nativeEvent.coordinate.longitude,
-                });
-              }}
+              onPress={
+                canEdit
+                  ? (e) => {
+                      setCoverageCenter({
+                        latitude: e.nativeEvent.coordinate.latitude,
+                        longitude: e.nativeEvent.coordinate.longitude,
+                      });
+                    }
+                  : undefined
+              }
             >
               {coverageCenter ? (
                 <>

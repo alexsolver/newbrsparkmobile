@@ -34,7 +34,8 @@ async function ensureAndroidPushChannels(): Promise<void> {
   });
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_TECH, {
     name: 'BrSpark, Atividades (prestador)',
-    importance: Notifications.AndroidImportance.HIGH,
+    /** MAX: cabeçalho / som com app em segundo plano (oferta e despacho); HIGH podia cair em fila silenciosa. */
+    importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#2563EB',
     sound: 'default',
@@ -485,7 +486,9 @@ export const NotificationService = {
     }
 
     if (finalStatus !== 'granted') {
-      console.log('Permissão de push negada.');
+      console.warn(
+        '[BrSpark] Permissão de push negada. iOS: Ajustes → BrSpark → Notificações → Permitir alertas.',
+      );
       return null;
     }
 

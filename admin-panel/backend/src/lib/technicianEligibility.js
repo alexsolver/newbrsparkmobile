@@ -1,54 +1,91 @@
 'use strict';
 
 const { resolveAppEffectiveTenantId } = require('./appLoginEffectiveTenant');
-const { resolveFieldTaskOwnerEmailCandidatesForAppUser } = require('./userEmailUnique');
+const {
+  resolveCanonicalEmailNormForUser,
+  resolveFieldTaskOwnerEmailCandidatesForAppUser,
+} = require('./userEmailUnique');
+const { normalizeEmail } = require('./fieldTaskExecutionAccess');
 
-/** Papéis que podem receber OS/FT e RT (exclui apenas cliente final). Alinhado a `UserRole` no Prisma. */
-const FIELD_TASK_ASSIGNEE_ROLES = ['PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN'];
+/** Único papel que pode receber e executar OS/FT e RT no app (alinhado a `UserRole` no Prisma). */
+const FIELD_TASK_ASSIGNEE_ROLES = ['PROVIDER'];
 
 function normalizeRole(role) {
   return String(role || '').trim().toUpperCase();
 }
 
-/** Técnico de empresa: `USER` com `TechnicianProfile` ACTIVE recebe OS como prestador de campo. */
-function isActiveTechnicianUserRole(role, technicianStatus) {
-  return normalizeRole(role) === 'USER' && normalizeRole(technicianStatus) === 'ACTIVE';
-}
-
 function userRowEligibleForFieldTasks(row) {
   if (!row) return false;
-  const r = normalizeRole(row.role);
-  if (FIELD_TASK_ASSIGNEE_ROLES.includes(r)) return true;
-  return isActiveTechnicianUserRole(r, row.technicianProfile?.status);
+  return normalizeRole(row.role) === 'PROVIDER';
 }
 
 /**
- * Prestador «clássico» = usuário ativo com TechnicianProfile em estado ACTIVE.
- * Mantido para fluxos que ainda exigem perfil técnico (ex.: identidade / algumas políticas).
+ * Utilizador PROVIDER ativo para o e-mail (mesma regra que `resolveFieldTaskAssigneeEmail`).
  * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} db
  */
 async function isActiveTechnicianForEmail(db, email, tenantId) {
-  const e = String(email || '').trim();
-  if (!e) return false;
-  const where = {
-    isActive: true,
-    email: { equals: e, mode: 'insensitive' },
-    technicianProfile: { status: 'ACTIVE' },
-  };
-  if (tenantId) where.tenantId = tenantId;
-  const row = await db.user.findFirst({ where, select: { id: true } });
-  return !!row;
+  return !!(await resolveFieldTaskAssigneeEmail(db, email, tenantId || undefined));
 }
 
 const baseEligibleWhere = (emailNorm) => ({
   isActive: true,
   email: { equals: emailNorm, mode: 'insensitive' },
-  /** Apenas `USER` (cliente) fica de fora de OS/FT e RT. */
-  role: { in: FIELD_TASK_ASSIGNEE_ROLES },
+  role: 'PROVIDER',
 });
 
 /**
- * Resolve o e-mail canônico do usuário que pode receber FT/OS e RT (ativo, não cliente).
+ * E-mail a gravar em `ownerEmail` / despacho: preferir `AppAccount.emailNorm` (login) quando existir.
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} db
+ */
+async function resolvedOwnerEmailForUserId(db, userId) {
+  const uid = String(userId || '').trim();
+  if (!uid) return null;
+  const u = await db.user.findFirst({
+    where: { id: uid },
+    select: { email: true, appAccountId: true, appAccount: { select: { emailNorm: true } } },
+  });
+  if (!u) return null;
+  const canon = await resolveCanonicalEmailNormForUser(db, u);
+  if (canon) return canon;
+  const raw = String(u.email || '').trim();
+  return raw || null;
+}
+
+/**
+ * Prestador PROVIDER ativo pelo login (`AppAccount.emailNorm` ou `User.email`), **sem** exigir
+ * `ProviderTenantAffiliation` com a empresa do formulário. Quem tem vínculo dedicado com janelas
+ * exclusivas é filtrado no despacho (`filterBroadcastCandidatesExcludingDedicatedAt`), não aqui.
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} db
+ */
+async function resolveActiveProviderEmailGlobally(db, rawEmail) {
+  const e = String(rawEmail || '').trim();
+  if (!e) return null;
+  const em = normalizeEmail(e);
+  if (!em) return null;
+
+  const acc = await db.appAccount.findUnique({
+    where: { emailNorm: em },
+    select: { id: true },
+  });
+
+  const userWhere = { isActive: true, role: 'PROVIDER' };
+  if (acc?.id) {
+    userWhere.appAccountId = String(acc.id);
+  } else {
+    userWhere.email = { equals: e, mode: 'insensitive' };
+  }
+
+  const users = await db.user.findMany({
+    where: userWhere,
+    select: { id: true },
+    take: 24,
+  });
+  if (users.length !== 1) return null;
+  return resolvedOwnerEmailForUserId(db, users[0].id);
+}
+
+/**
+ * Resolve o e-mail canônico do utilizador PROVIDER ativo que pode receber FT/OS e RT.
  * @returns {Promise<string|null>} e-mail na base ou null se inelegível / ambíguo sem tenant.
  */
 async function resolveFieldTaskAssigneeEmail(db, email, tenantId) {
@@ -58,18 +95,17 @@ async function resolveFieldTaskAssigneeEmail(db, email, tenantId) {
   if (tenantId) {
     const row = await db.user.findFirst({
       where: { ...baseEligibleWhere(e), tenantId },
-      select: { email: true },
+      select: { id: true, email: true },
     });
-    return row?.email ? String(row.email).trim() : null;
+    if (row?.id) {
+      const out = await resolvedOwnerEmailForUserId(db, row.id);
+      if (out) return out;
+    }
+    return resolveActiveProviderEmailGlobally(db, e);
   }
 
-  const rows = await db.user.findMany({
-    where: baseEligibleWhere(e),
-    select: { email: true, tenantId: true },
-    take: 2,
-  });
-  if (rows.length === 1) return String(rows[0].email || '').trim() || null;
-  return null;
+  /** Sem tenant no modelo: não usar só `User.email` — prestadores na pool partilham e-mail sintético na linha. */
+  return resolveActiveProviderEmailGlobally(db, e);
 }
 
 async function canReceiveFieldTasksForEmail(db, email, tenantId) {
@@ -97,7 +133,7 @@ async function canReceiveFieldTasksForAppSession(db, opts) {
    */
   const u = await db.user.findFirst({
     where: { id: userId, isActive: true },
-    select: { id: true, role: true, technicianProfile: { select: { status: true } } },
+    select: { id: true, role: true },
   });
   if (!u || !userRowEligibleForFieldTasks(u)) return false;
 
@@ -113,7 +149,6 @@ async function canReceiveFieldTasksForAppSession(db, opts) {
 module.exports = {
   FIELD_TASK_ASSIGNEE_ROLES,
   isActiveTechnicianForEmail,
-  isActiveTechnicianUserRole,
   userRowEligibleForFieldTasks,
   resolveFieldTaskAssigneeEmail,
   canReceiveFieldTasksForEmail,

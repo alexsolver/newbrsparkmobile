@@ -216,6 +216,7 @@ async function handleNotificationResponse(
         status: 'ACCEPTED',
         timestamp: new Date().toISOString(),
       });
+      void pullTasks().catch(() => {});
     } catch {
       Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.push.acceptActivityError'));
     }
@@ -268,6 +269,8 @@ async function handleNotificationResponse(
       subtitle: liveSub || undefined,
     });
     setPendingOpenExecutionFromPush(taskId);
+    /** Sem isto o painel ficava em «Aguardando Envio»: RECEIVED só após GET /api/sync/tasks. */
+    await pullTasks().catch(() => {});
     try {
       const raw = await AsyncStorage.getItem(BRSPARK_PERSONA_STORAGE_KEY);
       const p = raw === 'provider' ? 'provider' : 'client';
@@ -321,6 +324,8 @@ export function PushNotificationResponseBridge() {
           .join(' — ')
           .slice(0, 120),
       });
+      /** App em 1.º plano: sincroniza já para o servidor sair de PENDING sem tocar na notificação. */
+      void pullTasks().catch(() => {});
     });
     return () => sub.remove();
   }, []);
