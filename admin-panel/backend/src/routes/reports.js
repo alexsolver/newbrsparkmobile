@@ -9,6 +9,7 @@ const { effectiveLastSubmittedRevision } = require('../lib/effectiveExecutionRev
 const { mapExecutionToPanelTask } = require('../lib/executionTaskPanel');
 const { mergePresetConfig } = require('../lib/reportPresetDefaults');
 const { buildFilteredExportPayload } = require('../lib/reportExportJson');
+const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('../lib/userEmailUnique');
 
 const DEFAULT_CONFIG = mergePresetConfig(null);
 
@@ -143,15 +144,9 @@ router.get(
     });
     if (!ex) return res.status(404).json({ error: 'Execução não encontrada.' });
 
-    const emails = ex.ownerEmail ? [ex.ownerEmail] : [];
-    const users = await prisma.user.findMany({
-      where: { email: { in: emails } },
+    const ownerUser = ex.ownerEmail ? await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, ex.ownerEmail, {
       select: { email: true, avatarUrl: true },
-    });
-    const userMap = users.reduce((acc, u) => {
-      acc[u.email] = u;
-      return acc;
-    }, {});
+    }) : null;
 
     const lsr = effectiveLastSubmittedRevision(
       ex.lastSubmittedRevision,
@@ -159,7 +154,7 @@ router.get(
     );
 
     const task = mapExecutionToPanelTask(ex, {
-      ownerAvatar: ensureHttpsUrlForPublicInternet(userMap[ex.ownerEmail]?.avatarUrl) || null,
+      ownerAvatar: ensureHttpsUrlForPublicInternet(ownerUser?.avatarUrl) || null,
       includeSchemaRaw: true,
       lastSubmittedRevision: lsr,
     });

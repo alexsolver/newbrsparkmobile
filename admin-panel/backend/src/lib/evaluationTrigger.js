@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const prisma = require('../db');
+const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('./userEmailUnique');
 
 function newPublicTokenFields() {
   return {
@@ -103,11 +104,9 @@ async function onChecklistExecutionSynced(executionId) {
   if (st !== 'SYNCED' && st !== 'COMPLETED') return null;
 
   let tenantId = ex.template?.tenantId || null;
-  const techUser = await prisma.user.findFirst({
-    where: {
-      email: { equals: ex.ownerEmail, mode: 'insensitive' },
-      ...(tenantId ? { tenantId } : {}),
-    },
+  const techUser = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, ex.ownerEmail, {
+    tenantId,
+    select: { id: true, tenantId: true },
   });
   if (!techUser) return null;
   if (!tenantId) tenantId = techUser.tenantId;

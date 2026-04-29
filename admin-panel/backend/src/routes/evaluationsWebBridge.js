@@ -4,6 +4,10 @@ const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const prisma = require('../db');
+const {
+  resolveCanonicalEmailNormForUser,
+  resolvePreferredActiveUserForDispatchOwnerEmail,
+} = require('../lib/userEmailUnique');
 
 const router = express.Router();
 
@@ -47,8 +51,8 @@ router.post('/laravel-evaluations-bridge', express.json(), async (req, res) => {
       });
     }
 
-    const user = await prisma.user.findFirst({
-      where: { tenantId: tenant.id, email },
+    const user = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, email, {
+      tenantId: tenant.id,
       include: { tenant: true },
     });
     if (!user) {
@@ -56,9 +60,6 @@ router.post('/laravel-evaluations-bridge', express.json(), async (req, res) => {
         error:
           'Utilizador não encontrado na base BrSpark (PostgreSQL). O e-mail e tenant devem coincidir com uma conta de app/painel Node.',
       });
-    }
-    if (!user.isActive) {
-      return res.status(403).json({ error: 'Conta desativada.' });
     }
     if (user.tenant?.status === 'SUSPENDED' || user.tenant?.status === 'CANCELLED') {
       return res.status(403).json({ error: 'Organização suspensa ou cancelada.' });
@@ -73,11 +74,12 @@ router.post('/laravel-evaluations-bridge', express.json(), async (req, res) => {
       });
     }
 
+    const jwtEmail = await resolveCanonicalEmailNormForUser(prisma, user);
     const appToken = jwt.sign(
       {
         id: user.id,
         tenantId: user.tenantId,
-        email: user.email,
+        email: jwtEmail,
         role: user.role,
         sessionId,
       },

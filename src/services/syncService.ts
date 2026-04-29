@@ -73,6 +73,7 @@ const CHECKLIST_OUTBOX_CONFLICTS_KEY = '@brspark_outbox_conflicts_v1';
 export const LAST_SUCCESSFUL_FULL_SYNC_AT_MS_KEY = '@brspark_last_successful_full_sync_at_ms';
 const TELEMETRY_OUTBOX_KEY = '@brspark_telemetry_outbox';
 const MEDIA_STUCK_ATTEMPT_THRESHOLD = 3;
+const REJECTED_TASKS_KEY = '@brspark_rejected_tasks';
 
 function normalizeStoredId(v: unknown): string {
   const s = String(v ?? '').trim();
@@ -86,6 +87,19 @@ function checklistOutboxTaskId(item: any): string {
     normalizeStoredId(item?.executionId) ||
     normalizeStoredId(item?.metadata?.executionId)
   );
+}
+
+function remoteTaskStatusIsActiveForWorklist(row: any): boolean {
+  const st = String(row?.status || '').toUpperCase();
+  return st === 'PENDING' || st === 'RECEIVED' || st === 'ACCEPTED' || st === 'IN_PROGRESS' || st === 'PAUSED';
+}
+
+function remoteTaskShouldClearLocalReject(row: any): boolean {
+  if (!row) return false;
+  if (!remoteTaskStatusIsActiveForWorklist(row)) return false;
+  /** Rejeição local de oferta broadcast ainda aberta é intencional; DIRECT/reaberta deve seguir o servidor. */
+  if (Boolean(row.broadcastClaimPending)) return false;
+  return true;
 }
 
 /** Task id em linhas de Conflitos (corrige `taskId` nulo e `identity` tipo `task:<id>`). */
@@ -2343,6 +2357,29 @@ async function stripInProgressLocalForRevisionPendingTasks(remoteTasks: any[]): 
   }
 }
 
+async function stripRejectedLocalForActiveRemoteTasks(remoteTasks: any[]): Promise<void> {
+  const ids = new Set<string>();
+  for (const t of remoteTasks) {
+    const id = normalizeStoredId(t?.id);
+    if (!id || !remoteTaskShouldClearLocalReject(t)) continue;
+    ids.add(id);
+  }
+  if (ids.size === 0) return;
+  try {
+    let removed = 0;
+    await updateStoredJsonArray<string>(REJECTED_TASKS_KEY, (arr) => {
+      const next = arr.filter((id) => !ids.has(String(id)));
+      removed = arr.length - next.length;
+      return next;
+    });
+    if (removed > 0) {
+      console.log(`[pullTasks] ${REJECTED_TASKS_KEY}: removidos ${removed} id(s) ativos devolvidos pelo servidor`);
+    }
+  } catch (e) {
+    console.warn('[pullTasks] stripRejectedLocalForActiveRemoteTasks:', e);
+  }
+}
+
 /** Não reintroduzir metadados de revisão que o servidor já limpou (após sync / nova conclusão). */
 function stripStaleReopenFromMergedMetadata(
   rMeta: Record<string, unknown>,
@@ -2674,10 +2711,20 @@ async function removeExecutedCacheEntriesForActiveRemoteTasks(remoteTasks: any[]
 }
 
 export async function pullTasks(ownerEmail?: string): Promise<void> {
-  const q = ownerEmail ? `?owner_email=${encodeURIComponent(ownerEmail)}` : '';
+  const params = new URLSearchParams();
+  if (ownerEmail) params.set('owner_email', ownerEmail);
+  /** Evita 304/ETag em endpoint de sync: sem corpo JSON o cache local não recebe OS novas. */
+  params.set('_sync_ts', String(Date.now()));
+  const q = `?${params.toString()}`;
   console.log(`[pullTasks] 🔄 Iniciando para email: "${ownerEmail}" | URL: /api/sync/tasks${q}`);
   try {
-    const res = await apiFetch(`/api/sync/tasks${q}`);
+    const res = await apiFetch(`/api/sync/tasks${q}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
+    });
     console.log(`[pullTasks] HTTP status: ${res.status}`);
     if (res.ok) {
         let syncReason: string | null = null;
@@ -2724,6 +2771,7 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         await stripLocalExecutionStateForTerminalServerTasks(remoteTasks);
         await clearChecklistQuarantineForTerminalServerTasks(remoteTasks);
         await stripInProgressLocalForRevisionPendingTasks(remoteTasks);
+        await stripRejectedLocalForActiveRemoteTasks(remoteTasks);
 
         let ftExisting = await loadFtCloudTasks();
         let rtExisting = await loadRtCloudTasks();

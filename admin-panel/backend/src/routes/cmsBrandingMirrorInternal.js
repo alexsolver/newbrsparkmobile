@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const prisma = require('../db');
+const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('../lib/userEmailUnique');
 
 const router = express.Router();
 
@@ -31,8 +32,7 @@ async function resolveTenantForCmsMirror(slug, ownerEmail) {
       where: { email: { equals: em, mode: 'insensitive' } },
     });
     if (byTenantEmail) return byTenantEmail;
-    const user = await prisma.user.findFirst({
-      where: { email: { equals: em, mode: 'insensitive' } },
+    const user = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, em, {
       include: { tenant: true },
     });
     if (user?.tenant) return user.tenant;

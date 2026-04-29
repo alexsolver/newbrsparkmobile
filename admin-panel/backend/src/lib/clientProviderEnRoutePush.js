@@ -3,6 +3,7 @@
 const prisma = require('../db');
 const { sendExpoPushToMany } = require('../services/expoPush');
 const { extractClientEmailFromMetadata } = require('./technicianClientChatGate');
+const { resolveActiveUserIdsForDispatchOwnerEmail } = require('./userEmailUnique');
 
 const PUSH_CATEGORY_CLIENT = 'BRSPARK_CLIENT_TRACKING';
 const ANDROID_CLIENT_CHANNEL = 'brspark-cliente';
@@ -10,20 +11,7 @@ const ANDROID_CLIENT_CHANNEL = 'brspark-cliente';
 async function resolveUserIdsForClientPush(clientEmail, tenantId) {
   const raw = String(clientEmail || '').trim();
   if (!raw) return [];
-  const emailFilter = { equals: raw, mode: 'insensitive' };
-
-  if (tenantId) {
-    const u = await prisma.user.findFirst({
-      where: { isActive: true, tenantId, email: emailFilter },
-      select: { id: true },
-    });
-    return u ? [u.id] : [];
-  }
-  const users = await prisma.user.findMany({
-    where: { isActive: true, email: emailFilter },
-    select: { id: true },
-  });
-  return users.map((x) => x.id);
+  return resolveActiveUserIdsForDispatchOwnerEmail(prisma, raw, { tenantId });
 }
 
 /**

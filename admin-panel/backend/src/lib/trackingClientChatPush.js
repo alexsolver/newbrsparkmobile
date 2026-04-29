@@ -1,6 +1,7 @@
 'use strict';
 
 const { sendExpoPushToMany } = require('../services/expoPush');
+const { resolveActiveUserIdsForDispatchOwnerEmail } = require('./userEmailUnique');
 
 /** Canal Android alinhado a `ANDROID_CHANNEL_TRACKING_CLIENT_CHAT` no app (notifications.ts). */
 const CHANNEL_TRACKING_CLIENT_CHAT = 'brspark-tracking-client-chat';
@@ -17,33 +18,16 @@ async function resolveTechnicianUserIds(prisma, opts) {
   const emailRaw = String(opts.ownerEmail || '').trim();
   const templateTid = opts.templateTenantId || null;
   if (!emailRaw) return [];
-  const emailFilter = { equals: emailRaw, mode: 'insensitive' };
-
-  if (templateTid) {
-    const u = await prisma.user.findFirst({
-      where: { isActive: true, tenantId: templateTid, email: emailFilter },
-      select: { id: true },
-    });
-    if (u) return [u.id];
-    const fb = await prisma.user.findFirst({
-      where: { isActive: true, email: emailFilter },
-      orderBy: { updatedAt: 'desc' },
-      select: { id: true, tenantId: true },
-    });
-    if (fb) {
+  const userIds = await resolveActiveUserIdsForDispatchOwnerEmail(prisma, emailRaw, { tenantId: templateTid });
+  if (templateTid && userIds.length > 0) {
+    const inTenant = await prisma.user.count({ where: { id: { in: userIds }, tenantId: templateTid } });
+    if (inTenant === 0) {
       console.warn(
-        `[${LOG_LABEL}] Fallback por e-mail (fora do tenant do template): ${emailRaw} → tenantId=${fb.tenantId}`
+        `[${LOG_LABEL}] Fallback por AppAccount/e-mail (fora do tenant do template): ${emailRaw}`
       );
-      return [fb.id];
     }
-    return [];
   }
-
-  const users = await prisma.user.findMany({
-    where: { isActive: true, email: emailFilter },
-    select: { id: true },
-  });
-  return users.map((x) => x.id);
+  return userIds;
 }
 
 /**

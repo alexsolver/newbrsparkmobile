@@ -26,7 +26,10 @@ const {
   broadcastCandidateArray,
 } = require('../lib/fieldTaskExecutionAccess');
 const { FIELD_TASK_CONTEXT_TENANT_KEY } = require('../lib/fieldTaskExecutionTenantScope');
-const { resolveActiveUsersForDispatchOwnerEmail } = require('../lib/userEmailUnique');
+const {
+  resolveActiveUsersForDispatchOwnerEmail,
+  resolvePreferredActiveUserForDispatchOwnerEmail,
+} = require('../lib/userEmailUnique');
 
 const OPS_GPS_STALE_SEC = Math.min(
   3600,
@@ -217,8 +220,7 @@ async function maybePrefetchOpsChatTranslationForTechnician(ex, msg) {
   const techEmail = String(ex.ownerEmail || '').trim().toLowerCase();
   if (!techEmail) return;
 
-  const u = await prisma.user.findFirst({
-    where: { email: { equals: techEmail, mode: 'insensitive' } },
+  const u = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, techEmail, {
     select: { preferredChatLocale: true, tenantId: true },
   });
   let target = 'pt-BR';
@@ -576,14 +578,19 @@ router.get('/tasks', async (req, res) => {
 
     const emails = [...new Set(executions.map(e => e.ownerEmail).filter(Boolean))];
     const scopeTenantId = panelTenantIdForUserScope(req);
-    const users = await prisma.user.findMany({
-      where: {
-        email: { in: emails },
-        ...(scopeTenantId ? { tenantId: scopeTenantId } : {}),
-      },
-      select: { email: true, avatarUrl: true },
-    });
-    const userMap = users.reduce((acc, u) => { acc[u.email] = u; return acc; }, {});
+    const userPairs = await Promise.all(
+      emails.map(async (email) => [
+        email,
+        await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, email, {
+          tenantId: scopeTenantId,
+          select: { email: true, avatarUrl: true },
+        }),
+      ])
+    );
+    const userMap = userPairs.reduce((acc, [email, u]) => {
+      if (u) acc[email] = u;
+      return acc;
+    }, {});
 
     const activeTrackingIds = executions
       .filter((ex) => {

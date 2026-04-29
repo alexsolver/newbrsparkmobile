@@ -98,26 +98,69 @@ async function resolveActiveUsersForDispatchOwnerEmail(db, emailRaw) {
   const em = String(emailRaw || '').trim();
   if (!em) return [];
 
+  const out = new Map();
   const byRowEmail = await db.user.findMany({
     where: { isActive: true, email: { equals: em, mode: 'insensitive' } },
-    select: { id: true, tenantId: true },
+    select: { id: true, tenantId: true, appAccountId: true },
   });
-  if (byRowEmail.length) return byRowEmail;
+  for (const row of byRowEmail) out.set(String(row.id), row);
 
   const norm = em.trim().toLowerCase();
-  if (!norm) return [];
+  if (!norm) return [...out.values()];
 
   const acc = await db.appAccount.findUnique({
     where: { emailNorm: norm },
     select: { id: true },
   });
-  if (!acc?.id) return [];
+  const appAccountIds = new Set(
+    [
+      acc?.id ? String(acc.id) : '',
+      ...byRowEmail.map((row) => String(row.appAccountId || '').trim()),
+    ].filter(Boolean)
+  );
+  if (appAccountIds.size === 0) {
+    return [...out.values()].map(({ appAccountId, ...row }) => row);
+  }
 
   const viaAccount = await db.user.findMany({
-    where: { appAccountId: String(acc.id), isActive: true },
-    select: { id: true, tenantId: true },
+    where: { appAccountId: { in: [...appAccountIds] }, isActive: true },
+    select: { id: true, tenantId: true, appAccountId: true },
   });
-  return viaAccount;
+  for (const row of viaAccount) out.set(String(row.id), row);
+  return [...out.values()].map(({ appAccountId, ...row }) => row);
+}
+
+async function resolveActiveUserIdsForDispatchOwnerEmail(db, emailRaw, { tenantId } = {}) {
+  const rows = await resolveActiveUsersForDispatchOwnerEmail(db, emailRaw);
+  const preferTid = String(tenantId || '').trim();
+  const preferred = preferTid ? rows.filter((r) => String(r.tenantId || '') === preferTid) : [];
+  const picked = preferred.length ? preferred : rows;
+  return picked.map((r) => String(r.id)).filter(Boolean);
+}
+
+async function resolvePreferredActiveUserForDispatchOwnerEmail(db, emailRaw, { tenantId, select, include } = {}) {
+  const ids = await resolveActiveUserIdsForDispatchOwnerEmail(db, emailRaw, { tenantId });
+  if (ids.length === 0) return null;
+  const candidates = await db.user.findMany({
+    where: { id: { in: ids }, isActive: true },
+    select: { id: true, role: true, updatedAt: true },
+    orderBy: { updatedAt: 'desc' },
+  });
+  if (candidates.length === 0) return null;
+  const roleRank = (role) => {
+    const r = String(role || '').toUpperCase();
+    if (r === 'PROVIDER' || r === 'TECHNICIAN') return 0;
+    if (r === 'MANAGER' || r === 'TENANT_ADMIN') return 1;
+    return 2;
+  };
+  candidates.sort((a, b) => roleRank(a.role) - roleRank(b.role));
+  const id = String(candidates[0].id);
+  const args = {
+    where: { id },
+  };
+  if (include) args.include = include;
+  else if (select) args.select = select;
+  return db.user.findUnique(args);
 }
 
 module.exports = {
@@ -126,4 +169,6 @@ module.exports = {
   resolveCanonicalEmailNormForUser,
   resolveFieldTaskOwnerEmailCandidatesForAppUser,
   resolveActiveUsersForDispatchOwnerEmail,
+  resolveActiveUserIdsForDispatchOwnerEmail,
+  resolvePreferredActiveUserForDispatchOwnerEmail,
 };

@@ -37,7 +37,10 @@ const {
 const authUser = require('../middleware/authUser');
 const optionalAuthUser = require('../middleware/optionalAuthUser');
 const { assertTenantAccess, resolveScopedTenantId } = require('../lib/authorization');
-const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
+const {
+  resolveActiveUserIdsForDispatchOwnerEmail,
+  resolveCanonicalEmailNormForUser,
+} = require('../lib/userEmailUnique');
 
 const MAX_FACE_ENROLLMENT_BYTES = 5 * 1024 * 1024;
 const MAX_FACE_ENROLLMENT_PHOTOS = 12;
@@ -397,18 +400,11 @@ async function notifyTechRegistrationStatus(opts) {
       : [];
     const templatesByKey = Object.fromEntries(templateRows.map((r) => [String(r.key), r]));
 
-    const candidateUsers = await prisma.user.findMany({
-      where: {
-        tenantId,
-        isActive: true,
-        email: { equals: invitedEmail, mode: 'insensitive' },
-      },
-      select: { id: true },
-    });
+    const candidateUsers = await resolveActiveUserIdsForDispatchOwnerEmail(prisma, invitedEmail, { tenantId });
     const candidateUserIds = Array.from(
       new Set(
         candidateUsers
-          .map((u) => String(u.id || '').trim())
+          .map((id) => String(id || '').trim())
           .filter(Boolean)
           .concat(opts?.candidateUserId ? [String(opts.candidateUserId).trim()] : []),
       ),

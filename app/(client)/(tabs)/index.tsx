@@ -85,6 +85,7 @@ import {
   updateStoredJsonArray,
 } from '../../../src/lib/asyncStorageAtomic';
 import { cacheChecklistTemplateIfMissing } from '../../../src/services/routineTaskService';
+import type { AgendaScope } from '../../../src/services/agendaService';
 import {
   peekPendingOpenExecutionFromPush,
   takePendingOpenExecutionFromPush,
@@ -2206,6 +2207,14 @@ export default function DashboardScreen() {
   const providerModeOnly = canUseProviderModeInUi && String(userRole || '').toUpperCase() === 'TECHNICIAN';
   const hasProviderProfileFallback =
     String(user?.role || '').toUpperCase() === 'PROVIDER' || String(userRole || '').toUpperCase() === 'TECHNICIAN';
+  /** Montar o dashboard de OS na Home: `canUseProviderModeInUi` omitia B2C+capability (agenda já mostrava OS). */
+  const showProviderDashboardPage = useMemo(
+    () =>
+      canUseProviderModeInUi ||
+      (canUseProviderMode && isB2CConsumerUser(user)) ||
+      hasProviderProfileFallback,
+    [canUseProviderModeInUi, canUseProviderMode, user, hasProviderProfileFallback],
+  );
   const [svcFilter, setSvcFilter] = useState('all');
   const [searchText, setSearchText] = useState('');
   const [sortMode, setSortMode] = useState<'DEFAULT' | 'RATING' | 'AGENDA' | 'VERIFIED' | 'PRICE' | 'DISTANCE'>('DEFAULT');
@@ -2218,11 +2227,8 @@ export default function DashboardScreen() {
   /** Limite de linhas na aba Concluídas (lista completa continua em memória após sync). */
   const [providerCompletedListCap, setProviderCompletedListCap] = useState(PROVIDER_OS_COMPLETED_INITIAL);
   const [providerTasks, setProviderTasks] = useState<any[]>([]);
-  /** Lista prestador (abas, rota, contagens): OS só em modo «oferta» de claim não entram em Pendentes — aparecem no sheet global. */
-  const providerTasksForTabs = useMemo(
-    () => providerTasks.filter((t: any) => !t?.broadcastClaimPending),
-    [providerTasks]
-  );
+  /** Lista prestador (abas, rota, contagens). Ofertas broadcast (`broadcastClaimPending`) entram em Pendentes — o cartão já trata claim (alinhado à agenda). */
+  const providerTasksForTabs = useMemo(() => providerTasks, [providerTasks]);
   const [inprogressIds, setInprogressIds] = useState<Set<string>>(new Set());
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   /** IDs em `@brspark_accepted_tasks` (aceite local); a aba «Iniciadas» usa `inprogressIds` / estado IN_PROGRESS. */
@@ -2773,6 +2779,8 @@ export default function DashboardScreen() {
   const loadDataChainRef = useRef(Promise.resolve());
   /** Evita empilhar refreshes pós-pull quando a rede está lenta. */
   const deferredProviderReloadRef = useRef(false);
+  /** Transição CLIENT → modo prestador: `loadData` inicial pode ter corrido com scope CLIENT. */
+  const prevAppModeForProviderListRef = useRef<string | null>(null);
   /** `false` = último check de rede foi offline; usado para disparar sync em rajada ao voltar online. */
   const reconnectOnlineRef = useRef<boolean | null>(null);
   /** Última vez que o diretório de empresas veio da rede com sucesso (força bust após TTL). */
@@ -2824,13 +2832,12 @@ export default function DashboardScreen() {
            });
          }
          await purgeExpiredCompletedExecutionCaches();
-         // Escopo de agenda não pode depender do modo visual (mode), para evitar
-         // oscilação CLIENT/PROVIDER durante bootstrap do app/contexto.
-         const providerScopeEnabled = canUseProviderModeInUi || hasProviderProfileFallback;
-         const events = await AgendaService.getUnifiedAgenda(
-           email,
-           providerScopeEnabled ? 'PROVIDER' : 'CLIENT',
-         );
+         /** Alinhado a `agenda.tsx` / `orders.tsx`: `canUseProviderModeInUi` escondia OS na Home (abas prestador). */
+         const providerAgendaScope: AgendaScope =
+           mode === 'PROVIDER' && (canUseProviderMode || hasProviderProfileFallback)
+             ? 'PROVIDER'
+             : 'CLIENT';
+         const events = await AgendaService.getUnifiedAgenda(email, providerAgendaScope);
          let cloudExecRows: any[] = [];
          let cloudExecLookupOk = true;
          try {
@@ -2844,7 +2851,12 @@ export default function DashboardScreen() {
              .map((r: any) => String(r?.id || '').trim())
              .filter(Boolean)
          );
-         
+         for (const ev of events) {
+           if (!isProviderChecklistExecutionEvent(ev)) continue;
+           const eid = String((ev as { id?: unknown }).id ?? '').trim();
+           if (eid) cloudExecIds.add(eid);
+         }
+
          const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
          let executedTasksRaw = [];
          try { executedTasksRaw = JSON.parse(executedStr); } catch(e) {}
@@ -3135,6 +3147,47 @@ export default function DashboardScreen() {
            };
          }
 
+         void apiFetch('/api/telemetry/batch', {
+           method: 'POST',
+           body: JSON.stringify({
+             ownerEmail: email,
+             tenantId: user?.tenantId || null,
+             events: [
+               {
+                 eventType: 'INTEGRITY_CHECK',
+                 ownerEmail: email,
+                 tenantId: user?.tenantId || null,
+                 deviceTimestamp: new Date().toISOString(),
+                 payload: {
+                   reason: 'provider_os_home_pipeline',
+                   severity: 'LOW',
+                   mode,
+                   userRole,
+                   canUseProviderMode,
+                   hasProviderProfileFallback,
+                   showProviderDashboardPage,
+                   providerAgendaScope,
+                   eventsLen: events.length,
+                   combinedEventsLen: combinedEvents.length,
+                   cloudExecIdsSize: cloudExecIds.size,
+                   requireKnownExecution,
+                   ptFilteredStrictLen: ptFilteredStrict.length,
+                   ptFilteredLen: pt_filtered.length,
+                   mappedLen: mapped.length,
+                   pendingCount: mapped.filter((row: any) => row.status === 'PENDING').length,
+                   inProgressCount: mapped.filter((row: any) => row.status === 'IN_PROGRESS' || row.status === 'PAUSED').length,
+                   completedCount: mapped.filter((row: any) => row.status === 'COMPLETED').length,
+                   osNumbers: mapped.slice(0, 12).map((row: any) => row.osNumber || row.id),
+                   rawStatuses: mapped.slice(0, 12).map((row: any) => ({
+                     osNumber: row.osNumber || row.id,
+                     status: row.status,
+                   })),
+                 },
+               },
+             ],
+           }),
+         }).catch(() => {});
+
          setProviderTasks(mapped);
          setInprogressIds(new Set(inprogressMerged));
          setCompletedIds(completedSetForMap);
@@ -3145,6 +3198,31 @@ export default function DashboardScreen() {
            setProviderOpenTransitTaskId(null);
          }
       } catch(e) {
+         void apiFetch('/api/telemetry/batch', {
+           method: 'POST',
+           body: JSON.stringify({
+             ownerEmail: email,
+             tenantId: user?.tenantId || null,
+             events: [
+               {
+                 eventType: 'INTEGRITY_CHECK',
+                 ownerEmail: email,
+                 tenantId: user?.tenantId || null,
+                 deviceTimestamp: new Date().toISOString(),
+                 payload: {
+                   reason: 'provider_os_home_pipeline_error',
+                   severity: 'HIGH',
+                   mode,
+                   userRole,
+                   canUseProviderMode,
+                   hasProviderProfileFallback,
+                   showProviderDashboardPage,
+                   errorMessage: e instanceof Error ? e.message : String(e),
+                 },
+               },
+             ],
+           }),
+         }).catch(() => {});
          console.error('ERROR LOADING AGENDA:', e);
       }
 
@@ -3231,6 +3309,15 @@ export default function DashboardScreen() {
     return loadDataChainRef.current;
   };
   loadDataRef.current = loadData;
+
+  useEffect(() => {
+    if (authLoading || !user?.email) return;
+    const prev = prevAppModeForProviderListRef.current;
+    prevAppModeForProviderListRef.current = mode;
+    if (prev != null && prev !== 'PROVIDER' && mode === 'PROVIDER') {
+      void loadDataRef.current?.(false);
+    }
+  }, [mode, authLoading, user?.email]);
 
   /** Conclusão de checklist: actualização optimista das abas antes do `loadData` assíncrono terminar. */
   useEffect(() => {
@@ -3337,7 +3424,7 @@ export default function DashboardScreen() {
     let page = 0;
     if (providerModeOnly) {
       page = 0;
-    } else if (canUseProviderModeInUi) {
+    } else if (showProviderDashboardPage) {
       page = mode === 'PROVIDER' ? 1 : 0;
     } else {
       page = mode === 'ASSETS' ? 1 : 0;
@@ -3347,7 +3434,7 @@ export default function DashboardScreen() {
     // Release lock after animation
     const timer = setTimeout(() => { isInternalScroll.current = false; }, 500);
     return () => clearTimeout(timer);
-  }, [mode, pagerWidth, canUseProviderModeInUi, providerModeOnly]);
+  }, [mode, pagerWidth, showProviderDashboardPage, providerModeOnly]);
 
   // Rajada de sync ao recuperar rede (complementa o poller de 20 s e reduz sensação de "app preso").
   useEffect(() => {
@@ -3438,7 +3525,7 @@ export default function DashboardScreen() {
     const page = Math.round(e.nativeEvent.contentOffset.x / pagerWidth);
     
     let newMode = mode;
-    if (canUseProviderModeInUi) {
+    if (showProviderDashboardPage) {
       newMode = page === 0 ? 'ASSETS' : 'PROVIDER';
     } else {
       newMode = page === 0 ? 'SERVICES' : 'ASSETS';
@@ -4542,7 +4629,7 @@ export default function DashboardScreen() {
         )}
 
         {/* ═══════ PAGE 3: Dashboard do Prestador ═══════ */}
-        {canUseProviderModeInUi && (
+        {showProviderDashboardPage && (
         <View style={{ width: pagerWidth, flex: 1, backgroundColor: C.background }}>
           {/* Cabeçalho das abas (fixo no topo desta página) */}
           <View

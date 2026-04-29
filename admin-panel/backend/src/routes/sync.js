@@ -542,6 +542,12 @@ function mapChecklistExecutionToSyncTask(ex) {
 // sem depender só do AsyncStorage local do celular).
 router.get('/tasks', async (req, res) => {
   try {
+    /** Sync mobile é estado operacional; 304 deixa o app sem corpo JSON e não atualiza o cache local. */
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+
     const jwtEmail = String(req.user?.email || '').trim();
     const qEmail = String(req.query.owner_email || '').trim();
     const ownerCandidates = await resolveFieldTaskOwnerEmailCandidatesForAppUser(prisma, req.user.id);

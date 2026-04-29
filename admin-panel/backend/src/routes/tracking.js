@@ -32,6 +32,7 @@ const {
   stripTransitEtaDisplayFields,
   resolveDisplayEtaMinutesFromMeta,
 } = require('../lib/transitEtaDisplaySnapshot');
+const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('../lib/userEmailUnique');
 
 /** Sem GPS com coordenadas dentro deste intervalo → "sem sinal" no link público. Padrão 10 min (mau sinal / intervalos de GPS). Override: TRACKING_GPS_STALE_SEC. */
 const DISPLACEMENT_GPS_STALE_SEC = Math.min(
@@ -898,9 +899,8 @@ router.get('/:token', async (req, res) => {
     let techAvatar = null;
     let techPhone  = null;
     try {
-      const userRecord = await prisma.user.findFirst({
-        where: { email: exec.ownerEmail },
-        select: { name: true, avatarUrl: true },
+      const userRecord = await resolvePreferredActiveUserForDispatchOwnerEmail(prisma, exec.ownerEmail, {
+        select: { name: true, avatarUrl: true, phone: true },
       });
       if (userRecord) {
         techName   = userRecord.name  || techName;

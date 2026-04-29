@@ -17,8 +17,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { useTranslation } from 'react-i18next';
+import { useAppContext } from '../../../src/context/AppContext';
 import { AgendaService } from '../../../src/services/agendaService';
-import { userHasCapability, isB2CConsumerUser } from '../../../src/services/auth';
+import { userHasCapability } from '../../../src/services/auth';
 import type { AgendaScope } from '../../../src/services/agendaService';
 import { taskOsLabel } from '../../../src/utils/taskOsLabel';
 import { LocationZoneTypeBadge } from '../../../src/components/LocationZoneTypeBadge';
@@ -60,14 +61,14 @@ export default function OrdersScreen() {
   const statusMap = useMemo(() => buildStatusMap(C), [C]);
   const router = useRouter();
   const { user, userRole } = useAuth();
+  const { mode } = useAppContext();
   const canUseProviderMode = userHasCapability(user, 'mobile.mode.provider');
-  /** Igual à Home (`index.tsx`): sem isto, `CLIENT` esconde todas as OS na agenda unificada. */
-  const canUseProviderModeInUi = canUseProviderMode && !isB2CConsumerUser(user);
+  /** Mesmo critério que `agenda.tsx`: evita `CLIENT` no ecrã de OS enquanto a agenda está em modo prestador. */
   const hasProviderProfileFallback =
     String(user?.role || '').toUpperCase() === 'PROVIDER' ||
     String(userRole || '').toUpperCase() === 'TECHNICIAN';
   const agendaScope: AgendaScope =
-    canUseProviderModeInUi || hasProviderProfileFallback ? 'PROVIDER' : 'CLIENT';
+    mode === 'PROVIDER' && (canUseProviderMode || hasProviderProfileFallback) ? 'PROVIDER' : 'CLIENT';
   const { t } = useTranslation();
   const [filter, setFilter] = useState('all');
   const [realTasks, setRealTasks] = useState<any[]>([]);
@@ -111,7 +112,7 @@ export default function OrdersScreen() {
         } catch(e) {}
       }
       fetchTasks();
-    }, [user, userRole, canUseProviderMode, agendaScope])
+    }, [user, userRole, mode, canUseProviderMode, agendaScope])
   );
 
   const orders = React.useMemo(() => realTasks, [realTasks]);
