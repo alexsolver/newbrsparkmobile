@@ -141,6 +141,9 @@ Notifications.setNotificationHandler({
 /** Concha CLIENTE vs PRESTADOR — listas de alertas independentes (não misturar). */
 export type NotificationPersona = 'client' | 'provider';
 
+/** Id fixo do alerta «horários sobrepostos» na agenda do prestador (escopo `provider` apenas). */
+export const AGENDA_OVERLAP_IN_APP_ID = 'agenda_os_interval_overlap';
+
 export interface AppNotification {
   id: string;
   title: string;
@@ -202,6 +205,19 @@ export const NotificationService = {
   },
 
   async syncRealNotifications(userEmail: string) {
+    /** Migração: alertas de sobreposição de OS foram gravados como `client` por engano (<= correção agenda). */
+    const leakOverlapTitle = i18n.t('agenda.overlapNotificationTitle');
+    const leakOverlapBody = i18n.t('agenda.overlapNotificationBody');
+    _notifications = _notifications.filter(
+      (n) =>
+        !(
+          n.personaScope === 'client' &&
+          n.category === 'alert' &&
+          n.title === leakOverlapTitle &&
+          n.body === leakOverlapBody
+        ),
+    );
+
     let generated: AppNotification[] = [];
 
     // 1 + 2c + 2d em paralelo (antes: soma das latências de rede — abrir alertas parecia «travar»).
@@ -392,6 +408,7 @@ export const NotificationService = {
         n.id.startsWith('n_') ||
         n.id.startsWith('paff_invite_') ||
         n.id.startsWith('eval_survey_') ||
+        n.id === AGENDA_OVERLAP_IN_APP_ID ||
         n.providerAffiliationId,
     );
 

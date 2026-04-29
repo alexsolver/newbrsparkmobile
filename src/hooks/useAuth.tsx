@@ -43,8 +43,8 @@ interface AuthContextType {
   createWorkspace: (kind: 'CLIENT' | 'PROVIDER') => Promise<User>;
   /** Mesmo e-mail, outro tenant — troca JWT (perfil). Devolve o utilizador da nova sessão. */
   switchWorkspace: (tenantId: string) => Promise<User>;
-  /** GET /api/me e actualiza o estado (após gravação directa de AuthService, etc.). */
-  refreshUser: () => Promise<void>;
+  /** GET /api/me e actualiza o estado (após gravação directa de AuthService, etc.). Devolve o utilizador actualizado ou `null`. */
+  refreshUser: () => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -474,12 +474,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return u;
   };
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (): Promise<User | null> => {
     const fresh = await AuthService.validateSession();
     if (fresh) {
       setUser(fresh);
       runAvatarWarm(fresh);
+      return fresh;
     }
+    return null;
   }, [runAvatarWarm]);
 
   return (

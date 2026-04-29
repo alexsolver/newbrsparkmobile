@@ -202,6 +202,9 @@ export default function ProfileScreen() {
   const [tfaDisableOtp,  setTfaDisableOtp]    = useState('');
   const [tfa2Action,     setTfa2Action]       = useState<'enable' | 'disable'>('enable');
 
+  /** Evita martelar `/api/me` em navegações rápidas entre abas. */
+  const lastProfileFocusRefreshRef = useRef(0);
+
   /** Estado da candidatura: em aberto (token), já enviada, ou ainda sem registo (fluxo antigo). */
   const [techRegResume, setTechRegResume] = useState<{
     open: boolean;
@@ -1078,19 +1081,35 @@ export default function ProfileScreen() {
     }
   }, [personaRoleForUi, activeTab]);
 
+  /** Ao focar o perfil: actualizar estado do servidor (habilitação prestador, capabilities) sem depender só do throttle do AppState. */
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      const now = Date.now();
+      if (now - lastProfileFocusRefreshRef.current < 25_000) return;
+      lastProfileFocusRefreshRef.current = now;
+      void refreshUser();
+    }, [user, refreshUser]),
+  );
+
   /** Cliente/Prestador = troca de tenant (CLIENT vs PROVIDER); cria o espaço em falta com o mesmo e-mail. */
   const ensurePersonaWorkspace = useCallback(
     async (target: 'CLIENT' | 'PROVIDER') => {
       if (!user) return;
       const targetKind = target === 'CLIENT' ? 'CLIENT' : 'PROVIDER';
-      const currentKind = String(user.tenant?.kind || '').toUpperCase();
 
       try {
         setSyncing(true);
 
+        /** Sincronizar com `/api/me` antes de validar capability e `technicianProfile` (evita estado obsoleto após aprovação no painel). */
+        const refreshed = await refreshUser();
+        const effectiveUser = refreshed ?? user;
+
+        const currentKind = String(effectiveUser.tenant?.kind || '').toUpperCase();
+
         if (currentKind === targetKind) {
           if (target === 'PROVIDER') {
-            if (!canUseProviderMode(user)) {
+            if (!canUseProviderMode(effectiveUser)) {
               Alert.alert(t('profile.providerUnavailableTitle'), t('profile.providerUnavailableBody'));
               return;
             }
@@ -1108,8 +1127,8 @@ export default function ProfileScreen() {
         const workspaces = await AuthService.listSiblingWorkspaces();
         const match = workspaces.find((w) => String(w.kind || '').toUpperCase() === targetKind);
 
-        let sessionUser = user;
-        if (match?.id && match.id !== user.tenantId) {
+        let sessionUser = effectiveUser;
+        if (match?.id && match.id !== effectiveUser.tenantId) {
           sessionUser = await switchWorkspace(match.id);
         } else if (!match) {
           sessionUser = await createWorkspace(targetKind as 'CLIENT' | 'PROVIDER');
@@ -1138,7 +1157,7 @@ export default function ProfileScreen() {
         setSyncing(false);
       }
     },
-    [user, switchWorkspace, createWorkspace, setUserRole, router, t],
+    [user, refreshUser, switchWorkspace, createWorkspace, setUserRole, router, t],
   );
 
   // ── Guest Mode ──────────────────────────────────────────────

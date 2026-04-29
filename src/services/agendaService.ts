@@ -4,7 +4,7 @@ import { CostService } from './costService';
 import { InsuranceService } from './insuranceService';
 import { AgendaEvent } from '../types/agenda';
 import { overlayExecutionStatusOutboxOnTasks, pullTasks } from './syncService';
-import { NotificationService } from './notifications';
+import { AGENDA_OVERLAP_IN_APP_ID, NotificationService } from './notifications';
 import i18n from '../i18n';
 import { taskRowIsRoutineTask } from '../lib/routineTaskQueueUi';
 import { loadFtCloudTasks } from '../lib/cloudTasksBuckets';
@@ -68,11 +68,13 @@ async function notifyAgendaOverlapIfNeeded(overlapIds: string[]) {
     const prev = await AsyncStorage.getItem(AGENDA_OVERLAP_SIG_KEY);
     if (prev === sig) return;
     await AsyncStorage.setItem(AGENDA_OVERLAP_SIG_KEY, sig);
+    /** Só prestador: OS/checklist na agenda; nunca inbox do cliente. */
     NotificationService.addNotification({
       title: i18n.t('agenda.overlapNotificationTitle'),
       body: i18n.t('agenda.overlapNotificationBody'),
       category: 'alert',
-      personaScope: 'client',
+      personaScope: 'provider',
+      fixedId: AGENDA_OVERLAP_IN_APP_ID,
     });
   } catch {
     /* ignore */
@@ -221,7 +223,8 @@ export const AgendaService = {
     }
     markAgendaOverlaps(mergedAll);
     const overlapIds = mergedAll.filter((e) => e.agendaOverlap).map((e) => e.id);
-    if (overlapIds.length > 0) {
+    /** Sobreposição de blocos de OS só existe na vista prestador; evita alerta errado / escopo cliente. */
+    if (scope === 'PROVIDER' && overlapIds.length > 0) {
       void notifyAgendaOverlapIfNeeded(overlapIds);
     }
     return mergedAll;

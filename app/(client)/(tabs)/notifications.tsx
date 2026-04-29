@@ -41,7 +41,7 @@ export default function NotificationsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { user } = useAuth();
-  const { activePersona, canUseProviderPersona } = usePersona();
+  const { activePersona } = usePersona();
   const persona: NotificationPersona = activePersona;
   const { colors: C, appDisplayName, appTagline } = useTheme();
   const styles = useMemo(() => createNotificationsStyles(C), [C]);
@@ -137,20 +137,8 @@ export default function NotificationsScreen() {
   };
 
   const categories = ['all', 'maintenance', 'expiry', 'alert', 'sync', 'info', 'evaluation'];
-  const mergedInbox = useMemo(() => {
-    const base = NotificationService.getAll(persona);
-    if (persona !== 'client' || !canUseProviderPersona) return base;
-    const fromProvider = NotificationService.getAll('provider').filter((n) => n.providerAffiliationId);
-    if (!fromProvider.length) return base;
-    const byId = new Map<string, AppNotification>();
-    for (const n of base) byId.set(n.id, n);
-    for (const n of fromProvider) {
-      if (!byId.has(n.id)) byId.set(n.id, n);
-    }
-    return Array.from(byId.values()).sort((a, b) => b.timestamp - a.timestamp);
-  }, [persona, canUseProviderPersona, items]);
-
-  const itemsForUi = mergedInbox;
+  /** Inbox estrita por persona — sem misturar avisos de prestador na vista cliente (e vice-versa). */
+  const itemsForUi = items;
   const filtered = filter === 'all' ? itemsForUi : itemsForUi.filter((i) => i.category === filter);
   const unread = itemsForUi.filter((i) => !i.read).length;
 

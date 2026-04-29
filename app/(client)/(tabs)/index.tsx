@@ -36,7 +36,6 @@ import { Header } from '../../../src/components/Header';
 import { AssetCard } from '../../../src/components/AssetCard';
 import { Asset } from '../../../src/types/asset';
 import { assetMatchesRootFilter, getAssetRootIconColor } from '../../../src/assetKind';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
   getRootAssets,
   getLocalAssets,
@@ -47,7 +46,7 @@ import { LEGACY_SERVICE_CATEGORY_I18N } from '../../../src/services/directoryCat
 import { resolveDirectoryMediaUri } from '../../../src/utils/directoryMediaUrl';
 import { ApiService, ProviderService } from '../../../src/services/api';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Badge } from '../../../src/components/Badge';
 import { StockService } from '../../../src/services/stockService';
@@ -4317,41 +4316,7 @@ export default function DashboardScreen() {
         {/* ═══════ PAGE 1: Catálogo de Serviços ═══════ */}
         {userRole === 'CLIENT' && (
         <View style={{ width: pagerWidth, flex: 1, backgroundColor: C.background }}>
-          <LinearGradient
-            colors={[SERVICE_CATEGORY_COLORS.all, C.branding]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.premiumHeader}
-          >
-            <View style={styles.premiumHeaderRow}>
-              <View>
-                <Text style={styles.premiumHeaderText}>{t('home.searchTitle')}</Text>
-              </View>
-            </View>
-
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.circularCatScroll}
-              keyboardShouldPersistTaps="handled"
-            >
-              {(categories.length > 0 ? categories : SERVICE_CATEGORIES).map((cat: any) => (
-                <TouchableOpacity key={cat.id} style={styles.circularCatItem} onPress={() => setSvcFilter(cat.id)}>
-                  <View style={[styles.circularCatIconWrap, svcFilter === cat.id && styles.circularCatActive]}>
-                    {cat.isMCI
-                      ? <MaterialCommunityIcons name={cat.icon as any} size={24} color={C.cardWhite} />
-                      : <Ionicons name={cat.icon as any} size={24} color={C.cardWhite} />}
-                  </View>
-                  <Text style={styles.circularCatLabel} numberOfLines={1}>
-                    {cat.labelKey
-                      ? t(`home.serviceCategories.${cat.labelKey}`)
-                      : (cat.label || cat.id)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </LinearGradient>
-
+          <View style={{ paddingTop: 8 }}>
           <View style={styles.searchWrapPremium}>
             <Ionicons name="search" size={18} color={C.textLight} style={{ marginRight: 10 }} />
             <TextInput
@@ -4362,6 +4327,7 @@ export default function DashboardScreen() {
               onChangeText={(txt) => setSearchText(txt)}
               returnKeyType="done"
             />
+          </View>
           </View>
 
           {/* Altura fixa: ScrollView horizontal dentro de coluna flex:1 esticava na vertical e inchava os chips */}
@@ -6763,19 +6729,7 @@ function createDashboardStyles(C: ColorPalette) {
   listTitle: { fontSize: 14, fontWeight: '900', color: C.primary, textTransform: 'uppercase', letterSpacing: -0.2 },
   listType: { fontSize: 10, color: C.textSecondary, marginTop: 2, fontWeight: '800', textTransform: 'uppercase' },
   filterScroll: { paddingHorizontal: 16, paddingBottom: 8 },
-  // Premium Services UI
-  // Premium Services UI (Refined Typo & Deep Slate Ardósia)
-  premiumHeader: { paddingBottom: 24, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, paddingHorizontal: 16, paddingTop: 10 },
-  premiumHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  premiumHeaderText: { fontSize: 15, fontWeight: '900', color: C.cardWhite, letterSpacing: -0.4 },
-  
-  circularCatScroll: { paddingRight: 20 },
-  circularCatItem: { alignItems: 'center', width: 95 },
-  circularCatIconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
-  circularCatActive: { backgroundColor: SERVICE_CATEGORY_COLORS.all, shadowColor: SERVICE_CATEGORY_COLORS.all, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  circularCatLabel: { fontSize: 9, fontWeight: '900', color: C.cardWhite, opacity: 0.85, letterSpacing: 0.5, textAlign: 'center', textTransform: 'uppercase' },
-
-  searchWrapPremium: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: -16, backgroundColor: C.cardWhite, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, shadowColor: C.slate, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
+  searchWrapPremium: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 0, backgroundColor: C.cardWhite, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, shadowColor: C.slate, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
 
   filterChip: {
     paddingHorizontal: 16,
