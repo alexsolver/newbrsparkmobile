@@ -5906,7 +5906,7 @@ window.saveChecklist = async function() {
                                 fbStr(
                                     'fb_alert_dup_title_api',
                                     null,
-                                    'Já existe um formulário activo com este nome nesta pasta.'
+                                    'Já existe um formulário ativo com este nome nesta pasta.'
                                 )
                         )
                     );
@@ -6949,7 +6949,7 @@ window.duplicateChecklist = async function(id) {
                             fbStr(
                                 'fb_alert_dup_title_api',
                                 null,
-                                'Já existe um formulário activo com este nome nesta pasta.'
+                                'Já existe um formulário ativo com este nome nesta pasta.'
                             )
                     )
                 );

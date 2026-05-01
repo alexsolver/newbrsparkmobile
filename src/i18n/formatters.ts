@@ -29,6 +29,12 @@ export async function setUnitSystem(imperial: boolean) {
   await AsyncStorage.setItem(UNIT_KEY, imperial ? 'imperial' : 'metric');
 }
 
+/** Remove preferência gravada — `isImperial()` volta a seguir o idioma (ex.: en-US). */
+export async function resetUnitPreference() {
+  await AsyncStorage.removeItem(UNIT_KEY);
+  _useImperial = null;
+}
+
 export function isImperial(): boolean {
   if (_useImperial !== null) return _useImperial;
   return IMPERIAL_LOCALES.includes(getCurrentLanguage());

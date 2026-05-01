@@ -11,6 +11,7 @@ const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const {
   materializeApprovedApplication,
   mirrorApprovedLegacyRegistrationToProviderNetwork,
+  buildFaceEnrollmentFromApprovedRegistration,
   normalizeFacePhotos,
   MIN_FACE_ENROLLMENT_PHOTOS_FOR_SUBMIT,
 } = require('../lib/technicianRegistrationMaterialize');
@@ -951,7 +952,7 @@ publicRouter.post(
       if (!Array.isArray(merged.personalDocuments)) merged.personalDocuments = [];
       if (!Array.isArray(merged.technician.professionalDocuments)) merged.technician.professionalDocuments = [];
 
-      const updated = await prisma.technicianRegistrationApplication.update({
+      await prisma.technicianRegistrationApplication.update({
         where: { id: freshApp.id },
         data: {
           responsesJson: merged,
@@ -970,68 +971,89 @@ publicRouter.post(
         },
       });
 
-      /** Sempre materializar aprovação no mesmo pedido — sem fila de revisão manual por omissão. */
-      try {
-        const approvedUser = await materializeApprovedApplication(basePrisma, freshApp.id);
-        /**
-         * Resposta HTTP o mais cedo possível: mirror provider-first, e-mail/push e CompreFace podem
-         * exceder timeouts de gateway (504) se correrem antes de `res.json`.
-         */
-        const approvedUserId = approvedUser.id;
-        const notifyEmail = merged.email || freshApp.invitedEmail;
-        const tenantIdBg = freshApp.tenantId;
-        const candidateUserIdBg = req.user.id;
-        const technicianBg =
-          merged.technician && typeof merged.technician === 'object' ? merged.technician : {};
-        res.json({ ok: true, status: 'APPROVED', autoApproved: true });
-        void (async () => {
-          try {
-            await mirrorApprovedLegacyRegistrationToProviderNetwork(basePrisma, {
-              tenantId: tenantIdBg,
-              userId: approvedUserId,
-              technician: technicianBg,
+      /**
+       * Resposta imediata `PROCESSING`: materialização + FaceMatch + mirror correm em background.
+       * Evita 504 quando o gateway corta o pedido antes do fim de `materializeApprovedApplication`.
+       * A app deve fazer polling em GET `/:token` até `status === 'APPROVED'` (ou timeout).
+       */
+      const notifyEmail = merged.email || freshApp.invitedEmail;
+      const tenantIdBg = freshApp.tenantId;
+      const candidateUserIdBg = req.user.id;
+      const technicianBg =
+        merged.technician && typeof merged.technician === 'object' ? merged.technician : {};
+      const avatarUrlBg = merged.avatarUrl ? String(merged.avatarUrl).trim() : '';
+      const faceBeforeBg = normalizeFacePhotos(merged.faceEnrollmentPhotos);
+      res.json({ ok: true, status: 'PROCESSING', autoApproved: true });
+      void (async () => {
+        let approvedUserId;
+        try {
+          const approvedUser = await materializeApprovedApplication(basePrisma, freshApp.id, {
+            deferFaceEnrollment: true,
+          });
+          approvedUserId = approvedUser.id;
+        } catch (autoErr) {
+          console.error('[tech-reg] auto-approve async after PROCESSING', autoErr);
+          return;
+        }
+        try {
+          const mergedFaces = await buildFaceEnrollmentFromApprovedRegistration(
+            freshApp.id,
+            approvedUserId,
+            avatarUrlBg,
+            faceBeforeBg
+          );
+          if (mergedFaces.length) {
+            await basePrisma.user.update({
+              where: { id: approvedUserId },
+              data: {
+                faceEnrollmentPhotos: mergedFaces,
+                comprefaceRecognitionSync: {
+                  status: 'pending',
+                  at: new Date().toISOString(),
+                  message: 'Candidatura aprovada — a sincronizar galeria FaceMatch.',
+                },
+              },
             });
-          } catch (e) {
-            console.warn('[provider-first] mirror legacy auto-approve failed:', e?.message || e);
           }
-          try {
-            await notifyTechRegistrationStatus({
-              tenantId: tenantIdBg,
-              invitedEmail: notifyEmail,
-              candidateUserId: candidateUserIdBg,
-              status: 'SUBMITTED',
-            });
-          } catch (e) {
-            console.warn('[tech-reg] notify SUBMITTED (assíncrono após resposta)', e);
-          }
-          try {
-            await notifyTechRegistrationStatus({
-              tenantId: tenantIdBg,
-              invitedEmail: notifyEmail,
-              candidateUserId: candidateUserIdBg,
-              status: 'APPROVED',
-            });
-          } catch (e) {
-            console.warn('[tech-reg] notify APPROVED (assíncrono após resposta)', e);
-          }
-          try {
-            await syncComprefaceGalleryAfterUserChange(basePrisma, approvedUserId, req, 'tech_reg_auto_approve');
-          } catch (e) {
-            console.warn('[tech-reg] FaceMatch após habilitação automática', e);
-          }
-        })();
-        return;
-      } catch (autoErr) {
-        console.error('[tech-reg] auto-approve after submit', autoErr);
-        return res.status(500).json({
-          error:
-            autoErr && autoErr.message
-              ? String(autoErr.message)
-              : 'Envio registrado, mas a habilitação automática falhou. Tente de novo ou fale com o suporte.',
-          code: 'TECH_REG_AUTO_APPROVE_FAILED',
-          status: updated.status,
-        });
-      }
+        } catch (e) {
+          console.warn('[tech-reg] matrícula facial diferida (pós-resposta) falhou:', e?.message || e);
+        }
+        try {
+          await mirrorApprovedLegacyRegistrationToProviderNetwork(basePrisma, {
+            tenantId: tenantIdBg,
+            userId: approvedUserId,
+            technician: technicianBg,
+          });
+        } catch (e) {
+          console.warn('[provider-first] mirror legacy auto-approve failed:', e?.message || e);
+        }
+        try {
+          await notifyTechRegistrationStatus({
+            tenantId: tenantIdBg,
+            invitedEmail: notifyEmail,
+            candidateUserId: candidateUserIdBg,
+            status: 'SUBMITTED',
+          });
+        } catch (e) {
+          console.warn('[tech-reg] notify SUBMITTED (assíncrono após resposta)', e);
+        }
+        try {
+          await notifyTechRegistrationStatus({
+            tenantId: tenantIdBg,
+            invitedEmail: notifyEmail,
+            candidateUserId: candidateUserIdBg,
+            status: 'APPROVED',
+          });
+        } catch (e) {
+          console.warn('[tech-reg] notify APPROVED (assíncrono após resposta)', e);
+        }
+        try {
+          await syncComprefaceGalleryAfterUserChange(basePrisma, approvedUserId, req, 'tech_reg_auto_approve');
+        } catch (e) {
+          console.warn('[tech-reg] FaceMatch após habilitação automática', e);
+        }
+      })();
+      return;
     } catch (err) {
       console.error('POST tech-reg submit', err);
       res.status(500).json({ error: err.message });

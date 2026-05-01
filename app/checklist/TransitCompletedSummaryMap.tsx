@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, LayoutChangeEvent, Dimensions } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
+import { formatDistance } from '../../src/i18n/formatters';
 
 const MAP_HEIGHT = 200;
 const MAX_POINTS = 500;
@@ -246,7 +247,7 @@ export function transitActualMetricsLabels(am: {
     durationLabel = formatDurationBr(am.durationSeconds);
   }
   if (am.distanceMeters != null && Number.isFinite(am.distanceMeters) && am.distanceMeters >= 0) {
-    distanceLabel = `${(am.distanceMeters / 1000).toFixed(2)} km`;
+    distanceLabel = formatDistance(am.distanceMeters / 1000);
   }
   return { durationLabel, distanceLabel };
 }

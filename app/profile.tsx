@@ -40,7 +40,15 @@ import {
   requeueChecklistOutboxConflicts,
   clearChecklistOutboxConflicts,
 } from '../src/services/syncService';
-import { isImperial, setUnitSystem, setNumberFormat, getNumberFormat, loadNumberFormatPreference, NumberFormatPrefs } from '../src/i18n/formatters';
+import {
+  isImperial,
+  setUnitSystem,
+  resetUnitPreference,
+  setNumberFormat,
+  getNumberFormat,
+  loadNumberFormatPreference,
+  NumberFormatPrefs,
+} from '../src/i18n/formatters';
 import { shareUserLocalDataJson } from '../src/utils/exportUserLocalData';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
 import {
@@ -482,7 +490,10 @@ export default function ProfileScreen() {
       
       setPushEnabled(await readPushEnabledPreference());
       const region = await AsyncStorage.getItem(REGION_KEY);
-      setSelectedRegion(region || getDeviceRegion());
+      const resolvedRegion = region || getDeviceRegion();
+      if (resolvedRegion === 'US') await setUnitSystem(true);
+      else await resetUnitPreference();
+      setSelectedRegion(resolvedRegion);
       const lang = await AsyncStorage.getItem(LANGUAGE_KEY);
       setSelectedLang(lang || i18n.language || 'pt-BR');
       await loadNumberFormatPreference();
@@ -1767,6 +1778,9 @@ export default function ProfileScreen() {
                     onPress={async () => {
                       setSelectedRegion(r.code);
                       await AsyncStorage.setItem(REGION_KEY, r.code);
+                      if (r.code === 'US') await setUnitSystem(true);
+                      else await resetUnitPreference();
+                      setUseImperial(isImperial());
                       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                       setRegionDropdownOpen(false);
                     }}

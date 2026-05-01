@@ -2,18 +2,66 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import * as Network from 'expo-network';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { apiFetch, getToken, handleUnauthorizedMaybeSessionInvalidated } from '../services/auth';
 
 const VOICE_NOTE_PHASE_PENDING = 'pending_transcription';
+
+const IOS_AUDIO_SESSION_BUSY_MS = [0, 160, 320, 600, 1000] as const;
+const RECORDING_ATTEMPTS = IOS_AUDIO_SESSION_BUSY_MS.length;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** iOS `AVAudioSessionErrorInsufficientPriority` / transient session contention. */
+function isIosAudioSessionBusyError(e: unknown): boolean {
+  const o = e as { message?: string; code?: number | string } | null;
+  const msg = typeof o?.message === 'string' ? o.message : '';
+  const code = o?.code;
+  if (code === 561017449 || code === '561017449') return true;
+  const m = msg.toLowerCase();
+  return (
+    msg.includes('561017449') ||
+    m.includes('session activation failed') ||
+    m.includes('insufficientpriority') ||
+    msg.includes('!pri')
+  );
+}
+
+async function applyVoiceRecordingAudioMode(): Promise<void> {
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: true,
+    playsInSilentModeIOS: true,
+    interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+    staysActiveInBackground: false,
+    interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+    shouldDuckAndroid: true,
+    playThroughEarpieceAndroid: false,
+  });
+}
+
+/** Release recording flag so the next `setActive` can succeed after contention. */
+async function releaseVoiceRecordingAudioMode(): Promise<void> {
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: false,
+    playsInSilentModeIOS: true,
+    interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+    staysActiveInBackground: false,
+    interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+    shouldDuckAndroid: true,
+    playThroughEarpieceAndroid: false,
+  });
+}
 
 export type VoiceNoteStoredValue = {
   transcript?: string;
@@ -85,6 +133,7 @@ export function ChecklistVoiceNoteField({
         r.stopAndUnloadAsync().catch(() => {});
         recordingRef.current = null;
       }
+      void releaseVoiceRecordingAudioMode().catch(() => {});
     };
   }, []);
 
@@ -367,21 +416,61 @@ export function ChecklistVoiceNoteField({
         Alert.alert(t('appAlerts.techReg.permTitle'), t('appAlerts.voice.micRequired'));
         return;
       }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
-      const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await rec.startAsync();
-      recordingRef.current = rec;
-      setPhase('recording');
-      emitState({ phase: 'recording', error: '' });
+
+      const stuck = recordingRef.current;
+      if (stuck) {
+        recordingRef.current = null;
+        try {
+          await stuck.stopAndUnloadAsync();
+        } catch {
+          /* ignore */
+        }
+        await sleep(80);
+      }
+
+      for (let attempt = 0; attempt < RECORDING_ATTEMPTS; attempt++) {
+        const waitMs = IOS_AUDIO_SESSION_BUSY_MS[attempt];
+        if (waitMs > 0) {
+          await sleep(waitMs);
+          try {
+            await releaseVoiceRecordingAudioMode();
+          } catch {
+            /* ignore */
+          }
+          await sleep(Platform.OS === 'ios' ? 90 : 40);
+        }
+
+        await applyVoiceRecordingAudioMode();
+
+        let rec: InstanceType<typeof Audio.Recording> | null = null;
+        try {
+          rec = new Audio.Recording();
+          await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+          await rec.startAsync();
+          recordingRef.current = rec;
+          setPhase('recording');
+          emitState({ phase: 'recording', error: '' });
+          return;
+        } catch (e) {
+          if (rec) {
+            try {
+              await rec.stopAndUnloadAsync();
+            } catch {
+              /* ignore */
+            }
+          }
+          const retriable = Platform.OS === 'ios' && isIosAudioSessionBusyError(e);
+          const more = attempt < RECORDING_ATTEMPTS - 1;
+          if (!retriable || !more) {
+            throw e;
+          }
+        }
+      }
     } catch (e: any) {
-      const msg = e?.message || 'Não foi possível iniciar a gravação.';
+      const busy = Platform.OS === 'ios' && isIosAudioSessionBusyError(e);
+      const msg = busy
+        ? t('appAlerts.voice.sessionBusy')
+        : e?.message || 'Não foi possível iniciar a gravação.';
       setErrMsg(msg);
       setPhase('error');
       emitState({ phase: 'error', error: msg });
@@ -402,6 +491,12 @@ export function ChecklistVoiceNoteField({
       setPhase('error');
       emitState({ phase: 'error', error: msg });
       return;
+    } finally {
+      try {
+        await releaseVoiceRecordingAudioMode();
+      } catch {
+        /* ignore */
+      }
     }
     if (!uri) {
       const msg = 'Gravação sem arquivo.';

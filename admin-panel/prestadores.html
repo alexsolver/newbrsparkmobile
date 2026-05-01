@@ -6,14 +6,61 @@
   <title>BrSpark Admin — Prestadores</title>
   <link rel="stylesheet" href="css/main.css" />
   <style>
-    .prest-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      align-items: start;
+    .pr-tabs-wrap {
+      margin-bottom: 18px;
     }
-    @media (max-width: 1100px) {
-      .prest-grid { grid-template-columns: 1fr; }
+    .pr-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .pr-tab {
+      padding: 12px 18px;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text2);
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -1px;
+      cursor: pointer;
+      border-radius: 10px 10px 0 0;
+    }
+    .pr-tab:hover {
+      color: var(--text);
+      background: var(--surface2);
+    }
+    .pr-tab--active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: var(--surface);
+    }
+    .pr-tab:focus-visible {
+      outline: 2px solid var(--blue, #2563eb);
+      outline-offset: 2px;
+    }
+    .pr-tab-panel[hidden] {
+      display: none !important;
+    }
+    .pr-subsec-title {
+      font-size: 13px;
+      font-weight: 800;
+      margin: 18px 0 8px;
+      color: var(--text);
+    }
+    .pr-invite-filters {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px 16px;
+      margin-bottom: 12px;
+      align-items: end;
+    }
+    .pr-invite-filters .form-group {
+      margin-bottom: 0;
+    }
+    .pr-invite-filters-full {
+      grid-column: 1 / -1;
     }
     .prest-card {
       background: var(--surface);
@@ -36,7 +83,6 @@
       line-height: 1.45;
       margin: 0 0 14px;
     }
-    .prest-apps-card { margin-top: 20px; }
     .prest-candidates-list {
       max-height: 220px;
       overflow: auto;
@@ -47,7 +93,7 @@
     }
     .prest-table-wrap {
       overflow: auto;
-      max-height: 360px;
+      max-height: min(70vh, 560px);
       border: 1px solid var(--border);
       border-radius: 10px;
     }
@@ -57,6 +103,64 @@
       gap: 10px;
       align-items: center;
       margin-bottom: 10px;
+    }
+    .pr-bonds-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: stretch;
+      max-width: 220px;
+    }
+    .pr-bonds-actions .btn {
+      flex: 1 1 100px;
+      font-size: 11px;
+      padding: 6px 8px;
+      line-height: 1.2;
+    }
+    .pr-search-shell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 10px;
+      background: var(--surface2);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .pr-search-shell:focus-within {
+      border-color: var(--blue, #2563eb);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+    }
+    .pr-search-shell input.pr-search-input {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      background: transparent;
+      font-size: 14px;
+      padding: 6px 4px;
+      outline: none;
+      color: var(--text);
+    }
+    .pr-platform-row-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      padding: 2px 6px;
+      border-radius: 6px;
+      margin-top: 6px;
+      display: inline-block;
+    }
+    .pr-platform-row-badge--ok {
+      background: rgba(34, 197, 94, 0.15);
+      color: rgb(21, 128, 61);
+    }
+    .pr-platform-row-badge--warn {
+      background: rgba(245, 158, 11, 0.18);
+      color: rgb(146, 64, 14);
+    }
+    th#pr-th-actions {
+      min-width: 200px;
     }
   </style>
 </head>
@@ -78,7 +182,14 @@
 
       <p id="pr-perm-banner" class="prest-sub" style="display:none;padding:12px 14px;border-radius:10px;background:var(--amber-dim);color:var(--text);border:1px solid var(--border);margin-bottom:16px"></p>
 
-      <div class="prest-grid">
+      <div class="pr-tabs-wrap" id="pr-tabs-wrap" hidden>
+        <div class="pr-tabs" role="tablist" aria-label="Prestadores">
+          <button type="button" class="pr-tab pr-tab--active" role="tab" id="pr-tab-btn-bonds" aria-selected="true" aria-controls="pr-panel-bonds" data-pr-tab="bonds"></button>
+          <button type="button" class="pr-tab" role="tab" id="pr-tab-btn-invite" aria-selected="false" aria-controls="pr-panel-invite" data-pr-tab="invite"></button>
+        </div>
+      </div>
+
+      <div id="pr-panel-bonds" class="pr-tab-panel" role="tabpanel" aria-labelledby="pr-tab-btn-bonds">
         <section class="prest-card" id="pr-section-bonds" aria-labelledby="pr-card-bonds-title">
           <h2 id="pr-card-bonds-title">Vínculos e pedidos</h2>
           <p class="prest-sub" id="pr-bonds-hint"></p>
@@ -108,20 +219,15 @@
             </table>
           </div>
         </section>
+      </div>
 
+      <div id="pr-panel-invite" class="pr-tab-panel" role="tabpanel" aria-labelledby="pr-tab-btn-invite" hidden>
         <section class="prest-card" id="pr-section-invite" aria-labelledby="pr-card-invite-title">
           <h2 id="pr-card-invite-title">Convidar parceria ou vínculo dedicado</h2>
           <div id="pr-invite-intro" class="prest-sub" style="padding:12px 14px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);margin-bottom:14px"></div>
           <div class="form-group">
             <label class="form-label" for="pr-invite-email" id="pr-lbl-invite-email">E-mail do prestador *</label>
             <input type="email" class="form-control" id="pr-invite-email" placeholder="tecnico@exemplo.com" autocomplete="email" />
-          </div>
-          <div class="form-group" id="pr-candidates-wrap">
-            <label class="form-label" for="pr-candidates-filter" id="pr-lbl-candidates">Prestadores disponíveis</label>
-            <p id="pr-candidates-help" class="prest-sub" style="margin-top:0"></p>
-            <input type="search" class="form-control" id="pr-candidates-filter" placeholder="" autocomplete="off" />
-            <div id="pr-candidates-list" class="prest-candidates-list"></div>
-            <p id="pr-candidates-status" style="font-size:11px;color:var(--text3);margin-top:6px"></p>
           </div>
           <div class="form-group" id="pr-wrap-invite-tenant" style="display:none">
             <label class="form-label" for="pr-invite-tenant" id="pr-lbl-invite-tenant">Tenant (empresa) *</label>
@@ -131,6 +237,87 @@
           <input type="hidden" id="pr-invite-type" value="DEDICATED" />
           <p id="pr-lbl-type" class="prest-sub" style="margin-top:6px;font-size:12px;color:var(--text2)"></p>
           <p id="pr-type-hint" class="prest-sub" style="margin-top:4px"></p>
+
+          <h3 class="pr-subsec-title" id="pr-directory-filters-heading"></h3>
+          <p id="pr-platform-search-hint" class="prest-sub" style="margin-top:0;margin-bottom:10px"></p>
+          <div class="pr-invite-filters" id="pr-invite-filters">
+            <div class="form-group pr-invite-filters-full">
+              <label class="form-label" for="pr-platform-search" id="pr-lbl-platform-search">Buscar na plataforma</label>
+              <div class="pr-search-shell" role="search">
+                <ion-icon name="search-outline" style="font-size:20px;color:var(--text3);flex-shrink:0" aria-hidden="true"></ion-icon>
+                <input
+                  type="search"
+                  class="pr-search-input"
+                  id="pr-platform-search"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                  aria-describedby="pr-platform-search-hint pr-platform-search-status"
+                />
+                <button type="button" class="btn btn-outline btn-sm" id="pr-platform-search-clear" style="display:none;flex-shrink:0;padding:4px 10px">
+                  <span id="pr-platform-search-clear-txt">Limpar</span>
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pr-search-skill" id="pr-lbl-search-skill"></label>
+              <input type="search" class="form-control" id="pr-search-skill" autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pr-search-location" id="pr-lbl-search-location"></label>
+              <select class="form-control" id="pr-search-location"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pr-search-tech-status" id="pr-lbl-search-tech-status"></label>
+              <select class="form-control" id="pr-search-tech-status">
+                <option value="" id="pr-search-tech-opt-any"></option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="PENDING">PENDING</option>
+                <option value="INACTIVE">INACTIVE</option>
+                <option value="SUSPENDED">SUSPENDED</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pr-search-schedule" id="pr-lbl-search-schedule"></label>
+              <select class="form-control" id="pr-search-schedule">
+                <option value="" id="pr-search-sch-opt-any"></option>
+                <option value="1" id="pr-search-sch-opt-yes"></option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pr-search-coverage" id="pr-lbl-search-coverage"></label>
+              <select class="form-control" id="pr-search-coverage">
+                <option value="" id="pr-search-cov-opt-any"></option>
+                <option value="1" id="pr-search-cov-opt-yes"></option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="pr-search-min-score" id="pr-lbl-search-min-score"></label>
+              <input type="number" class="form-control" id="pr-search-min-score" min="0" max="100" step="0.1" placeholder="" autocomplete="off" />
+            </div>
+            <div class="form-group" style="padding-top:22px">
+              <button type="button" class="btn btn-primary" id="pr-directory-search-btn" style="width:100%"></button>
+            </div>
+          </div>
+          <p id="pr-search-location-hint" class="prest-sub" style="display:none;font-size:11px;color:var(--text3);margin:-4px 0 10px"></p>
+          <p id="pr-platform-search-status" style="font-size:11px;color:var(--text3);margin-top:4px;min-height:1.2em"></p>
+          <div id="pr-platform-search-results" class="prest-candidates-list" style="max-height:280px;margin-bottom:16px"></div>
+          <div class="form-group" id="pr-candidates-wrap">
+            <label class="form-label" for="pr-candidates-filter" id="pr-lbl-candidates">Prestadores disponíveis</label>
+            <p id="pr-candidates-help" class="prest-sub" style="margin-top:0"></p>
+            <div class="pr-search-shell" style="margin-bottom:8px">
+              <ion-icon name="funnel-outline" style="font-size:18px;color:var(--text3);flex-shrink:0" aria-hidden="true"></ion-icon>
+              <input
+                type="search"
+                class="pr-search-input"
+                id="pr-candidates-filter"
+                placeholder=""
+                autocomplete="off"
+                aria-describedby="pr-candidates-help pr-candidates-status"
+              />
+            </div>
+            <div id="pr-candidates-list" class="prest-candidates-list"></div>
+            <p id="pr-candidates-status" style="font-size:11px;color:var(--text3);margin-top:6px"></p>
+          </div>
           <div class="form-group">
             <label class="form-label" for="pr-invite-note" id="pr-lbl-note">Mensagem (opcional)</label>
             <textarea class="form-control" id="pr-invite-note" rows="3" placeholder=""></textarea>
@@ -140,35 +327,6 @@
           </button>
         </section>
       </div>
-
-      <section class="prest-card prest-apps-card" id="pr-section-apps" aria-labelledby="pr-card-apps-title">
-        <h2 id="pr-card-apps-title">Candidaturas (onboarding)</h2>
-        <p class="prest-sub" id="pr-apps-sub"></p>
-        <div class="prest-toolbar" style="margin-top:4px">
-          <button type="button" class="btn btn-outline btn-sm" id="pr-apps-refresh">
-            <ion-icon name="refresh-outline" style="font-size:16px;vertical-align:-2px" aria-hidden="true"></ion-icon>
-            <span id="pr-apps-refresh-txt">Atualizar</span>
-          </button>
-          <a href="prestadores-catalogo.html" class="btn btn-primary btn-sm" id="pr-apps-see-all" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
-            <span id="pr-apps-see-all-txt">Abrir lista completa</span>
-            <ion-icon name="arrow-forward-outline" style="font-size:16px;vertical-align:-2px" aria-hidden="true"></ion-icon>
-          </a>
-        </div>
-        <p id="pr-apps-status" style="font-size:12px;color:var(--text2);margin-bottom:8px"></p>
-        <div class="prest-table-wrap" style="max-height:280px">
-          <table class="data-table" style="width:100%;font-size:12px">
-            <thead>
-              <tr>
-                <th id="pr-apps-th-email">E-mail</th>
-                <th id="pr-apps-th-tenant">Tenant</th>
-                <th id="pr-apps-th-status">Estado</th>
-                <th id="pr-apps-th-updated">Atualizado</th>
-              </tr>
-            </thead>
-            <tbody id="pr-tech-tbody"></tbody>
-          </table>
-        </div>
-      </section>
     </div>
   </div>
 </div>

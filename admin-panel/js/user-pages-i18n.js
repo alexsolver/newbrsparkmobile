@@ -182,10 +182,10 @@ const M = {
     ul_lblTenant: 'Conta (Tenant)',
     ul_lblTenantsMulti: 'Organizações (tenants) *',
     ul_tenantsHint:
-      'Apenas organizações empresa (COMPANY). Será criado um registo de utilizador por organização selecionada, com o mesmo e-mail, nome e senha. O slug e o contacto junto de cada nome são dados dessa organização — não confunda com o e-mail do novo utilizador.',
-    /** Modo admin de uma organização (sem selecção múltipla). */
+      'Apenas organizações empresa (COMPANY). Será criado um registro de usuário por organização selecionada, com o mesmo e-mail, nome e senha. O slug e o contato junto de cada nome são dados dessa organização — não confunda com o e-mail do novo usuário.',
+    /** Modo admin de uma organização (sem seleção múltipla). */
     ul_tenantsHintScoped:
-      'Apenas organizações empresa (COMPANY). Será criado um registo na sua organização com o e-mail, nome e senha indicados. No seletor, o texto entre parênteses é o contacto da organização.',
+      'Apenas organizações empresa (COMPANY). Será criado um registro na sua organização com o e-mail, nome e senha indicados. No seletor, o texto entre parênteses é o contato da organização.',
     ul_tenantsAll: 'Marcar todas',
     ul_tenantsNone: 'Limpar seleção',
     ul_createPickTenants: 'Selecione pelo menos uma organização (tenant).',
@@ -255,9 +255,9 @@ const M = {
     ul_editUser: 'Editar usuário',
     ul_resetPwdBtn: 'Resetar senha',
     ul_deactivate: 'Desativar conta',
-    ul_deleteUser: 'Eliminar utilizador (esta organização)',
+    ul_deleteUser: 'Eliminar usuário (esta organização)',
     ul_deleteUserConfirm:
-      'Eliminar permanentemente «{name}» nesta organização? Se o mesmo e-mail existir noutro espaço (cliente/prestador), esse registo mantém-se. Esta ação não remove a conta de login unificada (App) por completo.',
+      'Eliminar permanentemente «{name}» nesta organização? Se o mesmo e-mail existir em outro espaço (cliente/prestador), esse registro permanece. Esta ação não remove a conta de login unificada (App) por completo.',
     ul_activate: 'Ativar conta',
     ul_pwdMin: 'A senha deve ter pelo menos 8 caracteres, com uma letra maiúscula, uma minúscula e um número.',
     ul_pwdOk: 'Senha resetada com sucesso.',
@@ -368,14 +368,16 @@ const M = {
     ue_cfGalleryDesc_html:
       'Ao adicionar ou remover fotos base ou ao gravar alteração de avatar, o <strong>servidor envia na hora</strong> a galeria ao FaceMatch (ordem: referência do passo 1, quando existir; depois avatar; depois demais matrículas).',
     ue_cfSyncAgain: 'Sincronizar novamente',
-    ue_cfSyncIdle: 'Pronto, a sincronizar após alterar fotos.',
+    ue_cfSyncIdle: 'Pronto — sincroniza após alterar fotos.',
     ue_cfSubjectFoot: 'O subject no FaceMatch segue o formato tenant:usuário definido pelo painel.',
+    ue_cfManualSyncHint:
+      'Força o envio ao FaceMatch (Recognition) do avatar e das fotos de matrícula já gravados no servidor — não grava a ficha nem altera outros campos.',
     ue_secWorkTime: 'Registro de horas (ponto)',
     ue_lblMatricula: 'Matrícula funcional',
     ue_phMatricula: 'Ex.: 12345, FT-00042…',
     ue_matriculaHint:
       'Um valor por usuário, único na organização quando preenchido. Usado no app de ponto, nas batidas e nos relatórios de horas (exportação / auditoria).',
-    ue_wtLoading: 'A carregar política do tenant…',
+    ue_wtLoading: 'Carregando política do tenant…',
     ue_wtEnableLbl: 'Habilitar registro de horas para este usuário',
     ue_wtBrRegimeTitle: 'Vínculo laboral (Brasil)',
     ue_wtBrRegimeHint:
@@ -405,7 +407,7 @@ const M = {
     ue_addr_us_postal: 'ZIP / código postal',
     ue_addr_us_country: 'País (código ISO, ex. US)',
     ue_avatarUploadBtn: 'Enviar imagem',
-    ue_avatarUploading: 'A enviar…',
+    ue_avatarUploading: 'Enviando…',
     ue_avatarUploadErr: 'Não foi possível enviar a imagem do avatar.',
     ue_avatarHeic: 'HEIC não é aceito. Use JPEG ou PNG.',
     ue_rbacRoleFieldLocked: 'O seu papel não permite alterar este campo.',
@@ -432,7 +434,7 @@ const M = {
       '<strong>Vínculo</strong>: relação operacional com a empresa (horários de exclusividade podem ser acordados). Ao ativar, outras afiliações ativas com a mesma conta podem ser encerradas automaticamente. Requer identidade global de prestador e fluxo provider-first ativo na empresa.',
     ue_paffNoIdentity:
       'Ainda não existe identidade global de prestador para este e-mail. Conclua o cadastro global / KYC antes de convites ou use o fluxo de cadastro de prestador.',
-    ue_paffLoading: 'A carregar vínculos…',
+    ue_paffLoading: 'Carregando vínculos…',
     ue_paffLoadErr: 'Não foi possível carregar os vínculos com empresas.',
     ue_paffEmpty: 'Sem vínculos com empresas visíveis para a sua sessão.',
     ue_paffKycLine: 'Estado global: KYC <strong>{kyc}</strong> · identidade <strong>{global}</strong>.',
@@ -479,12 +481,12 @@ const M = {
     ue_paffBtnActivate: 'Ativar',
     ue_paffBtnEnd: 'Encerrar',
     ue_paffEndConfirm: 'Encerrar este vínculo com a empresa? O prestador deixa de operar nessa tenant.',
-    ue_paffActivateNeedKyc: 'KYC global tem de estar aprovado para ativar.',
+    ue_paffActivateNeedKyc: 'KYC global precisa estar aprovado para ativar.',
     ue_paffActivateNeedProviderFirst:
-      'O fluxo «prestador na rede» tem de estar ativo na empresa destino (feature flag). Ative em Sistema / flags ou peça à plataforma.',
+      'O fluxo «prestador na rede» precisa estar ativo na empresa destino (feature flag). Ative em Sistema / flags ou peça à plataforma.',
     ue_paffHintKycShort: 'Bloqueio KYC: aprove o onboarding global (caixa acima) ou o KYC desta identidade ainda não está APPROVED.',
     ue_paffHintPfShort:
-      'Bloqueio «prestador na rede»: a flag provider_first_network tem de estar ativa no tenant desta linha (ex.: Lan Solver). Sistema → feature flags dessa org.',
+      'Bloqueio «prestador na rede»: a flag provider_first_network precisa estar ativa no tenant desta linha (ex.: Lan Solver). Sistema → feature flags dessa org.',
     ue_paffGenericErr: 'Operação falhou.',
     ue_paffTenantPick: '(escolher empresa)',
     ue_paffTenantCurrent: '(organização atual)',
@@ -495,7 +497,7 @@ const M = {
     ue_paffDedicatedWindowsBtn: 'Janelas dedicadas',
     ue_paffDedicatedModalTitle: 'Exclusividade partner (tempo)',
     ue_paffDedHint:
-      'Neste horário, em cada semana, o prestador deixa de aparecer em ofertas partner (broadcast) e na sincronização. Ordens atribuídas directamente pela empresa (sem leilão) continuam possíveis. Acordar sempre com o prestador.',
+      'Neste horário, em cada semana, o prestador deixa de aparecer em ofertas partner (broadcast) e na sincronização. Ordens atribuídas diretamente pela empresa (sem leilão) continuam possíveis. Acordar sempre com o prestador.',
     ue_paffDedLblTz: 'Fuso horário (IANA)',
     ue_paffDedThDay: 'Dia',
     ue_paffDedThStart: 'Início',
@@ -503,7 +505,7 @@ const M = {
     ue_paffDedThAct: ' ',
     ue_paffDedAddLine: '+ Linha',
     ue_paffDedRemove: 'Remover',
-    ue_paffDedicatedSaved: 'Janelas dedicadas guardadas.',
+    ue_paffDedicatedSaved: 'Janelas dedicadas salvas.',
     ue_paffDedicatedNotFound: 'Vínculo não encontrado.',
     ue_paffDedicatedNeedRel: 'Só vínculos DEDICATED podem ter janelas de exclusividade partner.',
     ue_paffDedDay_mon: 'Segunda',
@@ -539,7 +541,7 @@ const M = {
     ue_docLocsTitle: 'Vazio = válido em todas as bases do tenant',
     ue_docLocsHint: 'Ctrl+clique várias',
     ue_docUploadBtn: 'Enviar arquivo',
-    ue_docUploading: 'A enviar…',
+    ue_docUploading: 'Enviando…',
     ue_docUploadErr: 'Não foi possível enviar o anexo.',
     ue_docPhNotes: 'Notas',
     ue_docRemove: 'Remover',
@@ -587,7 +589,7 @@ const M = {
     ue_auditThAction: 'Ação',
     ue_auditThAdmin: 'Admin',
     ue_auditThDetail: 'Detalhe',
-    ue_auditLoading: 'A carregar…',
+    ue_auditLoading: 'Carregando…',
     ue_elevateModalTitle: 'Confirmar elevação',
     ue_elevateLblEmail: 'E-mail',
     ue_elevateConfirm: 'Confirmar',
@@ -627,7 +629,7 @@ const M = {
     ue_discardConfirm: 'Descartar todas as alterações?',
     ue_saveNeedNameEmail: 'Nome e e-mail são obrigatórios.',
     ue_saveEmailInvalid: 'Formato de e-mail inválido.',
-    ue_saveOk: 'Guardado com sucesso.',
+    ue_saveOk: 'Salvo com sucesso.',
     ue_copyLinkOk: 'Link copiado.',
     ue_copyLinkPrompt: 'Copie:',
     ue_cfAdminNoState_html:
@@ -641,7 +643,7 @@ const M = {
     ue_cfPendingDefault: 'Aguarda sincronização com FaceMatch.',
     ue_cfFailDefault: 'Falha',
     ue_cfLastOk: ' Último OK: {date} ({n} img).',
-    ue_cfSyncLoading: 'A sincronizar com FaceMatch…',
+    ue_cfSyncLoading: 'Sincronizando com FaceMatch…',
     ue_cfSyncGalleryOkShort: 'Galeria atualizada, {n} imagem(ns) enviada(s) · subject: {sub}',
     ue_cfSyncFail: 'Falha na sincronização.',
     ue_cfSyncNetErrShort: 'Erro de rede ao contatar o servidor.',
@@ -673,7 +675,7 @@ const M = {
       'Prestador ACTIVE: o colaborador não altera foto de perfil nem matrícula facial pelo app, salvo durante uma janela de rematrícula aberta abaixo.',
     ue_faceReenrollKicker: 'Rematrícula facial no app',
     ue_faceReenrollDesc_html:
-      'Autorize um período em que o prestador pode atualizar a foto de perfil e as fotos base de reconhecimento diretamente no telemóvel (útil após troca de visual ou falhas na biometria).',
+      'Autorize um período em que o prestador pode atualizar a foto de perfil e as fotos base de reconhecimento diretamente no celular (útil após troca de visual ou falhas na biometria).',
     ue_faceReenrollHoursLbl: 'Duração',
     ue_faceReenrollOpenBtn: 'Abrir janela',
     ue_faceReenrollClearBtn: 'Encerrar janela',
@@ -686,7 +688,7 @@ const M = {
       'HEIC não é suportado aqui: {file}\nNo iPhone use Ajustes → Câmera → Formatos → «Mais compatível», ou converta para JPEG.',
     ue_faceFormatAlert: 'Formato não reconhecido (use JPEG, PNG ou WebP): {file}',
     ue_faceFileFallback: 'arquivo',
-    ue_faceUploadingFile: 'A enviar {file}…',
+    ue_faceUploadingFile: 'Enviando {file}…',
     ue_faceUploadFail: 'Falha ao enviar a foto. Verifique a conexão com a API e o console do navegador.',
     ue_navSessionNotes: 'Sessão e notas',
     ue_navActivity: 'Atividade',
@@ -697,11 +699,13 @@ const M = {
     pr_bc_here: 'Prestadores',
     pr_hero_title: 'Prestadores',
     pr_hero_sub:
-      'Convites de vínculo, provider-first (pedidos e activações) e candidaturas de onboarding — num só lugar.',
+      'Convites de vínculo, provider-first (pedidos e ativações) e candidaturas de onboarding — num só lugar.',
+    pr_tab_bonds: 'Vínculos e pedidos',
+    pr_tab_invite: 'Convidar e pesquisa',
     pr_perm_none: 'Sem permissão para gestão de prestadores nesta sessão.',
     pr_card_bonds_title: 'Vínculos e pedidos (organização)',
     pr_card_bonds_hint:
-      'Convites, pedidos «Solicitado» ou «Convidado» e vínculos activos. Para aprovar: botão «Activar» nesta tabela (recomendado) ou a ficha do utilizador — secção «Vínculos com empresas» (link em cada linha).',
+      'Convites, pedidos «Solicitado» ou «Convidado» e vínculos ativos. Para aprovar: botão «Ativar» nesta tabela (recomendado) ou a ficha do usuário — seção «Vínculos com empresas» (link em cada linha).',
     pr_card_bonds_hint_global: 'Escolha a organização acima para carregar os vínculos (modo plataforma).',
     pr_bonds_tenant_lbl: 'Organização (tenant)',
     pr_bonds_refresh: 'Atualizar',
@@ -710,66 +714,97 @@ const M = {
     pr_th_state: 'Estado',
     pr_th_requested: 'Pedido em',
     pr_th_actions: 'Ações',
-    pr_activate: 'Activar',
-    pr_confirm_activate: 'Activar este vínculo na organização?',
+    pr_activate: 'Ativar',
+    pr_confirm_activate: 'Ativar este vínculo na organização?',
     pr_kyc_pending: 'KYC pendente',
     pr_kyc_open_user: 'Abrir ficha (cadastro / KYC)',
     pr_open_user_affiliations: 'Ficha → vínculos com empresas',
     pr_rel_dedicated: 'Vínculo',
     pr_rel_owner: 'Espaço próprio',
-    pr_select_tenant_first: 'Seleccione a organização (tenant) para continuar.',
-    pr_loading: 'A carregar…',
+    pr_select_tenant_first: 'Selecione a organização (tenant) para continuar.',
+    pr_loading: 'Carregando…',
     pr_bonds_count: '{n} vínculo(s) mostrados.',
     pr_candidates_count: '{n} prestador(es) na lista de candidatos.',
     pr_candidates_filter_empty: 'Nenhum resultado para o filtro.',
-    pr_card_invite_title: 'Convidar prestador (vínculo)',
+    pr_card_invite_title: 'Convidar prestador e pesquisa na rede',
     pr_invite_intro_html:
-      'Envie um convite de <strong>vínculo</strong> com a empresa (horários de exclusividade podem ser acordados). Requer provider-first activo no tenant e prestador com cadastro global.',
+      'Envie um convite de <strong>vínculo</strong> com a empresa (horários de exclusividade podem ser acordados). Requer provider-first ativo no tenant e prestador com cadastro global.',
     pr_lbl_invite_email: 'E-mail do prestador *',
     pr_ph_invite_email: 'tecnico@exemplo.com',
     pr_lbl_candidates: 'Prestadores disponíveis para convite',
     pr_candidates_help:
-      'Contas com cadastro global de prestador sem vínculo activo ou pendente noutra empresa (nem na sua). Clique numa linha para preencher o e-mail.',
-    pr_candidates_filter_ph: 'Filtrar por nome ou e-mail…',
+      'Contas com cadastro global de prestador sem vínculo ativo ou pendente em outra empresa (nem na sua). Clique numa linha para preencher o e-mail.',
+    pr_candidates_filter_ph: 'Filtrar a lista elegível (nome, e-mail ou cidade)…',
+    pr_lbl_platform_search: 'Buscar prestador na plataforma',
+    pr_platform_search_hint:
+      'Pesquisa na rede (nome, e-mail, especialidade ou CFT). Toque em «Usar e-mail» para preencher o convite. Quem já tiver vínculo dedicado noutra empresa aparece com aviso — o envio do convite pode falhar.',
+    pr_platform_search_ph: 'Ex.: maria silva, cft, electricista…',
+    pr_platform_search_clear: 'Limpar',
+    pr_directory_filters_heading: 'Pesquisa na plataforma',
+    pr_lbl_search_skill: 'Habilidade (texto nas competências)',
+    pr_ph_search_skill: 'Ex.: elétrica, NR-10…',
+    pr_lbl_search_location: 'Base / localidade',
+    pr_search_location_any: 'Qualquer base',
+    pr_search_location_need_tenant: 'Selecione a empresa (tenant) para listar as bases.',
+    pr_lbl_search_tech_status: 'Estado do perfil técnico',
+    pr_search_tech_any: 'Qualquer',
+    pr_lbl_search_schedule: 'Agenda (disponibilidade)',
+    pr_search_sch_any: 'Indiferente',
+    pr_search_sch_yes: 'Com horários ativos',
+    pr_lbl_search_coverage: 'Área no mapa',
+    pr_search_cov_any: 'Indiferente',
+    pr_search_cov_yes: 'Com cobertura (raio)',
+    pr_lbl_search_min_score: 'Pontuação interna mínima',
+    pr_ph_search_min_score: 'Ex.: 7',
+    pr_directory_search_btn: 'Buscar na rede',
+    pr_platform_search_idle: 'Digite pelo menos 2 caracteres no texto geral, ou preencha outros filtros, e clique em «Buscar na rede».',
+    pr_platform_search_min: 'São necessários pelo menos 2 caracteres.',
+    pr_platform_search_empty: 'Nenhum prestador encontrado na plataforma para este texto.',
+    pr_platform_search_summary: '{n} resultado(s) nesta busca.',
+    pr_result_score: 'Pontuação interna',
+    pr_platform_search_error: 'Não foi possível concluir a busca. Verifique a sessão e a consola.',
+    pr_platform_use_email: 'Usar e-mail',
+    pr_badge_eligible: 'Elegível para convite',
+    pr_badge_other: 'Pode já ter vínculo — convite pode falhar',
+    pr_suspend: 'Suspender',
+    pr_resume: 'Reativar',
+    pr_end_link: 'Encerrar vínculo',
+    pr_end_invite: 'Cancelar convite',
+    pr_confirm_suspend:
+      'Suspender este vínculo? O prestador fica sem atribuições nesta organização até reativar (ou encerrar).',
+    pr_confirm_resume: 'Reativar este vínculo suspenso?',
+    pr_confirm_end_link:
+      'Encerrar definitivamente este vínculo com a organização? O registo histórico mantém-se; o prestador deixa de operar aqui.',
+    pr_confirm_end_invite: 'Cancelar este convite ou pedido pendente?',
+    pr_bonds_no_actions: '—',
     pr_lbl_invite_tenant: 'Tenant (empresa) *',
-    pr_invite_tenant_hint: 'Necessário no modo global. Em modo organização, usamos automaticamente o contexto actual.',
+    pr_invite_tenant_hint: 'Necessário no modo global. Em modo organização, usamos automaticamente o contexto atual.',
     pr_lbl_type: 'Convites utilizam apenas vínculo com a empresa.',
     pr_invite_opt_dedicated: 'Vínculo com a empresa',
     pr_type_hint:
-      'Só é possível convidar com vínculo dedicado. Ao activar, outros vínculos activos do prestador podem ser desactivados automaticamente.',
+      'Só é possível convidar com vínculo dedicado. Ao ativar, outros vínculos ativos do prestador podem ser desativados automaticamente.',
     pr_lbl_note: 'Mensagem (opcional)',
     pr_ph_note: 'Ex.: Vínculo full time na operação de SP.',
     pr_invite_submit: 'Criar convite',
     pr_no_perm_invite: 'Sem permissão para criar convites nesta sessão.',
     pr_alert_email: 'Informe o e-mail do prestador.',
-    pr_alert_tenant: 'Seleccione o tenant (empresa).',
+    pr_alert_tenant: 'Selecione o tenant (empresa).',
     pr_alert_session: 'Sessão expirada ou sem resposta da API. Entre de novo.',
     pr_invite_created_title: 'Convite criado.',
     pr_invite_created_body: 'Tipo: {type} · E-mail: {email}',
     pr_invite_email_ok: 'E-mail ao prestador: enviado ({p}). Verifique spam.',
     pr_invite_email_skip: 'E-mail: não enviado ({p}). {r}',
     pr_invite_email_fail: 'E-mail: falhou — {e}',
-    pr_invite_push_ok: 'Notificação no telemóvel: {n} aceite(s) pela Expo.{err} Abra a app → Empresas (vínculos).',
-    pr_invite_push_partial: 'Push: {n} token(s) registado(s), 0 entregues.{e}',
-    pr_invite_push_none: 'Push: nenhum token Expo (o prestador tem de abrir a app com notificações activas).',
-    pr_card_apps_title: 'Candidaturas (onboarding)',
-    pr_apps_sub:
-      'Resumo das últimas candidaturas. O botão laranja abre o diretório de todos os prestadores (filtros por bases, competências, agenda e área). Para convidar ao formulário e aprovar candidaturas, use «Candidaturas» no menu ou abra technician-applications.html.',
-    pr_apps_see_all: 'Abrir diretório de prestadores',
-    pr_apps_refresh: 'Atualizar',
-    pr_apps_summary: 'Total na API: {n} (mostramos até 12).',
-    pr_apps_empty: 'Nenhuma candidatura listada neste contexto.',
-    pr_apps_th_email: 'E-mail',
-    pr_apps_th_tenant: 'Tenant',
-    pr_apps_th_status: 'Estado',
-    pr_apps_th_updated: 'Atualizado',
+    pr_invite_push_ok: 'Notificação no celular: {n} aceite(s) pela Expo.{err} Abra a app → Empresas (vínculos).',
+    pr_invite_push_partial: 'Push: {n} token(s) registrado(s), 0 entregues.{e}',
+    pr_invite_push_none: 'Push: nenhum token Expo (o prestador precisa abrir a app com notificações ativas).',
     pdc_pageTitle: 'BrSpark Admin — Diretório de prestadores',
     pdc_bc_panel: 'Painel',
     pdc_bc_prestadores: 'Prestadores',
     pdc_bc_here: 'Diretório',
     pdc_hero_title: 'Diretório de prestadores',
     pdc_hero_sub:
-      'Inclui quem tem perfil técnico e/ou identidade global de prestador. Por omissão oculta apenas quem está **neste momento** numa **janela exclusiva** de vínculo dedicado (ACTIVE) com **outra** empresa do que o contexto da consulta. Em modo empresa, lista prestadores de toda a rede; o filtro de organização (modo plataforma) restringe a membros da tenant ou com afiliação a essa tenant. Filtros: texto, competências, bases, agenda e área.',
+      'Inclui quem tem perfil técnico e/ou identidade global de prestador. Por padrão oculta apenas quem está **neste momento** numa **janela exclusiva** de vínculo dedicado (ACTIVE) com **outra** empresa do que o contexto da consulta. Em modo empresa, lista prestadores de toda a rede; o filtro de organização (modo plataforma) restringe a membros da tenant ou com afiliação a essa tenant. Filtros: texto, competências, bases, agenda e área.',
     pdc_filter_include_dedicated:
       'Incluir também quem está numa janela exclusiva dedicada (lista completa para auditoria, ignora o filtro por horário).',
     pdc_link_apps: 'Candidaturas (onboarding)',
@@ -780,12 +815,12 @@ const M = {
     pdc_filter_skill_ph: 'Texto em competências (tags, JSON)…',
     pdc_filter_location: 'Base / local',
     pdc_filter_location_any: 'Qualquer base',
-    pdc_filter_location_hint: 'Seleccione primeiro o tenant (modo plataforma) ou use o contexto da organização.',
+    pdc_filter_location_hint: 'Selecione primeiro o tenant (modo plataforma) ou use o contexto da organização.',
     pdc_filter_status: 'Estado do perfil técnico',
     pdc_filter_status_any: 'Qualquer estado',
     pdc_filter_schedule: 'Agenda de disponibilidade',
     pdc_filter_schedule_any: 'Indiferente',
-    pdc_filter_schedule_yes: 'Com horários activos',
+    pdc_filter_schedule_yes: 'Com horários ativos',
     pdc_filter_coverage: 'Área de atendimento',
     pdc_filter_coverage_any: 'Indiferente',
     pdc_filter_coverage_yes: 'Com raio ou base geográfica',
@@ -803,8 +838,8 @@ const M = {
     pdc_th_specialty: 'Especialidade',
     pdc_th_schedule: 'Agenda',
     pdc_th_coverage: 'Área',
-    pdc_th_updated: 'Actualizado',
-    pdc_th_actions: 'Acções',
+    pdc_th_updated: 'Atualizado',
+    pdc_th_actions: 'Ações',
     pdc_yes: 'Sim',
     pdc_no: 'Não',
     pdc_open_user: 'Ficha',
@@ -812,7 +847,7 @@ const M = {
     pdc_err: 'Não foi possível carregar o diretório.',
     pdc_perm: 'Sem permissão para este recurso.',
     pdc_prev: 'Anterior',
-    pdc_next: 'Seguinte',
+    pdc_next: 'Próximo',
     ue_prefLocaleDefault: '(Padrão do dispositivo / tenant)',
   },
   'en-US': {
@@ -1174,6 +1209,8 @@ const M = {
     ue_cfSyncAgain: 'Sync again',
     ue_cfSyncIdle: 'Ready, will sync after photo changes.',
     ue_cfSubjectFoot: 'The FaceMatch subject follows the tenant:user format defined by the panel.',
+    ue_cfManualSyncHint:
+      'Pushes the current server-side profile photo and enrollment photos to FaceMatch (Recognition) again — does not save the form or change other fields.',
     ue_secWorkTime: 'Time clock',
     ue_lblMatricula: 'Employee ID',
     ue_phMatricula: 'e.g. 12345, FT-00042…',
@@ -1500,6 +1537,8 @@ const M = {
     pr_hero_title: 'Providers',
     pr_hero_sub:
       'Company-link invites, provider-first links (requests and activations), and onboarding applications — in one place.',
+    pr_tab_bonds: 'Links & requests',
+    pr_tab_invite: 'Invite & search',
     pr_perm_none: 'No permission to manage providers in this session.',
     pr_card_bonds_title: 'Links & requests (organization)',
     pr_card_bonds_hint:
@@ -1524,7 +1563,7 @@ const M = {
     pr_bonds_count: '{n} link(s) shown.',
     pr_candidates_count: '{n} provider(s) in the candidate list.',
     pr_candidates_filter_empty: 'No rows match the filter.',
-    pr_card_invite_title: 'Invite provider (company link)',
+    pr_card_invite_title: 'Invite provider & network search',
     pr_invite_intro_html:
       'Send a <strong>company link</strong> invite (exclusive time windows may be agreed). Requires provider-first on the tenant and a global provider account.',
     pr_lbl_invite_email: 'Provider email *',
@@ -1532,7 +1571,49 @@ const M = {
     pr_lbl_candidates: 'Providers available to invite',
     pr_candidates_help:
       'Accounts with a global provider profile without an active/pending link at another company (or yours). Click a row to fill the email field.',
-    pr_candidates_filter_ph: 'Filter by name or email…',
+    pr_candidates_filter_ph: 'Filter the eligible list (name, email or city)…',
+    pr_lbl_platform_search: 'Search the provider network',
+    pr_platform_search_hint:
+      'Search across the network (name, email, specialty or council ID). Click Use email to fill the invite. Rows marked with a warning may already be linked elsewhere — the API may reject the invite.',
+    pr_platform_search_ph: 'e.g. maria, cft, electrician…',
+    pr_platform_search_clear: 'Clear',
+    pr_directory_filters_heading: 'Platform search',
+    pr_lbl_search_skill: 'Skill (matches skills JSON)',
+    pr_ph_search_skill: 'e.g. electrical, OSHA…',
+    pr_lbl_search_location: 'Base / location',
+    pr_search_location_any: 'Any base',
+    pr_search_location_need_tenant: 'Pick a company (tenant) to load bases.',
+    pr_lbl_search_tech_status: 'Technician profile status',
+    pr_search_tech_any: 'Any',
+    pr_lbl_search_schedule: 'Schedule (availability)',
+    pr_search_sch_any: 'Any',
+    pr_search_sch_yes: 'With active weekly hours',
+    pr_lbl_search_coverage: 'Map coverage',
+    pr_search_cov_any: 'Any',
+    pr_search_cov_yes: 'With coverage radius',
+    pr_lbl_search_min_score: 'Minimum internal score',
+    pr_ph_search_min_score: 'e.g. 7',
+    pr_directory_search_btn: 'Search network',
+    pr_platform_search_idle: 'Type at least 2 characters in the general box, or set other filters, then click Search network.',
+    pr_platform_search_min: 'Enter at least 2 characters.',
+    pr_platform_search_empty: 'No providers matched in the platform directory.',
+    pr_platform_search_summary: '{n} result(s) for this search.',
+    pr_result_score: 'Internal score',
+    pr_platform_search_error: 'Search failed. Check your session and the browser console.',
+    pr_platform_use_email: 'Use email',
+    pr_badge_eligible: 'Eligible to invite',
+    pr_badge_other: 'May be blocked — invite can fail',
+    pr_suspend: 'Suspend',
+    pr_resume: 'Resume',
+    pr_end_link: 'End link',
+    pr_end_invite: 'Cancel invite',
+    pr_confirm_suspend:
+      'Suspend this link? The provider will not receive assignments for this organization until you resume or end the link.',
+    pr_confirm_resume: 'Resume this suspended link?',
+    pr_confirm_end_link:
+      'End this organization link permanently? History is kept; the provider stops operating here.',
+    pr_confirm_end_invite: 'Cancel this pending invite or request?',
+    pr_bonds_no_actions: '—',
     pr_lbl_invite_tenant: 'Tenant (company) *',
     pr_invite_tenant_hint: 'Required in platform mode. In organization mode the current context is used automatically.',
     pr_lbl_type: 'Invites use a company link only.',
@@ -1553,17 +1634,6 @@ const M = {
     pr_invite_push_ok: 'Mobile notification: {n} accepted by Expo.{err} Open the app → Companies (links).',
     pr_invite_push_partial: 'Push: {n} token(s) registered, 0 delivered.{e}',
     pr_invite_push_none: 'Push: no Expo tokens (the technician must open the app with notifications on).',
-    pr_card_apps_title: 'Applications (onboarding)',
-    pr_apps_sub:
-      'Summary of the latest applications. The orange button opens the full provider directory (sites, skills, schedule, coverage). For form invites and approvals, use Applications (onboarding) in the menu or technician-applications.html.',
-    pr_apps_see_all: 'Open provider directory',
-    pr_apps_refresh: 'Refresh',
-    pr_apps_summary: 'Total from API: {n} (showing up to 12).',
-    pr_apps_empty: 'No applications in this context.',
-    pr_apps_th_email: 'Email',
-    pr_apps_th_tenant: 'Tenant',
-    pr_apps_th_status: 'Status',
-    pr_apps_th_updated: 'Updated',
     pdc_pageTitle: 'BrSpark Admin — Provider directory',
     pdc_bc_panel: 'Home',
     pdc_bc_prestadores: 'Providers',
@@ -2146,6 +2216,8 @@ export function applyUserEditStaticPageI18n() {
   setT('ue-cf-gallery-title', 'ue_cfGalleryTitle');
   setH('ue-cf-gallery-desc', 'ue_cfGalleryDesc_html');
   setH('ue-cf-subject-foot', 'ue_cfSubjectFoot');
+  setT('btn-ue-sync-compreface-txt', 'ue_cfSyncAgain');
+  setT('ue-cf-manual-sync-hint', 'ue_cfManualSyncHint');
   setT('ue-sec-worktime-title', 'ue_secWorkTime');
   setT('ue-lbl-matricula', 'ue_lblMatricula');
   const fm = document.getElementById('f-employee-matricula');
@@ -2326,6 +2398,14 @@ export function applyPrestadoresPageI18n() {
   if (pch) pch.textContent = t('pr_candidates_help');
   const pcf = document.getElementById('pr-candidates-filter');
   if (pcf) pcf.placeholder = t('pr_candidates_filter_ph');
+  setT('pr-lbl-platform-search', 'pr_lbl_platform_search');
+  const psh = document.getElementById('pr-platform-search-hint');
+  if (psh) psh.textContent = t('pr_platform_search_hint');
+  const psIn = document.getElementById('pr-platform-search');
+  if (psIn) psIn.placeholder = t('pr_platform_search_ph');
+  setT('pr-platform-search-clear-txt', 'pr_platform_search_clear');
+  const psStat = document.getElementById('pr-platform-search-status');
+  if (psStat && !String(psStat.textContent || '').trim()) psStat.textContent = t('pr_platform_search_idle');
   setT('pr-lbl-invite-tenant', 'pr_lbl_invite_tenant');
   const pith = document.getElementById('pr-invite-tenant-hint');
   if (pith) pith.textContent = t('pr_invite_tenant_hint');
@@ -2341,14 +2421,30 @@ export function applyPrestadoresPageI18n() {
   const pn = document.getElementById('pr-invite-note');
   if (pn) pn.placeholder = t('pr_ph_note');
   setT('pr-invite-submit-txt', 'pr_invite_submit');
-  setT('pr-card-apps-title', 'pr_card_apps_title');
-  setT('pr-apps-sub', 'pr_apps_sub');
-  setT('pr-apps-see-all-txt', 'pr_apps_see_all');
-  setT('pr-apps-refresh-txt', 'pr_apps_refresh');
-  setT('pr-apps-th-email', 'pr_apps_th_email');
-  setT('pr-apps-th-tenant', 'pr_apps_th_tenant');
-  setT('pr-apps-th-status', 'pr_apps_th_status');
-  setT('pr-apps-th-updated', 'pr_apps_th_updated');
+  setT('pr-tab-btn-bonds', 'pr_tab_bonds');
+  setT('pr-tab-btn-invite', 'pr_tab_invite');
+  setT('pr-directory-filters-heading', 'pr_directory_filters_heading');
+  setT('pr-lbl-search-skill', 'pr_lbl_search_skill');
+  const psk = document.getElementById('pr-search-skill');
+  if (psk) psk.placeholder = t('pr_ph_search_skill');
+  setT('pr-lbl-search-location', 'pr_lbl_search_location');
+  setT('pr-lbl-search-tech-status', 'pr_lbl_search_tech_status');
+  const tAny = document.getElementById('pr-search-tech-opt-any');
+  if (tAny) tAny.textContent = t('pr_search_tech_any');
+  setT('pr-lbl-search-schedule', 'pr_lbl_search_schedule');
+  const schAny = document.getElementById('pr-search-sch-opt-any');
+  const schYes = document.getElementById('pr-search-sch-opt-yes');
+  if (schAny) schAny.textContent = t('pr_search_sch_any');
+  if (schYes) schYes.textContent = t('pr_search_sch_yes');
+  setT('pr-lbl-search-coverage', 'pr_lbl_search_coverage');
+  const covAny = document.getElementById('pr-search-cov-opt-any');
+  const covYes = document.getElementById('pr-search-cov-opt-yes');
+  if (covAny) covAny.textContent = t('pr_search_cov_any');
+  if (covYes) covYes.textContent = t('pr_search_cov_yes');
+  setT('pr-lbl-search-min-score', 'pr_lbl_search_min_score');
+  const pmin = document.getElementById('pr-search-min-score');
+  if (pmin) pmin.placeholder = t('pr_ph_search_min_score');
+  setT('pr-directory-search-btn', 'pr_directory_search_btn');
 }
 
 /** Página diretório de prestadores (SaaS / tenant). */

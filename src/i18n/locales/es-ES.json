@@ -2731,7 +2731,8 @@
       "savedBody": "Material añadido a su stock técnico."
     },
     "voice": {
-      "micRequired": "Se necesita el micrófono para grabar la nota de voz."
+      "micRequired": "Se necesita el micrófono para grabar la nota de voz.",
+      "sessionBusy": "El micrófono está ocupado (llamada, otra app o el sistema liberando el audio). Cierre lo que use el micrófono y pulse Grabar de nuevo."
     },
     "location": {
       "connectionErrorTitle": "Error de conexión",
@@ -3065,9 +3066,8 @@
       "coverageMapRequiredBody": "Defina el centro del área de servicio en el mapa (toque el mapa): el radio está definido pero el centro no.",
       "coverageSlotsRequiredBody": "En cada turno marcado como disponible, abra «Regiones en el mapa» y defina al menos un área (círculo) con radio en km.",
       "coverageNotesHint": "Las áreas por radio (varias por turno) se definen en «Regiones en el mapa» en cada día/turno, como en el perfil de prestador. Use las notas solo para texto libre.",
-      "availabilityLaterTitle": "Disponibilidad y área en el mapa",
-      "availabilityLaterBody": "No necesita completar horarios ni el mapa en este registro. Tras la aprobación, configure turnos y regiones en el mapa en su perfil de prestador.",
       "submitGatewayTimeoutBody": "El servidor o la red tardaron demasiado (tiempo agotado en la pasarela). Inténtelo de nuevo, con otra red o con menos adjuntos. Si persiste, contacte soporte.",
+      "processingPollTimeoutBody": "La activación automática aún no ha terminado en el servidor. Abra el perfil en unos minutos para comprobar si ya está activo; si sigue pendiente, vuelva a enviar o contacte soporte.",
       "coverageMapModalTitle": "Mapa, área de servicio",
       "coverageMapModalClose": "Cerrar",
       "coverageMapModalHelp": "Al abrir, el mapa usa su posición actual (GPS) si lo permite; si no, se centra en la dirección de arriba. Toque el punto deseado para marcar la base operativa y ver el radio de servicio.",

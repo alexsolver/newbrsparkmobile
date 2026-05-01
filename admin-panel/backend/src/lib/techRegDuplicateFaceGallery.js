@@ -14,6 +14,13 @@ const DUPLICATE_FACE_MIN_SIMILARITY = Math.min(
   Math.max(0.75, _envDup != null && _envDup !== '' ? Number(_envDup) : 0.86)
 );
 
+const _envDupTimeout = process.env.TECH_REG_DUP_FACE_TIMEOUT_MS;
+/** Reconhecimento na submissão: limite inferior ao timeout global do recognize (45s) para não somar com materialize e estourar 504 no gateway. */
+const DUPLICATE_FACE_RECOGNIZE_TIMEOUT_MS = Math.min(
+  60000,
+  Math.max(5000, _envDupTimeout != null && _envDupTimeout !== '' ? Number(_envDupTimeout) : 20000)
+);
+
 /**
  * Verifica se a imagem já corresponde na galeria de reconhecimento a **outro** utilizador activo.
  * Usa a mesma integração CompreFace que o resto da biometria (chave de reconhecimento, não verificação).
@@ -50,7 +57,10 @@ async function assertTechRegProbeNotDuplicateOtherUser(prisma, opts) {
 
   let recog;
   try {
-    recog = await recognizeWithIntegration(visionInt, probeBuffer, { predictionCount: 12 });
+    recog = await recognizeWithIntegration(visionInt, probeBuffer, {
+      predictionCount: 12,
+      timeoutMs: DUPLICATE_FACE_RECOGNIZE_TIMEOUT_MS,
+    });
   } catch (e) {
     console.warn('[techRegDuplicateFaceGallery] recognize', e.message);
     return { ok: true, skipped: true };
@@ -89,4 +99,5 @@ async function assertTechRegProbeNotDuplicateOtherUser(prisma, opts) {
 module.exports = {
   assertTechRegProbeNotDuplicateOtherUser,
   DUPLICATE_FACE_MIN_SIMILARITY,
+  DUPLICATE_FACE_RECOGNIZE_TIMEOUT_MS,
 };

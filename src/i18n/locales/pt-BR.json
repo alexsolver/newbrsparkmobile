@@ -2731,7 +2731,8 @@
       "savedBody": "Material adicionado ao seu estoque técnico."
     },
     "voice": {
-      "micRequired": "É necessário permitir o microfone para gravar a nota de voz."
+      "micRequired": "É necessário permitir o microfone para gravar a nota de voz.",
+      "sessionBusy": "O microfone está ocupado (chamada, outra app ou o sistema a libertar o áudio). Feche o que estiver a usar o microfone e toque em Gravar de novo."
     },
     "location": {
       "connectionErrorTitle": "Erro de Conexão",
@@ -3065,9 +3066,8 @@
       "coverageMapRequiredBody": "Defina o centro da área de atendimento no mapa (toque no mapa) — o raio está preenchido mas o centro não.",
       "coverageSlotsRequiredBody": "Em cada turno com disponibilidade ativa, abra \"Regiões no mapa\" e defina pelo menos uma área (círculo) com raio em km.",
       "coverageNotesHint": "As áreas por raio (várias por turno) são definidas em \"Regiões no mapa\" em cada dia e turno, como no perfil do prestador. Use as notas abaixo só para texto livre (referências internas).",
-      "availabilityLaterTitle": "Disponibilidade e área no mapa",
-      "availabilityLaterBody": "Você não precisa preencher horários nem mapa neste cadastro. Depois que a candidatura for aprovada, configure turnos da semana e regiões no mapa no seu perfil de prestador.",
       "submitGatewayTimeoutBody": "O servidor ou a rede demoraram demais para responder (tempo esgotado no gateway). Tente de novo em instantes, em outra rede ou com menos anexos. Se continuar, entre em contato com o suporte.",
+      "processingPollTimeoutBody": "A habilitação automática ainda não terminou no servidor. Daqui a pouco abra o perfil para ver se já está ativo; se continuar pendente, tente enviar de novo ou contacte o suporte.",
       "coverageMapModalTitle": "Mapa, área de atendimento",
       "coverageMapModalClose": "Fechar",
       "coverageMapModalHelp": "Ao abrir, o mapa usa a sua posição atual (GPS), se você autorizar; caso contrário, centra no endereço acima. Toque no ponto desejado para marcar a base operacional e ver o raio de atendimento.",

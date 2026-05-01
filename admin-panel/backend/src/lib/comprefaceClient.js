@@ -70,7 +70,7 @@ function stripDataUrlBase64(b64) {
 /**
  * @param {object} integration — registro Prisma Exadel FaceMatch
  * @param {Buffer} imageBuffer
- * @param {{ predictionCount?: number }} opts
+ * @param {{ predictionCount?: number, timeoutMs?: number }} opts — `timeoutMs` omisso: 45000.
  */
 async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
   const apiKey = integration.apiKey && String(integration.apiKey).trim();
@@ -86,6 +86,7 @@ async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
     throw err;
   }
   const predictionCount = Math.min(20, Math.max(1, Number(opts.predictionCount) || 5));
+  const timeoutMs = Math.min(120000, Math.max(3000, Number(opts.timeoutMs) || 45000));
   const limit = 1;
   let lastErr;
   const blob = new Blob([imageBuffer], { type: 'image/jpeg' });
@@ -99,7 +100,7 @@ async function recognizeWithIntegration(integration, imageBuffer, opts = {}) {
         method: 'POST',
         headers: { 'x-api-key': apiKey },
         body: fd,
-        signal: AbortSignal.timeout(45000),
+        signal: AbortSignal.timeout(timeoutMs),
         redirect: 'manual',
       });
       const text = await r.text().catch(() => '');

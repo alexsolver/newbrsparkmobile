@@ -30,6 +30,7 @@ import { AuthService, API_BASE, beginPublicAuthFlow, resetPublicAuthFlow } from 
 import { complianceDocFallbackUrl } from '../../src/constants/legalPublicUrls';
 import { passwordChecks } from '../../src/lib/appPasswordPolicy';
 import { setLanguage, getDeviceRegion } from '../../src/i18n';
+import { resetUnitPreference, setUnitSystem } from '../../src/i18n/formatters';
 import { useAuth } from '../../src/hooks/useAuth';
 import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 import {
@@ -399,6 +400,8 @@ export default function RegisterOnboardingScreen() {
   const applyCountryAndLanguage = async (c: (typeof COUNTRIES)[number]) => {
     setCountry(c.code);
     await AsyncStorage.setItem(REGION_KEY, c.code);
+    if (c.code === 'US') await setUnitSystem(true);
+    else await resetUnitPreference();
     await setLanguage(c.lang);
   };
 

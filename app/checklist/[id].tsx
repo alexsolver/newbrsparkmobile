@@ -52,6 +52,7 @@ import {
   computeEtaMinutesFromRemainingMetersAndSpeedMps,
 } from '../../src/services/transitEtaPolicy';
 import { haversineMeters, polylineLengthMeters } from '../../src/utils/polylineMetrics';
+import { formatDistance } from '../../src/i18n/formatters';
 import { LinearGradient } from 'expo-linear-gradient';
 import GeofenceStatusBar from './GeofenceStatusBar';
 import GeofenceMapScreen from './GeofenceMapScreen';
@@ -481,7 +482,7 @@ function formatTransitEvidenceLines(
   if (pm && (pm.distanceMeters != null || pm.durationSeconds != null)) {
     const parts: string[] = [];
     if (pm.distanceMeters != null && Number.isFinite(pm.distanceMeters)) {
-      parts.push(`${(pm.distanceMeters / 1000).toFixed(2)} km`);
+      parts.push(formatDistance(pm.distanceMeters / 1000));
     }
     if (pm.durationSeconds != null && Number.isFinite(pm.durationSeconds) && pm.durationSeconds > 0) {
       parts.push(`~${Math.round(pm.durationSeconds / 60)} min (estimativa)`);
@@ -500,7 +501,7 @@ function formatTransitEvidenceLines(
       );
     }
     if (am.distanceMeters != null && Number.isFinite(am.distanceMeters)) {
-      parts.push(`${(am.distanceMeters / 1000).toFixed(2)} km`);
+      parts.push(formatDistance(am.distanceMeters / 1000));
     }
     if (parts.length) lines.push(`Trecho real: ${parts.join(' · ')}`);
   }
@@ -6680,17 +6681,12 @@ export default function ChecklistEngine() {
               return Alert.alert(t('common.attention'), t('checklistForm.permissionNativeCameraDenied'));
 
             const fieldForCapture = template?.schemaData?.find((f: any) => f.id === fieldId);
-            const facialIdentify =
-              type === 'facial_recognition' &&
-              String(fieldForCapture?.facialAuthMode || '').toLowerCase() === 'identify';
             const cameraOpts: ImagePicker.ImagePickerOptions = {
               quality: 0.5,
               base64: true,
               cameraType:
                 type === 'facial_recognition'
-                  ? facialIdentify
-                    ? ImagePicker.CameraType.back
-                    : ImagePicker.CameraType.front
+                  ? ImagePicker.CameraType.front
                   : ImagePicker.CameraType.back,
             };
             const res = await ImagePicker.launchCameraAsync(cameraOpts);

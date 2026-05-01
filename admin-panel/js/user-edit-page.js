@@ -3345,12 +3345,50 @@ export async function bootUserEditPage() {
     }
   };
   paintFaceReenrollStatus();
+  const btnUeCfSync = document.getElementById('btn-ue-sync-compreface');
+  const txtUeCfSync = document.getElementById('btn-ue-sync-compreface-txt');
+  if (btnUeCfSync && !btnUeCfSync.dataset.ueBound) {
+    btnUeCfSync.dataset.ueBound = '1';
+    btnUeCfSync.addEventListener('click', async () => {
+      if (isUserEditReadonly()) return;
+      btnUeCfSync.disabled = true;
+      if (txtUeCfSync) txtUeCfSync.textContent = t('ue_cfSyncLoading');
+      let res = null;
+      try {
+        res = await CONFIG.post(`/users/${encodeURIComponent(id)}/sync-compreface`, {}).catch(() => null);
+      } finally {
+        if (txtUeCfSync) txtUeCfSync.textContent = t('ue_cfSyncAgain');
+        btnUeCfSync.disabled = isUserEditReadonly();
+      }
+      if (!res) {
+        alert(t('ue_cfSyncNetErrAlert'));
+        return;
+      }
+      if (res.error || res.ok === false) {
+        alert(String(res.error || t('ue_cfSyncFail')));
+        if (res.comprefaceRecognitionSync != null && bumpUserRefFaceState) {
+          bumpUserRefFaceState({ comprefaceRecognitionSync: res.comprefaceRecognitionSync });
+        }
+        return;
+      }
+      if (res.comprefaceRecognitionSync != null && bumpUserRefFaceState) {
+        bumpUserRefFaceState({ comprefaceRecognitionSync: res.comprefaceRecognitionSync });
+      }
+      const n = res.faces != null ? Number(res.faces) : 0;
+      const sub = res.subject != null ? String(res.subject) : '';
+      const msg = t('ue_cfSyncGalleryOkShort')
+        .replace(/\{n\}/g, String(Number.isFinite(n) ? n : 0))
+        .replace(/\{sub\}/g, sub);
+      alert(msg);
+    });
+  }
   const setReReadonly = () => {
     const ro = isUserEditReadonly();
     if (btnReOpen) btnReOpen.disabled = ro;
     if (btnReClear) btnReClear.disabled = ro;
     if (hoursSel) hoursSel.disabled = ro;
     if (reNoteTa) reNoteTa.disabled = ro;
+    if (btnUeCfSync) btnUeCfSync.disabled = ro;
   };
   setReReadonly();
   if (btnReOpen) {

@@ -2731,7 +2731,8 @@
       "savedBody": "Material wurde Ihrem technischen Bestand hinzugefügt."
     },
     "voice": {
-      "micRequired": "Mikrofonzugriff ist für die Sprachnotiz erforderlich."
+      "micRequired": "Mikrofonzugriff ist für die Sprachnotiz erforderlich.",
+      "sessionBusy": "Das Mikrofon ist belegt (Anruf, andere App oder das System gibt Audio noch frei). Schließen Sie die Nutzung und tippen Sie erneut auf Aufnehmen."
     },
     "location": {
       "connectionErrorTitle": "Verbindungsfehler",
@@ -3065,9 +3066,8 @@
       "coverageMapRequiredBody": "Legen Sie den Mittelpunkt des Einsatzgebiets auf der Karte fest (Tippen) — der Radius ist gesetzt, der Mittelpunkt fehlt.",
       "coverageSlotsRequiredBody": "Öffnen Sie für jede aktive Schicht «Regionen auf der Karte» und legen Sie mindestens einen Kreis (Radius in km) fest.",
       "coverageNotesHint": "Radien pro Schicht stellen Sie wie im Anbieterprofil unter «Regionen auf der Karte» ein. Die Notizen unten sind nur für Freitext.",
-      "availabilityLaterTitle": "Verfügbarkeit und Kartenbereich",
-      "availabilityLaterBody": "In dieser Registrierung müssen Sie keine Wochenzeiten oder die Karte ausfüllen. Nach der Freigabe legen Sie Schichten und Kartenregionen in Ihrem Anbieterprofil fest.",
       "submitGatewayTimeoutBody": "Server oder Netzwerk antworteten zu langsam (Gateway-Zeitüberschreitung). Erneut versuchen, anderes Netz oder weniger Anhänge. Bei anhaltendem Fehler Support kontaktieren.",
+      "processingPollTimeoutBody": "Die automatische Freischaltung auf dem Server ist noch nicht fertig. Öffnen Sie in Kürze das Profil, um zu prüfen, ob Sie aktiv sind; bleibt es ausstehend, erneut senden oder Support kontaktieren.",
       "coverageMapModalTitle": "Karte, Einsatzgebiet",
       "coverageMapModalClose": "Schließen",
       "coverageMapModalHelp": "Beim Öffnen nutzt die Karte Ihre aktuelle GPS-Position, wenn Sie es erlauben; sonst zentriert sie auf die Adresse oben. Tippen Sie auf den gewünschten Punkt für Ihre operative Basis, um den Service-Radius zu sehen.",

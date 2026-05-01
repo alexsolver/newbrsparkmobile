@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const { REGISTRATION_PRIMARY_FACE_ID, isRegistrationPrimaryFacePhoto } = require('./faceEnrollmentPrimary');
 const { isProviderFirstNetworkEnabled } = require('./providerFirstNetwork');
+const { tenantIsSharedAppRegistrationPool } = require('./resolveSharedRegistrationTenant');
 const { normalizeServiceCoverageGeo } = require('./technicianServiceCoverage');
 const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('./userEmailUnique');
 
@@ -173,11 +174,21 @@ async function mirrorApprovedLegacyRegistrationToProviderNetwork(prisma, { tenan
     });
     const tenantKind = String(tenantRow?.kind || 'COMPANY').toUpperCase();
     const isCompanyTenant = tenantKind === 'COMPANY';
-    /** Vínculo prestador ↔ empresa na app é apenas DEDICATED; espaço CLIENT/PROVIDER é OWNER interno. */
-    const relationshipType = isCompanyTenant ? 'DEDICATED' : 'OWNER';
-    const affiliationNote = isCompanyTenant
+    const isSharedPool = await tenantIsSharedAppRegistrationPool(tx, tenantId);
+    /**
+     * COMPANY operacional → DEDICATED (empresa define horários / regiões no painel).
+     * Piscina de registo partilhada (master) → OWNER: não é vínculo com «empregador»; o prestador
+     * edita horários e área no app (ver `hasActiveDedicatedAffiliationForAppUser`).
+     */
+    let relationshipType = isCompanyTenant ? 'DEDICATED' : 'OWNER';
+    let affiliationNote = isCompanyTenant
       ? 'Criado automaticamente pela aprovação no fluxo legado (vínculo dedicado).'
       : 'Espaço próprio do prestador (owner). Vínculos com tenant empresa (COMPANY) usam vínculo dedicado.';
+    if (isSharedPool) {
+      relationshipType = 'OWNER';
+      affiliationNote =
+        'Tenant de registo partilhado da app (piscina de contas). Não é vínculo operacional DEDICATED com empresa — criado pela aprovação do cadastro legado.';
+    }
 
     const providerIdentity = await tx.providerIdentity.upsert({
       where: { userId: String(userId) },
@@ -244,14 +255,17 @@ async function mirrorApprovedLegacyRegistrationToProviderNetwork(prisma, { tenan
  * Atualiza perfil, documentos e TechnicianProfile; não altera a senha da conta.
  */
 async function mergeTechRegistrationIntoExistingUser(prisma, app, existingUser, ctx) {
-  const { raw, name, addressJson, personalDocuments, technician, faceBefore } = ctx;
+  const { raw, name, addressJson, personalDocuments, technician, faceBefore, deferFaceEnrollment } = ctx;
 
-  const mergedFaces = await buildFaceEnrollmentFromApprovedRegistration(
-    app.id,
-    existingUser.id,
-    raw.avatarUrl,
-    faceBefore
-  );
+  const mergedFaces =
+    deferFaceEnrollment
+      ? []
+      : await buildFaceEnrollmentFromApprovedRegistration(
+          app.id,
+          existingUser.id,
+          raw.avatarUrl,
+          faceBefore
+        );
 
   return prisma.$transaction(async (tx) => {
     const userData = {
@@ -318,8 +332,10 @@ async function mergeTechRegistrationIntoExistingUser(prisma, app, existingUser, 
 
 /**
  * Persiste User + TechnicianProfile a partir de responsesJson da candidatura aprovada.
+ * @param {{ deferFaceEnrollment?: boolean }} [opts] — Se true, não copia fotos FaceMatch antes do return (p.ex. responder HTTP e correr `buildFaceEnrollmentFromApprovedRegistration` depois).
  */
-async function materializeApprovedApplication(prisma, applicationId) {
+async function materializeApprovedApplication(prisma, applicationId, opts = {}) {
+  const deferFaceEnrollment = !!opts.deferFaceEnrollment;
   const app = await prisma.technicianRegistrationApplication.findUnique({
     where: { id: applicationId },
     include: { tenant: { select: { id: true, name: true } } },
@@ -365,6 +381,7 @@ async function materializeApprovedApplication(prisma, applicationId) {
       personalDocuments,
       technician,
       faceBefore,
+      deferFaceEnrollment,
     });
   }
 
@@ -423,24 +440,26 @@ async function materializeApprovedApplication(prisma, applicationId) {
     return user;
   });
 
-  const mergedFaces = await buildFaceEnrollmentFromApprovedRegistration(
-    app.id,
-    result.id,
-    raw.avatarUrl,
-    faceBefore
-  );
-  if (mergedFaces.length) {
-    await prisma.user.update({
-      where: { id: result.id },
-      data: {
-        faceEnrollmentPhotos: mergedFaces,
-        comprefaceRecognitionSync: {
-          status: 'pending',
-          at: new Date().toISOString(),
-          message: 'Candidatura aprovada — a sincronizar galeria FaceMatch.',
+  if (!deferFaceEnrollment) {
+    const mergedFaces = await buildFaceEnrollmentFromApprovedRegistration(
+      app.id,
+      result.id,
+      raw.avatarUrl,
+      faceBefore
+    );
+    if (mergedFaces.length) {
+      await prisma.user.update({
+        where: { id: result.id },
+        data: {
+          faceEnrollmentPhotos: mergedFaces,
+          comprefaceRecognitionSync: {
+            status: 'pending',
+            at: new Date().toISOString(),
+            message: 'Candidatura aprovada — a sincronizar galeria FaceMatch.',
+          },
         },
-      },
-    });
+      });
+    }
   }
 
   return result;

@@ -71,6 +71,21 @@ export const USER_PAGES_DE_MERGE = {
   ul_prestadoresHub: 'Anbieter',
   ul_prestadoresHubTitle: 'Partnerschaftseinladungen, Organisationsverknüpfungen und Bewerbungen (Onboarding)',
   pr_kyc_open_user: 'Profil öffnen (Onboarding / KYC)',
+  pr_lbl_platform_search: 'In der Plattform suchen',
+  pr_platform_search_clear: 'Leeren',
+  pr_suspend: 'Aussetzen',
+  pr_resume: 'Fortsetzen',
+  pr_end_link: 'Verknüpfung beenden',
+  pr_end_invite: 'Einladung abbrechen',
+  pr_platform_use_email: 'E-Mail übernehmen',
+  pr_badge_eligible: 'Einladung möglich',
+  pr_badge_other: 'Ggf. blockiert',
+  pr_candidates_empty_list:
+    'Derzeit niemand bereit (dedizierte Verknüpfung woanders aktiv/ausstehend oder bereits hier). Nutzen Sie die Suche oben.',
+  pr_tab_bonds: 'Verknüpfungen & Anfragen',
+  pr_tab_invite: 'Einladen & Suche',
+  pr_result_score: 'Interne Bewertung',
+  pr_directory_search_btn: 'Netzwerk durchsuchen',
   ul_newUser: 'Neuer Benutzer',
   ul_tableTitle: 'Benutzerliste',
   ul_cancel: 'Abbrechen',
@@ -86,4 +101,6 @@ export const USER_PAGES_DE_MERGE = {
   ul_createManyOk: '{n} Konten in den ausgewählten Organisationen erfolgreich angelegt.',
   ul_resetPwd: 'Passwort zurücksetzen',
   ue_prefLocaleDefault: '(Gerät / Mandant — Standard)',
+  ue_cfManualSyncHint:
+    'Sendet Profilbild und Gesichts-Referenzfotos erneut an FaceMatch (Recognition) — speichert das Formular nicht und ändert keine anderen Felder.',
 };

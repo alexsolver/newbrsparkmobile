@@ -12,7 +12,15 @@ import { isTechnicianProfileActive } from '../src/services/auth';
 import { ThemeProvider } from '../src/theme/ThemeContext';
 import { I18nextProvider } from 'react-i18next';
 import i18n from '../src/i18n';
-import { loadUnitPreference, loadNumberFormatPreference } from '../src/i18n/formatters';
+import { getDeviceRegion } from '../src/i18n';
+import {
+  loadUnitPreference,
+  loadNumberFormatPreference,
+  setUnitSystem,
+  resetUnitPreference,
+} from '../src/i18n/formatters';
+
+const BRSPARK_REGION_KEY = '@brspark_region';
 import { Header } from '../src/components/Header';
 import { AppProvider } from '../src/context/AppContext';
 import { PersonaProvider, usePersona } from '../src/context/PersonaContext';
@@ -167,6 +175,14 @@ function AppInitializer() {
 
         await ApiService.sync(user?.email || '');
         await loadUnitPreference();
+        try {
+          const savedRegion = await AsyncStorage.getItem(BRSPARK_REGION_KEY);
+          const resolvedRegion = savedRegion || getDeviceRegion();
+          if (resolvedRegion === 'US') await setUnitSystem(true);
+          else await resetUnitPreference();
+        } catch {
+          /* ignore */
+        }
         await loadNumberFormatPreference();
       } catch (err) {
         console.error('[BOOT] Initialization error:', err);

@@ -1542,9 +1542,6 @@ export default function TechRegistrationScreen() {
       return;
     }
     setSaving(true);
-    /** EAS preview/production: `__DEV__` é false — usar `EXPO_PUBLIC_DEBUG_TECH_REG_SUBMIT=1` no perfil EAS ou `.env`. */
-    const techRegSubmitDebugLog =
-      __DEV__ || String(process.env.EXPO_PUBLIC_DEBUG_TECH_REG_SUBMIT || '').trim() === '1';
     try {
       const submitPath = `/api/technician-registration/public/${encodeURIComponent(token)}/submit`;
       const bodyObj =
@@ -1552,35 +1549,6 @@ export default function TechRegistrationScreen() {
           ? { otpCode, otpChallengeToken, responsesJson: buildResponsesJson() }
           : { responsesJson: buildResponsesJson() };
       const bodyStr = JSON.stringify(bodyObj);
-      const tSubmit0 = Date.now();
-      // #region agent log
-      fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '307b27' },
-        body: JSON.stringify({
-          sessionId: '307b27',
-          hypothesisId: 'H1',
-          location: 'tech-registration.tsx:submit:pre',
-          message: 'tech reg submit start',
-          data: {
-            bodyKb: Math.round(bodyStr.length / 1024),
-            personalDocsLen: personalDocs.length,
-            proDocsLen: proDocs.length,
-            facePhotoLen: facePhotos.filter((p) => p.id && p.url).length,
-            hasOtp: !!(otpCode && otpChallengeToken),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      if (techRegSubmitDebugLog) {
-        console.warn('[debug-307b27:H1]', {
-          bodyKb: Math.round(bodyStr.length / 1024),
-          personalDocsLen: personalDocs.length,
-          proDocsLen: proDocs.length,
-          facePhotoLen: facePhotos.filter((p) => p.id && p.url).length,
-        });
-      }
       /** Submit pode demorar (payload + biometria no servidor); o `apiFetch` por defeito aborta aos 18 s. */
       const res = await apiFetch(submitPath, {
         method: 'POST',
@@ -1588,37 +1556,7 @@ export default function TechRegistrationScreen() {
         body: bodyStr,
       });
       const rawText = await res.text();
-      const submitDurationMs = Date.now() - tSubmit0;
       const rawTrim = rawText.trimStart();
-      // #region agent log
-      fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '307b27' },
-        body: JSON.stringify({
-          sessionId: '307b27',
-          hypothesisId: 'H2',
-          location: 'tech-registration.tsx:submit:response',
-          message: 'tech reg submit http',
-          data: {
-            status: res.status,
-            ok: res.ok,
-            durationMs: submitDurationMs,
-            rawLen: rawText.length,
-            rawShape: rawTrim.startsWith('<') ? 'html' : rawTrim.startsWith('{') ? 'json' : 'other',
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      if (techRegSubmitDebugLog) {
-        console.warn('[debug-307b27:H2]', {
-          status: res.status,
-          ok: res.ok,
-          durationMs: submitDurationMs,
-          rawLen: rawText.length,
-          rawShape: rawTrim.startsWith('<') ? 'html' : rawTrim.startsWith('{') ? 'json' : 'other',
-        });
-      }
       if (res.status === 413) {
         Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.techReg.payloadTooLargeBody'));
         return;
@@ -1630,35 +1568,6 @@ export default function TechRegistrationScreen() {
         const looksLikeHtml = rawText.trimStart().startsWith('<');
         const statusLine = `HTTP ${res.status}`;
         const gateway = res.status === 504 || res.status === 502 || res.status === 503;
-        // #region agent log
-        fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '307b27' },
-          body: JSON.stringify({
-            sessionId: '307b27',
-            hypothesisId: 'H3',
-            location: 'tech-registration.tsx:submit:parseFail',
-            message: 'tech reg submit non-json body',
-            data: {
-              status: res.status,
-              gateway,
-              looksLikeHtml,
-              rawLen: rawText.length,
-              durationMs: submitDurationMs,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-        if (techRegSubmitDebugLog) {
-          console.warn('[debug-307b27:H3]', {
-            status: res.status,
-            gateway,
-            looksLikeHtml,
-            rawLen: rawText.length,
-            durationMs: submitDurationMs,
-          });
-        }
         const msg = gateway
           ? `${i18n.t('appAlerts.techReg.submitGatewayTimeoutBody')}\n\n${statusLine}`
           : looksLikeHtml
@@ -1705,6 +1614,50 @@ export default function TechRegistrationScreen() {
         }
         return;
       }
+      /** Backend pode responder cedo com PROCESSING e materializar em background (evita 504 no gateway). */
+      if (
+        res.ok &&
+        data.autoApproved === true &&
+        String(data.status || '').toUpperCase() === 'PROCESSING'
+      ) {
+        const pollPath = `/api/technician-registration/public/${encodeURIComponent(token)}`;
+        const pollDeadline = Date.now() + 120_000;
+        let sawApproved = false;
+        while (Date.now() < pollDeadline) {
+          await new Promise<void>((r) => setTimeout(r, 1600));
+          let pr: Response;
+          try {
+            pr = await apiFetch(pollPath, { method: 'GET', timeoutMs: 45_000 });
+          } catch {
+            continue;
+          }
+          const pt = await pr.text();
+          let pd: Record<string, unknown> = {};
+          try {
+            pd = pt ? (JSON.parse(pt) as Record<string, unknown>) : {};
+          } catch {
+            continue;
+          }
+          const pst = String(pd.status || '').toUpperCase();
+          if (pst === 'APPROVED') {
+            sawApproved = true;
+            break;
+          }
+          if (pst === 'REJECTED') {
+            Alert.alert(
+              i18n.t('appAlerts.techReg.submitTitle'),
+              sanitizeBiometryUserText(String(pd.error || '')) ||
+                i18n.t('appAlerts.techReg.submitFallbackBody')
+            );
+            return;
+          }
+        }
+        if (!sawApproved) {
+          Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.techReg.processingPollTimeoutBody'));
+          return;
+        }
+        data = { ...data, status: 'APPROVED', autoApproved: true };
+      }
       const approvedNow =
         data.autoApproved === true ||
         String(data.status || '').toUpperCase() === 'APPROVED';
@@ -1736,26 +1689,6 @@ export default function TechRegistrationScreen() {
       setSubmitOtpCode('');
       setSubmitOtpChallengeToken(null);
     } catch (e: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '307b27' },
-        body: JSON.stringify({
-          sessionId: '307b27',
-          hypothesisId: 'H4',
-          location: 'tech-registration.tsx:submit:catch',
-          message: 'tech reg submit exception',
-          data: {
-            errName: String(e?.name || ''),
-            errMsgLen: String(e?.message ?? '').length,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      if (techRegSubmitDebugLog) {
-        console.warn('[debug-307b27:H4]', { errName: String(e?.name || ''), errMsgLen: String(e?.message ?? '').length });
-      }
       const rawMsg = String(e?.message ?? '').trim();
       const aborted =
         e?.name === 'AbortError' ||
@@ -2763,13 +2696,6 @@ export default function TechRegistrationScreen() {
             ) : null}
           </View>
         ))}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.secTitle}>{i18n.t('appAlerts.techReg.availabilityLaterTitle')}</Text>
-        <Text style={{ fontSize: 13, color: C.textSecondary, lineHeight: 21 }}>
-          {i18n.t('appAlerts.techReg.availabilityLaterBody')}
-        </Text>
       </View>
 
       {!readOnly ? (

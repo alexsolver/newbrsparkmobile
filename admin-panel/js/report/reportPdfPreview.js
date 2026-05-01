@@ -1604,13 +1604,17 @@ function buildPdfProdBlockForPreview(th, t, responses) {
       : '';
 
   const sectionRowsProd = collectSectionTimingRowsForPreview(t.template?.sectionBreaks, responses);
-  let sectionLineProd = sectionRowsProd
-    .map((r) => {
-      const short = r.label.length > 24 ? r.label.slice(0, 24) + '…' : r.label;
-      return `<strong>${esc(short)}</strong> ${r.sec != null ? fmtDurationPtBr(r.sec) : '—'}`;
-    })
-    .join(' <span style="color:#cbd5e1">|</span> ');
-  if (sectionLineProd.length > 400) sectionLineProd = sectionLineProd.slice(0, 400) + '…';
+  const sectionStagesHtmlProd =
+    sectionRowsProd.length === 0
+      ? '<span style="color:#ca8a04;font-weight:500">Sem tempos por etapa registrados.</span>'
+      : `<div style="display:flex;flex-direction:column;gap:4px">${sectionRowsProd
+          .map(
+            (r) =>
+              `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:8px;color:#78350f;line-height:1.4;font-weight:600"><span style="flex:1;min-width:0;word-break:break-word;padding-right:4px"><strong>${esc(
+                r.label,
+              )}</strong></span><span style="flex-shrink:0;white-space:nowrap;font-weight:700">${r.sec != null ? fmtDurationPtBr(r.sec) : '—'}</span></div>`,
+          )
+          .join('')}</div>`;
 
   const pdfPauseInProdHtml = buildPauseProductivityPdfFragment(esc, fmtDurationPtBr, t, responses);
 
@@ -1644,7 +1648,7 @@ function buildPdfProdBlockForPreview(th, t, responses) {
               <div style="font-size:8px;font-weight:900;color:#9A3412;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:5px">
                 <ion-icon name="git-branch-outline" style="font-size:14px;color:${th.transitAccent}"></ion-icon> Etapas no formulário
               </div>
-              <div style="font-size:8px;color:#78350f;line-height:1.45;font-weight:600">${sectionLineProd || '<span style="color:#ca8a04;font-weight:500">Sem tempos por etapa registrados.</span>'}</div>
+              <div style="font-size:8px;color:#78350f;line-height:1.45;font-weight:600">${sectionStagesHtmlProd}</div>
             </div>
             ${pdfPauseInProdHtml}
           </div>

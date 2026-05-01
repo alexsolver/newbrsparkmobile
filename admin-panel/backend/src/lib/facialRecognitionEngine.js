@@ -33,6 +33,63 @@ function auditNoFaceInImage(mode, engine) {
   };
 }
 
+/**
+ * Em `self_verify`, o CompreFace devolve vários subjects ordenados por similaridade.
+ * O primeiro pode ser outro utilizador (rosto parecido / galeria duplicada). Procuramos
+ * o candidato que corresponde ao utilizador da sessão (e tenant) acima do limiar.
+ * @returns {{ subject: string, similarity: number } | null}
+ */
+function pickSelfVerifySubjectFromRecognition(recognizeJson, { tenantId, sessionUserId, minSim }) {
+  const results = recognizeJson && Array.isArray(recognizeJson.result) ? recognizeJson.result : [];
+  if (!results.length) return null;
+  const face = results[0];
+  const subjects = face && Array.isArray(face.subjects) ? face.subjects : [];
+  const tid = String(tenantId || '').trim();
+  const sid = String(sessionUserId || '').trim();
+  if (!sid) return null;
+  for (const sub of subjects) {
+    if (!sub || sub.subject == null || sub.similarity == null) continue;
+    const similarity = Number(sub.similarity);
+    if (!Number.isFinite(similarity) || similarity < minSim) continue;
+    const parsed = parseComprefaceSubjectName(String(sub.subject));
+    if (!parsed) continue;
+    if (String(parsed.userId) !== sid) continue;
+    if (tid && String(parsed.tenantId) !== tid) continue;
+    return { subject: String(sub.subject), similarity };
+  }
+  return null;
+}
+
+/**
+ * Em `identify`, percorre subjects (ordenados por similaridade) e escolhe o primeiro
+ * que corresponde a um utilizador ativo do tenant da sessão, acima do limiar.
+ * @returns {Promise<{ subject: string, similarity: number } | null>}
+ */
+async function pickIdentifySubjectFromRecognition(recognizeJson, prisma, { tenantId, minSim }) {
+  const results = recognizeJson && Array.isArray(recognizeJson.result) ? recognizeJson.result : [];
+  if (!results.length) return null;
+  const face = results[0];
+  const subjects = face && Array.isArray(face.subjects) ? face.subjects : [];
+  const tid = String(tenantId || '').trim();
+  if (!tid) return null;
+  for (const sub of subjects) {
+    if (!sub || sub.subject == null || sub.similarity == null) continue;
+    const similarity = Number(sub.similarity);
+    if (!Number.isFinite(similarity) || similarity < minSim) continue;
+    const parsed = parseComprefaceSubjectName(String(sub.subject));
+    if (!parsed) continue;
+    if (String(parsed.tenantId) !== tid) continue;
+    const identified = await prisma.user.findFirst({
+      where: { id: parsed.userId, tenantId: tid, isActive: true },
+      select: { id: true },
+    });
+    if (identified) {
+      return { subject: String(sub.subject), similarity };
+    }
+  }
+  return null;
+}
+
 function parseMeta(raw) {
   try {
     return typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -154,15 +211,31 @@ async function verifyFacialImageBuffer(prisma, opts) {
     };
   }
 
+  const predictionCountSelf = Math.min(
+    20,
+    Math.max(8, Number(process.env.COMPREFACE_SELF_VERIFY_PREDICTION_COUNT) || 12)
+  );
+  const predictionCountIdentify = Math.min(
+    20,
+    Math.max(
+      8,
+      Number(process.env.COMPREFACE_IDENTIFY_PREDICTION_COUNT) ||
+        Number(process.env.COMPREFACE_SELF_VERIFY_PREDICTION_COUNT) ||
+        12
+    )
+  );
+  const predictionCount =
+    mode === 'self_verify' ? predictionCountSelf : predictionCountIdentify;
+
   let recog;
   try {
-    recog = await recognizeWithIntegration(visionInt, buf, { predictionCount: 5 });
+    recog = await recognizeWithIntegration(visionInt, buf, { predictionCount });
   } catch (e1) {
     if (isFaceMatchNoFaceInImageError(e1)) {
       return { ok: false, audit: auditNoFaceInImage(mode, engine) };
     }
     try {
-      recog = await recognizeWithIntegration(visionInt, buf, { predictionCount: 5 });
+      recog = await recognizeWithIntegration(visionInt, buf, { predictionCount });
     } catch (e) {
       if (isFaceMatchNoFaceInImageError(e)) {
         return { ok: false, audit: auditNoFaceInImage(mode, engine) };
@@ -184,7 +257,22 @@ async function verifyFacialImageBuffer(prisma, opts) {
     }
   }
 
-  const top = pickTopRecognitionMatch(recog.data);
+  const globalTop = pickTopRecognitionMatch(recog.data);
+  let top = null;
+  if (mode === 'self_verify' && tenantId && sessionUserId) {
+    top = pickSelfVerifySubjectFromRecognition(recog.data, {
+      tenantId,
+      sessionUserId,
+      minSim: MIN_SIMILARITY,
+    });
+  } else if (mode === 'identify' && tenantId) {
+    top = await pickIdentifySubjectFromRecognition(recog.data, prisma, {
+      tenantId,
+      minSim: MIN_SIMILARITY,
+    });
+  }
+  if (!top) top = globalTop;
+
   if (!top) {
     return {
       ok: false,
@@ -244,7 +332,9 @@ async function verifyFacialImageBuffer(prisma, opts) {
   const identified =
     mode === 'identify'
       ? await prisma.user.findFirst({
-          where: { id: parsed.userId, isActive: true },
+          where: tenantId
+            ? { id: parsed.userId, tenantId, isActive: true }
+            : { id: parsed.userId, isActive: true },
           select: { id: true, name: true, email: true, role: true },
         })
       : await prisma.user.findFirst({

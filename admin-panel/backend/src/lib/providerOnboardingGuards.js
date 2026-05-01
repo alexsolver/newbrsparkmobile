@@ -1,7 +1,10 @@
 'use strict';
 
+const { tenantIsSharedAppRegistrationPool } = require('./resolveSharedRegistrationTenant');
+
 /**
- * Prestador já com vínculo DEDICATED + ACTIVE: não faz sentido abrir / submeter
+ * Prestador já com vínculo DEDICATED + ACTIVE com **empresa operacional** (exclui a tenant
+ * COMPANY de registo partilhado da app — piscina `master`): não faz sentido abrir / submeter
  * candidatura de onboarding global por autoatendimento (duplica fila no painel).
  *
  * @param {import('@prisma/client').PrismaClient} prisma
@@ -11,14 +14,18 @@
 async function hasActiveDedicatedAffiliation(prisma, providerIdentityId) {
   const pid = String(providerIdentityId || '').trim();
   if (!pid) return false;
-  const n = await prisma.providerTenantAffiliation.count({
+  const rows = await prisma.providerTenantAffiliation.findMany({
     where: {
       providerIdentityId: pid,
       relationshipType: 'DEDICATED',
       status: 'ACTIVE',
     },
+    select: { tenantId: true },
   });
-  return n > 0;
+  for (const r of rows) {
+    if (!(await tenantIsSharedAppRegistrationPool(prisma, r.tenantId))) return true;
+  }
+  return false;
 }
 
 /**
@@ -30,14 +37,18 @@ async function hasActiveDedicatedAffiliation(prisma, providerIdentityId) {
 async function hasActiveDedicatedAffiliationForAppUser(prisma, userId) {
   const uid = String(userId || '').trim();
   if (!uid) return false;
-  const n = await prisma.providerTenantAffiliation.count({
+  const rows = await prisma.providerTenantAffiliation.findMany({
     where: {
       relationshipType: 'DEDICATED',
       status: 'ACTIVE',
       providerIdentity: { userId: uid },
     },
+    select: { tenantId: true },
   });
-  return n > 0;
+  for (const r of rows) {
+    if (!(await tenantIsSharedAppRegistrationPool(prisma, r.tenantId))) return true;
+  }
+  return false;
 }
 
 module.exports = {

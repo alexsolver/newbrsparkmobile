@@ -2731,7 +2731,8 @@
       "savedBody": "Material added to your technical stock."
     },
     "voice": {
-      "micRequired": "Microphone access is required to record the voice note."
+      "micRequired": "Microphone access is required to record the voice note.",
+      "sessionBusy": "The microphone is busy (a call, another app, or the system is still releasing audio). Close anything using the mic and tap Record again."
     },
     "location": {
       "connectionErrorTitle": "Connection error",
@@ -3065,9 +3066,8 @@
       "coverageMapRequiredBody": "Set your service area center on the map (tap the map) — radius is set but the center is not.",
       "coverageSlotsRequiredBody": "For every shift marked available, open “Map regions” and add at least one area (circle) with a radius in km.",
       "coverageNotesHint": "Radius areas (several per shift) are set under “Map regions” for each day/shift, like in the provider profile. Use the notes below only for free‑text references.",
-      "availabilityLaterTitle": "Availability and map area",
-      "availabilityLaterBody": "You don’t need to fill in weekly hours or the map in this signup. After approval, set shifts and map regions in your provider profile.",
       "submitGatewayTimeoutBody": "The server or network took too long (gateway timeout). Try again in a moment, another network, or with fewer attachments. If it keeps happening, contact support.",
+      "processingPollTimeoutBody": "Automatic approval is still finishing on the server. Open your profile shortly to see if you are active; if it stays pending, try submitting again or contact support.",
       "coverageMapModalTitle": "Map, service area",
       "coverageMapModalClose": "Close",
       "coverageMapModalHelp": "When you open the map, it uses your current GPS position if you allow it; otherwise it centers on the address above. Tap the point you want as your operational base to see the service radius.",

@@ -1099,6 +1099,113 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
   }
 });
 
+// POST /api/providers/affiliations/:id/suspend — painel admin (ACTIVE → SUSPENDED)
+adminRouter.post('/affiliations/:id/suspend', express.json(), async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const row = await prisma.providerTenantAffiliation.findUnique({
+      where: { id },
+      include: { providerIdentity: { select: { userId: true } } },
+    });
+    if (!row) return res.status(404).json({ error: 'Vínculo não encontrado.' });
+    if (!canAccessTenant(req, row.tenantId)) return res.status(403).json({ error: 'Sem permissão para este tenant.' });
+    if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
+    const st = String(row.status || '').toUpperCase();
+    if (st !== 'ACTIVE') {
+      return res.status(409).json({
+        error: 'Só é possível suspender um vínculo ativo.',
+        code: 'AFFILIATION_INVALID_STATE',
+      });
+    }
+    const now = new Date();
+    const updated = await prisma.providerTenantAffiliation.update({
+      where: { id: row.id },
+      data: { status: 'SUSPENDED', suspendedAt: now },
+    });
+    const uid = String(row.providerIdentity?.userId || '').trim();
+    if (uid) invalidateAppEffectiveTenantIdCache(uid);
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: row.tenantId,
+          action: 'PROVIDER_AFFILIATION_SUSPENDED',
+          resource: row.id,
+          category: 'ADMIN',
+          metadata: auditContextMetadata(req, {
+            providerIdentityId: row.providerIdentityId,
+            targetTenantId: row.tenantId,
+          }),
+        },
+      })
+      .catch(() => {});
+    return res.json({
+      ok: true,
+      affiliation: {
+        id: updated.id,
+        status: updated.status,
+        relationshipType: updated.relationshipType || 'DEDICATED',
+        suspendedAt: updated.suspendedAt,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/providers/affiliations/:id/resume — painel admin (SUSPENDED → ACTIVE)
+adminRouter.post('/affiliations/:id/resume', express.json(), async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const row = await prisma.providerTenantAffiliation.findUnique({
+      where: { id },
+      include: { providerIdentity: { select: { userId: true } } },
+    });
+    if (!row) return res.status(404).json({ error: 'Vínculo não encontrado.' });
+    if (!canAccessTenant(req, row.tenantId)) return res.status(403).json({ error: 'Sem permissão para este tenant.' });
+    if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
+    const st = String(row.status || '').toUpperCase();
+    if (st !== 'SUSPENDED') {
+      return res.status(409).json({
+        error: 'Só é possível reativar um vínculo suspenso.',
+        code: 'AFFILIATION_INVALID_STATE',
+      });
+    }
+    const updated = await prisma.providerTenantAffiliation.update({
+      where: { id: row.id },
+      data: { status: 'ACTIVE', suspendedAt: null },
+    });
+    const uid = String(row.providerIdentity?.userId || '').trim();
+    if (uid) invalidateAppEffectiveTenantIdCache(uid);
+    await prisma.auditLog
+      .create({
+        data: {
+          ...auditActor(req),
+          tenantId: row.tenantId,
+          action: 'PROVIDER_AFFILIATION_RESUMED',
+          resource: row.id,
+          category: 'ADMIN',
+          metadata: auditContextMetadata(req, {
+            providerIdentityId: row.providerIdentityId,
+            targetTenantId: row.tenantId,
+          }),
+        },
+      })
+      .catch(() => {});
+    return res.json({
+      ok: true,
+      affiliation: {
+        id: updated.id,
+        status: updated.status,
+        relationshipType: updated.relationshipType || 'DEDICATED',
+        suspendedAt: updated.suspendedAt,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/providers/affiliations/:id/end
 // Encerrar vínculo (ex.: dedicação terminou). Mantém histórico.
 adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
@@ -1233,13 +1340,19 @@ async function directoryDbTenantClauseResolved(prismaClient, tenantFilter, autho
   return { OR: orBranches };
 }
 
-function rowMatchesDirectoryFilters(u, { qSearch, skill, locationId, hasSchedule, hasCoverage }) {
+function rowMatchesDirectoryFilters(u, { qSearch, skill, locationId, hasSchedule, hasCoverage, minScore }) {
   const tp = u.technicianProfile;
   const pi = u.providerIdentity;
   if (!tp && !pi) return false;
   if (locationId && !tp) return false;
   if (hasSchedule === '1' && !tp) return false;
   if (hasCoverage === '1' && !tp) return false;
+  if (minScore != null && Number.isFinite(minScore)) {
+    const raw = tp?.score ?? pi?.score;
+    if (raw == null || raw === '') return false;
+    const sc = Number(raw);
+    if (!Number.isFinite(sc) || sc < minScore) return false;
+  }
   if (qSearch) {
     const q = qSearch.toLowerCase();
     const emTech = u.email ? String(u.email).toLowerCase() : '';
@@ -1301,6 +1414,10 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
     const hasSchedule = String(req.query.hasSchedule || '').trim() === '1' ? '1' : '';
     const hasCoverage = String(req.query.hasCoverage || '').trim() === '1' ? '1' : '';
     const techStatus = req.query.techStatus != null ? String(req.query.techStatus).trim().slice(0, 32) : '';
+    const minScoreRaw = req.query.minScore != null ? String(req.query.minScore).trim() : '';
+    const minScoreParsed = parseFloat(minScoreRaw);
+    const minScore =
+      minScoreRaw !== '' && Number.isFinite(minScoreParsed) ? Math.max(0, Math.min(100, minScoreParsed)) : null;
     /** Lista completa ignorando janelas exclusivas do vínculo dedicado (auditoria / operações). */
     const includeDedicatedBound = String(req.query.includeDedicatedBound || '').trim() === '1';
     const at = new Date();
@@ -1370,7 +1487,7 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
       },
     });
 
-    const post = { qSearch, skill, locationId, hasSchedule, hasCoverage };
+    const post = { qSearch, skill, locationId, hasSchedule, hasCoverage, minScore };
     const enriched = await Promise.all(
       rows.map(async (u) => ({
         ...u,
