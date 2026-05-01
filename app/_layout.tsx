@@ -77,22 +77,11 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inLogin =
       pathname.startsWith('/auth/login') || (segments[0] === 'auth' && otpSeg === 'login');
     const inProviderCatalog = segments[0] === 'provider-services';
-    const inProviderOnboardingDeepLink =
-      pathname.startsWith('/provider-onboarding') || segments[0] === 'provider-onboarding';
     const seg0 = (segments as string[])[0];
     /** `/` ou ecrã `index` — deixar `app/index` decidir login vs home (não forçar login aqui). */
     const atRootOrIndex = !seg0 || seg0 === 'index';
 
-    if (
-      !user &&
-      !atRootOrIndex &&
-      !inAuthGroup &&
-      !inClient &&
-      !inProvider &&
-      !inProfile &&
-      !inProviderCatalog &&
-      !inProviderOnboardingDeepLink
-    ) {
+    if (!user && !atRootOrIndex && !inAuthGroup && !inClient && !inProvider && !inProfile && !inProviderCatalog) {
       router.replace('/auth/login' as any);
       return;
     }
@@ -276,7 +265,6 @@ function MainLayout() {
               <Stack.Screen name="work-time" />
               <Stack.Screen name="ops-chat/[taskId]" />
               <Stack.Screen name="provider-services/[tenantId]" />
-              <Stack.Screen name="provider-onboarding" />
               <Stack.Screen name="+not-found" options={{ headerShown: true }} />
             </Stack>
           </View>

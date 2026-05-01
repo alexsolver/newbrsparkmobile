@@ -138,13 +138,6 @@
           <button type="button" class="btn btn-primary" id="pr-invite-submit">
             <span id="pr-invite-submit-txt">Criar convite</span>
           </button>
-          <div id="pr-first-access-wrap" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
-            <h3 id="pr-first-title" style="font-size:14px;font-weight:800;margin:0 0 8px;color:var(--text)"></h3>
-            <p id="pr-first-hint" class="prest-sub" style="margin-bottom:12px"></p>
-            <button type="button" class="btn btn-outline" id="pr-first-access-btn">
-              <span id="pr-first-access-txt"></span>
-            </button>
-          </div>
         </section>
       </div>
 
@@ -176,35 +169,6 @@
           </table>
         </div>
       </section>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="pr-first-access-modal" role="dialog" aria-modal="true" aria-labelledby="pr-fa-modal-title">
-  <div class="modal modal-lg" style="width:min(640px,96vw);max-height:min(90vh,720px);display:flex;flex-direction:column">
-    <div class="modal-header">
-      <span class="modal-title" id="pr-fa-modal-title"></span>
-      <button type="button" class="modal-close" id="pr-fa-modal-close" aria-label="Close">
-        <ion-icon name="close-outline" style="font-size:22px;vertical-align:-4px" aria-hidden="true"></ion-icon>
-      </button>
-    </div>
-    <div class="modal-body" style="overflow:auto">
-      <p class="prest-sub" id="pr-fa-modal-exp" style="margin-top:0;margin-bottom:12px"></p>
-      <p class="prest-sub" id="pr-fa-web-warn" style="display:none;margin-bottom:10px;color:var(--warn,#b45309)"></p>
-      <label class="form-label" for="pr-fa-ta-web" id="pr-fa-lbl-web"></label>
-      <textarea id="pr-fa-ta-web" class="form-control" rows="4" readonly style="font-size:11px;font-family:ui-monospace,monospace;word-break:break-all"></textarea>
-      <div style="margin:8px 0 16px;display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn btn-outline btn-sm" id="pr-fa-copy-web"></button>
-      </div>
-      <label class="form-label" for="pr-fa-ta-app" id="pr-fa-lbl-app"></label>
-      <textarea id="pr-fa-ta-app" class="form-control" rows="3" readonly style="font-size:11px;font-family:ui-monospace,monospace;word-break:break-all"></textarea>
-      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" class="btn btn-outline btn-sm" id="pr-fa-copy-app"></button>
-      </div>
-      <p id="pr-fa-copy-status" role="status" style="font-size:12px;color:var(--text2);margin:12px 0 0;min-height:1.2em"></p>
-    </div>
-    <div class="modal-footer">
-      <button type="button" class="btn btn-primary" id="pr-fa-modal-done"></button>
     </div>
   </div>
 </div>

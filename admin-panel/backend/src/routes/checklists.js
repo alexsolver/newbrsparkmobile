@@ -37,7 +37,7 @@ const {
 const { preserveDispatchClientContactMetadata } = require('../lib/technicianClientChatGate');
 const { notifyBroadcastLosers } = require('../lib/fieldTaskBroadcastNotify');
 const {
-    filterBroadcastCandidatesExcludingDedicatedOtherTenant,
+    filterBroadcastCandidatesExcludingDedicatedAt,
     isAppUserInDedicatedExclusiveAt,
 } = require('../lib/providerDedicatedExclusiveService');
 const { allAssigneesHaveDedicatedWithTenant } = require('../lib/providerDedicatedDispatch');
@@ -1799,18 +1799,14 @@ router.post('/dispatch', async (req, res) => {
         const osNumber = await allocateNextFtOsNumber(prisma);
         let broadcastList = normalizeBroadcastCandidateEmails(resolvedList);
         if (isBroadcast) {
-            broadcastList = await filterBroadcastCandidatesExcludingDedicatedOtherTenant(
-                prisma,
-                broadcastList,
-                fieldTaskContextTenantId,
-            );
+            broadcastList = await filterBroadcastCandidatesExcludingDedicatedAt(prisma, broadcastList, scheduledStart);
             const minBroadcastCandidates = resolvedList.length >= 2 ? 2 : 1;
             if (broadcastList.length < minBroadcastCandidates) {
                 return res.status(400).json({
                     error:
                         minBroadcastCandidates >= 2
-                            ? 'Após excluir prestadores com vínculo dedicado activo noutra empresa, faltam candidatos para o modo oferta (mínimo 2).'
-                            : 'O prestador não está disponível para ofertas (vínculo dedicado activo com outra empresa).',
+                            ? 'Após excluir prestadores em janela de vínculo dedicado exclusivo no horário agendado da OS, faltam candidatos para o modo oferta com vários técnicos (mínimo 2).'
+                            : 'O prestador não está disponível para ofertas neste horário (janela de exclusividade de vínculo dedicado com outra empresa).',
                     code: 'BROADCAST_DEDICATED_EXCLUSIVITY',
                 });
             }

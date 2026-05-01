@@ -53,45 +53,6 @@ const M = {
     ten_undefined_region: 'Não definido',
     ten_row_suspend: 'Suspender',
     ten_row_activate: 'Ativar',
-    ten_row_onboard_web: 'Onboarding prestador',
-    ten_onboard_modal_title: 'Onboarding do prestador (convite)',
-    ten_onboard_modal_hint:
-      'Define o que o prestador vê no formulário público de convite. Requer rede «prestador primeiro» activa neste tenant.',
-    ten_onboard_btn_save: 'Guardar',
-    ten_onboard_err_load: 'Não foi possível carregar a configuração.',
-    ten_onboard_saved: 'Configuração guardada.',
-    ten_onboard_save_fail: 'Não foi possível guardar.',
-    ten_ob_intro:
-      'Escolha dados básicos do perfil, dados já guardados no cadastro do utilizador (morada, documentos, etc.), verificação facial, Didit e confirme se existem campos personalizados antigos.',
-    ten_ob_section_profile: 'Dados básicos do perfil (nome, contactos)',
-    ten_ob_section_integrated: 'Dados já existentes no cadastro BrSpark',
-    ten_ob_integrated_hint:
-      'Marque o que a empresa pode rever no convite. O prestador não edita aqui — vem do cadastro dele na plataforma.',
-    ten_ob_section_integrated_user: 'Utilizador',
-    ten_ob_section_integrated_tech: 'Perfil técnico / prestador',
-    ten_ob_int_address: 'Morada',
-    ten_ob_int_personalDocuments: 'Documentos pessoais',
-    ten_ob_int_professionalDocuments: 'Documentos profissionais / certificados',
-    ten_ob_int_cft: 'CFT / conselho',
-    ten_ob_int_specialty: 'Especialidade',
-    ten_ob_int_skills: 'Competências (skills)',
-    ten_ob_int_workSchedule: 'Horários de trabalho',
-    ten_ob_int_serviceCoverage: 'Área de cobertura',
-    ten_ob_int_serviceLocations: 'Locais de atendimento (IDs)',
-    ten_ob_legacy_custom_notice:
-      'Este tenant ainda tem campos personalizados antigos na configuração; eles mantêm-se até limpar manualmente no JSON ou migrar.',
-    ten_ob_pf_name: 'Nome',
-    ten_ob_pf_email: 'E-mail',
-    ten_ob_pf_phone: 'Telefone',
-    ten_ob_pf_avatar: 'Foto de perfil (URL)',
-    ten_ob_section_verify: 'Verificação facial',
-    ten_ob_skip_face: 'Não exigir FaceMatch no envio (fotos obrigatórias)',
-    ten_ob_skip_face_hint:
-      'Só use se a política da empresa o permitir. Com Didit activo, a verificação facial no envio já fica desactivada.',
-    ten_ob_section_didit: 'Didit (KYC)',
-    ten_ob_didit_enable: 'Activar Didit para este tenant',
-    ten_ob_didit_workflow_ph: 'ID do fluxo Didit (workflow)',
-    ten_ob_didit_hint: 'Se estiver vazio, pode herdar do tenant master ou da variável de ambiente do servidor.',
     ten_modal_title: 'Novo Tenant',
     ten_lbl_company: 'Nome da Empresa *',
     ten_ph_company: 'Ex: Benedito Imóveis',
@@ -825,44 +786,6 @@ M['en-US'] = {
   ten_undefined_region: 'Not set',
   ten_row_suspend: 'Suspend',
   ten_row_activate: 'Activate',
-  ten_row_onboard_web: 'Provider onboarding',
-  ten_onboard_modal_title: 'Provider invite onboarding',
-  ten_onboard_modal_hint:
-    'Controls what providers see on the public invite form. Requires provider-first network enabled for this tenant.',
-  ten_onboard_btn_save: 'Save',
-  ten_onboard_err_load: 'Could not load configuration.',
-  ten_onboard_saved: 'Configuration saved.',
-  ten_onboard_save_fail: 'Could not save.',
-  ten_ob_intro:
-    'Pick basic profile fields, data already stored on the user record (address, documents, etc.), face verification, Didit, and note any legacy custom fields.',
-  ten_ob_section_profile: 'Basic profile (name, contacts)',
-  ten_ob_section_integrated: 'Data already on the BrSpark user record',
-  ten_ob_integrated_hint:
-    'Choose what the company may review on the invite. The provider does not edit this — it comes from their platform profile.',
-  ten_ob_section_integrated_user: 'User',
-  ten_ob_section_integrated_tech: 'Technician / provider profile',
-  ten_ob_int_address: 'Address',
-  ten_ob_int_personalDocuments: 'Personal documents',
-  ten_ob_int_professionalDocuments: 'Professional documents / certificates',
-  ten_ob_int_cft: 'CFT / council registration',
-  ten_ob_int_specialty: 'Specialty',
-  ten_ob_int_skills: 'Skills',
-  ten_ob_int_workSchedule: 'Work schedule',
-  ten_ob_int_serviceCoverage: 'Service coverage area',
-  ten_ob_int_serviceLocations: 'Service locations (IDs)',
-  ten_ob_legacy_custom_notice:
-    'This tenant still has legacy custom fields in config; they are kept until removed manually or migrated.',
-  ten_ob_pf_name: 'Name',
-  ten_ob_pf_email: 'Email',
-  ten_ob_pf_phone: 'Phone',
-  ten_ob_pf_avatar: 'Profile photo (URL)',
-  ten_ob_section_verify: 'Face verification',
-  ten_ob_skip_face: 'Do not require FaceMatch on submit (mandatory photos)',
-  ten_ob_skip_face_hint: 'Only if your policy allows it. Didit already disables FaceMatch on submit when enabled.',
-  ten_ob_section_didit: 'Didit (KYC)',
-  ten_ob_didit_enable: 'Enable Didit for this tenant',
-  ten_ob_didit_workflow_ph: 'Didit workflow ID',
-  ten_ob_didit_hint: 'If empty, may inherit from master tenant or server environment.',
   ten_modal_title: 'New tenant',
     ten_lbl_company: 'Company name *',
     ten_ph_company: 'e.g. ACME Properties',
@@ -1973,10 +1896,6 @@ export function applyTenantsPageI18n() {
   const np = document.getElementById('new-plan-id');
   if (np && np.options[0]) np.options[0].textContent = mpT('ten_opt_no_plan');
   setText('ten-modal-cancel', 'common_cancel');
-  setText('tenant-onboard-modal-title', 'ten_onboard_modal_title');
-  setText('tenant-onboard-modal-hint', 'ten_onboard_modal_hint');
-  setText('tenant-onboard-save', 'ten_onboard_btn_save');
-  setText('tenant-onboard-cancel', 'common_cancel');
   const svt = document.getElementById('ten-modal-save-text');
   const svLegacy = document.getElementById('ten-modal-save');
   if (svt) svt.textContent = mpT('ten_btn_create');

@@ -347,19 +347,11 @@ async function handleUePaffAffiliationAction(actBtn) {
   clearUePaffInlineError();
   const noteEl = document.getElementById('ue-paff-note');
   const note = noteEl ? String(noteEl.value || '').trim() : '';
-  let justification = '';
-  if (act === 'end') {
-    justification = String(window.prompt(t('ue_paffJustificationPrompt'), '') || '').trim();
-    if (justification.length < 4) {
-      alert(t('ue_paffJustificationTooShort'));
-      return;
-    }
-  }
   const path =
     act === 'activate'
       ? `/providers/affiliations/${encodeURIComponent(affId)}/activate`
       : `/providers/affiliations/${encodeURIComponent(affId)}/end`;
-  const body = { ...(note ? { note } : {}), ...(act === 'end' && justification ? { justification } : {}) };
+  const body = note ? { note } : {};
   try {
     const res = await CONFIG.post(path, body).catch(() => null);
     if (res?.error) {

@@ -33,8 +33,6 @@ export type ProviderAffiliation = {
   endedAt?: string | null;
   suspendedAt?: string | null;
   dedicatedExclusive?: DedicatedExclusiveSchedule | null;
-  transitionJustification?: string | null;
-  transitionActor?: string | null;
 };
 
 export const ProviderAffiliationsApi = {
@@ -88,12 +86,9 @@ export const ProviderAffiliationsApi = {
     return (j?.affiliation || null) as ProviderAffiliation;
   },
 
-  async suspendByAffiliationId(affiliationId: string, justification: string): Promise<ProviderAffiliation> {
+  async suspendByAffiliationId(affiliationId: string): Promise<ProviderAffiliation> {
     const safe = encodeURIComponent(String(affiliationId || '').trim());
-    const r = await apiFetch(`/api/providers/me/affiliations/${safe}/suspend`, {
-      method: 'POST',
-      body: JSON.stringify({ justification: String(justification || '').trim() }),
-    });
+    const r = await apiFetch(`/api/providers/me/affiliations/${safe}/suspend`, { method: 'POST' });
     const j = await r.json();
     if (!r.ok) throw new Error(j?.error || 'Não foi possível suspender o vínculo.');
     return (j?.affiliation || null) as ProviderAffiliation;
@@ -107,12 +102,9 @@ export const ProviderAffiliationsApi = {
     return (j?.affiliation || null) as ProviderAffiliation;
   },
 
-  async endByAffiliationId(affiliationId: string, justification: string): Promise<ProviderAffiliation> {
+  async endByAffiliationId(affiliationId: string): Promise<ProviderAffiliation> {
     const safe = encodeURIComponent(String(affiliationId || '').trim());
-    const r = await apiFetch(`/api/providers/me/affiliations/${safe}/end`, {
-      method: 'POST',
-      body: JSON.stringify({ justification: String(justification || '').trim() }),
-    });
+    const r = await apiFetch(`/api/providers/me/affiliations/${safe}/end`, { method: 'POST' });
     const j = await r.json();
     if (!r.ok) throw new Error(j?.error || 'Não foi possível encerrar o vínculo.');
     return (j?.affiliation || null) as ProviderAffiliation;

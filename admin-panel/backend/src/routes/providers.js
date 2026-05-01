@@ -39,25 +39,17 @@ const {
 } = require('../lib/providerDedicatedExclusiveService');
 const { hasActiveDedicatedAffiliationForAppUser } = require('../lib/providerOnboardingGuards');
 const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
-const {
-  resolveProviderWebOnboardingOrigin,
-  buildProviderOnboardPageUrl,
-  buildJoinAsProviderPageUrl,
-} = require('../lib/providerWebOnboardingUrl');
 
 const publicRouter = express.Router();
 const adminRouter = express.Router();
 
 const GLOBAL_INVITE_PURPOSE = 'PROVIDER_GLOBAL_ONBOARDING_INVITE';
-const GLOBAL_INVITE_TTL_RAW = Number(process.env.PROVIDER_GLOBAL_INVITE_TTL_SECONDS);
-const GLOBAL_INVITE_TTL =
-  Number.isFinite(GLOBAL_INVITE_TTL_RAW) && GLOBAL_INVITE_TTL_RAW > 0
-    ? Math.floor(GLOBAL_INVITE_TTL_RAW)
-    : 14 * 24 * 3600;
+const GLOBAL_INVITE_TTL = Number(process.env.PROVIDER_GLOBAL_INVITE_TTL_SECONDS || 14 * 24 * 3600);
 const AFFILIATION_ACCEPT_BASE_URL =
   String(process.env.PROVIDER_AFFILIATION_ACCEPT_URL_BASE || 'brsparkmobile://provider-affiliation/accept').trim();
 const ONBOARDING_INVITE_BASE_URL =
   String(process.env.PROVIDER_GLOBAL_ONBOARDING_URL_BASE || 'brsparkmobile://provider-onboarding').trim();
+
 const AFFILIATION_RELATIONSHIP_TYPES = new Set(['DEDICATED']);
 
 const ONBOARDING_DEDICATED_ACTIVE_MSG =
@@ -76,23 +68,6 @@ function normalizeEmail(raw) {
   return String(raw || '')
     .trim()
     .toLowerCase();
-}
-
-/** E-mail mascarado para página pública de convite (não expor endereço completo). */
-function maskEmailForInvitePreview(email) {
-  const e = normalizeEmail(email);
-  if (!e) return '—';
-  const at = e.indexOf('@');
-  if (at <= 0) return '—';
-  const local = e.slice(0, at);
-  const dom = e.slice(at + 1);
-  const masked = local.length <= 2 ? '**' : `${local.slice(0, 2)}***`;
-  return `${masked}@${dom}`;
-}
-
-function readTransitionJustification(body) {
-  const j = String(body?.justification ?? body?.transitionJustification ?? '').trim();
-  return j.length >= 4 ? j : null;
 }
 
 function mergeJsonResponses(existing, patch) {
@@ -234,8 +209,6 @@ function affiliationPayloadFromRow(row, extra = {}) {
     activatedAt: row.activatedAt,
     endedAt: row.endedAt,
     suspendedAt: row.suspendedAt,
-    transitionJustification: row.transitionJustification ?? null,
-    transitionActor: row.transitionActor ?? null,
     dedicatedExclusive: dedicatedExclusiveForAppPayload(row),
     ...extra,
   };
@@ -262,45 +235,6 @@ async function maybeBackfillAffiliationForActiveTechnician(userId, tenantId) {
     tenantKind: u.tenant?.kind,
   }).catch(() => {});
 }
-
-// GET /api/providers/global-invite-preview — público; valida JWT de POST /onboarding/invite.
-publicRouter.get('/global-invite-preview', async (req, res) => {
-  try {
-    const token = String(req.query.token || '').trim();
-    if (!token) {
-      return res.status(400).json({ ok: false, error: 'Parâmetro token é obrigatório.' });
-    }
-    let payload;
-    try {
-      payload = jwt.verify(token, process.env.JWT_SECRET);
-    } catch {
-      return res.status(400).json({ ok: false, error: 'Convite inválido ou expirado.' });
-    }
-    if (payload?.purpose !== GLOBAL_INVITE_PURPOSE) {
-      return res.status(400).json({ ok: false, error: 'Convite inválido.' });
-    }
-    const email = normalizeEmail(payload?.email);
-    let inviterTenantName = null;
-    const tid = payload.inviterTenantId != null ? String(payload.inviterTenantId).trim() : '';
-    if (tid) {
-      const tn = await prisma.tenant.findUnique({
-        where: { id: tid },
-        select: { name: true, slug: true },
-      });
-      inviterTenantName = tn ? String(tn.name || tn.slug || '').trim() || null : null;
-    }
-    const expSec = typeof payload.exp === 'number' ? payload.exp : null;
-    const expiresAt = expSec ? new Date(expSec * 1000).toISOString() : null;
-    return res.json({
-      ok: true,
-      emailHint: maskEmailForInvitePreview(email),
-      inviterTenantName,
-      expiresAt,
-    });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message || String(err) });
-  }
-});
 
 // GET /api/providers/me/onboarding/status
 publicRouter.get('/me/onboarding/status', authUser, async (req, res) => {
@@ -498,22 +432,10 @@ publicRouter.post('/me/affiliations/:id/suspend', authUser, async (req, res) => 
         code: 'AFFILIATION_INVALID_STATE',
       });
     }
-    const just = readTransitionJustification(req.body || {});
-    if (!just) {
-      return res.status(400).json({
-        error: 'Justificativa obrigatória (mínimo 4 caracteres).',
-        code: 'JUSTIFICATION_REQUIRED',
-      });
-    }
     const now = new Date();
     const updated = await prisma.providerTenantAffiliation.update({
       where: { id: row.id },
-      data: {
-        status: 'SUSPENDED',
-        suspendedAt: now,
-        transitionJustification: just,
-        transitionActor: 'PROVIDER',
-      },
+      data: { status: 'SUSPENDED', suspendedAt: now },
     });
     invalidateAppEffectiveTenantIdCache(req.user.id);
     return res.json({ ok: true, affiliation: affiliationPayloadFromRow({ ...row, ...updated }) });
@@ -557,13 +479,6 @@ publicRouter.post('/me/affiliations/:id/end', authUser, async (req, res) => {
         code: 'AFFILIATION_INVALID_STATE',
       });
     }
-    const justEnd = readTransitionJustification(req.body || {});
-    if (!justEnd) {
-      return res.status(400).json({
-        error: 'Justificativa obrigatória (mínimo 4 caracteres).',
-        code: 'JUSTIFICATION_REQUIRED',
-      });
-    }
     const now = new Date();
     const appAccountId = row.providerIdentity?.user?.appAccountId || null;
     const updated = await prisma.$transaction(async (tx) => {
@@ -573,8 +488,6 @@ publicRouter.post('/me/affiliations/:id/end', authUser, async (req, res) => {
           status: 'INACTIVE',
           endedAt: now,
           suspendedAt: null,
-          transitionJustification: justEnd,
-          transitionActor: 'PROVIDER',
         },
       });
       if (appAccountId) {
@@ -834,8 +747,6 @@ adminRouter.post('/onboarding/invite', express.json(), async (req, res) => {
     };
     const inviteToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: GLOBAL_INVITE_TTL });
     const inviteUrl = `${ONBOARDING_INVITE_BASE_URL}${ONBOARDING_INVITE_BASE_URL.includes('?') ? '&' : '?'}inviteToken=${encodeURIComponent(inviteToken)}`;
-    const webOrigin = resolveProviderWebOnboardingOrigin(req);
-    const inviteUrlWeb = buildJoinAsProviderPageUrl(webOrigin, inviteToken);
 
     await prisma.auditLog
       .create({
@@ -858,7 +769,6 @@ adminRouter.post('/onboarding/invite', express.json(), async (req, res) => {
       email,
       inviteToken,
       inviteUrl,
-      inviteUrlWeb: inviteUrlWeb || undefined,
       expiresInSeconds: GLOBAL_INVITE_TTL,
     });
   } catch (err) {
@@ -951,22 +861,6 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
       });
     }
 
-    const blockedElsewhere = await prisma.providerTenantAffiliation.findFirst({
-      where: {
-        providerIdentityId: provider.id,
-        relationshipType: 'DEDICATED',
-        status: 'ACTIVE',
-        tenantId: { not: String(tenantId) },
-      },
-      select: { id: true },
-    });
-    if (blockedElsewhere) {
-      return res.status(409).json({
-        error: 'Este prestador já tem vínculo dedicado activo com outra empresa.',
-        code: 'PROVIDER_ALREADY_DEDICATED_ELSEWHERE',
-      });
-    }
-
     const invitationToken = crypto.randomBytes(24).toString('hex');
     const now = new Date();
     const note = String(req.body?.note || '').trim();
@@ -1016,10 +910,6 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
       .catch(() => {});
 
     const acceptUrl = `${AFFILIATION_ACCEPT_BASE_URL}${AFFILIATION_ACCEPT_BASE_URL.includes('?') ? '&' : '?'}token=${encodeURIComponent(invitationToken)}`;
-    const webOnboardUrl = buildProviderOnboardPageUrl(
-      resolveProviderWebOnboardingOrigin(req),
-      invitationToken,
-    );
 
     const tenantLabelRow = await prisma.tenant
       .findUnique({
@@ -1044,8 +934,8 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
     };
     try {
       const subject = `Convite BrSpark — ${tenantLabel}`;
-      const text = `Olá,\n\nA empresa «${tenantLabel}» convidou-o para ${relPt} na rede BrSpark.\n\nComplete o onboarding (fotos e dados) no telemóvel — página web:\n${webOnboardUrl}\n\nOu abra o convite na app BrSpark:\n${acceptUrl}\n\nNo app: Perfil → Organizações e parcerias — o convite aparece como «Convite recebido» até aceitar.\n\nSe não esperava este convite, ignore.\n`;
-      const html = `<p>Olá,</p><p>A empresa <strong>${escapeHtmlEmailFragment(tenantLabel)}</strong> convidou-o para <strong>${escapeHtmlEmailFragment(relPt)}</strong> na rede BrSpark.</p><p><a href="${escapeHtmlEmailFragment(webOnboardUrl)}"><strong>Onboarding web (recomendado)</strong> — concluir no telemóvel</a></p><p><a href="${escapeHtmlEmailFragment(acceptUrl)}">Abrir no app / aceitar convite</a></p><p style="font-size:13px;color:#555">Na app: <strong>Perfil</strong> → <strong>Organizações e parcerias</strong> — o estado aparece como «Convite recebido» até aceitar.</p><p style="font-size:12px;color:#888">Se o link não abrir, copie o endereço acima ou abra a app e atualize esse separador.</p>`;
+      const text = `Olá,\n\nA empresa «${tenantLabel}» convidou-o para ${relPt} na rede BrSpark.\n\nAbra o link no telemóvel com a app BrSpark instalada:\n${acceptUrl}\n\nNo app: Perfil → Organizações e parcerias — o convite aparece como «Convite recebido» até aceitar.\n\nSe não esperava este convite, ignore.\n`;
+      const html = `<p>Olá,</p><p>A empresa <strong>${escapeHtmlEmailFragment(tenantLabel)}</strong> convidou-o para <strong>${escapeHtmlEmailFragment(relPt)}</strong> na rede BrSpark.</p><p><a href="${escapeHtmlEmailFragment(acceptUrl)}">Abrir no app / aceitar convite</a></p><p style="font-size:13px;color:#555">Na app: <strong>Perfil</strong> → <strong>Organizações e parcerias</strong> — o estado aparece como «Convite recebido» até aceitar.</p><p style="font-size:12px;color:#888">Se o link não abrir, copie o endereço acima ou abra a app e atualize esse separador.</p>`;
       const { send, provider: emailProviderUsed } = await sendTransactionalEmailWithFallback({
         to: provider.user.email,
         subject,
@@ -1096,7 +986,6 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
       email: adminInviteEmailTo,
       invitationToken,
       acceptUrl,
-      webOnboardUrl,
       status: row.status,
       relationshipType: row.relationshipType || relationshipType,
       invitedAt: row.invitedAt,
@@ -1222,13 +1111,6 @@ adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
     if (!row) return res.status(404).json({ error: 'Vínculo não encontrado.' });
     if (!canAccessTenant(req, row.tenantId)) return res.status(403).json({ error: 'Sem permissão para este tenant.' });
     if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
-    const justTenant = readTransitionJustification(req.body || {});
-    if (!justTenant) {
-      return res.status(400).json({
-        error: 'Justificativa obrigatória (mínimo 4 caracteres).',
-        code: 'JUSTIFICATION_REQUIRED',
-      });
-    }
     const note = String(req.body?.note || '').trim();
     const now = new Date();
     const appAccountId = row.providerIdentity?.user?.appAccountId || null;
@@ -1239,8 +1121,6 @@ adminRouter.post('/affiliations/:id/end', express.json(), async (req, res) => {
           status: 'INACTIVE',
           endedAt: now,
           note: note || row.note || null,
-          transitionJustification: justTenant,
-          transitionActor: 'TENANT_ADMIN',
         },
       });
       if (appAccountId) {

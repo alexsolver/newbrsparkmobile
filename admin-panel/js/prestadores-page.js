@@ -23,74 +23,6 @@ function escAttr(s) {
     .replace(/>/g, '&gt;');
 }
 
-function isLikelyNonPublicInviteWebUrl(web) {
-  const s = String(web || '').trim().toLowerCase();
-  if (!s) return true;
-  if (s.includes('127.0.0.1') || s.includes('localhost')) return true;
-  return /https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(s);
-}
-
-function closePrFirstAccessResultModal() {
-  document.getElementById('pr-first-access-modal')?.classList.remove('open');
-  const st = document.getElementById('pr-fa-copy-status');
-  if (st) st.textContent = '';
-}
-
-function openPrFirstAccessResultModal(web, app, expSec) {
-  const ov = document.getElementById('pr-first-access-modal');
-  if (!ov) {
-    const lines = [t('pr_first_access_ok_title'), '', `${t('pr_first_access_web')}\n${web || '—'}`, '', `${t('pr_first_access_app')}\n${app || '—'}`];
-    if (typeof expSec === 'number' && Number.isFinite(expSec)) lines.push('', `${t('pr_first_access_exp')} ${expSec}`);
-    alert(lines.join('\n'));
-    return;
-  }
-  const webTa = document.getElementById('pr-fa-ta-web');
-  const appTa = document.getElementById('pr-fa-ta-app');
-  if (webTa) webTa.value = web || '';
-  if (appTa) appTa.value = app || '';
-  const expEl = document.getElementById('pr-fa-modal-exp');
-  if (expEl) {
-    expEl.textContent =
-      typeof expSec === 'number' && Number.isFinite(expSec) ? `${t('pr_first_access_exp')} ${expSec}` : '';
-  }
-  const warn = document.getElementById('pr-fa-web-warn');
-  if (warn) {
-    const showWarn = isLikelyNonPublicInviteWebUrl(web);
-    warn.style.display = showWarn ? '' : 'none';
-    if (showWarn) warn.textContent = t('pr_first_access_web_warn');
-  }
-  const st = document.getElementById('pr-fa-copy-status');
-  if (st) st.textContent = '';
-  ov.classList.add('open');
-  setTimeout(() => {
-    try {
-      webTa?.focus();
-      webTa?.select();
-    } catch {
-      /* ignore */
-    }
-  }, 80);
-}
-
-async function copyPrFirstAccessField(value) {
-  const v = String(value || '').trim();
-  const st = document.getElementById('pr-fa-copy-status');
-  if (!v) {
-    if (st) st.textContent = '';
-    return;
-  }
-  try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(v);
-      if (st) st.textContent = t('pr_first_access_copy_ok');
-      return;
-    }
-  } catch {
-    /* fallthrough */
-  }
-  if (st) st.textContent = t('pr_first_access_copy_err');
-}
-
 /** Clic no texto dentro do `<button>` → `target` pode ser nó de texto (sem `closest`). */
 function prDomElementFromTarget(clickTarget) {
   if (!clickTarget) return null;
@@ -354,45 +286,6 @@ async function loadBondsTable() {
   }
 }
 
-async function runFirstAccessInviteSubmit() {
-  if (!canManageTenantUsers) {
-    alert(t('pr_no_perm_invite'));
-    return;
-  }
-  const email = String(document.getElementById('pr-invite-email')?.value || '').trim();
-  if (!email) {
-    alert(t('pr_alert_email'));
-    return;
-  }
-  const tenantId = inviteTenantId();
-  if (!tenantId) {
-    alert(t('pr_alert_tenant'));
-    return;
-  }
-  const btn = document.getElementById('pr-first-access-btn');
-  if (btn) btn.disabled = true;
-  try {
-    const out = await CONFIG.post('/providers/onboarding/invite', { email, tenantId });
-    if (out == null) {
-      alert(t('pr_alert_session'));
-      return;
-    }
-    if (out.error || !out.inviteUrl) {
-      alert(out?.error || t('pr_first_access_err'));
-      return;
-    }
-    const web = out.inviteUrlWeb || '';
-    const app = out.inviteUrl || '';
-    const exp = typeof out.expiresInSeconds === 'number' ? out.expiresInSeconds : null;
-    openPrFirstAccessResultModal(web, app, exp);
-  } catch (err) {
-    console.error('[pr-first-access]', err);
-    alert(err?.message || t('pr_first_access_err'));
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
 async function loadTechSummary() {
   const statusEl = document.getElementById('pr-apps-status');
   const tbody = document.getElementById('pr-tech-tbody');
@@ -462,11 +355,7 @@ async function runAffiliationInviteSubmit() {
       return;
     }
     if (out.error) {
-      if (String(out.code || '') === 'PROVIDER_NOT_FOUND') {
-        alert(`${out.error}\n\n${t('pr_invite_first_access_hint')}`);
-      } else {
-        alert(out.error);
-      }
+      alert(out.error);
       return;
     }
     const acceptUrl = out.acceptUrl || '';
@@ -518,19 +407,6 @@ document.getElementById('pr-candidates-list')?.addEventListener('click', (e) => 
 });
 
 document.getElementById('pr-invite-submit')?.addEventListener('click', () => void runAffiliationInviteSubmit());
-document.getElementById('pr-first-access-btn')?.addEventListener('click', () => void runFirstAccessInviteSubmit());
-
-document.getElementById('pr-fa-modal-close')?.addEventListener('click', () => closePrFirstAccessResultModal());
-document.getElementById('pr-fa-modal-done')?.addEventListener('click', () => closePrFirstAccessResultModal());
-document.getElementById('pr-first-access-modal')?.addEventListener('click', (e) => {
-  if (e.target && e.target.id === 'pr-first-access-modal') closePrFirstAccessResultModal();
-});
-document.getElementById('pr-fa-copy-web')?.addEventListener('click', () =>
-  void copyPrFirstAccessField(document.getElementById('pr-fa-ta-web')?.value),
-);
-document.getElementById('pr-fa-copy-app')?.addEventListener('click', () =>
-  void copyPrFirstAccessField(document.getElementById('pr-fa-ta-app')?.value),
-);
 
 document.getElementById('pr-bonds-refresh')?.addEventListener('click', () => void loadBondsTable());
 document.getElementById('pr-apps-refresh')?.addEventListener('click', () => void loadTechSummary());
