@@ -246,14 +246,14 @@ async function mirrorApprovedLegacyRegistrationToProviderNetwork(prisma, { tenan
 async function mergeTechRegistrationIntoExistingUser(prisma, app, existingUser, ctx) {
   const { raw, name, addressJson, personalDocuments, technician, faceBefore } = ctx;
 
-  return prisma.$transaction(async (tx) => {
-    const mergedFaces = await buildFaceEnrollmentFromApprovedRegistration(
-      app.id,
-      existingUser.id,
-      raw.avatarUrl,
-      faceBefore
-    );
+  const mergedFaces = await buildFaceEnrollmentFromApprovedRegistration(
+    app.id,
+    existingUser.id,
+    raw.avatarUrl,
+    faceBefore
+  );
 
+  return prisma.$transaction(async (tx) => {
     const userData = {
       name,
       phone: raw.phone ? String(raw.phone).trim() : null,
@@ -393,21 +393,6 @@ async function materializeApprovedApplication(prisma, applicationId) {
       },
     });
 
-    const mergedFaces = await buildFaceEnrollmentFromApprovedRegistration(app.id, user.id, raw.avatarUrl, faceBefore);
-    if (mergedFaces.length) {
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          faceEnrollmentPhotos: mergedFaces,
-          comprefaceRecognitionSync: {
-            status: 'pending',
-            at: new Date().toISOString(),
-            message: 'Candidatura aprovada — a sincronizar galeria FaceMatch.',
-          },
-        },
-      });
-    }
-
     await tx.technicianProfile.create({
       data: {
         userId: user.id,
@@ -437,6 +422,26 @@ async function materializeApprovedApplication(prisma, applicationId) {
 
     return user;
   });
+
+  const mergedFaces = await buildFaceEnrollmentFromApprovedRegistration(
+    app.id,
+    result.id,
+    raw.avatarUrl,
+    faceBefore
+  );
+  if (mergedFaces.length) {
+    await prisma.user.update({
+      where: { id: result.id },
+      data: {
+        faceEnrollmentPhotos: mergedFaces,
+        comprefaceRecognitionSync: {
+          status: 'pending',
+          at: new Date().toISOString(),
+          message: 'Candidatura aprovada — a sincronizar galeria FaceMatch.',
+        },
+      },
+    });
+  }
 
   return result;
 }

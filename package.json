@@ -24,10 +24,12 @@
     "i18n:check": "node scripts/i18n-validate.mjs",
     "i18n:sync-es": "node scripts/i18n-sync-es.mjs",
     "eas:build:android": "eas build --profile production --platform android",
+    "eas:submit:android": "eas submit --profile production --platform android --latest",
     "eas:build:ios": "eas build --profile production --platform ios",
     "eas:build:all": "eas build --profile production --platform all",
     "eas:update:production": "eas update --channel production --auto",
-    "eas:update:preview": "eas update --channel preview --auto"
+    "eas:update:preview": "eas update --channel preview --auto",
+    "eas:submit:ios:ci": "node scripts/eas-submit-ios-noninteractive.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

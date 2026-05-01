@@ -973,24 +973,27 @@ publicRouter.post(
       /** Sempre materializar aprovação no mesmo pedido — sem fila de revisão manual por omissão. */
       try {
         const approvedUser = await materializeApprovedApplication(basePrisma, freshApp.id);
-        await mirrorApprovedLegacyRegistrationToProviderNetwork(basePrisma, {
-          tenantId: freshApp.tenantId,
-          userId: approvedUser.id,
-          technician: merged.technician,
-        }).catch((e) => {
-          console.warn('[provider-first] mirror legacy auto-approve failed:', e?.message || e);
-        });
         /**
-         * Resposta antes de e-mail/push e FaceMatch: `notifyTechRegistrationStatus` (SMTP/Expo) e o sync
-         * CompreFace excedem timeouts comuns de proxy (504). O candidato vê sucesso; notificações e galeria
-         * concluem em segundo plano no mesmo processo Node.
+         * Resposta HTTP o mais cedo possível: mirror provider-first, e-mail/push e CompreFace podem
+         * exceder timeouts de gateway (504) se correrem antes de `res.json`.
          */
         const approvedUserId = approvedUser.id;
         const notifyEmail = merged.email || freshApp.invitedEmail;
         const tenantIdBg = freshApp.tenantId;
         const candidateUserIdBg = req.user.id;
+        const technicianBg =
+          merged.technician && typeof merged.technician === 'object' ? merged.technician : {};
         res.json({ ok: true, status: 'APPROVED', autoApproved: true });
         void (async () => {
+          try {
+            await mirrorApprovedLegacyRegistrationToProviderNetwork(basePrisma, {
+              tenantId: tenantIdBg,
+              userId: approvedUserId,
+              technician: technicianBg,
+            });
+          } catch (e) {
+            console.warn('[provider-first] mirror legacy auto-approve failed:', e?.message || e);
+          }
           try {
             await notifyTechRegistrationStatus({
               tenantId: tenantIdBg,
