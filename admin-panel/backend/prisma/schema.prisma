@@ -314,6 +314,10 @@ model ProviderTenantAffiliation {
   tenantScheduleJson     Json?
   tenantServiceLocationIds Json?
   tenantDocsJson         Json?
+  /// Justificativa obrigatória ao rescindir/suspender (prestador ou empresa).
+  transitionJustification String? @map("transition_justification") @db.Text
+  /// Quem registrou a última transição relevante: TENANT_ADMIN | PROVIDER.
+  transitionActor        String? @map("transition_actor")
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 

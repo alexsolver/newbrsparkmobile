@@ -136,6 +136,16 @@ const corsOriginOption =
         cb(null, true);
       };
 app.use(cors({ origin: corsOriginOption, credentials: true }));
+
+/** Didit webhook — corpo RAW para validação HMAC (antes de express.json). */
+const diditWebhookRouter = express.Router();
+diditWebhookRouter.post(
+  '/didit',
+  express.raw({ type: 'application/json', limit: '2mb' }),
+  require('./routes/diditWebhook').diditWebhookHandler,
+);
+app.use('/api/webhooks', diditWebhookRouter);
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
@@ -186,6 +196,7 @@ app.use('/api',         accountRoutes); // app:   POST /api/register | POST /api
 app.get('/api/public/asset-occupancy.ics', publicAssetOccupancyIcs);
 app.use('/api/asset-occupancy-calendar', assetOccupancyCalendarRouter);
 app.use('/api/technician-onboarding', require('./routes/technicianOnboarding'));
+app.use('/api/public/provider-affiliation-onboarding', require('./routes/providerAffiliationOnboardingPublic'));
 app.use('/api/maps/google', googleMapsRoutes); // app JWT: POST route-metrics, GET quota-preview
 app.use('/api/sync',    syncRoutes);          // app: GET /api/sync/assets | POST /api/sync/push
 app.use('/api/sync',    syncModulesRoutes);   // app: módulos — costs, insurance, vault, media…

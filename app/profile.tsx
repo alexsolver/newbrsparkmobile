@@ -43,7 +43,10 @@ import {
 import { isImperial, setUnitSystem, setNumberFormat, getNumberFormat, loadNumberFormatPreference, NumberFormatPrefs } from '../src/i18n/formatters';
 import { shareUserLocalDataJson } from '../src/utils/exportUserLocalData';
 import { getPersonaHomeHref } from '../src/navigation/personaRouting';
-import { isProviderOnboardingComplete } from '../src/lib/onboardingPrefs';
+import {
+  isProviderOnboardingComplete,
+  PENDING_TECH_REG_TOKEN_KEY,
+} from '../src/lib/onboardingPrefs';
 import { usePersona } from '../src/context/PersonaContext';
 import { ProviderAffiliationsApi } from '../src/services/providerAffiliations';
 
@@ -651,6 +654,7 @@ export default function ProfileScreen() {
           score: typeof profile.score === 'number' ? profile.score : 5,
         },
       });
+      await refreshUser();
       if (String(profile.status || '').toUpperCase() === 'ACTIVE') {
         await setUserRole('TECHNICIAN');
         router.push('/auth/onboarding' as any);
@@ -659,7 +663,14 @@ export default function ProfileScreen() {
       const invite = profile.techRegistrationInviteToken;
       if (invite) {
         await loadTechRegResume();
-        router.push({ pathname: '/auth/tech-registration', params: { token: invite } } as any);
+        await setUserRole('TECHNICIAN');
+        const needProviderConsent = !(await isProviderOnboardingComplete());
+        if (needProviderConsent) {
+          await AsyncStorage.setItem(PENDING_TECH_REG_TOKEN_KEY, invite);
+          router.push('/auth/onboarding' as any);
+          return;
+        }
+        router.push(`/auth/tech-registration?token=${encodeURIComponent(invite)}` as any);
         return;
       }
       if (String(profile.techRegistrationStatus || '').toUpperCase() === 'SUBMITTED') {
@@ -686,7 +697,7 @@ export default function ProfileScreen() {
       return;
     }
     const go = (tok: string) => {
-      router.push({ pathname: '/auth/tech-registration', params: { token: tok } } as any);
+      router.push(`/auth/tech-registration?token=${encodeURIComponent(tok)}` as any);
     };
     const resumeTok = techRegResume?.open ? techRegResume.inviteToken : undefined;
     if (resumeTok) {
@@ -1262,10 +1273,9 @@ export default function ProfileScreen() {
                       alignItems: 'center',
                     }}
                     onPress={() =>
-                      router.push({
-                        pathname: '/auth/tech-registration',
-                        params: { token: techRegResume.inviteToken },
-                      } as any)
+                      router.push(
+                        `/auth/tech-registration?token=${encodeURIComponent(String(techRegResume.inviteToken))}` as any,
+                      )
                     }
                   >
                     <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>

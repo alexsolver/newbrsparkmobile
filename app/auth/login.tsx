@@ -7,7 +7,7 @@ import {
 
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -303,6 +303,28 @@ export default function LoginScreen() {
   const [twoFaChallenge, setTwoFaChallenge] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
+  const insets = useSafeAreaInsets();
+  /** Modal + teclado: KeyboardAvoidingView dentro de Modal falha no iOS; inset via listeners (cf. schedule-regions). */
+  const [twoFaKeyboardInset, setTwoFaKeyboardInset] = useState(0);
+
+  useEffect(() => {
+    if (!twoFaVisible) {
+      setTwoFaKeyboardInset(0);
+      return;
+    }
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const subShow = Keyboard.addListener(showEvt, (e) => {
+      setTwoFaKeyboardInset(e.endCoordinates?.height ?? 0);
+    });
+    const subHide = Keyboard.addListener(hideEvt, () => {
+      setTwoFaKeyboardInset(0);
+    });
+    return () => {
+      subShow.remove();
+      subHide.remove();
+    };
+  }, [twoFaVisible]);
 
   const goToTechRegistrationAfterAuth = () => {
     if (!techRegToken) return;
@@ -488,52 +510,74 @@ export default function LoginScreen() {
 
       {/* ─── 2FA OTP Modal ─────────────────────────────────────────────────── */}
       <Modal visible={twoFaVisible} animationType="slide" transparent>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: C.cardWhite, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: 48 }}>
-            <View style={{ alignItems: 'center', marginBottom: 20 }}>
-              <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: C.status.info.bg, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
-                <Ionicons name="shield-checkmark" size={28} color={C.accent} />
-              </View>
-              <Text style={{ fontSize: 18, fontWeight: '900', color: C.primary }}>Verificação em 2 etapas</Text>
-              <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '500', textAlign: 'center', marginTop: 6 }}>
-                {'Insira o código de 6 dígitos\nenviado para o seu e-mail.'}
-              </Text>
-            </View>
-
-            <TextInput
-              style={{
-                fontSize: 32, fontWeight: '900', letterSpacing: 12,
-                textAlign: 'center', backgroundColor: C.background,
-                borderRadius: 16, borderWidth: 1.5, borderColor: C.accent,
-                paddingVertical: 18, paddingHorizontal: 16, color: C.primary,
-                marginBottom: 20,
-              }}
-              value={otp}
-              onChangeText={v => setOtp(v.replace(/[^0-9]/g, '').slice(0, 6))}
-              keyboardType="number-pad"
-              maxLength={6}
-              autoFocus
-              placeholder="------"
-              placeholderTextColor={C.border}
-            />
-
-            <TouchableOpacity
-              style={[
-                { backgroundColor: C.accent, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginBottom: 14 },
-                (otp.length < 6 || otpLoading) && { opacity: 0.5 },
-              ]}
-              onPress={handleVerifyOtp}
-              disabled={otp.length < 6 || otpLoading}
+        <View style={{ flex: 1 }}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
+          </TouchableWithoutFeedback>
+          <View
+            style={[StyleSheet.absoluteFillObject, { justifyContent: 'flex-end', paddingBottom: twoFaKeyboardInset }]}
+            pointerEvents="box-none"
+          >
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              bounces={false}
             >
-              {otpLoading
-                ? <ActivityIndicator color={C.cardWhite} />
-                : <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 16 }}>Verificar Código</Text>
-              }
-            </TouchableOpacity>
+              <View
+                style={{
+                  backgroundColor: C.cardWhite,
+                  borderTopLeftRadius: 28,
+                  borderTopRightRadius: 28,
+                  padding: 28,
+                  paddingBottom: Math.max(insets.bottom + 20, 48),
+                }}
+              >
+                <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                  <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: C.status.info.bg, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                    <Ionicons name="shield-checkmark" size={28} color={C.accent} />
+                  </View>
+                  <Text style={{ fontSize: 18, fontWeight: '900', color: C.primary }}>Verificação em 2 etapas</Text>
+                  <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '500', textAlign: 'center', marginTop: 6 }}>
+                    {'Insira o código de 6 dígitos\nenviado para o seu e-mail.'}
+                  </Text>
+                </View>
 
-            <TouchableOpacity style={{ alignItems: 'center', padding: 8 }} onPress={() => { setTwoFaVisible(false); setTwoFaChallenge(null); }}>
-              <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
-            </TouchableOpacity>
+                <TextInput
+                  style={{
+                    fontSize: 32, fontWeight: '900', letterSpacing: 12,
+                    textAlign: 'center', backgroundColor: C.background,
+                    borderRadius: 16, borderWidth: 1.5, borderColor: C.accent,
+                    paddingVertical: 18, paddingHorizontal: 16, color: C.primary,
+                    marginBottom: 20,
+                  }}
+                  value={otp}
+                  onChangeText={v => setOtp(v.replace(/[^0-9]/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  autoFocus
+                  placeholder="------"
+                  placeholderTextColor={C.border}
+                />
+
+                <TouchableOpacity
+                  style={[
+                    { backgroundColor: C.accent, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginBottom: 14 },
+                    (otp.length < 6 || otpLoading) && { opacity: 0.5 },
+                  ]}
+                  onPress={handleVerifyOtp}
+                  disabled={otp.length < 6 || otpLoading}
+                >
+                  {otpLoading
+                    ? <ActivityIndicator color={C.cardWhite} />
+                    : <Text style={{ color: C.cardWhite, fontWeight: '900', fontSize: 16 }}>Verificar Código</Text>
+                  }
+                </TouchableOpacity>
+
+                <TouchableOpacity style={{ alignItems: 'center', padding: 8 }} onPress={() => { setTwoFaVisible(false); setTwoFaChallenge(null); }}>
+                  <Text style={{ fontSize: 13, color: C.textSecondary, fontWeight: '700' }}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>

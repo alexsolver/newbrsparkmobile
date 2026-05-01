@@ -1,5 +1,5 @@
 import '../src/tasks/routeTrackingTask';
-import { Stack, useGlobalSearchParams, useRouter, useSegments } from 'expo-router';
+import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useFonts } from 'expo-font';
@@ -40,6 +40,8 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
   const { colors: C } = useTheme();
   const router = useRouter();
   const segments = useSegments();
+  /** Durante transições do stack `auth/*`, `segments[1]` pode ainda não existir — usar pathname evita redirecionar à força. */
+  const pathname = usePathname() || '';
   const { activePersona } = usePersona();
   const globalParams = useGlobalSearchParams<{ techRegToken?: string }>();
   const pendingTechRegInvite =
@@ -52,15 +54,28 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inClient = segments[0] === '(client)';
     const inProvider = segments[0] === '(provider)';
     const inProfile    = segments[0] === 'profile';
-    const inOnboarding = segments[0] === 'auth' && (segments as string[])[1] === 'onboarding';
+    const segList = Array.isArray(segments) ? (segments as string[]) : [];
+    const otpSeg = segList[1] || '';
+    const inOnboarding =
+      pathname.startsWith('/auth/onboarding') ||
+      segList.includes('onboarding') ||
+      (segments[0] === 'auth' && otpSeg === 'onboarding');
     const inOtpJourney =
-      segments[0] === 'auth' &&
-      ['identifier', 'otp-verify', 'awaiting-approval', 'simulator', 'legal-sign'].includes(
-        (segments as string[])[1] || ''
+      (segments[0] === 'auth' &&
+        ['identifier', 'otp-verify', 'awaiting-approval', 'simulator', 'legal-sign'].includes(otpSeg)) ||
+      ['/auth/identifier', '/auth/otp-verify', '/auth/awaiting-approval', '/auth/simulator', '/auth/legal-sign'].some(
+        (p) => pathname.startsWith(p),
       );
     const inTechRegistration =
-      segments[0] === 'auth' && (segments as string[])[1] === 'tech-registration';
-    const inLogin = segments[0] === 'auth' && (segments as string[])[1] === 'login';
+      pathname.startsWith('/auth/tech-registration') ||
+      segList.includes('tech-registration') ||
+      (segments[0] === 'auth' && otpSeg === 'tech-registration');
+    const inRegisterOnboarding =
+      pathname.startsWith('/auth/register-onboarding') ||
+      segList.includes('register-onboarding') ||
+      (segments[0] === 'auth' && otpSeg === 'register-onboarding');
+    const inLogin =
+      pathname.startsWith('/auth/login') || (segments[0] === 'auth' && otpSeg === 'login');
     const inProviderCatalog = segments[0] === 'provider-services';
     const seg0 = (segments as string[])[0];
     /** `/` ou ecrã `index` — deixar `app/index` decidir login vs home (não forçar login aqui). */
@@ -71,16 +86,25 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (user && inAuthGroup && !inOnboarding && !inTechRegistration && !inOtpJourney) {
+    if (
+      user &&
+      inAuthGroup &&
+      !inOnboarding &&
+      !inTechRegistration &&
+      !inRegisterOnboarding &&
+      !inOtpJourney
+    ) {
       if (inLogin && pendingTechRegInvite) {
         return;
       }
-      // Logged-in user trying to access auth — check if onboarding is needed first
+      // Logged-in user in `auth/*` fora de fluxos explícitos: completar onboarding geral ou sair do **login**.
+      // Não redireccionar para a home só porque `@brspark_onboarding_done` existe — isso cancelava
+      // `tech-registration` (Quero ser prestador) numa frame em que pathname/segments ainda não batiam.
       AsyncStorage.getItem('@brspark_onboarding_done')
         .then((done) => {
           if (!done) {
             router.replace('/auth/onboarding' as any);
-          } else {
+          } else if (inLogin) {
             router.replace(getPersonaHomeHref(activePersona) as any);
           }
         })
@@ -99,7 +123,7 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     if (user && inProvider && activePersona === 'client') {
       router.replace(getPersonaHomeHref('client') as any);
     }
-  }, [user, loading, segments, pendingTechRegInvite, activePersona, router]);
+  }, [user, loading, segments, pathname, pendingTechRegInvite, activePersona, router]);
 
   if (loading) {
     return (

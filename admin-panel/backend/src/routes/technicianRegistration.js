@@ -30,6 +30,7 @@ const {
   blockLockedTechnicianIdentity,
 } = require('../lib/technicianIdentityLock');
 const { verifyTechRegEnrollmentAgainstProfile } = require('../lib/techRegComprefaceVerify');
+const { assertTechRegProbeNotDuplicateOtherUser } = require('../lib/techRegDuplicateFaceGallery');
 const {
   extractIdDocumentWithOpenAi,
   verifyDocumentFaceMatchesProfileOpenAi,
@@ -49,12 +50,6 @@ const TECH_REG_RECENT_SESSION_MAX_AGE_SECONDS = Number(process.env.TECH_REG_RECE
 const TECH_REG_SUBMIT_OTP_TTL_SECONDS = Number(process.env.TECH_REG_SUBMIT_OTP_TTL_SECONDS || 10 * 60);
 const TECH_REG_SUBMIT_OTP_MAX_ATTEMPTS = Number(process.env.TECH_REG_SUBMIT_OTP_MAX_ATTEMPTS || 5);
 const TECH_REG_SUBMIT_OTP_PURPOSE = 'TECH_REG_SUBMIT_OTP';
-
-/** Se `1`/`true`: desativa a aprovação automática após o envio do cadastro (revisão manual no painel). Por omissão o prestador é habilitado logo após o envio bem-sucedido. */
-function techRegSkipAutoApproveAfterSubmit() {
-  const v = String(process.env.TECH_REG_SKIP_AUTO_APPROVE_AFTER_SUBMIT || '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes';
-}
 
 /** Desafio OTP efêmero em memória por instância (cid -> payload). */
 const techRegSubmitOtpChallenges = new Map();
@@ -682,6 +677,15 @@ publicRouter.post(
       if (!ext) ext = detectFaceExtFromBuffer(buf);
       if (!ext) return res.status(400).json({ error: 'Use imagem JPEG, PNG ou WebP.' });
 
+      const dupProfileEarly = await assertTechRegProbeNotDuplicateOtherUser(prisma, {
+        registrationTenantId: app.tenantId,
+        candidateUserId: req.user.id,
+        probeBuffer: buf,
+      });
+      if (!dupProfileEarly.ok) {
+        return res.status(409).json({ error: dupProfileEarly.message, code: dupProfileEarly.code });
+      }
+
       const raw = app.responsesJson && typeof app.responsesJson === 'object' ? app.responsesJson : {};
       const oldAv = String(raw.avatarUrl || '');
       if (oldAv.startsWith(`/uploads/tech-registration/${app.id}/`)) {
@@ -730,6 +734,7 @@ publicRouter.post(
         }
       }
       nextJson.personalDocuments = pd;
+
       await prisma.$transaction([
         prisma.technicianRegistrationApplication.update({
           where: { id: app.id },
@@ -916,6 +921,19 @@ publicRouter.post(
       }
 
       const merged = mergeJsonResponses(app.responsesJson, req.body.responsesJson || req.body.responses || {});
+      if (isAiTechRegProfileGateFromRaw(merged)) {
+        const profSubmit = await readTechRegProfileBuffer({ id: app.id, responsesJson: merged });
+        if (!profSubmit.error && profSubmit.buf) {
+          const dupSubmit = await assertTechRegProbeNotDuplicateOtherUser(prisma, {
+            registrationTenantId: app.tenantId,
+            candidateUserId: req.user.id,
+            probeBuffer: profSubmit.buf,
+          });
+          if (!dupSubmit.ok) {
+            return res.status(409).json({ error: dupSubmit.message, code: dupSubmit.code });
+          }
+        }
+      }
       if (!merged.technician || typeof merged.technician !== 'object') merged.technician = {};
       if (!merged.technician.workScheduleJson || typeof merged.technician.workScheduleJson !== 'object') {
         merged.technician.workScheduleJson = defaultEmptySchedule();
@@ -952,42 +970,41 @@ publicRouter.post(
         status: 'SUBMITTED',
       });
 
+      /** Sempre materializar aprovação no mesmo pedido — sem fila de revisão manual por omissão. */
       let outStatus = updated.status;
       let autoApproved = false;
-      if (!techRegSkipAutoApproveAfterSubmit()) {
+      try {
+        const approvedUser = await materializeApprovedApplication(basePrisma, app.id);
+        await mirrorApprovedLegacyRegistrationToProviderNetwork(basePrisma, {
+          tenantId: app.tenantId,
+          userId: approvedUser.id,
+          technician: merged.technician,
+        }).catch((e) => {
+          console.warn('[provider-first] mirror legacy auto-approve failed:', e?.message || e);
+        });
         try {
-          const approvedUser = await materializeApprovedApplication(basePrisma, app.id);
-          await mirrorApprovedLegacyRegistrationToProviderNetwork(basePrisma, {
-            tenantId: app.tenantId,
-            userId: approvedUser.id,
-            technician: merged.technician,
-          }).catch((e) => {
-            console.warn('[provider-first] mirror legacy auto-approve failed:', e?.message || e);
-          });
-          try {
-            await syncComprefaceGalleryAfterUserChange(basePrisma, approvedUser.id, req, 'tech_reg_auto_approve');
-          } catch (e) {
-            console.warn('[tech-reg] FaceMatch após habilitação automática', e);
-          }
-          await notifyTechRegistrationStatus({
-            tenantId: app.tenantId,
-            invitedEmail: merged.email || app.invitedEmail,
-            candidateUserId: req.user.id,
-            status: 'APPROVED',
-          });
-          outStatus = 'APPROVED';
-          autoApproved = true;
-        } catch (autoErr) {
-          console.error('[tech-reg] auto-approve after submit', autoErr);
-          return res.status(500).json({
-            error:
-              autoErr && autoErr.message
-                ? String(autoErr.message)
-                : 'Envio registado, mas a habilitação automática falhou. A equipa pode aprovar no painel.',
-            code: 'TECH_REG_AUTO_APPROVE_FAILED',
-            status: updated.status,
-          });
+          await syncComprefaceGalleryAfterUserChange(basePrisma, approvedUser.id, req, 'tech_reg_auto_approve');
+        } catch (e) {
+          console.warn('[tech-reg] FaceMatch após habilitação automática', e);
         }
+        await notifyTechRegistrationStatus({
+          tenantId: app.tenantId,
+          invitedEmail: merged.email || app.invitedEmail,
+          candidateUserId: req.user.id,
+          status: 'APPROVED',
+        });
+        outStatus = 'APPROVED';
+        autoApproved = true;
+      } catch (autoErr) {
+        console.error('[tech-reg] auto-approve after submit', autoErr);
+        return res.status(500).json({
+          error:
+            autoErr && autoErr.message
+              ? String(autoErr.message)
+              : 'Envio registado, mas a habilitação automática falhou. Tente de novo ou contacte o suporte.',
+          code: 'TECH_REG_AUTO_APPROVE_FAILED',
+          status: updated.status,
+        });
       }
 
       res.json({ ok: true, status: outStatus, ...(autoApproved ? { autoApproved: true } : {}) });
@@ -1100,6 +1117,14 @@ publicRouter.post(
             ? 503
             : 400;
         return res.status(st).json({ error: v.message, code: v.code });
+      }
+      const dupFace = await assertTechRegProbeNotDuplicateOtherUser(prisma, {
+        registrationTenantId: freshApp.tenantId,
+        candidateUserId: req.user.id,
+        probeBuffer: buf,
+      });
+      if (!dupFace.ok) {
+        return res.status(409).json({ error: dupFace.message, code: dupFace.code });
       }
     }
 

@@ -1289,6 +1289,11 @@
     "affiliationsDeclineConfirmBody": "The invite from {{name}} will be declined. The company may need to send a new invite to connect again.",
     "affiliationsEndConfirmTitle": "End this link?",
     "affiliationsEndConfirmBody": "The link or pending request will no longer be active. The company will lose operational access as appropriate. Continue?",
+    "affiliationsJustificationTitleSuspend": "Suspend link",
+    "affiliationsJustificationTitleEnd": "End link",
+    "affiliationsJustificationHint": "A justification (at least 4 characters) is required for audit records.",
+    "affiliationsJustificationPlaceholder": "Describe the reason…",
+    "affiliationsJustificationTooShort": "Please enter at least 4 characters.",
     "affiliationsLoadErrorHint": "Pull to refresh or check your connection. If the error persists, sign out and sign in again.",
     "affiliationsDedicatedWindowsTitle": "Exclusivity hours",
     "affiliationsDedicatedWindowsHint": "During these weekly windows the dedicated link governs the availability agreed with the company, which can still assign work to you directly.",
@@ -3056,6 +3061,11 @@
       "approvedTitle": "Registration approved",
       "approvedBody": "Your provider registration was accepted and is already active. You can use provider mode in the app.",
       "networkError": "Network error.",
+      "submitTimeoutBody": "The upload took too long or was interrupted (slow network or busy server). Check your connection and try again. If it keeps happening, try another network (Wi‑Fi or mobile data).",
+      "serverHtmlResponseBody": "The server returned an error page instead of JSON (network, proxy, or service unavailable). Try another network or later.",
+      "serverBadResponseBody": "Invalid server response. Please try again.",
+      "payloadTooLargeBody": "The upload exceeded the size limit. Reduce attachments or contact support.",
+      "coverageMapRequiredBody": "Set your service area center on the map (tap the map) — radius is set but the center is not.",
       "permTitle": "Permission",
       "sessionTitle": "Session",
       "identityLockedNavTitle": "Active provider",
@@ -3111,6 +3121,10 @@
         "FACE_MISMATCH": {
           "title": "Photo not accepted",
           "message": "We could not confirm you match the step 1 profile photo. Take another photo: face forward, good light, no sunglasses or items covering your face."
+        },
+        "FACE_ALREADY_REGISTERED": {
+          "title": "Face already registered",
+          "message": "This face is already linked to another account in your organization. Use the account that already has your biometrics or contact your company."
         },
         "VERIFY_OR_INVALID_IMAGE": {
           "title": "Invalid image",

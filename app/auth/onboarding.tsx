@@ -19,7 +19,7 @@ import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { NotificationService } from '../../src/services/notifications';
 import { apiFetch, canUseProviderMode } from '../../src/services/auth';
-import { ONBOARDING_PROVIDER_DONE_KEY } from '../../src/lib/onboardingPrefs';
+import { ONBOARDING_PROVIDER_DONE_KEY, PENDING_TECH_REG_TOKEN_KEY } from '../../src/lib/onboardingPrefs';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { useTranslation } from 'react-i18next';
 import { getDeviceRegion } from '../../src/i18n';
@@ -290,9 +290,19 @@ export default function OnboardingScreen() {
       console.warn('[Onboarding] Erro ao salvar consentimentos:', e);
     } finally {
       setLoading(false);
-      router.replace(getPersonaHomeHref(isTechnician ? 'provider' : 'client') as any);
     }
-  }, [consents, policy, isTechnician, user, consentEntriesForApi, legalLabel, t]);
+    try {
+      const pendingTok = await AsyncStorage.getItem(PENDING_TECH_REG_TOKEN_KEY);
+      if (pendingTok && isTechnician) {
+        await AsyncStorage.removeItem(PENDING_TECH_REG_TOKEN_KEY);
+        router.replace(`/auth/tech-registration?token=${encodeURIComponent(pendingTok)}` as any);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    router.replace(getPersonaHomeHref(isTechnician ? 'provider' : 'client') as any);
+  }, [consents, policy, isTechnician, user, consentEntriesForApi, legalLabel, t, router]);
 
   const summaryRows: [keyof ConsentState, string, string][] = useMemo(() => {
     if (isTechnician) {

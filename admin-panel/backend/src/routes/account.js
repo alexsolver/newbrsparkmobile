@@ -1947,6 +1947,52 @@ router.post('/me/workspaces', authUser, async (req, res) => {
 });
 
 /**
+ * Todos os `User` associados ao mesmo login (mesmo `AppAccount` ou e-mail legado / técnico +brspark.ws.*).
+ * Sem isto, só uma filiação era anonimizada e o utilizador voltava a entrar com o mesmo e-mail/palavra-passe
+ * noutra organização.
+ */
+async function resolveAllUserIdsForAccountDeletion(db, anchorUserId) {
+  const uid = String(anchorUserId || '').trim();
+  if (!uid) return [];
+  const row = await db.user.findUnique({
+    where: { id: uid },
+    select: {
+      id: true,
+      email: true,
+      appAccountId: true,
+      appAccount: { select: { id: true, emailNorm: true } },
+    },
+  });
+  if (!row) return [];
+  if (row.appAccountId) {
+    const rows = await db.user.findMany({
+      where: { appAccountId: row.appAccountId },
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
+  }
+  const canon = await resolveCanonicalEmailNormForUser(db, row);
+  const em = String(canon || row.email || '')
+    .trim()
+    .toLowerCase();
+  if (!em.includes('@')) return [row.id];
+  const at = em.indexOf('@');
+  const local = em.slice(0, at);
+  const synthFrag = `${local}+brspark.ws.`;
+  const siblings = await db.user.findMany({
+    where: {
+      OR: [
+        { email: { equals: em, mode: 'insensitive' } },
+        { email: { contains: synthFrag, mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true },
+  });
+  const ids = [...new Set(siblings.map((s) => s.id))];
+  return ids.length ? ids : [row.id];
+}
+
+/**
  * DELETE /api/me — exclusão de conta (LGPD): anonimiza dados de identificação, invalida sessão,
  * remove tokens push e desativa o utilizador (paridade com Laravel `AuthController::deleteAccount`).
  */
@@ -1955,34 +2001,66 @@ router.delete('/me', authUser, async (req, res) => {
   if (!userId) return res.status(400).json({ error: 'Sessão inválida.' });
 
   const randomPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
-  const tombstoneEmail = `deleted_${userId}@brspark.com`;
 
   try {
+    const anchor = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        appAccountId: true,
+        appAccount: { select: { emailNorm: true } },
+        email: true,
+      },
+    });
+    if (!anchor) {
+      return res.status(404).json({ error: 'Utilizador não encontrado.' });
+    }
+
+    const idsToTombstone = await resolveAllUserIdsForAccountDeletion(prisma, userId);
+    const canonicalForOtp = await resolveCanonicalEmailNormForUser(prisma, anchor);
+    const appAccountIdToRemove = anchor.appAccountId || null;
+
     await prisma.$transaction(async (tx) => {
-      await tx.pushToken.deleteMany({ where: { userId } });
-      await tx.user.update({
-        where: { id: userId },
-        data: {
-          name: 'Usuário Excluído',
-          email: tombstoneEmail,
-          password: randomPassword,
-          phone: null,
-          avatarUrl: null,
-          addressJson: null,
-          personalDocuments: null,
-          faceEnrollmentPhotos: null,
-          comprefaceRecognitionSync: null,
-          employeeMatricula: null,
-          preferredChatLocale: null,
-          emailVerificationToken: null,
-          emailVerificationExpiresAt: null,
-          emailVerifiedAt: null,
-          currentSessionId: null,
-          currentDeviceId: null,
-          isActive: false,
-          appAccountId: null,
-        },
-      });
+      await tx.pushToken.deleteMany({ where: { userId: { in: idsToTombstone } } });
+      await tx.appRefreshSession.deleteMany({ where: { userId: { in: idsToTombstone } } });
+      if (canonicalForOtp && canonicalForOtp.includes('@')) {
+        await tx.otpLoginChallenge.deleteMany({
+          where: { target: { equals: canonicalForOtp.trim().toLowerCase(), mode: 'insensitive' } },
+        });
+      }
+
+      for (const id of idsToTombstone) {
+        const tombstoneEmail = `deleted_${id}@brspark.com`;
+        await tx.user.update({
+          where: { id },
+          data: {
+            name: 'Usuário Excluído',
+            email: tombstoneEmail,
+            password: randomPassword,
+            phone: null,
+            avatarUrl: null,
+            addressJson: null,
+            personalDocuments: null,
+            faceEnrollmentPhotos: null,
+            comprefaceRecognitionSync: null,
+            employeeMatricula: null,
+            preferredChatLocale: null,
+            emailVerificationToken: null,
+            emailVerificationExpiresAt: null,
+            emailVerifiedAt: null,
+            currentSessionId: null,
+            currentDeviceId: null,
+            isActive: false,
+            appAccountId: null,
+          },
+        });
+      }
+
+      if (appAccountIdToRemove) {
+        await tx.appAccount
+          .delete({ where: { id: appAccountIdToRemove } })
+          .catch(() => {});
+      }
     });
 
     res.json({
@@ -2197,9 +2275,12 @@ router.get('/me/technician-registration', authUser, async (req, res) => {
     const submittedRow = await prisma.technicianRegistrationApplication.findFirst({
       where: { tenantId, invitedEmail: em, status: 'SUBMITTED' },
       orderBy: { submittedAt: 'desc' },
-      select: { id: true },
+      select: { id: true, candidateUserId: true },
     });
-    const submittedAwaitingReview = !!submittedRow;
+    const submittedAwaitingReview =
+      !!submittedRow &&
+      submittedRow.candidateUserId != null &&
+      String(submittedRow.candidateUserId) === String(req.user.id);
     if (!app) {
       return res.json({ open: false, submittedAwaitingReview });
     }
@@ -2251,6 +2332,7 @@ router.post('/me/technician', authUser, async (req, res) => {
     const submittedApp = await prisma.technicianRegistrationApplication.findFirst({
       where: { tenantId, invitedEmail: em, status: 'SUBMITTED' },
       orderBy: { submittedAt: 'desc' },
+      select: { id: true, candidateUserId: true },
     });
 
     let profile = existing;
@@ -2276,10 +2358,19 @@ router.post('/me/technician', authUser, async (req, res) => {
           data: { candidateUserId: req.user.id },
         })
         .catch(() => {});
-    } else if (submittedApp) {
+    } else if (
+      submittedApp &&
+      submittedApp.candidateUserId != null &&
+      String(submittedApp.candidateUserId) === String(req.user.id)
+    ) {
+      /** Mesmo utilizador da sessão — candidatura já enviada para análise. */
       techRegistrationStatus = 'SUBMITTED';
       techRegistrationInviteToken = null;
     } else {
+      /**
+       * SUBMITTED de outro `candidateUserId`, null, ou conta apagada/recriada com o mesmo e-mail no tenant
+       * (ex.: piscina BrSpark) — não bloquear novo «Quero ser prestador».
+       */
       const token = generateTechRegInviteToken();
       const createdApp = await prisma.technicianRegistrationApplication.create({
         data: {

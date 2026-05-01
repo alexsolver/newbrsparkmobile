@@ -1289,6 +1289,11 @@
     "affiliationsDeclineConfirmBody": "Se rechazará la invitación de {{name}}. La empresa puede necesitar enviar una nueva invitación para volver a vincularse.",
     "affiliationsEndConfirmTitle": "¿Cerrar este vínculo?",
     "affiliationsEndConfirmBody": "El vínculo o la solicitud pendiente dejarán de estar activos. La empresa deja de tener acceso operativo según corresponda. ¿Continuar?",
+    "affiliationsJustificationTitleSuspend": "Suspender vínculo",
+    "affiliationsJustificationTitleEnd": "Cerrar vínculo",
+    "affiliationsJustificationHint": "Justificación obligatoria (mínimo 4 caracteres) para auditoría.",
+    "affiliationsJustificationPlaceholder": "Describa el motivo…",
+    "affiliationsJustificationTooShort": "Indique al menos 4 caracteres.",
     "affiliationsLoadErrorHint": "Tira para actualizar o comprueba la conexión. Si el error continúa, cierra sesión y vuelve a entrar.",
     "affiliationsDedicatedWindowsTitle": "Horario de exclusividad",
     "affiliationsDedicatedWindowsHint": "En estas ventanas semanales el vínculo dedicado rige la disponibilidad acordada con la empresa, que puede seguir asignándote órdenes directamente.",
@@ -3056,6 +3061,11 @@
       "approvedTitle": "Registro aprobado",
       "approvedBody": "Tu registro de prestador fue aceptado y ya está activo. Puedes usar el modo prestador en la app.",
       "networkError": "Fallo de red.",
+      "submitTimeoutBody": "El envío tardó demasiado o se interrumpió (red lenta o servidor ocupado). Comprueba la conexión e inténtalo de nuevo. Si persiste, prueba otra red (Wi‑Fi o datos móviles).",
+      "serverHtmlResponseBody": "El servidor devolvió una página de error en lugar de JSON (red, proxy o servicio no disponible). Pruebe otra red o más tarde.",
+      "serverBadResponseBody": "Respuesta del servidor no válida. Inténtelo de nuevo.",
+      "payloadTooLargeBody": "El envío superó el límite de tamaño. Reduzca adjuntos o contacte soporte.",
+      "coverageMapRequiredBody": "Defina el centro del área de servicio en el mapa (toque el mapa): el radio está definido pero el centro no.",
       "permTitle": "Permiso",
       "sessionTitle": "Sesión",
       "identityLockedNavTitle": "Proveedor activo",
@@ -3111,6 +3121,10 @@
         "FACE_MISMATCH": {
           "title": "Foto no aceptada",
           "message": "No pudimos confirmar que eres la misma persona que la foto de perfil del paso 1. Toma otra foto: rostro de frente, buena luz, sin gafas oscuras ni objetos cubriendo el rostro."
+        },
+        "FACE_ALREADY_REGISTERED": {
+          "title": "Rostro ya registrado",
+          "message": "Este rostro ya está vinculado a otra cuenta en su organización. Use la cuenta que ya tiene su biometría o contacte a la empresa."
         },
         "VERIFY_OR_INVALID_IMAGE": {
           "title": "Imagen no válida",

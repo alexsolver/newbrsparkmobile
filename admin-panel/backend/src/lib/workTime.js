@@ -19,19 +19,31 @@ function normalizeFacePhotos(raw) {
 }
 
 /**
- * Matrícula facial «ok» para o ponto: exige fotos base no perfil.
- * `comprefaceRecognitionSync`: `synced` ou `pending` contam como OK; só `error` falha.
+ * Estado da última sincronização da galeria com o motor FaceMatch (CompreFace), para o app e relatórios.
+ * @param {{ comprefaceRecognitionSync?: unknown }} user
+ * @returns {'none'|'synced'|'pending'|'error'|string}
+ */
+function parseComprefaceGallerySyncStatus(user) {
+  const s = user && user.comprefaceRecognitionSync;
+  if (!s || typeof s !== 'object' || Array.isArray(s)) return 'none';
+  const raw = s.status != null ? s.status : s.Status;
+  const st = String(raw || '')
+    .trim()
+    .toLowerCase();
+  if (st === 'synced' || st === 'pending' || st === 'error') return st;
+  return 'none';
+}
+
+/**
+ * Matrícula facial «ok» para o ponto: pelo menos uma foto base no perfil (`id` + `url`).
+ * O estado `comprefaceRecognitionSync` **não** deve anular isto — utilizadores com fotos no painel
+ * não podem ver o app a pedir «complete a matrícula» só porque o JSON de sync está vazio,
+ * legado ou com última tentativa em erro (o admin trata no FaceMatch / botão sincronizar).
  *
  * @param {import('@prisma/client').User} user
  */
 function faceEnrollmentOk(user) {
-  const photos = normalizeFacePhotos(user.faceEnrollmentPhotos);
-  if (photos.length === 0) return false;
-  const s = user.comprefaceRecognitionSync;
-  if (!s || typeof s !== 'object') return true;
-  const st = String(s.status || '').toLowerCase();
-  if (st === 'error') return false;
-  return st === 'synced' || st === 'pending';
+  return normalizeFacePhotos(user.faceEnrollmentPhotos).length > 0;
 }
 
 /**
@@ -134,6 +146,7 @@ async function getWorkTimeEffectiveForUser(userId, db = prisma) {
   const sharedScope = await isSharedAppRegistrationTenantId(db, scopeTenantId);
   const sharedHome = dedicatedContext ? await isSharedAppRegistrationTenantId(db, homeTenantId) : false;
   const enrolled = faceEnrollmentOk(user);
+  const faceGalleryServerSyncStatus = parseComprefaceGallerySyncStatus(user);
   const moduleOn =
     (!sharedScope && !!settings.moduleEnabled) ||
     (!sharedHome && !!(settingsHome && settingsHome.moduleEnabled));
@@ -185,6 +198,9 @@ async function getWorkTimeEffectiveForUser(userId, db = prisma) {
     userWorkTimeEnabled: userOn,
     workTimeEnrolledAt: user.workTimeEnrolledAt,
     faceEnrollmentOk: enrolled,
+    /** `error` = última sincronização CompreFace falhou; fotos podem existir no perfil. */
+    faceGalleryServerSyncStatus,
+    faceGalleryServerSyncFailed: faceGalleryServerSyncStatus === 'error',
     faceReenrollmentWindowOpen,
     faceReenrollmentUntil: reUntil ? new Date(reUntil).toISOString() : null,
     faceReenrollmentNote: user.technicianProfile?.faceReenrollmentNote || null,
@@ -197,6 +213,7 @@ module.exports = {
   WORK_TIME_FLAG_KEY,
   canAccountAccessWorkTime,
   normalizeFacePhotos,
+  parseComprefaceGallerySyncStatus,
   faceEnrollmentOk,
   isWorkTimeFeatureFlagEnabled,
   ensureWorkTimeSettings,

@@ -2,8 +2,9 @@
 
 /**
  * Remove utilizadores pelo e-mail (todos os tenants) e tokens push associados.
+ * Preferir `deleteUserDataByEmail.js` para limpeza completa (AuditLog, AppAccount,
+ * candidaturas tech-reg, dados por ownerEmail, etc.).
  * Uso: node scripts/deleteUsersByEmail.js email1@x.com "outro@y.com"
- * Ex.: node scripts/deleteUsersByEmail.js well@well.com marcio@1.com
  */
 require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');

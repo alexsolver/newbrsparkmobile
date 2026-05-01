@@ -27,6 +27,7 @@ import {
 import MapView, { Circle, Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
@@ -87,6 +88,7 @@ function userFacingFaceEnrollmentError(
   if (c === 'NO_VERIFICATION_KEY') return F('NO_VERIFICATION_KEY');
   if (c === 'UNSUPPORTED_ENGINE') return F('UNSUPPORTED_ENGINE');
   if (c === 'FACE_MISMATCH') return F('FACE_MISMATCH');
+  if (c === 'FACE_ALREADY_REGISTERED') return F('FACE_ALREADY_REGISTERED');
   if (c === 'VERIFY_NO_SCORE' || c === 'INVALID_IMAGE') return F('VERIFY_OR_INVALID_IMAGE');
   if (c === 'NO_FACE_DETECTED') return F('NO_FACE_DETECTED');
   if (c === 'MULTIPLE_FACES') return F('MULTIPLE_FACES');
@@ -313,11 +315,18 @@ function publicUrl(path: string) {
 }
 
 export default function TechRegistrationScreen() {
+  const insets = useSafeAreaInsets();
+  const mainFormScrollRef = useRef<ScrollView>(null);
   const { colors: C } = useTheme();
   const router = useRouter();
   const { user, logout, patchUser, refreshUser } = useAuth();
-  const params = useLocalSearchParams<{ token?: string }>();
-  const token = typeof params.token === 'string' ? params.token : '';
+  const params = useLocalSearchParams<{ token?: string | string[] }>();
+  const token = (() => {
+    const raw = params.token;
+    if (typeof raw === 'string') return raw;
+    if (Array.isArray(raw) && raw[0]) return String(raw[0]);
+    return '';
+  })();
 
   const [loading, setLoading] = useState(true);
   const [authRequired, setAuthRequired] = useState(false);
@@ -905,7 +914,7 @@ export default function TechRegistrationScreen() {
     });
     const data = await res.json();
     if (!res.ok) {
-      if (data.code === 'TECH_IDENTITY_LOCKED') {
+      if (data.code === 'TECH_IDENTITY_LOCKED' || data.code === 'FACE_ALREADY_REGISTERED') {
         const { title, message } = userFacingFaceEnrollmentError(res.status, data.code, data.error);
         Alert.alert(title, message);
       } else {
@@ -1539,6 +1548,14 @@ export default function TechRegistrationScreen() {
       );
       return;
     }
+    const km = Number(serviceCoverageRadiusKm);
+    if (Number.isFinite(km) && km > 0 && !coverageCenter) {
+      Alert.alert(
+        i18n.t('appAlerts.techReg.validationTitle'),
+        i18n.t('appAlerts.techReg.coverageMapRequiredBody')
+      );
+      return;
+    }
     const jwt = await getToken();
     if (!jwt) {
       Alert.alert(i18n.t('appAlerts.techReg.sessionTitle'), i18n.t('appAlerts.techReg.sessionSubmit'));
@@ -1553,19 +1570,34 @@ export default function TechRegistrationScreen() {
     }
     setSaving(true);
     try {
-      const res = await fetch(`${basePath}/submit`, {
+      const submitPath = `/api/technician-registration/public/${encodeURIComponent(token)}/submit`;
+      /** Submit pode demorar (payload + biometria no servidor); o `apiFetch` por defeito aborta aos 18 s. */
+      const res = await apiFetch(submitPath, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${jwt}`,
-        },
+        timeoutMs: 120_000,
         body: JSON.stringify(
           otpCode && otpChallengeToken
             ? { otpCode, otpChallengeToken, responsesJson: buildResponsesJson() }
             : { responsesJson: buildResponsesJson() }
         ),
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      if (res.status === 413) {
+        Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.techReg.payloadTooLargeBody'));
+        return;
+      }
+      let data: Record<string, unknown> = {};
+      try {
+        data = rawText ? (JSON.parse(rawText) as Record<string, unknown>) : {};
+      } catch {
+        const looksLikeHtml = rawText.trimStart().startsWith('<');
+        const statusLine = `HTTP ${res.status}`;
+        const msg = looksLikeHtml
+          ? `${i18n.t('appAlerts.techReg.serverHtmlResponseBody')}\n\n${statusLine}`
+          : `${i18n.t('appAlerts.techReg.serverBadResponseBody')}\n\n${statusLine}`;
+        Alert.alert(i18n.t('common.error'), msg);
+        return;
+      }
       if (!res.ok) {
         if (data.code === 'RECENT_LOGIN_OTP_REQUIRED') {
           if (data.challengeToken) setSubmitOtpChallengeToken(String(data.challengeToken));
@@ -1589,8 +1621,12 @@ export default function TechRegistrationScreen() {
           );
           return;
         }
-        if (data.code === 'TECH_IDENTITY_LOCKED') {
-          const { title, message } = userFacingFaceEnrollmentError(res.status, data.code, data.error);
+        if (data.code === 'TECH_IDENTITY_LOCKED' || data.code === 'FACE_ALREADY_REGISTERED') {
+          const { title, message } = userFacingFaceEnrollmentError(
+            res.status,
+            data.code != null ? String(data.code) : undefined,
+            data.error != null ? String(data.error) : undefined
+          );
           Alert.alert(title, message);
         } else {
           const errMsg =
@@ -1633,7 +1669,16 @@ export default function TechRegistrationScreen() {
       setSubmitOtpCode('');
       setSubmitOtpChallengeToken(null);
     } catch (e: any) {
-      Alert.alert(i18n.t('common.error'), e?.message || i18n.t('appAlerts.techReg.networkError'));
+      const rawMsg = String(e?.message ?? '').trim();
+      const aborted =
+        e?.name === 'AbortError' ||
+        /^abort(ed)?$/i.test(rawMsg) ||
+        /aborted/i.test(rawMsg) ||
+        /operation was aborted/i.test(rawMsg);
+      Alert.alert(
+        i18n.t('common.error'),
+        aborted ? i18n.t('appAlerts.techReg.submitTimeoutBody') : rawMsg || i18n.t('appAlerts.techReg.networkError'),
+      );
     } finally {
       setSaving(false);
     }
@@ -1981,7 +2026,19 @@ export default function TechRegistrationScreen() {
 
   return (
     <>
-    <ScrollView style={styles.root} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: C.cardWhite }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+    >
+    <ScrollView
+      ref={mainFormScrollRef}
+      style={styles.root}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 220 }}
+    >
       <View style={styles.head}>
         <TouchableOpacity onPress={() => router.back()} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
           <Ionicons name="chevron-back" size={22} color={C.accent} />
@@ -2785,6 +2842,13 @@ export default function TechRegistrationScreen() {
           }}
           placeholder="Ex.: atende Campinas, Valinhos, Vinhedo e Paulínia."
           multiline
+          onFocus={() => {
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                mainFormScrollRef.current?.scrollToEnd({ animated: true });
+              }, 160);
+            });
+          }}
         />
       </View>
 
@@ -2794,6 +2858,7 @@ export default function TechRegistrationScreen() {
         </TouchableOpacity>
       ) : null}
     </ScrollView>
+    </KeyboardAvoidingView>
 
     <Modal visible={regionMapVisible} animationType="slide" onRequestClose={() => setRegionMapVisible(false)}>
       <View style={[styles.mapModalRoot, { paddingTop: Platform.OS === 'ios' ? 52 : 36 }]}>

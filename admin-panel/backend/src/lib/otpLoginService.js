@@ -56,6 +56,7 @@ async function tombstoneUserRowFully(prisma, userId) {
         currentSessionId: null,
         currentDeviceId: null,
         isActive: false,
+        appAccountId: null,
       },
     }),
   ]);
@@ -822,4 +823,5 @@ module.exports = {
   completeRegisterFromSetupToken,
   parseIdentifier,
   startEmailPurposeChallenge,
+  releaseDeadAccountSlotsForRegisterGlobal,
 };

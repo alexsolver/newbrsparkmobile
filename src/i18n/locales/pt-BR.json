@@ -1289,6 +1289,11 @@
     "affiliationsDeclineConfirmBody": "O convite de {{name}} será recusado. Pode ser necessário um novo convite da empresa para voltar a associar-se.",
     "affiliationsEndConfirmTitle": "Encerrar este vínculo?",
     "affiliationsEndConfirmBody": "O vínculo ou pedido pendente deixará de estar ativo. A empresa deixa de ter acesso operacional conforme o estado. Deseja continuar?",
+    "affiliationsJustificationTitleSuspend": "Suspender vínculo",
+    "affiliationsJustificationTitleEnd": "Encerrar vínculo",
+    "affiliationsJustificationHint": "Justificativa obrigatória (mínimo 4 caracteres) para registo de auditoria.",
+    "affiliationsJustificationPlaceholder": "Descreva o motivo…",
+    "affiliationsJustificationTooShort": "Informe uma justificativa com pelo menos 4 caracteres.",
     "affiliationsLoadErrorHint": "Puxe para atualizar ou confirme a ligação à internet. Se o erro persistir, termine sessão e entre de novo.",
     "affiliationsDedicatedWindowsTitle": "Horário de exclusividade",
     "affiliationsDedicatedWindowsHint": "Nestas janelas semanais o vínculo dedicado rege a disponibilidade acordada com a empresa, que pode continuar a atribuir ordens diretamente.",
@@ -3056,6 +3061,11 @@
       "approvedTitle": "Cadastro aprovado",
       "approvedBody": "O seu cadastro de prestador foi aceite e já está ativo. Pode usar o modo prestador no app.",
       "networkError": "Falha de rede.",
+      "submitTimeoutBody": "O envio demorou demais ou foi interrompido (rede lenta ou servidor ocupado). Verifique a conexão e tente enviar de novo. Se repetir, experimente outra rede (Wi‑Fi ou dados móveis).",
+      "serverHtmlResponseBody": "O servidor devolveu uma página de erro em vez de JSON (rede, proxy ou serviço indisponível). Tente outra rede ou mais tarde.",
+      "serverBadResponseBody": "Resposta do servidor inválida. Tente de novo.",
+      "payloadTooLargeBody": "O envio excedeu o limite de tamanho. Reduza anexos ou contacte o suporte.",
+      "coverageMapRequiredBody": "Defina o centro da área de atendimento no mapa (toque no mapa) — o raio está preenchido mas o centro não.",
       "permTitle": "Permissão",
       "sessionTitle": "Sessão",
       "identityLockedNavTitle": "Prestador ativo",
@@ -3111,6 +3121,10 @@
         "FACE_MISMATCH": {
           "title": "Foto não aceita",
           "message": "Não conseguimos confirmar que é a mesma pessoa da foto de perfil do passo 1. Tire outra foto: rosto de frente, boa luz, sem óculos escuros ou itens cobrindo o rosto."
+        },
+        "FACE_ALREADY_REGISTERED": {
+          "title": "Rosto já registado",
+          "message": "Este rosto já está associado a outra conta nesta organização. Utilize a conta que já tem a sua biometria ou contacte a empresa."
         },
         "VERIFY_OR_INVALID_IMAGE": {
           "title": "Imagem inválida",

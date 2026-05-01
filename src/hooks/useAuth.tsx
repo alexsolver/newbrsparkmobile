@@ -156,8 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(fresh);
               runAvatarWarm(fresh);
             } else {
-              // 401 em /me chama logout() e apaga AsyncStorage — sem isto o React mantém o utilizador
-              // e o Dashboard corre loadData com cache já limpo (lista vazia / «sem dados»).
+              // validateSession pode devolver null só se o armazenamento foi limpo (ex.: SESSION_INVALIDATED).
               const after = await AuthService.getUser();
               setUser(after);
               if (!after) {

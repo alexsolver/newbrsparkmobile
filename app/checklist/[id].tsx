@@ -1422,6 +1422,55 @@ function getSignatureSummarySourceFieldIds(field: any): string[] {
   );
 }
 
+/** Tipos estruturais / metadados que não entram no resumo para assinatura. */
+const SIGNATURE_SUMMARY_EXCLUDED_TYPES = new Set([
+  'section_break',
+  'hidden',
+  'signature',
+  'signature_summary',
+  'transit_start',
+  'transit_end',
+  'calculated',
+]);
+
+/** Ordem do schema: todos os campos com valor potencial (incl. IA, facial, materiais, leitura, etc.). */
+function inferDefaultSignatureSummaryFieldIds(schemaData: any[] | undefined): string[] {
+  if (!Array.isArray(schemaData)) return [];
+  const out: string[] = [];
+  for (const f of schemaData) {
+    if (!f?.id) continue;
+    const t = effectiveSchemaFieldType(f);
+    if (SIGNATURE_SUMMARY_EXCLUDED_TYPES.has(t)) continue;
+    out.push(String(f.id));
+  }
+  return out;
+}
+
+/**
+ * Lista efectiva para o bloco «Resumo para assinatura»:
+ * - Sem IDs no painel → inclui automaticamente todos os campos elegíveis (evita resumo vazio e omissão de IA).
+ * - Com IDs explícitos → mantém essa ordem e acrescenta ao fim qualquer campo elegível em falta (ex.: visão/IA adicionados depois).
+ */
+function getEffectiveSignatureSummaryFieldIds(signatureSummaryField: any, schemaData: any[] | undefined): string[] {
+  const explicit = getSignatureSummarySourceFieldIds(signatureSummaryField);
+  const inferred = inferDefaultSignatureSummaryFieldIds(schemaData);
+  if (explicit.length === 0) return inferred;
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const id of explicit) {
+    const s = String(id || '').trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    merged.push(s);
+  }
+  for (const id of inferred) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    merged.push(id);
+  }
+  return merged;
+}
+
 function isSummarySourceValueEmpty(v: unknown): boolean {
   if (v === undefined || v === null) return true;
   if (typeof v === 'string' && v.trim() === '') return true;
@@ -12094,8 +12143,8 @@ export default function ChecklistEngine() {
                  </TouchableOpacity>
               )}
               {field.type === 'signature_summary' && (() => {
-                const summaryIds = getSignatureSummarySourceFieldIds(field);
                 const schemaList = template?.schemaData || [];
+                const summaryIds = getEffectiveSignatureSummaryFieldIds(field, schemaList);
                 const byId = new Map<string, any>(schemaList.map((x: any) => [x.id, x]));
                 const openSig = () =>
                   ensureOnlineValidation(field, () => {

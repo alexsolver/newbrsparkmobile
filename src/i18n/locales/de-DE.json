@@ -1289,6 +1289,11 @@
     "affiliationsDeclineConfirmBody": "Die Einladung von {{name}} wird abgelehnt. Das Unternehmen muss ggf. eine neue Einladung senden, um die Verbindung erneut herzustellen.",
     "affiliationsEndConfirmTitle": "Diese Verbindung beenden?",
     "affiliationsEndConfirmBody": "Die Bindung oder ausstehende Anfrage wird nicht mehr aktiv. Das Unternehmen verliert den operativen Zugriff wie vorgesehen. Fortfahren?",
+    "affiliationsJustificationTitleSuspend": "Bindung aussetzen",
+    "affiliationsJustificationTitleEnd": "Bindung beenden",
+    "affiliationsJustificationHint": "Begründung erforderlich (mind. 4 Zeichen) für die Revision.",
+    "affiliationsJustificationPlaceholder": "Grund beschreiben…",
+    "affiliationsJustificationTooShort": "Mindestens 4 Zeichen eingeben.",
     "affiliationsLoadErrorHint": "Zum Aktualisieren nach unten ziehen oder die Verbindung prüfen. Wenn der Fehler bleibt, ab- und wieder anmelden.",
     "affiliationsDedicatedWindowsTitle": "Exklusivzeiten",
     "affiliationsDedicatedWindowsHint": "In diesen wöchentlichen Fenstern gilt die dedizierte Bindung für die mit dem Unternehmen vereinbarte Verfügbarkeit; es kann Ihnen weiterhin direkt Aufträge zuweisen.",
@@ -3056,6 +3061,11 @@
       "approvedTitle": "Registrierung genehmigt",
       "approvedBody": "Ihre Anbieter-Registrierung wurde akzeptiert und ist bereits aktiv. Sie können den Anbietermodus in der App nutzen.",
       "networkError": "Netzwerkfehler.",
+      "submitTimeoutBody": "Der Upload dauerte zu lange oder wurde unterbrochen (langsames Netz oder ausgelasteter Server). Verbindung prüfen und erneut senden. Bei Wiederholung anderes Netz versuchen (WLAN oder Mobilfunk).",
+      "serverHtmlResponseBody": "Der Server lieferte eine Fehlerseite statt JSON (Netzwerk, Proxy oder Dienst nicht verfügbar). Anderes Netz versuchen oder später erneut.",
+      "serverBadResponseBody": "Ungültige Serverantwort. Bitte erneut versuchen.",
+      "payloadTooLargeBody": "Die Übertragung überschritt die Größenbegrenzung. Anhänge reduzieren oder Support kontaktieren.",
+      "coverageMapRequiredBody": "Legen Sie den Mittelpunkt des Einsatzgebiets auf der Karte fest (Tippen) — der Radius ist gesetzt, der Mittelpunkt fehlt.",
       "permTitle": "Berechtigung",
       "sessionTitle": "Sitzung",
       "identityLockedNavTitle": "Aktiver Anbieter",
@@ -3111,6 +3121,10 @@
         "FACE_MISMATCH": {
           "title": "Foto nicht akzeptiert",
           "message": "Wir konnten nicht bestätigen, dass Sie mit dem Profilfoto aus Schritt 1 übereinstimmen. Neues Foto: Gesicht frontal, gutes Licht, keine Sonnenbrille oder verdeckende Gegenstände."
+        },
+        "FACE_ALREADY_REGISTERED": {
+          "title": "Gesicht bereits registriert",
+          "message": "Dieses Gesicht ist bereits mit einem anderen Konto in Ihrer Organisation verknüpft. Nutzen Sie das bestehende Konto oder wenden Sie sich an die Firma."
         },
         "VERIFY_OR_INVALID_IMAGE": {
           "title": "Ungültiges Bild",

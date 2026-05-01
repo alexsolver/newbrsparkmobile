@@ -110,6 +110,62 @@ async function filterBroadcastCandidatesExcludingDedicatedAt(prisma, emails, at)
 }
 
 /**
+ * Exclui candidatos a broadcast com vínculo DEDICATED+ACTIVE noutra empresa que `dispatchTenantId`.
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string[]} emails
+ * @param {string|null|undefined} dispatchTenantId
+ */
+async function filterBroadcastCandidatesExcludingDedicatedOtherTenant(prisma, emails, dispatchTenantId) {
+  const dt = String(dispatchTenantId || '').trim();
+  const out = [];
+  for (const raw of emails || []) {
+    const e = normalizeEmail(raw);
+    if (!e) continue;
+    if (dt && (await emailHasActiveDedicatedOtherTenant(prisma, e, dt))) continue;
+    out.push(e);
+  }
+  return out;
+}
+
+/**
+ * @param {import('@prisma/client').PrismaClient} prisma
+ * @param {string} email
+ * @param {string} dispatchTenantId
+ */
+async function emailHasActiveDedicatedOtherTenant(prisma, email, dispatchTenantId) {
+  const em = normalizeEmail(email);
+  const dt = String(dispatchTenantId || '').trim();
+  if (!em || !dt) return false;
+  const acc = await prisma.appAccount.findUnique({ where: { emailNorm: em }, select: { id: true } });
+  const userWhere = acc
+    ? { appAccountId: acc.id, isActive: true }
+    : { email: { equals: em, mode: 'insensitive' }, isActive: true };
+  const users = await prisma.user.findMany({
+    where: userWhere,
+    select: { id: true },
+  });
+  for (const u of users) {
+    const pis = await prisma.providerIdentity.findMany({
+      where: { userId: u.id },
+      select: { id: true },
+    });
+    for (const pi of pis) {
+      const hit = await prisma.providerTenantAffiliation.findFirst({
+        where: {
+          providerIdentityId: pi.id,
+          relationshipType: 'DEDICATED',
+          status: 'ACTIVE',
+          tenantId: { not: dt },
+        },
+        select: { id: true },
+      });
+      if (hit) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Valida que o novo `tenantScheduleJson` (bloco dedicado) não intersecta outras afiliações ACTIVE DEDICATED do mesmo PI.
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} providerIdentityId
@@ -147,8 +203,7 @@ async function assertNoDedicatedOverlapForProviderIdentity(prisma, providerIdent
 }
 
 /**
- * Diretório público (snapshot CMS): ocultar se o instante cai numa janela exclusiva de
- * qualquer vínculo ACTIVE+DEDICATED (fora dessas janelas, todas as empresas podem ver/contactar).
+ * Diretório público: ocultar se existir vínculo ACTIVE+DEDICATED (prestador não está no pool global).
  *
  * @param {{ affiliations?: Array<{ status?: string, relationshipType?: string, tenantScheduleJson?: unknown }> } | null} providerIdentity
  * @param {Date} [at]
@@ -158,16 +213,15 @@ function isHiddenFromPublicDirectoryAt(providerIdentity, at = new Date()) {
   for (const aff of list) {
     if (String(aff.relationshipType || '').toUpperCase() !== 'DEDICATED') continue;
     if (String(aff.status || '').toUpperCase() !== 'ACTIVE') continue;
-    const p = parseDedicatedExclusiveFromTenantScheduleJson(aff.tenantScheduleJson);
-    if (isInstantInDedicatedBlock(at, p)) return true;
+    // Com vínculo dedicado activo, o prestador não entra no «pool» público de outras empresas.
+    return true;
   }
   return false;
 }
 
 /**
- * Diretório painel empresa: ocultar ao `viewerTenantId` quando outra empresa tem ACTIVE+DEDICATED
- * e `at` está na janela exclusiva. A empresa do dedicado continua a ver o prestador.
- * `viewerTenantId` vazio ⇒ vista plataforma sem filtro por janela.
+ * Diretório painel empresa: ocultar ao `viewerTenantId` quando o prestador tem ACTIVE+DEDICATED com **outra** empresa.
+ * A empresa do vínculo dedicado continua a ver o prestador.
  *
  * @param {{ affiliations?: Array<{ tenantId?: string, status?: string, relationshipType?: string, tenantScheduleJson?: unknown }> } | null} providerIdentity
  * @param {string|null|undefined} viewerTenantId
@@ -180,8 +234,6 @@ function isHiddenFromCompanyDirectoryAt(providerIdentity, viewerTenantId, at = n
   for (const aff of list) {
     if (String(aff.relationshipType || '').toUpperCase() !== 'DEDICATED') continue;
     if (String(aff.status || '').toUpperCase() !== 'ACTIVE') continue;
-    const p = parseDedicatedExclusiveFromTenantScheduleJson(aff.tenantScheduleJson);
-    if (!isInstantInDedicatedBlock(at, p)) continue;
     const dedicatedTid = String(aff.tenantId || '').trim();
     if (dedicatedTid && dedicatedTid === vt) continue;
     return true;
@@ -194,6 +246,8 @@ module.exports = {
   isAppUserInDedicatedExclusiveAt,
   isCanonicalTechnicianEmailDedicatedAt,
   filterBroadcastCandidatesExcludingDedicatedAt,
+  filterBroadcastCandidatesExcludingDedicatedOtherTenant,
+  emailHasActiveDedicatedOtherTenant,
   assertNoDedicatedOverlapForProviderIdentity,
   isHiddenFromPublicDirectoryAt,
   isHiddenFromCompanyDirectoryAt,

@@ -376,6 +376,27 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="tenant-onboard-modal">
+  <div class="modal" style="max-width:720px;width:96%">
+    <div class="modal-header">
+      <span class="modal-title" id="tenant-onboard-modal-title">Onboarding web</span>
+      <button type="button" class="modal-close" onclick="closeModal('tenant-onboard-modal')" aria-label="Fechar">
+        <ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="tenant-onboard-tenant-id" />
+      <p class="text-muted" style="font-size:12px;line-height:1.45;margin-bottom:12px" id="tenant-onboard-modal-hint"></p>
+      <div id="tenant-onboard-inline-error" class="new-tenant-inline-error" role="alert" hidden></div>
+      <div id="tenant-onboard-ui-root"></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-ghost" id="tenant-onboard-cancel" onclick="closeModal('tenant-onboard-modal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="tenant-onboard-save">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <script>
   function openModal(id) {
     document.getElementById(id).classList.add('open');
@@ -396,12 +417,14 @@
   import { initPage } from './js/sidebar.js';
   import { CONFIG, getEffectivePanelCapabilities } from './js/config.js';
   import { applyTenantsPageI18n, tenantsStatusLabel, mpT, mpIntlLocale } from './js/menu-pages-i18n.js';
+  import { createTenantProviderOnboardModal } from './js/tenant-provider-onboard-ui.js';
 
   await initPage();
   applyTenantsPageI18n();
   const panelCaps = new Set(getEffectivePanelCapabilities());
   const canCreateTenant = panelCaps.has('platform.tenants.write');
   const canChangeTenantStatus = panelCaps.has('platform.tenants.write');
+  const canEditProviderOnboardWeb = canChangeTenantStatus;
   const canEditTenantBranding =
     panelCaps.has('tenant.branding.write.self') || panelCaps.has('tenant.branding.write.any');
   const newTenantBtn = document.querySelector('.data-toolbar-actions .btn.btn-primary');
@@ -597,6 +620,11 @@
       if (canEditTenantBranding) {
         actions.push(`<button type="button" class="btn btn-ghost btn-sm" data-branding-id="${idAttr}" onclick="openBrandingModal('${idAttr}')">Branding</button>`);
       }
+      if (canEditProviderOnboardWeb) {
+        actions.push(
+          `<button type="button" class="btn btn-ghost btn-sm" onclick="openProviderOnboardModal('${idAttr}')">${escHtml(mpT('ten_row_onboard_web'))}</button>`,
+        );
+      }
       if (canChangeTenantStatus) {
         actions.push(
           isActive
@@ -631,6 +659,25 @@
     await CONFIG.patch(`/tenants/${id}/status`, { status });
     loadTenants();
   };
+
+  const providerOnboardModal = createTenantProviderOnboardModal({
+    CONFIG,
+    mpT,
+    escHtml,
+    openModal: (id) => globalThis.openModal?.(id),
+    closeModal: (id) => globalThis.closeModal?.(id),
+  });
+  providerOnboardModal.buildStaticForm();
+
+  window.openProviderOnboardModal = async function openProviderOnboardModal(tenantId) {
+    if (!canEditProviderOnboardWeb) return;
+    await providerOnboardModal.open(tenantId);
+  };
+
+  document.getElementById('tenant-onboard-save')?.addEventListener('click', () => {
+    if (!canEditProviderOnboardWeb) return;
+    void providerOnboardModal.save();
+  });
 
   function brandingPreviewParseHex6(hex) {
     const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || '').trim());

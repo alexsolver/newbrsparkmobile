@@ -1,5 +1,17 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -37,6 +49,12 @@ export default function ProviderAffiliationsScreen() {
   const [rows, setRows] = useState<ProviderAffiliation[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [justifyModal, setJustifyModal] = useState<{
+    op: 'suspend' | 'end';
+    affiliationId: string;
+    tenantLabel: string;
+  } | null>(null);
+  const [justifyText, setJustifyText] = useState('');
   const firstFocusRef = useRef(true);
 
   const load = useCallback(async () => {
@@ -131,6 +149,15 @@ export default function ProviderAffiliationsScreen() {
     [runAction, t]
   );
 
+  const openJustificationModal = useCallback((op: 'suspend' | 'end', a: ProviderAffiliation) => {
+    setJustifyText('');
+    setJustifyModal({
+      op,
+      affiliationId: a.id,
+      tenantLabel: a.tenant?.name || '—',
+    });
+  }, []);
+
   const confirmEnd = useCallback(
     (a: ProviderAffiliation) => {
       Alert.alert(t('profile.affiliationsEndConfirmTitle'), t('profile.affiliationsEndConfirmBody'), [
@@ -141,12 +168,28 @@ export default function ProviderAffiliationsScreen() {
               ? t('profile.affiliationsActionEndPending')
               : t('profile.affiliationsActionEnd'),
           style: 'destructive',
-          onPress: () => void runAction(a.id, 'end', () => ProviderAffiliationsApi.endByAffiliationId(a.id)),
+          onPress: () => openJustificationModal('end', a),
         },
       ]);
     },
-    [runAction, t]
+    [openJustificationModal, t]
   );
+
+  const submitJustificationModal = useCallback(async () => {
+    if (!justifyModal) return;
+    const j = justifyText.trim();
+    if (j.length < 4) {
+      Alert.alert(t('common.error'), t('profile.affiliationsJustificationTooShort'));
+      return;
+    }
+    const { op, affiliationId } = justifyModal;
+    setJustifyModal(null);
+    if (op === 'end') {
+      await runAction(affiliationId, 'end', () => ProviderAffiliationsApi.endByAffiliationId(affiliationId, j));
+    } else {
+      await runAction(affiliationId, 'suspend', () => ProviderAffiliationsApi.suspendByAffiliationId(affiliationId, j));
+    }
+  }, [justifyModal, justifyText, runAction, t]);
 
   const ChipButton = useCallback(
     ({
@@ -235,7 +278,7 @@ export default function ProviderAffiliationsScreen() {
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10, alignItems: 'center' }}>
               <ChipButton
                 label={t('profile.affiliationsActionSuspend')}
-                onPress={() => void runAction(a.id, 'suspend', () => ProviderAffiliationsApi.suspendByAffiliationId(a.id))}
+                onPress={() => openJustificationModal('suspend', a)}
                 disabled={anyPending}
                 variant="default"
               />
@@ -365,7 +408,7 @@ export default function ProviderAffiliationsScreen() {
         </View>
       );
     },
-    [C.accent, ChipButton, anyPending, confirmDecline, confirmEnd, pendingKey, runAction, showConsentAndAccept, t]
+    [C.accent, ChipButton, anyPending, confirmDecline, confirmEnd, openJustificationModal, pendingKey, runAction, showConsentAndAccept, t]
   );
 
   const Section = useCallback(
@@ -440,6 +483,60 @@ export default function ProviderAffiliationsScreen() {
           </TouchableOpacity>
         </ScrollView>
       )}
+
+      <Modal visible={!!justifyModal} transparent animationType="fade" onRequestClose={() => setJustifyModal(null)}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.45)', padding: 20 }}
+        >
+          <View
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: 16,
+              padding: 16,
+              maxWidth: 420,
+              width: '100%',
+              alignSelf: 'center',
+            }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: '900', color: '#0F172A' }}>
+              {justifyModal?.op === 'suspend'
+                ? t('profile.affiliationsJustificationTitleSuspend')
+                : t('profile.affiliationsJustificationTitleEnd')}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#64748B', marginTop: 6 }}>{justifyModal?.tenantLabel}</Text>
+            <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 8 }}>{t('profile.affiliationsJustificationHint')}</Text>
+            <TextInput
+              value={justifyText}
+              onChangeText={setJustifyText}
+              placeholder={t('profile.affiliationsJustificationPlaceholder')}
+              multiline
+              style={{
+                marginTop: 12,
+                minHeight: 88,
+                borderWidth: 1,
+                borderColor: '#E2E8F0',
+                borderRadius: 12,
+                padding: 12,
+                fontSize: 14,
+                color: '#0F172A',
+                textAlignVertical: 'top',
+              }}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+              <TouchableOpacity onPress={() => setJustifyModal(null)} style={{ paddingVertical: 10, paddingHorizontal: 12 }}>
+                <Text style={{ fontWeight: '800', color: '#64748B' }}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => void submitJustificationModal()}
+                style={{ paddingVertical: 10, paddingHorizontal: 14, backgroundColor: C.primary, borderRadius: 10 }}
+              >
+                <Text style={{ fontWeight: '900', color: '#fff' }}>{t('common.confirm')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }

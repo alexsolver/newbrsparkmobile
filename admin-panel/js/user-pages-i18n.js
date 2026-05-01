@@ -479,6 +479,8 @@ const M = {
     ue_paffBtnActivate: 'Ativar',
     ue_paffBtnEnd: 'Encerrar',
     ue_paffEndConfirm: 'Encerrar este vínculo com a empresa? O prestador deixa de operar nessa tenant.',
+    ue_paffJustificationPrompt: 'Justificativa do encerramento (mínimo 4 caracteres):',
+    ue_paffJustificationTooShort: 'Informe uma justificativa com pelo menos 4 caracteres.',
     ue_paffActivateNeedKyc: 'KYC global tem de estar aprovado para ativar.',
     ue_paffActivateNeedProviderFirst:
       'O fluxo «prestador na rede» tem de estar ativo na empresa destino (feature flag). Ative em Sistema / flags ou peça à plataforma.',
@@ -724,7 +726,7 @@ const M = {
     pr_candidates_filter_empty: 'Nenhum resultado para o filtro.',
     pr_card_invite_title: 'Convidar prestador (vínculo)',
     pr_invite_intro_html:
-      'Envie um convite de <strong>vínculo</strong> com a empresa (horários de exclusividade podem ser acordados). Requer provider-first activo no tenant e prestador com cadastro global.',
+      'Envie um convite de <strong>vínculo</strong> com a empresa (horários de exclusividade podem ser acordados). Requer provider-first activo no tenant e prestador com cadastro global. Se a pessoa <strong>ainda não tiver conta BrSpark</strong>, use o botão abaixo para gerar um <strong>link web único</strong> de primeiro cadastro.',
     pr_lbl_invite_email: 'E-mail do prestador *',
     pr_ph_invite_email: 'tecnico@exemplo.com',
     pr_lbl_candidates: 'Prestadores disponíveis para convite',
@@ -752,6 +754,26 @@ const M = {
     pr_invite_push_ok: 'Notificação no telemóvel: {n} aceite(s) pela Expo.{err} Abra a app → Empresas (vínculos).',
     pr_invite_push_partial: 'Push: {n} token(s) registado(s), 0 entregues.{e}',
     pr_invite_push_none: 'Push: nenhum token Expo (o prestador tem de abrir a app com notificações activas).',
+    pr_invite_first_access_hint:
+      'Pode gerar um link de primeiro cadastro (secção «Ainda não está na BrSpark?» nesta mesma página) e enviar esse link à pessoa.',
+    pr_first_access_title: 'Ainda não está na BrSpark?',
+    pr_first_access_sub:
+      'Gera um convite com link HTTPS partilhável (WhatsApp, SMS, e-mail). A pessoa abre no telemóvel, instala a app e regista-se com o mesmo e-mail. Depois de concluir o cadastro global, pode voltar aqui e usar «Criar convite» para o vínculo com a empresa.',
+    pr_first_access_btn: 'Gerar link de primeiro cadastro',
+    pr_first_access_ok_title: 'Link de primeiro cadastro',
+    pr_first_access_web: 'Link web (partilhar):',
+    pr_first_access_app: 'Link para abrir na app:',
+    pr_first_access_exp: 'Expira em (segundos):',
+    pr_first_access_err: 'Não foi possível gerar o convite.',
+    pr_first_access_copy_web_btn: 'Copiar link web',
+    pr_first_access_copy_app_btn: 'Copiar link da app',
+    pr_first_access_close_btn: 'Concluído',
+    pr_first_access_close_aria: 'Fechar',
+    pr_first_access_copy_ok: 'Copiado para a área de transferência.',
+    pr_first_access_copy_err:
+      'Não foi possível copiar automaticamente — seleccione o texto e copie manualmente (Ctrl/Cmd+C).',
+    pr_first_access_web_warn:
+      'O link web usa localhost ou rede privada. Para partilhar na Internet, defina PROVIDER_WEB_ONBOARDING_BASE_URL (ou ADMIN_PANEL_PUBLIC_URL) no servidor.',
     pr_card_apps_title: 'Candidaturas (onboarding)',
     pr_apps_sub:
       'Resumo das últimas candidaturas. O botão laranja abre o diretório de todos os prestadores (filtros por bases, competências, agenda e área). Para convidar ao formulário e aprovar candidaturas, use «Candidaturas» no menu ou abra technician-applications.html.',
@@ -1283,6 +1305,8 @@ const M = {
     ue_paffBtnActivate: 'Activate',
     ue_paffBtnEnd: 'End',
     ue_paffEndConfirm: 'End this company link? The provider will no longer operate under that tenant.',
+    ue_paffJustificationPrompt: 'Reason for ending the link (min. 4 characters):',
+    ue_paffJustificationTooShort: 'Please enter at least 4 characters.',
     ue_paffActivateNeedKyc: 'Global KYC must be approved before activation.',
     ue_paffActivateNeedProviderFirst:
       'The “provider-first network” flow must be enabled for the target company (feature flag). Enable it under System / flags or ask platform support.',
@@ -1526,7 +1550,7 @@ const M = {
     pr_candidates_filter_empty: 'No rows match the filter.',
     pr_card_invite_title: 'Invite provider (company link)',
     pr_invite_intro_html:
-      'Send a <strong>company link</strong> invite (exclusive time windows may be agreed). Requires provider-first on the tenant and a global provider account.',
+      'Send a <strong>company link</strong> invite (exclusive time windows may be agreed). Requires provider-first on the tenant and a global provider account. If the person <strong>does not have a BrSpark account yet</strong>, use the button below to generate a single <strong>HTTPS invite link</strong> for first-time signup.',
     pr_lbl_invite_email: 'Provider email *',
     pr_ph_invite_email: 'tech@example.com',
     pr_lbl_candidates: 'Providers available to invite',
@@ -1553,6 +1577,25 @@ const M = {
     pr_invite_push_ok: 'Mobile notification: {n} accepted by Expo.{err} Open the app → Companies (links).',
     pr_invite_push_partial: 'Push: {n} token(s) registered, 0 delivered.{e}',
     pr_invite_push_none: 'Push: no Expo tokens (the technician must open the app with notifications on).',
+    pr_invite_first_access_hint:
+      'You can generate a first-time signup link (section «Not on BrSpark yet?» on this page) and send that link to the person.',
+    pr_first_access_title: 'Not on BrSpark yet?',
+    pr_first_access_sub:
+      'Creates an invite with a shareable HTTPS link (WhatsApp, SMS, email). They open it on their phone, install the app and sign up with the same email. After global provider onboarding is done, use «Create invite» here for the company link.',
+    pr_first_access_btn: 'Generate first-time signup link',
+    pr_first_access_ok_title: 'First-time signup invite',
+    pr_first_access_web: 'Web link (share):',
+    pr_first_access_app: 'Open-in-app link:',
+    pr_first_access_exp: 'Expires in (seconds):',
+    pr_first_access_err: 'Could not generate the invite.',
+    pr_first_access_copy_web_btn: 'Copy web link',
+    pr_first_access_copy_app_btn: 'Copy app link',
+    pr_first_access_close_btn: 'Done',
+    pr_first_access_close_aria: 'Close',
+    pr_first_access_copy_ok: 'Copied to clipboard.',
+    pr_first_access_copy_err: 'Automatic copy failed — select the text and copy manually (Ctrl/Cmd+C).',
+    pr_first_access_web_warn:
+      'The web link uses localhost or a private network. To share on the public internet, set PROVIDER_WEB_ONBOARDING_BASE_URL (or ADMIN_PANEL_PUBLIC_URL) on the server.',
     pr_card_apps_title: 'Applications (onboarding)',
     pr_apps_sub:
       'Summary of the latest applications. The orange button opens the full provider directory (sites, skills, schedule, coverage). For form invites and approvals, use Applications (onboarding) in the menu or technician-applications.html.',
@@ -2341,6 +2384,18 @@ export function applyPrestadoresPageI18n() {
   const pn = document.getElementById('pr-invite-note');
   if (pn) pn.placeholder = t('pr_ph_note');
   setT('pr-invite-submit-txt', 'pr_invite_submit');
+  setT('pr-first-title', 'pr_first_access_title');
+  const pfh = document.getElementById('pr-first-hint');
+  if (pfh) pfh.textContent = t('pr_first_access_sub');
+  setT('pr-first-access-txt', 'pr_first_access_btn');
+  setT('pr-fa-modal-title', 'pr_first_access_ok_title');
+  setT('pr-fa-lbl-web', 'pr_first_access_web');
+  setT('pr-fa-lbl-app', 'pr_first_access_app');
+  setT('pr-fa-copy-web', 'pr_first_access_copy_web_btn');
+  setT('pr-fa-copy-app', 'pr_first_access_copy_app_btn');
+  setT('pr-fa-modal-done', 'pr_first_access_close_btn');
+  const faClose = document.getElementById('pr-fa-modal-close');
+  if (faClose) faClose.setAttribute('aria-label', t('pr_first_access_close_aria'));
   setT('pr-card-apps-title', 'pr_card_apps_title');
   setT('pr-apps-sub', 'pr_apps_sub');
   setT('pr-apps-see-all-txt', 'pr_apps_see_all');

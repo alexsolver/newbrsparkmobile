@@ -1205,10 +1205,16 @@ export class AuthService {
           await AsyncStorage.setItem(USER_KEY, JSON.stringify(merged));
           return merged;
         }
-        // Só invalidar sessão com 401 explícito — 5xx/timeout após reconexão não devem forçar novo login.
+        // 401: `apiFetch` já tentou refresh. Não apagar JWT/utilizador aqui — prestadores podem passar dias
+        // sem rede; expirar access/refresh não deve deslogar nem apagar a sessão local (offline-first).
+        // `SESSION_INVALIDATED` é tratado em `apiFetch` e limpa armazenamento antes de devolver o 401.
         if (res.status === 401) {
-          await AuthService.logout({ preserveLocalData: true, reason: 'session_expired' });
-          return null;
+          const still = await AuthService.getUser();
+          if (!still) return null;
+          console.warn(
+            '[Auth] validateSession: 401 com credenciais locais — a manter sessão para trabalho offline; sincronizar após rede.',
+          );
+          return still;
         }
         console.warn(`[Auth] validateSession tentativa ${attempt + 1}/3 — HTTP ${res.status}`);
       } catch (e) {
