@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NotificationService } from '../../src/services/notifications';
 import { apiFetch, canUseProviderMode } from '../../src/services/auth';
 import { ONBOARDING_PROVIDER_DONE_KEY, PENDING_TECH_REG_TOKEN_KEY } from '../../src/lib/onboardingPrefs';
+import { tryConsumePendingProviderGlobalInvite } from '../../src/lib/pendingProviderGlobalInvite';
 import { dataCollectionService } from '../../src/services/dataCollectionService';
 import { useTranslation } from 'react-i18next';
 import { getDeviceRegion } from '../../src/i18n';
@@ -297,6 +298,18 @@ export default function OnboardingScreen() {
         await AsyncStorage.removeItem(PENDING_TECH_REG_TOKEN_KEY);
         router.replace(`/auth/tech-registration?token=${encodeURIComponent(pendingTok)}` as any);
         return;
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      const { outcome, message } = await tryConsumePendingProviderGlobalInvite();
+      if (outcome === 'ok') {
+        router.replace('/profile' as any);
+        return;
+      }
+      if (outcome === 'error' && message) {
+        Alert.alert('', message);
       }
     } catch {
       /* ignore */

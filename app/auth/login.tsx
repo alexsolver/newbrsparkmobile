@@ -23,6 +23,7 @@ import { complianceDocFallbackUrl } from '../../src/constants/legalPublicUrls';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
 import { LoginOAuthNativeSection, type NativeOAuthPending } from '../../src/components/auth/LoginOAuthNativeSection';
+import { tryConsumePendingProviderGlobalInvite } from '../../src/lib/pendingProviderGlobalInvite';
 function createLoginStyles(C: ColorPalette) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.cardWhite },
@@ -296,6 +297,24 @@ export default function LoginScreen() {
       pathname: '/auth/tech-registration',
       params: { token: techRegToken },
     } as any);
+  }, [authBoot, user, techRegToken, router]);
+
+  /** Convite «primeiro cadastro prestador» guardado pelo deep link `provider-onboarding`. */
+  useEffect(() => {
+    if (authBoot || !user || techRegToken) return;
+    let cancelled = false;
+    void (async () => {
+      const { outcome, message } = await tryConsumePendingProviderGlobalInvite();
+      if (cancelled) return;
+      if (outcome === 'ok') {
+        router.replace('/profile' as any);
+      } else if (outcome === 'error' && message) {
+        Alert.alert('', message);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [authBoot, user, techRegToken, router]);
 
   // ─── 2FA State ───────────────────────────────────────────────────────────────
