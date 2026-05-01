@@ -1763,7 +1763,9 @@
     "providerEmptyCompletedTitle": "Ninguna completada",
     "providerEmptyListSubtitle": "La lista aparecerá aquí cuando el panel asigne trabajos.",
     "providerRejectReasonTitle": "Motivo del rechazo",
-    "providerRejectReasonPlaceholder": "Especifique el motivo con detalle…"
+    "providerRejectReasonPlaceholder": "Especifique el motivo con detalle…",
+    "broadcastOfferBanner": "Oferta: asignada a quien acepte primero",
+    "broadcastOfferChip": "Oferta"
   },
   "services": {
     "title": "Empresas",
@@ -3061,6 +3063,16 @@
       "serverBadResponseBody": "Respuesta del servidor no válida. Inténtelo de nuevo.",
       "payloadTooLargeBody": "El envío superó el límite de tamaño. Reduzca adjuntos o contacte soporte.",
       "coverageMapRequiredBody": "Defina el centro del área de servicio en el mapa (toque el mapa): el radio está definido pero el centro no.",
+      "coverageSlotsRequiredBody": "En cada turno marcado como disponible, abra «Regiones en el mapa» y defina al menos un área (círculo) con radio en km.",
+      "coverageNotesHint": "Las áreas por radio (varias por turno) se definen en «Regiones en el mapa» en cada día/turno, como en el perfil de prestador. Use las notas solo para texto libre.",
+      "availabilityLaterTitle": "Disponibilidad y área en el mapa",
+      "availabilityLaterBody": "No necesita completar horarios ni el mapa en este registro. Tras la aprobación, configure turnos y regiones en el mapa en su perfil de prestador.",
+      "submitGatewayTimeoutBody": "El servidor o la red tardaron demasiado (tiempo agotado en la pasarela). Inténtelo de nuevo, con otra red o con menos adjuntos. Si persiste, contacte soporte.",
+      "coverageMapModalTitle": "Mapa, área de servicio",
+      "coverageMapModalClose": "Cerrar",
+      "coverageMapModalHelp": "Al abrir, el mapa usa su posición actual (GPS) si lo permite; si no, se centra en la dirección de arriba. Toque el punto deseado para marcar la base operativa y ver el radio de servicio.",
+      "coverageMapMarkerTitle": "Base operativa",
+      "coverageMapMarkerDesc": "Toque en otro punto del mapa para mover el pin.",
       "permTitle": "Permiso",
       "sessionTitle": "Sesión",
       "identityLockedNavTitle": "Proveedor activo",

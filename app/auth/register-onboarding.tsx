@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -26,11 +26,12 @@ import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
 import { FlagIsoImage } from '../../src/components/FlagIsoImage';
-import { AuthService, API_BASE } from '../../src/services/auth';
+import { AuthService, API_BASE, beginPublicAuthFlow, resetPublicAuthFlow } from '../../src/services/auth';
 import { complianceDocFallbackUrl } from '../../src/constants/legalPublicUrls';
 import { passwordChecks } from '../../src/lib/appPasswordPolicy';
 import { setLanguage, getDeviceRegion } from '../../src/i18n';
 import { useAuth } from '../../src/hooks/useAuth';
+import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 import {
   PHONE_DIAL_ENTRIES,
   PHONE_DIAL_FAVORITES_ISO,
@@ -320,7 +321,19 @@ export default function RegisterOnboardingScreen() {
   const { t, i18n } = useTranslation();
   const { colors: C, appTagline } = useTheme();
   const styles = useMemo(() => createRegisterStyles(C), [C]);
-  const { completeRegisterAfterOtpSetup } = useAuth();
+  const { completeRegisterAfterOtpSetup, clearSessionForRegistrationFlow } = useAuth();
+
+  /**
+   * Login pode já ter chamado `beginPublicAuthFlow` antes do push; aqui incrementamos outra vez.
+   * Cleanup com `resetPublicAuthFlow` evita depth preso se o utilizador voltar atrás.
+   */
+  useLayoutEffect(() => {
+    beginPublicAuthFlow();
+    void clearSessionForRegistrationFlow();
+    return () => {
+      resetPublicAuthFlow();
+    };
+  }, [clearSessionForRegistrationFlow]);
 
   const [step, setStep] = useState<Step>(1);
   const [name, setName] = useState('');
@@ -514,7 +527,12 @@ export default function RegisterOnboardingScreen() {
     setLoading(true);
     try {
       await completeRegisterAfterOtpSetup({ setupToken: token, password, consent: true });
-      goToTechRegistrationAfterAuth();
+      if (techRegToken) {
+        goToTechRegistrationAfterAuth();
+      } else {
+        const done = await AsyncStorage.getItem('@brspark_onboarding_done');
+        router.replace((done ? getPersonaHomeHref('client') : '/auth/onboarding') as any);
+      }
     } catch (e: unknown) {
       Alert.alert(t('auth.errorRegister'), e instanceof Error ? e.message : t('auth.errorConnection'));
     } finally {

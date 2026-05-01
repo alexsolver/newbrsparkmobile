@@ -18,6 +18,8 @@ import {
   API_BASE,
   AuthService,
   TwoFactorRequired,
+  beginPublicAuthFlow,
+  endPublicAuthFlow,
 } from '../../src/services/auth';
 import { complianceDocFallbackUrl } from '../../src/constants/legalPublicUrls';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -261,7 +263,8 @@ export default function LoginScreen() {
     typeof params.techRegToken === 'string' && params.techRegToken.trim()
       ? params.techRegToken.trim()
       : undefined;
-  const { login, loginWithOAuth, logout, completeLoginWithOtp, user, loading: authBoot } = useAuth();
+  const { login, loginWithOAuth, logout, completeLoginWithOtp, user, loading: authBoot, clearSessionForRegistrationFlow } =
+    useAuth();
   const { t, i18n } = useTranslation();
   const { colors: C, appTagline, loginScreenHeroBackgroundColor, loginHeroTaglineColor } = useTheme();
   const styles = useMemo(() => createLoginStyles(C), [C]);
@@ -275,13 +278,21 @@ export default function LoginScreen() {
   useEffect(() => {
     const r = params.register;
     if (r === '1' || r === 'true') {
-      router.replace(
-        techRegToken
-          ? ({ pathname: '/auth/register-onboarding', params: { techRegToken } } as any)
-          : ('/auth/register-onboarding' as any),
-      );
+      beginPublicAuthFlow();
+      void (async () => {
+        try {
+          await clearSessionForRegistrationFlow();
+          router.replace(
+            techRegToken
+              ? ({ pathname: '/auth/register-onboarding', params: { techRegToken } } as any)
+              : ('/auth/register-onboarding' as any),
+          );
+        } catch {
+          endPublicAuthFlow();
+        }
+      })();
     }
-  }, [params.register, router, techRegToken]);
+  }, [params.register, router, techRegToken, clearSessionForRegistrationFlow]);
 
   // Compliance doc viewer
   const [docModal, setDocModal] = useState<{ title: string; content: string } | null>(null);
@@ -615,13 +626,21 @@ export default function LoginScreen() {
             </View>
             <TouchableOpacity
               style={styles.tab}
-              onPress={() =>
-                router.push(
-                  techRegToken
-                    ? ({ pathname: '/auth/register-onboarding', params: { techRegToken } } as any)
-                    : ('/auth/register-onboarding' as any),
-                )
-              }
+              onPress={() => {
+                beginPublicAuthFlow();
+                void (async () => {
+                  try {
+                    await clearSessionForRegistrationFlow();
+                    router.push(
+                      techRegToken
+                        ? ({ pathname: '/auth/register-onboarding', params: { techRegToken } } as any)
+                        : ('/auth/register-onboarding' as any),
+                    );
+                  } catch {
+                    endPublicAuthFlow();
+                  }
+                })();
+              }}
             >
               <Text style={styles.tabT}>{t('auth.createAccount')}</Text>
             </TouchableOpacity>

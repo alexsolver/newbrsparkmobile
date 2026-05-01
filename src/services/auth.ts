@@ -392,6 +392,48 @@ async function setRefreshTokenSecure(token: string): Promise<void> {
   await AsyncStorage.setItem(REFRESH_TOKEN_ASYNC_FALLBACK_KEY, token);
 }
 
+/**
+ * Remove JWT + utilizador + refresh locais **sem** purge de SQLite/caches nem alertas.
+ * Fluxos públicos (ex.: registo OTP): evita que `apiFetch`/`validateSession` enviem Bearer antigo
+ * e o backend responda `SESSION_INVALIDATED` enquanto o utilizador cria conta.
+ */
+export async function clearStoredAppCredentials(): Promise<void> {
+  await clearRefreshTokenSecure();
+  try {
+    await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Contador reentrante: registo OTP / navegação para «Criar conta».
+ * Respostas tardias com `SESSION_INVALIDATED` para um JWT **antigo** (pedido em voo) não podem
+ * apagar a sessão nova nem mostrar o alerta — caso típico ao tocar em «Criar minha conta».
+ */
+let publicAuthFlowDepth = 0;
+
+export function beginPublicAuthFlow(): void {
+  publicAuthFlowDepth += 1;
+}
+
+export function endPublicAuthFlow(): void {
+  publicAuthFlowDepth = Math.max(0, publicAuthFlowDepth - 1);
+}
+
+export function getPublicAuthFlowDepth(): number {
+  return publicAuthFlowDepth;
+}
+
+/** Ao sair do ecrã de registo: zera o contador (emparelha login `begin` + registo `begin` sem depender de múltiplos `end`). */
+export function resetPublicAuthFlow(): void {
+  publicAuthFlowDepth = 0;
+}
+
+function isPublicAuthFlowActive(): boolean {
+  return publicAuthFlowDepth > 0;
+}
+
 /** Grava access + utilizador; refresh opcional (ausente = limpar refresh antigo). */
 export async function persistAppSessionPayload(data: {
   token: string;
@@ -944,16 +986,30 @@ export class AuthService {
     consent: boolean;
   }): Promise<User> {
     const deviceId = await getDeviceId();
-    const res = await fetch(`${API_BASE}/api/otp-auth/register-complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        setupToken: params.setupToken,
-        password: params.password,
-        consent: params.consent,
-        deviceId,
-      }),
-    });
+    const controller = new AbortController();
+    const regCompleteTimer = setTimeout(() => controller.abort(), 45_000);
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/api/otp-auth/register-complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          setupToken: params.setupToken,
+          password: params.password,
+          consent: params.consent,
+          deviceId,
+        }),
+        signal: controller.signal,
+      });
+    } catch (e: unknown) {
+      const name = e && typeof e === 'object' && 'name' in e ? String((e as { name?: string }).name) : '';
+      if (name === 'AbortError') {
+        throw new Error('Tempo esgotado ao criar conta. Verifique a internet e tente novamente.');
+      }
+      throw e instanceof Error ? e : new Error('Erro de rede ao criar conta.');
+    } finally {
+      clearTimeout(regCompleteTimer);
+    }
     const data = await res.json();
     if (!res.ok) {
       throw new Error((data as { error?: string }).error || (data as { code?: string }).code || 'Erro ao criar conta.');
@@ -1405,6 +1461,7 @@ export async function applySessionInvalidatedFromServer(): Promise<void> {
 /** Para fetch manual (ex.: storage): resposta 401 com code SESSION_INVALIDATED. */
 export async function handleUnauthorizedMaybeSessionInvalidated(res: Response): Promise<void> {
   if (res.status !== 401) return;
+  if (isPublicAuthFlowActive()) return;
   try {
     const body = await res.clone().json();
     if (body?.code === 'SESSION_INVALIDATED') {
@@ -1499,6 +1556,13 @@ export async function apiFetch(path: string, options: ApiFetchOptions = {}): Pro
         /* ignore */
       }
       if (sessionInvalidated) {
+        if (isPublicAuthFlowActive()) {
+          console.warn(
+            '[apiFetch] SESSION_INVALIDATED ignorado em fluxo público (registo / credenciais antigas em voo):',
+            path,
+          );
+          return res;
+        }
         await applySessionInvalidatedFromServer();
         return res;
       }

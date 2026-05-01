@@ -885,7 +885,13 @@ publicRouter.post(
       if (['APPROVED', 'REJECTED'].includes(app.status)) {
         return res.status(400).json({ error: 'Esta candidatura já foi concluída.' });
       }
-      const errMsg = validateSubmitPayload(app, req.body);
+      /** Estado mais recente da candidatura (fotos biométricas vêm de POSTs anteriores; evita merge com snapshot stale). */
+      const freshApp = await prisma.technicianRegistrationApplication.findUnique({
+        where: { id: app.id },
+      });
+      if (!freshApp) return res.status(404).json({ error: 'Candidatura não encontrada.' });
+
+      const errMsg = validateSubmitPayload(freshApp, req.body);
       if (errMsg) return res.status(400).json({ error: errMsg });
 
       const identity = await prisma.user.findUnique({
@@ -897,14 +903,14 @@ publicRouter.post(
       }
       if (!hasRecentAppSessionForTechRegSubmit(req.user)) {
         const otpCheck = verifyTechRegSubmitOtpChallenge({
-          app,
+          app: freshApp,
           reqUser: req.user,
           challengeToken: req.body?.otpChallengeToken,
           otpCode: req.body?.otpCode,
         });
         if (!otpCheck.ok) {
           if (otpCheck.code === 'OTP_REQUIRED') {
-            const issued = await issueTechRegSubmitOtpChallenge({ app, reqUser: req.user });
+            const issued = await issueTechRegSubmitOtpChallenge({ app: freshApp, reqUser: req.user });
             return res.status(400).json({
               error: 'Enviamos um código de confirmação para seu e-mail. Informe o código para concluir o envio.',
               code: 'RECENT_LOGIN_OTP_REQUIRED',
@@ -920,9 +926,9 @@ publicRouter.post(
         }
       }
 
-      const merged = mergeJsonResponses(app.responsesJson, req.body.responsesJson || req.body.responses || {});
+      const merged = mergeJsonResponses(freshApp.responsesJson, req.body.responsesJson || req.body.responses || {});
       if (isAiTechRegProfileGateFromRaw(merged)) {
-        const profSubmit = await readTechRegProfileBuffer({ id: app.id, responsesJson: merged });
+        const profSubmit = await readTechRegProfileBuffer({ id: freshApp.id, responsesJson: merged });
         if (!profSubmit.error && profSubmit.buf) {
           const dupSubmit = await assertTechRegProbeNotDuplicateOtherUser(prisma, {
             registrationTenantId: app.tenantId,
@@ -946,7 +952,7 @@ publicRouter.post(
       if (!Array.isArray(merged.technician.professionalDocuments)) merged.technician.professionalDocuments = [];
 
       const updated = await prisma.technicianRegistrationApplication.update({
-        where: { id: app.id },
+        where: { id: freshApp.id },
         data: {
           responsesJson: merged,
           passwordHash: identity.password,
@@ -957,57 +963,72 @@ publicRouter.post(
       });
       await prisma.technicianRegistrationEvent.create({
         data: {
-          applicationId: app.id,
+          applicationId: freshApp.id,
           type: 'SUBMITTED',
           message: null,
-          actorEmail: merged.email || app.invitedEmail,
+          actorEmail: merged.email || freshApp.invitedEmail,
         },
-      });
-      await notifyTechRegistrationStatus({
-        tenantId: app.tenantId,
-        invitedEmail: merged.email || app.invitedEmail,
-        candidateUserId: req.user.id,
-        status: 'SUBMITTED',
       });
 
       /** Sempre materializar aprovação no mesmo pedido — sem fila de revisão manual por omissão. */
-      let outStatus = updated.status;
-      let autoApproved = false;
       try {
-        const approvedUser = await materializeApprovedApplication(basePrisma, app.id);
+        const approvedUser = await materializeApprovedApplication(basePrisma, freshApp.id);
         await mirrorApprovedLegacyRegistrationToProviderNetwork(basePrisma, {
-          tenantId: app.tenantId,
+          tenantId: freshApp.tenantId,
           userId: approvedUser.id,
           technician: merged.technician,
         }).catch((e) => {
           console.warn('[provider-first] mirror legacy auto-approve failed:', e?.message || e);
         });
-        try {
-          await syncComprefaceGalleryAfterUserChange(basePrisma, approvedUser.id, req, 'tech_reg_auto_approve');
-        } catch (e) {
-          console.warn('[tech-reg] FaceMatch após habilitação automática', e);
-        }
-        await notifyTechRegistrationStatus({
-          tenantId: app.tenantId,
-          invitedEmail: merged.email || app.invitedEmail,
-          candidateUserId: req.user.id,
-          status: 'APPROVED',
-        });
-        outStatus = 'APPROVED';
-        autoApproved = true;
+        /**
+         * Resposta antes de e-mail/push e FaceMatch: `notifyTechRegistrationStatus` (SMTP/Expo) e o sync
+         * CompreFace excedem timeouts comuns de proxy (504). O candidato vê sucesso; notificações e galeria
+         * concluem em segundo plano no mesmo processo Node.
+         */
+        const approvedUserId = approvedUser.id;
+        const notifyEmail = merged.email || freshApp.invitedEmail;
+        const tenantIdBg = freshApp.tenantId;
+        const candidateUserIdBg = req.user.id;
+        res.json({ ok: true, status: 'APPROVED', autoApproved: true });
+        void (async () => {
+          try {
+            await notifyTechRegistrationStatus({
+              tenantId: tenantIdBg,
+              invitedEmail: notifyEmail,
+              candidateUserId: candidateUserIdBg,
+              status: 'SUBMITTED',
+            });
+          } catch (e) {
+            console.warn('[tech-reg] notify SUBMITTED (assíncrono após resposta)', e);
+          }
+          try {
+            await notifyTechRegistrationStatus({
+              tenantId: tenantIdBg,
+              invitedEmail: notifyEmail,
+              candidateUserId: candidateUserIdBg,
+              status: 'APPROVED',
+            });
+          } catch (e) {
+            console.warn('[tech-reg] notify APPROVED (assíncrono após resposta)', e);
+          }
+          try {
+            await syncComprefaceGalleryAfterUserChange(basePrisma, approvedUserId, req, 'tech_reg_auto_approve');
+          } catch (e) {
+            console.warn('[tech-reg] FaceMatch após habilitação automática', e);
+          }
+        })();
+        return;
       } catch (autoErr) {
         console.error('[tech-reg] auto-approve after submit', autoErr);
         return res.status(500).json({
           error:
             autoErr && autoErr.message
               ? String(autoErr.message)
-              : 'Envio registado, mas a habilitação automática falhou. Tente de novo ou contacte o suporte.',
+              : 'Envio registrado, mas a habilitação automática falhou. Tente de novo ou fale com o suporte.',
           code: 'TECH_REG_AUTO_APPROVE_FAILED',
           status: updated.status,
         });
       }
-
-      res.json({ ok: true, status: outStatus, ...(autoApproved ? { autoApproved: true } : {}) });
     } catch (err) {
       console.error('POST tech-reg submit', err);
       res.status(500).json({ error: err.message });
@@ -1983,17 +2004,6 @@ adminRouter.post('/:id/approve', async (req, res) => {
     }).catch((e) => {
       console.warn('[provider-first] mirror legacy approval failed:', e?.message || e);
     });
-    try {
-      await syncComprefaceGalleryAfterUserChange(prisma, user.id, req, 'tech_reg_approve');
-    } catch (e) {
-      console.warn('[tech-reg] FaceMatch após aprovação', e);
-    }
-    await notifyTechRegistrationStatus({
-      tenantId: app.tenantId,
-      invitedEmail: app.invitedEmail,
-      candidateUserId: app.candidateUserId || user.id,
-      status: 'APPROVED',
-    });
 
     await prisma.auditLog
       .create({
@@ -2019,6 +2029,28 @@ adminRouter.post('/:id/approve', async (req, res) => {
     });
     const { password, ...safe } = fresh;
     res.json({ ok: true, user: safe });
+
+    const userIdBg = user.id;
+    const tenantIdAp = app.tenantId;
+    const invitedAp = app.invitedEmail;
+    const candidateAp = app.candidateUserId || user.id;
+    void (async () => {
+      try {
+        await syncComprefaceGalleryAfterUserChange(prisma, userIdBg, req, 'tech_reg_approve');
+      } catch (e) {
+        console.warn('[tech-reg] FaceMatch após aprovação (assíncrono)', e);
+      }
+      try {
+        await notifyTechRegistrationStatus({
+          tenantId: tenantIdAp,
+          invitedEmail: invitedAp,
+          candidateUserId: candidateAp,
+          status: 'APPROVED',
+        });
+      } catch (e) {
+        console.warn('[tech-reg] notify APPROVED painel (assíncrono)', e);
+      }
+    })();
   } catch (err) {
     console.error('POST tech-reg approve', err);
     res.status(400).json({ error: err.message || String(err) });

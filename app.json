@@ -38,7 +38,7 @@
         ]
       },
       "bundleIdentifier": "com.brspark",
-      "buildNumber": "6"
+      "buildNumber": "7"
     },
     "android": {
       "usesCleartextTraffic": true,
@@ -65,7 +65,7 @@
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
       "package": "com.brspark",
-      "versionCode": 4
+      "versionCode": 5
     },
     "extra": {
       "eas": {

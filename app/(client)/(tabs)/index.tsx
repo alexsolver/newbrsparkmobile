@@ -2228,7 +2228,7 @@ export default function DashboardScreen() {
   /** Limite de linhas na aba Concluídas (lista completa continua em memória após sync). */
   const [providerCompletedListCap, setProviderCompletedListCap] = useState(PROVIDER_OS_COMPLETED_INITIAL);
   const [providerTasks, setProviderTasks] = useState<any[]>([]);
-  /** Lista prestador (abas, rota, contagens). Ofertas em aberto ficam fora de Pendentes até claim — ver `BroadcastOfferRootBridge`. */
+  /** Lista prestador (abas, rota, contagens). Ofertas broadcast aparecem em Pendentes com destaque visual. */
   const providerTasksForTabs = useMemo(() => providerTasks, [providerTasks]);
   const [inprogressIds, setInprogressIds] = useState<Set<string>>(new Set());
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
@@ -2348,14 +2348,11 @@ export default function DashboardScreen() {
     };
   }, [mode]);
 
-  /** Ofertas broadcast: só `BroadcastOfferRootBridge` + evento `BRSPARK_CLOUD_TASKS_UPDATED` (evita fila dupla com o dashboard e troca do 1.º item). */
-
   /** Pendentes com coordenadas, na mesma ordem da lista quando “Rota” está ativa (mapa alinhado à timeline). */
   const routeMapTasksOrdered = useMemo(() => {
     const base = providerTasksForTabs.filter((t) => {
       const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
       if (!providerTabMatchesTask(providerTab, s)) return false;
-      if (providerTab === 'PENDING' && providerTaskIsBroadcastOfferAwaitingClaim(t)) return false;
       return parseCoordLatLng(t) != null;
     });
     const ordered = sortTasksForOsrmRoute(base, providerSortMode, osrmDurations);
@@ -2380,7 +2377,6 @@ export default function DashboardScreen() {
     for (const task of providerTasksForTabs) {
       const s = effectiveProviderTaskStatus(task, completedIds, inprogressIds, acceptedIds);
       if (providerTabMatchesTask('PENDING', s)) {
-        if (providerTaskIsBroadcastOfferAwaitingClaim(task)) continue;
         pending += 1;
       } else if (providerTabMatchesTask('IN_PROGRESS', s)) inProgress += 1;
       else if (providerTabMatchesTask('COMPLETED', s)) completed += 1;
@@ -2423,7 +2419,6 @@ export default function DashboardScreen() {
     const filtered = providerTasksForTabs.filter((t) => {
       const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
       if (!providerTabMatchesTask(providerTab, s)) return false;
-      if (providerTab === 'PENDING' && providerTaskIsBroadcastOfferAwaitingClaim(t)) return false;
       return true;
     });
     const sorted = sortTasksForOsrmRoute(filtered, providerSortMode, osrmDurations);
@@ -2616,7 +2611,6 @@ export default function DashboardScreen() {
     const pendentesAll = providerTasksForTabs.filter((t) => {
       const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
       if (!providerTabMatchesTask(providerTab, s)) return false;
-      if (providerTab === 'PENDING' && providerTaskIsBroadcastOfferAwaitingClaim(t)) return false;
       return true;
     });
     const pendentes = pendentesAll
@@ -2703,7 +2697,6 @@ export default function DashboardScreen() {
         .filter((t) => {
           const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
           if (!providerTabMatchesTask(providerTab, s)) return false;
-          if (providerTab === 'PENDING' && providerTaskIsBroadcastOfferAwaitingClaim(t)) return false;
           return true;
         })
         .filter((t) => parseCoordLatLng(t) !== null)
@@ -2728,7 +2721,6 @@ export default function DashboardScreen() {
               const pendentesAll = providerTasksForTabs.filter((t) => {
                 const s = effectiveProviderTaskStatus(t, completedIds, inprogressIds, acceptedIds);
                 if (!providerTabMatchesTask(providerTab, s)) return false;
-                if (providerTab === 'PENDING' && providerTaskIsBroadcastOfferAwaitingClaim(t)) return false;
                 return true;
               });
               const pendentes = pendentesAll
@@ -3380,9 +3372,7 @@ export default function DashboardScreen() {
     return () => sub.remove();
   }, []);
 
-  /** Aceitar/recusar oferta broadcast: `BroadcastOfferRootBridge` no `_layout` raiz (ecrã checklist/mapa não desmonta handlers). */
-
-  /** Abrir cartão da OS após toque «OK» na notificação push. */
+  /** Abrir cartão da OS após toque «OK» na notificação push (inclui ofertas broadcast). */
   useEffect(() => {
     if (userRole !== 'TECHNICIAN') return;
     const tid = peekPendingOpenExecutionFromPush();
@@ -3391,9 +3381,6 @@ export default function DashboardScreen() {
     const found = providerTasks.find((t: any) => String(t.id) === String(tid));
     if (found) {
       takePendingOpenExecutionFromPush();
-      if ((found as any).broadcastClaimPending) {
-        return;
-      }
       selectProviderTab('PENDING');
       setSelectedTask(found);
       setTaskModalVisible(true);
@@ -4867,6 +4854,7 @@ export default function DashboardScreen() {
                         ? t('osSearch.status.COMPLETED', { defaultValue: 'Concluída' })
                         : t('osSearch.status.PENDING', { defaultValue: 'Pendente' });
                 const hasPendingVoiceNote = providerTaskHasPendingVoiceTranscription(order);
+                const isBroadcastOfferCard = providerTaskIsBroadcastOfferAwaitingClaim(order);
                 const cardMetaLabelColor = providerCardHighContrast ? C.slate : C.textSecondary;
                 const cardMetaBodyColor = providerCardHighContrast ? C.slate : C.textSecondary;
                 const isPremiumCard = providerCardVariant === 'premium';
@@ -4914,7 +4902,8 @@ export default function DashboardScreen() {
                         order={order}
                         t={t}
                         i18n={i18n as { language?: string }}
-                        frameBorderColor={cardTone.cardBorder}
+                        frameBorderColor={isBroadcastOfferCard ? C.status.warning.border : cardTone.cardBorder}
+                        isBroadcastOffer={isBroadcastOfferCard}
                         cardBackgroundColor={cardTone.cardBg}
                         topBarColor={studioTopBar}
                         isPremium={isPremiumCard}
@@ -4992,7 +4981,7 @@ export default function DashboardScreen() {
                       <View
                         style={{
                           width: isPremiumCard ? 4 : 5,
-                          backgroundColor: cardTone.stripe,
+                          backgroundColor: isBroadcastOfferCard ? C.status.warning.fg : cardTone.stripe,
                         }}
                       />
                       <View style={{ flex: 1, minWidth: 0, flexDirection: 'column' }}>
@@ -5060,6 +5049,30 @@ export default function DashboardScreen() {
                                     {taskOsLabel(order)}
                                   </Text>
                                 </View>
+                                {isBroadcastOfferCard ? (
+                                  <View
+                                    style={{
+                                      alignSelf: 'flex-start',
+                                      backgroundColor: C.status.warning.bg,
+                                      paddingHorizontal: 8,
+                                      paddingVertical: 4,
+                                      borderRadius: 8,
+                                      borderWidth: 1,
+                                      borderColor: C.status.warning.border,
+                                    }}
+                                  >
+                                    <Text
+                                      style={{
+                                        fontSize: 10,
+                                        fontWeight: '900',
+                                        color: C.status.warning.fg,
+                                        letterSpacing: 0.2,
+                                      }}
+                                    >
+                                      {t('home.broadcastOfferChip')}
+                                    </Text>
+                                  </View>
+                                ) : null}
                                 {isPremiumCard ? (
                                   <View
                                     style={{
@@ -5787,6 +5800,31 @@ export default function DashboardScreen() {
 
             {selectedTask && (
               <>
+                {(selectedTask as any).broadcastClaimPending ? (
+                  <View
+                    style={{
+                      marginBottom: 10,
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      borderRadius: 12,
+                      backgroundColor: C.status.warning.bg,
+                      borderWidth: 1,
+                      borderColor: C.status.warning.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '800',
+                        color: C.status.warning.fg,
+                        textAlign: 'center',
+                        lineHeight: 18,
+                      }}
+                    >
+                      {t('home.broadcastOfferBanner')}
+                    </Text>
+                  </View>
+                ) : null}
                 <ScrollView
                   style={{ flex: 1, marginTop: 4, minHeight: 0 }}
                   contentContainerStyle={{ paddingBottom: 12 }}

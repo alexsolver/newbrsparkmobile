@@ -8,6 +8,8 @@ import {
   User,
   subscribeSessionInvalidated,
   applySessionInvalidatedFromServer,
+  clearStoredAppCredentials,
+  resetPublicAuthFlow,
   isTechnicianProfileActive,
   canUseFieldWorkAppRole,
   canUseProviderMode,
@@ -45,6 +47,8 @@ interface AuthContextType {
   switchWorkspace: (tenantId: string) => Promise<User>;
   /** GET /api/me e actualiza o estado (após gravação directa de AuthService, etc.). Devolve o utilizador actualizado ou `null`. */
   refreshUser: () => Promise<User | null>;
+  /** Antes de fluxos só públicos (registo OTP): limpa JWT local e estado React para não disparar `SESSION_INVALIDATED` com sessão antiga. */
+  clearSessionForRegistrationFlow: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -405,6 +409,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const completeRegisterAfterOtpSetup = async (p: { setupToken: string; password: string; consent: boolean }) => {
     const u = await AuthService.completeRegisterAfterOtpSetup(p);
+    /** Liberta `publicAuthFlowDepth` antes do sync / telemetry — evita pedidos «presos» com SESSION_INVALIDATED ignorado. */
+    resetPublicAuthFlow();
     setUser(u);
     runAvatarWarm(u);
     _setUserRole('CLIENT');
@@ -415,6 +421,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (data: { name: string; email: string; password: string; phone?: string; consent: boolean }) => {
     const u = await AuthService.register(data);
+    resetPublicAuthFlow();
     setUser(u);
     runAvatarWarm(u);
     _setUserRole('CLIENT');
@@ -422,6 +429,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     dataCollectionService.onSessionOpen(u.email, u.tenantId, false);
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync post-register failed:', err));
   };
+
+  const clearSessionForRegistrationFlow = useCallback(async () => {
+    await clearStoredAppCredentials();
+    setUser(null);
+    _setUserRole('CLIENT');
+    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
+  }, []);
 
   const logout = async () => {
     resetGpsCapturePolicyToDefaults();
@@ -502,6 +516,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createWorkspace,
         switchWorkspace,
         refreshUser,
+        clearSessionForRegistrationFlow,
       }}
     >
       {children}

@@ -48,6 +48,7 @@ async function copyRegistrationFacePhotosToUser(applicationId, userId, photos) {
       });
     } catch (e) {
       console.warn('[tech-reg] copy face photo skip', srcAbs, e.message);
+      out.push(p);
     }
   }
   return out;

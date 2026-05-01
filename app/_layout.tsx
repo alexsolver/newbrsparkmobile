@@ -22,13 +22,7 @@ import { startAppStateTelemetryBridge } from '../src/services/appStateTelemetryB
 import { pollStaleGpsReminders } from '../src/services/syncService';
 import { NotificationService, preparePushNotificationInfrastructure } from '../src/services/notifications';
 import { PushNotificationResponseBridge } from '../src/components/PushNotificationResponseBridge';
-import { ProviderBroadcastOfferProvider } from '../src/context/ProviderBroadcastOfferContext';
-import {
-  BroadcastOfferSheetModelProvider,
-  ProviderBroadcastOfferSheet,
-} from '../src/components/ProviderBroadcastOfferSheet';
 import { TransitMapExpandedProvider } from '../src/context/TransitMapExpandedContext';
-import { BroadcastOfferRootBridge } from '../src/components/BroadcastOfferRootBridge';
 import { AutomaticTimeGate } from '../src/components/AutomaticTimeGate';
 import { GpsIntegrityGate } from '../src/components/GpsIntegrityGate';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -240,12 +234,9 @@ function MainLayout() {
 
   return (
     <RouteGuard>
-      <ProviderBroadcastOfferProvider>
-        <BroadcastOfferSheetModelProvider>
-          <TransitMapExpandedProvider>
+      <TransitMapExpandedProvider>
         <View style={{ flex: 1 }}>
           <PushNotificationResponseBridge />
-          <BroadcastOfferRootBridge />
           <AppInitializer />
           {!inAuth && <Header />}
           <View style={{ flex: 1 }}>
@@ -268,11 +259,8 @@ function MainLayout() {
               <Stack.Screen name="+not-found" options={{ headerShown: true }} />
             </Stack>
           </View>
-          <ProviderBroadcastOfferSheet />
         </View>
-          </TransitMapExpandedProvider>
-        </BroadcastOfferSheetModelProvider>
-      </ProviderBroadcastOfferProvider>
+      </TransitMapExpandedProvider>
     </RouteGuard>
   );
 }

@@ -19,13 +19,10 @@ import {
   Image,
   Platform,
   Modal,
-  Switch,
   KeyboardAvoidingView,
   Keyboard,
   TouchableWithoutFeedback,
 } from 'react-native';
-import MapView, { Circle, Marker } from 'react-native-maps';
-import * as Location from 'expo-location';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -34,13 +31,10 @@ import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { API_BASE, getToken, apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
-import {
-  rid,
-  defaultSchedule,
-  parseScheduleFromProfileJson,
-  findFirstInvalidEnabledTime,
-  isValidHhMm,
-} from '../../src/lib/technicianScheduleForm';
+import { rid, defaultSchedule } from '../../src/lib/technicianScheduleForm';
+
+/** Agenda vazia no cadastro: turnos e mapa ficam para o perfil depois da aprovação. */
+const TECH_REG_DEFAULT_SCHEDULE = defaultSchedule();
 import { useAuth } from '../../src/hooks/useAuth';
 import i18n from '../../src/i18n';
 import DatePickerButton from '../../src/components/DatePickerButton';
@@ -214,16 +208,6 @@ function enrollmentPhotosWithoutProfile(
   });
 }
 
-const DAYS: { key: string; label: string }[] = [
-  { key: 'mon', label: 'Segunda' },
-  { key: 'tue', label: 'Terça' },
-  { key: 'wed', label: 'Quarta' },
-  { key: 'thu', label: 'Quinta' },
-  { key: 'fri', label: 'Sexta' },
-  { key: 'sat', label: 'Sábado' },
-  { key: 'sun', label: 'Domingo' },
-];
-
 type DocRow = {
   id: string;
   docType: string;
@@ -236,29 +220,6 @@ type DocRow = {
   attachmentUrl?: string | null;
   attachmentMimeType?: string | null;
 };
-
-type Loc = {
-  id: string;
-  name: string;
-  type: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  address?: string | null;
-};
-
-type ServiceCoverageGeo = {
-  homeBase: {
-    latitude: number;
-    longitude: number;
-    address?: string | null;
-    city?: string | null;
-    state?: string | null;
-    postalCode?: string | null;
-    countryCode?: string | null;
-  } | null;
-  radiusKm: number | null;
-  notes?: string | null;
-} | null;
 
 function formatBrCepInput(raw: string): string {
   const d = raw.replace(/\D/g, '').slice(0, 8);
@@ -336,7 +297,6 @@ export default function TechRegistrationScreen() {
   const [closed, setClosed] = useState<{ status: string; tenantName?: string } | null>(null);
   const [status, setStatus] = useState('');
   const [revisionNote, setRevisionNote] = useState<string | null>(null);
-  const [locations, setLocations] = useState<Loc[]>([]);
   const [tenantName, setTenantName] = useState('');
   /** `panel_invite` = gestor convidou; `self_service` = «Quero ser prestador» no perfil (sem convite por e-mail). */
   const [registrationSource, setRegistrationSource] = useState<'panel_invite' | 'self_service'>('panel_invite');
@@ -358,13 +318,7 @@ export default function TechRegistrationScreen() {
   const [skillsText, setSkillsText] = useState('');
   const [personalDocs, setPersonalDocs] = useState<DocRow[]>([]);
   const [proDocs, setProDocs] = useState<DocRow[]>([]);
-  const [schedule, setSchedule] = useState(defaultSchedule);
-  const [timeTouchByDay, setTimeTouchByDay] = useState<Record<string, { s?: boolean; e?: boolean }>>({});
-  const [showAllTimeErrors, setShowAllTimeErrors] = useState(false);
   const [serviceLocIds, setServiceLocIds] = useState<string[]>([]);
-  const [serviceCoverageRadiusKm, setServiceCoverageRadiusKm] = useState('50');
-  const [serviceCoverageNotes, setServiceCoverageNotes] = useState('');
-  const [coverageCenter, setCoverageCenter] = useState<{ latitude: number; longitude: number } | null>(null);
   const [facePhotos, setFacePhotos] = useState<{ id: string; url: string }[]>([]);
   const [primaryProfileCapture, setPrimaryProfileCapture] = useState<PrimaryProfileCapture>(null);
   const [primaryValidating, setPrimaryValidating] = useState(false);
@@ -377,14 +331,6 @@ export default function TechRegistrationScreen() {
   const [techRegIdDocument, setTechRegIdDocument] = useState<TechRegIdDocumentPayload | null>(null);
   const [birthDate, setBirthDate] = useState('');
   const [fetchingCep, setFetchingCep] = useState(false);
-  const [regionMapVisible, setRegionMapVisible] = useState(false);
-  const [mapOpenLoading, setMapOpenLoading] = useState(false);
-  const [mapInitialRegion, setMapInitialRegion] = useState<{
-    latitude: number;
-    longitude: number;
-    latitudeDelta: number;
-    longitudeDelta: number;
-  } | null>(null);
 
   const [securityModalVisible, setSecurityModalVisible] = useState(false);
   const [submitOtpCode, setSubmitOtpCode] = useState('');
@@ -392,6 +338,9 @@ export default function TechRegistrationScreen() {
 
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const identityLockNavRef = useRef(false);
+
+  /** Só bloqueia edição enquanto aguarda análise; em NEEDS_REVISION volta a editar. */
+  const readOnly = status === 'SUBMITTED';
 
   /** Prestador já ACTIVE não deve usar o fluxo de candidatura para mudar foto ou biometria. */
   useEffect(() => {
@@ -461,7 +410,6 @@ export default function TechRegistrationScreen() {
       setStatus(data.status || '');
       setRevisionNote(data.revisionNote || null);
       setTenantName(data.tenantName || '');
-      setLocations(Array.isArray(data.locations) ? data.locations : []);
       const r = data.responsesJson && typeof data.responsesJson === 'object' ? data.responsesJson : {};
       setName(String(r.name || ''));
       setEmail(String(r.email || data.invitedEmail || ''));
@@ -487,29 +435,7 @@ export default function TechRegistrationScreen() {
       setBirthDate(String((r as { birthDate?: string }).birthDate || '').slice(0, 10));
       const idc = (r as { techRegIdDocument?: TechRegIdDocumentPayload }).techRegIdDocument;
       setTechRegIdDocument(idc && typeof idc === 'object' ? idc : null);
-      setSchedule(parseScheduleFromProfileJson(tech.workScheduleJson));
-      setTimeTouchByDay({});
-      setShowAllTimeErrors(false);
       setServiceLocIds(Array.isArray(tech.serviceLocationIds) ? [...tech.serviceLocationIds] : []);
-      const serviceCoverage = tech.serviceCoverageGeoJson && typeof tech.serviceCoverageGeoJson === 'object'
-        ? (tech.serviceCoverageGeoJson as ServiceCoverageGeo)
-        : null;
-      setCoverageCenter(
-        serviceCoverage?.homeBase &&
-          Number.isFinite(serviceCoverage.homeBase.latitude) &&
-          Number.isFinite(serviceCoverage.homeBase.longitude)
-          ? {
-              latitude: Number(serviceCoverage.homeBase.latitude),
-              longitude: Number(serviceCoverage.homeBase.longitude),
-            }
-          : null
-      );
-      setServiceCoverageRadiusKm(
-        serviceCoverage?.radiusKm != null && Number.isFinite(Number(serviceCoverage.radiusKm))
-          ? String(serviceCoverage.radiusKm)
-          : '50'
-      );
-      setServiceCoverageNotes(serviceCoverage?.notes ? String(serviceCoverage.notes) : '');
       const capRaw = (r as any).techRegPrimaryProfileCapture;
       const faces = Array.isArray(r.faceEnrollmentPhotos) ? r.faceEnrollmentPhotos : [];
       const faceRowsRaw = faces
@@ -578,39 +504,11 @@ export default function TechRegistrationScreen() {
     }, [load])
   );
 
-  useEffect(() => {
-    if (showAllTimeErrors && !findFirstInvalidEnabledTime(schedule)) {
-      setShowAllTimeErrors(false);
-    }
-  }, [schedule, showAllTimeErrors]);
-
-  const coverageRadiusMeters = useMemo(() => {
-    const km = Number(serviceCoverageRadiusKm);
-    if (!Number.isFinite(km) || km <= 0) return 0;
-    return km * 1000;
-  }, [serviceCoverageRadiusKm]);
-
   const buildResponsesJson = useCallback(() => {
     const skillsJson = skillsText
       .split(/[,;\n]/)
       .map((s) => s.trim())
       .filter(Boolean);
-    const coverageGeoJson =
-      coverageCenter && coverageRadiusMeters > 0
-        ? {
-            homeBase: {
-              latitude: coverageCenter.latitude,
-              longitude: coverageCenter.longitude,
-              address: line1.trim() || null,
-              city: city.trim() || null,
-              state: stateUf.trim() || null,
-              postalCode: postal.trim() || null,
-              countryCode: country.trim() || 'BR',
-            },
-            radiusKm: Number(serviceCoverageRadiusKm) || 0,
-            notes: serviceCoverageNotes.trim() || null,
-          }
-        : null;
     return {
       name: name.trim(),
       email: email.trim().toLowerCase(),
@@ -643,8 +541,8 @@ export default function TechRegistrationScreen() {
         specialty: specialty.trim() || null,
         score: Number(score) || 5,
         skillsJson,
-        workScheduleJson: schedule,
-        serviceCoverageGeoJson: coverageGeoJson,
+        workScheduleJson: JSON.parse(JSON.stringify(TECH_REG_DEFAULT_SCHEDULE)),
+        serviceCoverageGeoJson: null,
         serviceLocationIds: serviceLocIds,
         professionalDocuments: proDocs.map((d) => ({
           id: d.id,
@@ -672,6 +570,9 @@ export default function TechRegistrationScreen() {
           }
         : {}),
       ...(techRegIdDocument && techRegIdDocument.faceVerifiedAt ? { techRegIdDocument } : {}),
+      faceEnrollmentPhotos: facePhotos
+        .filter((p) => p.id && p.url)
+        .map((p) => ({ id: String(p.id), url: String(p.url) })),
     };
   }, [
     name,
@@ -679,6 +580,7 @@ export default function TechRegistrationScreen() {
     phone,
     birthDate,
     avatarUrl,
+    facePhotos,
     primaryProfileCapture,
     techRegIdDocument,
     line1,
@@ -694,11 +596,6 @@ export default function TechRegistrationScreen() {
     specialty,
     score,
     skillsText,
-    schedule,
-    coverageCenter,
-    coverageRadiusMeters,
-    serviceCoverageNotes,
-    serviceCoverageRadiusKm,
     serviceLocIds,
   ]);
 
@@ -1285,11 +1182,6 @@ export default function TechRegistrationScreen() {
     }
   };
 
-  const setCoverageCenterFromCoords = (latitude: number, longitude: number) => {
-    setCoverageCenter({ latitude, longitude });
-    saveDraftSoon();
-  };
-
   const fetchCepAndFillAddress = async () => {
     const cc = String(country || 'BR').trim().toUpperCase();
     if (cc !== 'BR') {
@@ -1325,54 +1217,6 @@ export default function TechRegistrationScreen() {
       Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.techReg.cepLookupError'));
     } finally {
       setFetchingCep(false);
-    }
-  };
-
-  const openRegionsMap = async () => {
-    setMapOpenLoading(true);
-    try {
-      const countryLabel =
-        String(country || 'BR').trim().toUpperCase() === 'BR' || !String(country || '').trim()
-          ? 'Brasil'
-          : String(country).trim();
-      const parts = [line1, district, city, stateUf, postal.replace(/\D/g, '')].map((s) => String(s || '').trim()).filter(Boolean);
-      let lat = -14.235;
-      let lng = -51.9253;
-      let centeredOnAddress = false;
-      if (parts.length >= 2) {
-        try {
-          const geo = await Location.geocodeAsync(`${parts.join(', ')}, ${countryLabel}`);
-          if (
-            geo?.[0]?.latitude != null &&
-            geo?.[0]?.longitude != null &&
-            Number.isFinite(geo[0].latitude) &&
-            Number.isFinite(geo[0].longitude)
-          ) {
-            lat = geo[0].latitude;
-            lng = geo[0].longitude;
-            centeredOnAddress = true;
-          }
-        } catch {
-          /* continuar */
-        }
-      }
-      if (!centeredOnAddress && coverageCenter) {
-        lat = coverageCenter.latitude;
-        lng = coverageCenter.longitude;
-      }
-      const delta = 0.42;
-      setMapInitialRegion({
-        latitude: lat,
-        longitude: lng,
-        latitudeDelta: delta,
-        longitudeDelta: delta,
-      });
-      if (!coverageCenter) {
-        setCoverageCenter({ latitude: lat, longitude: lng });
-      }
-      setRegionMapVisible(true);
-    } finally {
-      setMapOpenLoading(false);
     }
   };
 
@@ -1438,6 +1282,151 @@ export default function TechRegistrationScreen() {
           backgroundColor: C.cardWhite,
         },
         dayRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+        dayHeaderRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 8,
+          marginBottom: 10,
+        },
+        dayName: { fontWeight: '800', fontSize: 15, color: C.slate },
+        addSlotBtn: {
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          borderRadius: 10,
+          backgroundColor: C.accent,
+        },
+        addSlotBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+        slotCard: {
+          marginTop: 10,
+          paddingTop: 12,
+          borderTopWidth: 1,
+          borderTopColor: C.border,
+        },
+        slotTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        removeSlotBtn: {
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: C.border,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: C.cardWhite,
+        },
+        slotLocsRow: { marginTop: 10, gap: 8 },
+        locChipsScroll: { flexGrow: 0 },
+        locChip: {
+          paddingVertical: 6,
+          paddingHorizontal: 10,
+          borderRadius: 999,
+          borderWidth: 1,
+          marginRight: 8,
+          maxWidth: 200,
+        },
+        locChipText: { fontSize: 12, fontWeight: '700', color: C.slate },
+        slotMapOpenBtn: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: C.accent,
+          backgroundColor: C.cardWhite,
+        },
+        slotModalRoot: { flex: 1, backgroundColor: C.cardWhite },
+        slotModalActions: {
+          flexDirection: 'row',
+          gap: 10,
+          paddingHorizontal: 16,
+          paddingTop: 10,
+          paddingBottom: 8,
+          borderTopWidth: 1,
+          borderTopColor: C.border,
+        },
+        slotModalBtnSecondary: {
+          flex: 1,
+          paddingVertical: 12,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: C.border,
+          alignItems: 'center',
+          backgroundColor: C.surfaceLow,
+        },
+        slotModalBtnPrimary: {
+          flex: 1,
+          paddingVertical: 12,
+          borderRadius: 12,
+          alignItems: 'center',
+          backgroundColor: C.accent,
+        },
+        slotModalBtnPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+        slotModalBtnSecondaryText: { color: C.slate, fontWeight: '800', fontSize: 15 },
+        slotCityRow: { flexDirection: 'row', gap: 8, alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 },
+        slotCityInput: {
+          flex: 1,
+          borderWidth: 1,
+          borderColor: C.border,
+          borderRadius: 10,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          fontSize: 15,
+          color: C.slate,
+          backgroundColor: C.cardWhite,
+        },
+        slotMiniBtn: {
+          paddingVertical: 10,
+          paddingHorizontal: 14,
+          borderRadius: 10,
+          backgroundColor: C.accent,
+        },
+        slotMiniBtnText: { color: '#fff', fontWeight: '800', fontSize: 14 },
+        slotGpsBtn: {
+          paddingVertical: 10,
+          paddingHorizontal: 12,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: C.border,
+          backgroundColor: C.surfaceLow,
+        },
+        slotCirclesToolbar: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 16,
+          marginBottom: 8,
+          gap: 10,
+        },
+        slotCirclesList: { paddingHorizontal: 16, marginBottom: 8 },
+        slotCircleRow: {
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 8,
+          paddingVertical: 8,
+          paddingHorizontal: 10,
+          marginBottom: 6,
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: C.border,
+          backgroundColor: C.cardWhite,
+        },
+        slotCircleRadiusInput: {
+          width: 96,
+          borderWidth: 1,
+          borderColor: C.border,
+          borderRadius: 8,
+          paddingHorizontal: 8,
+          paddingVertical: 6,
+          fontSize: 14,
+          color: C.slate,
+          backgroundColor: C.surfaceLow,
+        },
+        slotCircleRm: { paddingVertical: 6, paddingHorizontal: 8 },
         cepRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
         cepInputWrap: { flex: 1 },
         cepSearchBtn: {
@@ -1530,14 +1519,6 @@ export default function TechRegistrationScreen() {
       Alert.alert(i18n.t('appAlerts.techReg.validationTitle'), i18n.t('appAlerts.techReg.validationName'));
       return;
     }
-    if (findFirstInvalidEnabledTime(schedule)) {
-      setShowAllTimeErrors(true);
-      Alert.alert(
-        i18n.t('appAlerts.techReg.validationTitle'),
-        i18n.t('appAlerts.techReg.validationScheduleTime')
-      );
-      return;
-    }
     if (enrollmentPhotosForUi.length < MIN_FACE_ENROLLMENT_PHOTOS) {
       Alert.alert(
         i18n.t('appAlerts.techReg.biometricPhotosTitle'),
@@ -1545,14 +1526,6 @@ export default function TechRegistrationScreen() {
           min: MIN_FACE_ENROLLMENT_PHOTOS,
           current: enrollmentPhotosForUi.length,
         })
-      );
-      return;
-    }
-    const km = Number(serviceCoverageRadiusKm);
-    if (Number.isFinite(km) && km > 0 && !coverageCenter) {
-      Alert.alert(
-        i18n.t('appAlerts.techReg.validationTitle'),
-        i18n.t('appAlerts.techReg.coverageMapRequiredBody')
       );
       return;
     }
@@ -1569,19 +1542,83 @@ export default function TechRegistrationScreen() {
       return;
     }
     setSaving(true);
+    /** EAS preview/production: `__DEV__` é false — usar `EXPO_PUBLIC_DEBUG_TECH_REG_SUBMIT=1` no perfil EAS ou `.env`. */
+    const techRegSubmitDebugLog =
+      __DEV__ || String(process.env.EXPO_PUBLIC_DEBUG_TECH_REG_SUBMIT || '').trim() === '1';
     try {
       const submitPath = `/api/technician-registration/public/${encodeURIComponent(token)}/submit`;
+      const bodyObj =
+        otpCode && otpChallengeToken
+          ? { otpCode, otpChallengeToken, responsesJson: buildResponsesJson() }
+          : { responsesJson: buildResponsesJson() };
+      const bodyStr = JSON.stringify(bodyObj);
+      const tSubmit0 = Date.now();
+      // #region agent log
+      fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '307b27' },
+        body: JSON.stringify({
+          sessionId: '307b27',
+          hypothesisId: 'H1',
+          location: 'tech-registration.tsx:submit:pre',
+          message: 'tech reg submit start',
+          data: {
+            bodyKb: Math.round(bodyStr.length / 1024),
+            personalDocsLen: personalDocs.length,
+            proDocsLen: proDocs.length,
+            facePhotoLen: facePhotos.filter((p) => p.id && p.url).length,
+            hasOtp: !!(otpCode && otpChallengeToken),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (techRegSubmitDebugLog) {
+        console.warn('[debug-307b27:H1]', {
+          bodyKb: Math.round(bodyStr.length / 1024),
+          personalDocsLen: personalDocs.length,
+          proDocsLen: proDocs.length,
+          facePhotoLen: facePhotos.filter((p) => p.id && p.url).length,
+        });
+      }
       /** Submit pode demorar (payload + biometria no servidor); o `apiFetch` por defeito aborta aos 18 s. */
       const res = await apiFetch(submitPath, {
         method: 'POST',
         timeoutMs: 120_000,
-        body: JSON.stringify(
-          otpCode && otpChallengeToken
-            ? { otpCode, otpChallengeToken, responsesJson: buildResponsesJson() }
-            : { responsesJson: buildResponsesJson() }
-        ),
+        body: bodyStr,
       });
       const rawText = await res.text();
+      const submitDurationMs = Date.now() - tSubmit0;
+      const rawTrim = rawText.trimStart();
+      // #region agent log
+      fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '307b27' },
+        body: JSON.stringify({
+          sessionId: '307b27',
+          hypothesisId: 'H2',
+          location: 'tech-registration.tsx:submit:response',
+          message: 'tech reg submit http',
+          data: {
+            status: res.status,
+            ok: res.ok,
+            durationMs: submitDurationMs,
+            rawLen: rawText.length,
+            rawShape: rawTrim.startsWith('<') ? 'html' : rawTrim.startsWith('{') ? 'json' : 'other',
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (techRegSubmitDebugLog) {
+        console.warn('[debug-307b27:H2]', {
+          status: res.status,
+          ok: res.ok,
+          durationMs: submitDurationMs,
+          rawLen: rawText.length,
+          rawShape: rawTrim.startsWith('<') ? 'html' : rawTrim.startsWith('{') ? 'json' : 'other',
+        });
+      }
       if (res.status === 413) {
         Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.techReg.payloadTooLargeBody'));
         return;
@@ -1592,9 +1629,41 @@ export default function TechRegistrationScreen() {
       } catch {
         const looksLikeHtml = rawText.trimStart().startsWith('<');
         const statusLine = `HTTP ${res.status}`;
-        const msg = looksLikeHtml
-          ? `${i18n.t('appAlerts.techReg.serverHtmlResponseBody')}\n\n${statusLine}`
-          : `${i18n.t('appAlerts.techReg.serverBadResponseBody')}\n\n${statusLine}`;
+        const gateway = res.status === 504 || res.status === 502 || res.status === 503;
+        // #region agent log
+        fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '307b27' },
+          body: JSON.stringify({
+            sessionId: '307b27',
+            hypothesisId: 'H3',
+            location: 'tech-registration.tsx:submit:parseFail',
+            message: 'tech reg submit non-json body',
+            data: {
+              status: res.status,
+              gateway,
+              looksLikeHtml,
+              rawLen: rawText.length,
+              durationMs: submitDurationMs,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        if (techRegSubmitDebugLog) {
+          console.warn('[debug-307b27:H3]', {
+            status: res.status,
+            gateway,
+            looksLikeHtml,
+            rawLen: rawText.length,
+            durationMs: submitDurationMs,
+          });
+        }
+        const msg = gateway
+          ? `${i18n.t('appAlerts.techReg.submitGatewayTimeoutBody')}\n\n${statusLine}`
+          : looksLikeHtml
+            ? `${i18n.t('appAlerts.techReg.serverHtmlResponseBody')}\n\n${statusLine}`
+            : `${i18n.t('appAlerts.techReg.serverBadResponseBody')}\n\n${statusLine}`;
         Alert.alert(i18n.t('common.error'), msg);
         return;
       }
@@ -1636,8 +1705,6 @@ export default function TechRegistrationScreen() {
         }
         return;
       }
-      setShowAllTimeErrors(false);
-      setTimeTouchByDay({});
       const approvedNow =
         data.autoApproved === true ||
         String(data.status || '').toUpperCase() === 'APPROVED';
@@ -1669,6 +1736,26 @@ export default function TechRegistrationScreen() {
       setSubmitOtpCode('');
       setSubmitOtpChallengeToken(null);
     } catch (e: any) {
+      // #region agent log
+      fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '307b27' },
+        body: JSON.stringify({
+          sessionId: '307b27',
+          hypothesisId: 'H4',
+          location: 'tech-registration.tsx:submit:catch',
+          message: 'tech reg submit exception',
+          data: {
+            errName: String(e?.name || ''),
+            errMsgLen: String(e?.message ?? '').length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (techRegSubmitDebugLog) {
+        console.warn('[debug-307b27:H4]', { errName: String(e?.name || ''), errMsgLen: String(e?.message ?? '').length });
+      }
       const rawMsg = String(e?.message ?? '').trim();
       const aborted =
         e?.name === 'AbortError' ||
@@ -1684,8 +1771,6 @@ export default function TechRegistrationScreen() {
     }
   };
 
-  /** Só bloqueia edição enquanto aguarda análise; em NEEDS_REVISION volta a editar. */
-  const readOnly = status === 'SUBMITTED';
   const isCompanyInvite = registrationSource === 'panel_invite';
 
   if (!token) {
@@ -1696,8 +1781,8 @@ export default function TechRegistrationScreen() {
         </Text>
         <Text style={{ color: C.textSecondary, textAlign: 'center', marginTop: 12, lineHeight: 22 }}>
           Falta o identificador do formulário na URL.{'\n\n'}
-          • Se você pediu cadastro no app: abra o perfil, toque em «Quero ser um Prestador» ou «Continuar cadastro de prestador».{'\n\n'}
-          • Se uma empresa lhe enviou convite: abra o link do e-mail ou mensagem (ou peça o link ao gestor).
+          • Se você pediu cadastro no app: abra o perfil e toque em "Quero ser prestador" ou "Continuar cadastro de prestador".{'\n\n'}
+          • Se uma empresa enviou um convite: abra o link do e-mail ou da mensagem (ou peça o link ao gestor).
         </Text>
         <TouchableOpacity style={[styles.btn, { marginTop: 20 }]} onPress={() => router.back()}>
           <Text style={styles.btnText}>Voltar</Text>
@@ -1726,10 +1811,10 @@ export default function TechRegistrationScreen() {
             {isCompanyInvite
               ? tenantName
                 ? `Empresa convidante: ${tenantName}`
-                : 'Inicie sessão no app com o e-mail do convite.'
+                : 'Faça login no app com o e-mail do convite.'
               : tenantName
                 ? `Organização da sua conta: ${tenantName}`
-                : 'Inicie sessão com a mesma conta BrSpark em que pediu ser prestador.'}
+                : 'Faça login com a mesma conta BrSpark em que pediu para ser prestador.'}
           </Text>
           <View style={styles.warn}>
             <Text style={styles.warnText}>
@@ -1738,8 +1823,8 @@ export default function TechRegistrationScreen() {
                   O convite foi enviado para{' '}
                   <Text style={{ fontWeight: '800' }}>{invitedEmailHint || 'o e-mail indicado pelo gestor'}</Text>.
                   {'\n\n'}
-                  A conta BrSpark com esse e-mail deve existir antes de aceitar o convite (use «Criar conta» no login,
-                  se ainda não tiver).
+                  A conta BrSpark com esse e-mail precisa existir antes de aceitar o convite (use "Criar conta" na tela de
+                  login, se ainda não tiver).
                 </>
               ) : (
                 <>
@@ -1812,11 +1897,6 @@ export default function TechRegistrationScreen() {
   const hasIdDocumentDone = !needsIdDocumentStep || !!techRegIdDocument?.faceVerifiedAt;
   const hasPersonalDataDone = !!name.trim() && !!phone.trim();
   const hasAddressDone = !!line1.trim() && !!city.trim() && !!stateUf.trim();
-  const hasScheduleDone = Object.values(schedule).some(
-    (day) => Array.isArray(day) && day.some((slot) => !!slot?.enabled && !!slot?.start && !!slot?.end),
-  );
-  const hasRegionsDone = !!coverageCenter && coverageRadiusMeters > 0;
-  const hasOpsDone = hasScheduleDone && hasRegionsDone;
   const hasSecurityDone = true;
   const progressItems = [
     { label: 'Foto de perfil', done: primaryStepDone },
@@ -1824,7 +1904,6 @@ export default function TechRegistrationScreen() {
     { label: 'Documento com foto', done: hasIdDocumentDone },
     { label: 'Dados pessoais', done: hasPersonalDataDone },
     { label: 'Endereço base', done: hasAddressDone },
-    { label: 'Disponibilidade e regiões', done: hasOpsDone },
     { label: 'Confirmação de segurança', done: hasSecurityDone },
   ];
   const progressDoneCount = progressItems.filter((it) => it.done).length;
@@ -2037,7 +2116,7 @@ export default function TechRegistrationScreen() {
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 220 }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 320 }}
     >
       <View style={styles.head}>
         <TouchableOpacity onPress={() => router.back()} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -2054,7 +2133,7 @@ export default function TechRegistrationScreen() {
               <Text style={styles.infoCalloutText}>
                 <Text style={{ fontWeight: '800', color: C.slate }}>Com convite: </Text>
                 O nome acima é a <Text style={{ fontWeight: '700' }}>empresa ou conta organizadora</Text> que criou o
-                convite no painel. O e-mail fixo abaixo é o que o gestor associou ao convite, tem de ser o mesmo da
+                convite no painel. O e-mail fixo abaixo é o que o gestor associou ao convite; precisa ser o mesmo da
                 sua conta BrSpark.
               </Text>
             </View>
@@ -2155,7 +2234,7 @@ export default function TechRegistrationScreen() {
         {isAiProfileGateEngine(primaryProfileCapture?.validationEngine) ? (
           <Text style={styles.fieldHint}>
             Passo 1: foto de perfil (IA). Passo 2: biometria. Passo 3: documento com foto (validação do rosto + leitura
-            dos dados). Confira nome, data de nascimento e a secção «Dados do documento» abaixo.
+            dos dados). Confira nome, data de nascimento e a seção "Dados do documento" abaixo.
           </Text>
         ) : (
           <>
@@ -2348,7 +2427,7 @@ export default function TechRegistrationScreen() {
         <Text style={styles.secTitle}>Endereço</Text>
         <Text style={styles.fieldHint}>
           País define se o CEP pode ser preenchido automaticamente (Brasil = ViaCEP). Organizações com várias bases usam o
-          mesmo formulário; as regiões em que você atua escolhe-se na secção «Regiões atendidas».
+          mesmo formulário; as regiões em que você atua são definidas na seção Regiões atendidas.
         </Text>
         <Text style={styles.label}>País (código ISO, ex.: BR)</Text>
         <TextInput
@@ -2529,8 +2608,8 @@ export default function TechRegistrationScreen() {
         <Text style={styles.secTitle}>Docs. pessoais</Text>
         {showPrimaryDocumentSection ? (
           <Text style={[styles.fieldHint, { marginBottom: 8 }]}>
-            O documento principal do passo 3 está na secção «Dados do documento» acima. Use «Adicionar linha» só para
-            outros documentos (comprovantes, etc.).
+            O documento principal do passo 3 está na seção Dados do documento acima. Use Adicionar linha só para outros
+            documentos (comprovantes, etc.).
           </Text>
         ) : null}
         {!readOnly ? (
@@ -2687,169 +2766,10 @@ export default function TechRegistrationScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.secTitle}>Horários da semana</Text>
-        <Text style={[styles.fieldHint, { marginBottom: 12 }]}>
-          Ative os dias em que você pode receber serviços e ajuste o intervalo (formato 24 h, ex.: 08:00 e 18:00).
+        <Text style={styles.secTitle}>{i18n.t('appAlerts.techReg.availabilityLaterTitle')}</Text>
+        <Text style={{ fontSize: 13, color: C.textSecondary, lineHeight: 21 }}>
+          {i18n.t('appAlerts.techReg.availabilityLaterBody')}
         </Text>
-        {DAYS.map(({ key, label }) => {
-          const slot = schedule[key]?.[0] || {
-            id: rid(),
-            enabled: false,
-            start: '08:00',
-            end: '18:00',
-            locationIds: [],
-            serviceAreaCircles: [],
-          };
-          const startTrim = String(slot.start || '').trim();
-          const endTrim = String(slot.end || '').trim();
-          const touch = timeTouchByDay[key] || {};
-          const startErr =
-            slot.enabled && !isValidHhMm(startTrim) && (touch.s || showAllTimeErrors);
-          const endErr =
-            slot.enabled && !isValidHhMm(endTrim) && (touch.e || showAllTimeErrors);
-          const timeHint = startErr || endErr ? i18n.t('common.timeFormat24Hint') : null;
-          return (
-            <View key={key} style={styles.dayCard}>
-              <View style={styles.dayRowTop}>
-                <Text style={{ fontWeight: '800', fontSize: 15, color: C.slate }}>{label}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={{ fontSize: 13, color: C.textSecondary }}>Disponível</Text>
-                  <Switch
-                    value={slot.enabled}
-                    onValueChange={(v) => {
-                      if (readOnly) return;
-                      const n = { ...schedule };
-                      n[key] = [{ ...slot, enabled: v }];
-                      setSchedule(n);
-                      saveDraftSoon();
-                    }}
-                    disabled={readOnly}
-                    trackColor={{ false: C.border, true: `${C.accent}88` }}
-                    thumbColor={slot.enabled ? C.accent : '#f4f4f5'}
-                  />
-                </View>
-              </View>
-              <View style={[styles.row2, { opacity: slot.enabled ? 1 : 0.45 }]}>
-                <View style={styles.flex1}>
-                  <Text style={[styles.label, startErr && { color: '#B91C1C' }]}>Início</Text>
-                  <TextInput
-                    style={[styles.input, startErr && { borderColor: '#DC2626', borderWidth: 2 }]}
-                    value={slot.start}
-                    editable={!readOnly && slot.enabled}
-                    onChangeText={(t) => {
-                      const n = { ...schedule };
-                      n[key] = [{ ...slot, start: t }];
-                      setSchedule(n);
-                      saveDraftSoon();
-                    }}
-                    onBlur={() =>
-                      setTimeTouchByDay((p) => ({
-                        ...p,
-                        [key]: { ...p[key], s: true },
-                      }))
-                    }
-                    placeholder="08:00"
-                  />
-                </View>
-                <View style={styles.flex1}>
-                  <Text style={[styles.label, endErr && { color: '#B91C1C' }]}>Fim</Text>
-                  <TextInput
-                    style={[styles.input, endErr && { borderColor: '#DC2626', borderWidth: 2 }]}
-                    value={slot.end}
-                    editable={!readOnly && slot.enabled}
-                    onChangeText={(t) => {
-                      const n = { ...schedule };
-                      n[key] = [{ ...slot, end: t }];
-                      setSchedule(n);
-                      saveDraftSoon();
-                    }}
-                    onBlur={() =>
-                      setTimeTouchByDay((p) => ({
-                        ...p,
-                        [key]: { ...p[key], e: true },
-                      }))
-                    }
-                    placeholder="18:00"
-                  />
-                </View>
-              </View>
-              {timeHint ? (
-                <Text style={{ fontSize: 11, color: '#B91C1C', marginTop: 6, lineHeight: 16, fontWeight: '600' }}>{timeHint}</Text>
-              ) : null}
-            </View>
-          );
-        })}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.secTitle}>Área de atendimento</Text>
-        <Text style={{ fontSize: 12, color: C.textSecondary, marginBottom: 8, lineHeight: 18 }}>
-          Defina o ponto central da sua operação e o raio máximo em quilômetros para receber ordens de serviço.
-        </Text>
-        <Text style={styles.label}>Raio de atendimento (km)</Text>
-        <TextInput
-          style={styles.input}
-          value={serviceCoverageRadiusKm}
-          editable={!readOnly}
-          onChangeText={(v) => {
-            setServiceCoverageRadiusKm(v.replace(/[^0-9.,]/g, '').replace(',', '.'));
-            saveDraftSoon();
-          }}
-          placeholder="50"
-          keyboardType="decimal-pad"
-        />
-        <Text style={styles.fieldHint}>
-          Exemplo: se você mora em Campinas e atende até 50 km, informe `50` e marque sua base no mapa.
-        </Text>
-        {!readOnly ? (
-          <TouchableOpacity
-            style={[styles.mapOpenBtn, { opacity: mapOpenLoading ? 0.65 : 1 }]}
-            onPress={() => void openRegionsMap()}
-            disabled={mapOpenLoading}
-          >
-            {mapOpenLoading ? (
-              <ActivityIndicator color={C.accent} size="small" />
-            ) : (
-              <Ionicons name="map-outline" size={22} color={C.accent} />
-            )}
-            <Text style={{ color: C.accent, fontWeight: '800', fontSize: 15 }}>Definir no mapa</Text>
-          </TouchableOpacity>
-        ) : null}
-        <Text style={[styles.fieldHint, { marginTop: 10 }]}>
-          Toque no mapa para ajustar o centro da sua área. O endereço acima é usado como referência inicial.
-        </Text>
-        <View style={{ gap: 6 }}>
-          <Text style={{ fontSize: 12, color: C.slate, fontWeight: '700' }}>
-            Centro atual:{' '}
-            {coverageCenter
-              ? `${coverageCenter.latitude.toFixed(5)}, ${coverageCenter.longitude.toFixed(5)}`
-              : 'não definido'}
-          </Text>
-          <Text style={{ fontSize: 12, color: C.textSecondary }}>
-            {coverageRadiusMeters > 0
-              ? `Raio atual: ${Number(serviceCoverageRadiusKm || 0)} km`
-              : 'Informe um raio acima de zero para concluir esta etapa.'}
-          </Text>
-        </View>
-        <Text style={[styles.label, { marginTop: 12 }]}>Observações internas da cobertura</Text>
-        <TextInput
-          style={[styles.input, { minHeight: 74, textAlignVertical: 'top' }]}
-          value={serviceCoverageNotes}
-          editable={!readOnly}
-          onChangeText={(v) => {
-            setServiceCoverageNotes(v);
-            saveDraftSoon();
-          }}
-          placeholder="Ex.: atende Campinas, Valinhos, Vinhedo e Paulínia."
-          multiline
-          onFocus={() => {
-            requestAnimationFrame(() => {
-              setTimeout(() => {
-                mainFormScrollRef.current?.scrollToEnd({ animated: true });
-              }, 160);
-            });
-          }}
-        />
       </View>
 
       {!readOnly ? (
@@ -2859,53 +2779,6 @@ export default function TechRegistrationScreen() {
       ) : null}
     </ScrollView>
     </KeyboardAvoidingView>
-
-    <Modal visible={regionMapVisible} animationType="slide" onRequestClose={() => setRegionMapVisible(false)}>
-      <View style={[styles.mapModalRoot, { paddingTop: Platform.OS === 'ios' ? 52 : 36 }]}>
-        <View style={styles.mapModalHeader}>
-          <Text style={{ fontSize: 17, fontWeight: '800', color: C.slate, flex: 1 }}>Mapa, área de atendimento</Text>
-          <TouchableOpacity onPress={() => setRegionMapVisible(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Text style={{ color: C.accent, fontWeight: '800', fontSize: 16 }}>Fechar</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={{ fontSize: 12, color: C.textSecondary, paddingHorizontal: 16, marginBottom: 8, lineHeight: 18 }}>
-          O mapa centra no endereço informado acima. Toque no ponto desejado para marcar sua base operacional e visualizar o raio de atendimento.
-        </Text>
-        {mapInitialRegion ? (
-          <MapView
-            style={{ flex: 1 }}
-            initialRegion={mapInitialRegion}
-            showsUserLocation={false}
-            onPress={(e) => {
-              if (readOnly) return;
-              setCoverageCenterFromCoords(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude);
-            }}
-          >
-            {coverageCenter ? (
-              <>
-                <Circle
-                  center={coverageCenter}
-                  radius={coverageRadiusMeters || 1}
-                  strokeColor={C.accent}
-                  fillColor={`${C.accent}28`}
-                  strokeWidth={2}
-                />
-                <Marker
-                  coordinate={coverageCenter}
-                  title="Base operacional"
-                  description="Toque noutro ponto do mapa para reposicionar."
-                  tracksViewChanges={false}
-                />
-              </>
-            ) : null}
-          </MapView>
-        ) : (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: C.textSecondary }}>Carregando mapa…</Text>
-          </View>
-        )}
-      </View>
-    </Modal>
 
     <Modal
       visible={securityModalVisible}

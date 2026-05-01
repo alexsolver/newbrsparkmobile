@@ -110,6 +110,8 @@ export type ProviderOsListCardStudioProps = {
   mapZoneChrome: LocationZoneChrome;
   /** Conteúdo após o chip de estado: pausa, aguard. aceite, etc. */
   chipsRow: React.ReactNode;
+  /** Oferta broadcast (primeiro a aceitar): pastilha junto ao rótulo da OS. */
+  isBroadcastOffer?: boolean;
 };
 
 /**
@@ -181,16 +183,42 @@ export function ProviderOsListCardStudio(p: ProviderOsListCardStudioProps) {
           {/* Alinhado ao card clássico: 3 ações em fila + mapa abaixo, coluna à direita. */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
             <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-              <Text
-                style={{
-                  fontSize: 12,
-                  color: C.slate,
-                  fontWeight: '800',
-                }}
-                numberOfLines={1}
-              >
-                {taskOsLabel(order)}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: C.slate,
+                    fontWeight: '800',
+                  }}
+                  numberOfLines={1}
+                >
+                  {taskOsLabel(order)}
+                </Text>
+                {p.isBroadcastOffer ? (
+                  <View
+                    style={{
+                      alignSelf: 'flex-start',
+                      backgroundColor: C.status.warning.bg,
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: C.status.warning.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        fontWeight: '900',
+                        color: C.status.warning.fg,
+                        letterSpacing: 0.2,
+                      }}
+                    >
+                      {p.t('home.broadcastOfferChip')}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <View
                   style={{

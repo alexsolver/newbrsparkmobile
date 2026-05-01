@@ -62,8 +62,8 @@ export const SERVER_COMPLETED_STATUSES = new Set([
 const SERVER_ACTIVE_STATUSES = new Set(['PENDING', 'RECEIVED', 'ACCEPTED', 'IN_PROGRESS', 'PAUSED']);
 
 /**
- * Oferta (sync: `assignmentMode=BROADCAST` + `claimStatus=OPEN`):
- * o técnico só deve ver no fluxo de aceite global (`BroadcastOfferRootBridge`), não na aba Pendentes até fazer claim.
+ * Oferta (sync: `assignmentMode=BROADCAST` + `claimStatus=OPEN`): `broadcastClaimPending` no modelo local.
+ * Aparece na aba Pendentes; aceite via `POST .../claim` no mesmo modal que as OS diretas.
  */
 export function providerTaskIsBroadcastOfferAwaitingClaim(t: unknown): boolean {
   const row = t && typeof t === 'object' ? (t as Record<string, unknown>) : {};

@@ -44,7 +44,6 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 import { useTransitMapExpanded } from '../../src/context/TransitMapExpandedContext';
-import { BroadcastOfferSheetEmbedded } from '../../src/components/ProviderBroadcastOfferSheet';
 import { subscribeTrackingClientChatPing } from '../../src/lib/trackingClientChatPing';
 
 const TRANSIT_MAP_HINTS_KEY = '@brspark_transit_map_hints_v1';
@@ -803,13 +802,7 @@ export default function LiveRouteMapCard({
   const [myPos, setMyPos]             = useState<{ lat: number; lng: number } | null>(null);
   const [expanded, setExpanded]       = useState(true);
   const { setTransitMapExpanded } = useTransitMapExpanded();
-  /**
-   * Sincronizar `transitMapExpanded` **antes** da pintura (`useLayoutEffect`).
-   * Com `useEffect`, ao minimizar o mapa (`expanded` → false) o 1.º paint já não inclui o `Modal`
-   * (onde está `BroadcastOfferSheetEmbedded`), mas `transitMapExpanded` ainda está `true` → a folha
-   * na raiz (`ProviderBroadcastOfferSheet`) continua `return null` → faixa da oferta «some» até o efeito
-   * assíncrono correr (ou vários frames), o que coincide com «passados uns segundos / ao fechar o mapa».
-   */
+  /** Sincronizar `transitMapExpanded` **antes** da pintura (`useLayoutEffect`) para overlays que dependem do mapa. */
   useLayoutEffect(() => {
     if (!visible) {
       setTransitMapExpanded(false);
@@ -3108,8 +3101,6 @@ export default function LiveRouteMapCard({
         )}
         {/* Chat aninhado: evita segundo Modal irmão ficar atrás do mapa no Android. */}
         {trackingChatModalEl}
-        {/* Demanda broadcast: overlay dentro deste Modal — não usar segundo Modal na raiz (fica atrás no Android). */}
-        <BroadcastOfferSheetEmbedded />
       </View>
     </Modal>
     </>

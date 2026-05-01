@@ -1763,7 +1763,9 @@
     "providerEmptyCompletedTitle": "Keine abgeschlossen",
     "providerEmptyListSubtitle": "Ihre Serviceliste wird hier angezeigt, wenn die Arbeit über das Admin-Panel versandt wird.",
     "providerRejectReasonTitle": "Ablehnungsgrund",
-    "providerRejectReasonPlaceholder": "Beschreiben Sie den Grund im Detail..."
+    "providerRejectReasonPlaceholder": "Beschreiben Sie den Grund im Detail...",
+    "broadcastOfferBanner": "Angebot: geht an den Ersten, der annimmt",
+    "broadcastOfferChip": "Angebot"
   },
   "services": {
     "title": "Unternehmen",
@@ -3061,6 +3063,16 @@
       "serverBadResponseBody": "Ungültige Serverantwort. Bitte erneut versuchen.",
       "payloadTooLargeBody": "Die Übertragung überschritt die Größenbegrenzung. Anhänge reduzieren oder Support kontaktieren.",
       "coverageMapRequiredBody": "Legen Sie den Mittelpunkt des Einsatzgebiets auf der Karte fest (Tippen) — der Radius ist gesetzt, der Mittelpunkt fehlt.",
+      "coverageSlotsRequiredBody": "Öffnen Sie für jede aktive Schicht «Regionen auf der Karte» und legen Sie mindestens einen Kreis (Radius in km) fest.",
+      "coverageNotesHint": "Radien pro Schicht stellen Sie wie im Anbieterprofil unter «Regionen auf der Karte» ein. Die Notizen unten sind nur für Freitext.",
+      "availabilityLaterTitle": "Verfügbarkeit und Kartenbereich",
+      "availabilityLaterBody": "In dieser Registrierung müssen Sie keine Wochenzeiten oder die Karte ausfüllen. Nach der Freigabe legen Sie Schichten und Kartenregionen in Ihrem Anbieterprofil fest.",
+      "submitGatewayTimeoutBody": "Server oder Netzwerk antworteten zu langsam (Gateway-Zeitüberschreitung). Erneut versuchen, anderes Netz oder weniger Anhänge. Bei anhaltendem Fehler Support kontaktieren.",
+      "coverageMapModalTitle": "Karte, Einsatzgebiet",
+      "coverageMapModalClose": "Schließen",
+      "coverageMapModalHelp": "Beim Öffnen nutzt die Karte Ihre aktuelle GPS-Position, wenn Sie es erlauben; sonst zentriert sie auf die Adresse oben. Tippen Sie auf den gewünschten Punkt für Ihre operative Basis, um den Service-Radius zu sehen.",
+      "coverageMapMarkerTitle": "Operative Basis",
+      "coverageMapMarkerDesc": "Tippen Sie woanders auf die Karte, um den Pin zu verschieben.",
       "permTitle": "Berechtigung",
       "sessionTitle": "Sitzung",
       "identityLockedNavTitle": "Aktiver Anbieter",
