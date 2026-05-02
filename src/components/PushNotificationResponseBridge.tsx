@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Alert, Linking } from 'react-native';
+import * as ExpoLinking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
@@ -147,6 +148,17 @@ async function handleNotificationResponse(
         }
       } catch {
         /* cair para navegação in-app */
+      }
+      try {
+        const parsed = ExpoLinking.parse(acceptUrl);
+        const raw = parsed.queryParams?.token;
+        const token = Array.isArray(raw) ? String(raw[0] || '').trim() : String(raw || '').trim();
+        if (token) {
+          router.push({ pathname: '/provider-affiliation/accept', params: { token } } as never);
+          return;
+        }
+      } catch {
+        /* ignore */
       }
     }
     router.push('/profile/affiliations' as never);

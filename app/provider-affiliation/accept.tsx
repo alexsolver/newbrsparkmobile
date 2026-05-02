@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from 'react-native';
-import { useGlobalSearchParams, useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
+import { useGlobalSearchParams, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { ProviderAffiliationsApi, ProviderAffiliation } from '../../src/services/providerAffiliations';
 import { useAuth } from '../../src/hooks/useAuth';
+
+function pickSearchParam(v: string | string[] | undefined): string {
+  if (v == null) return '';
+  if (Array.isArray(v)) return String(v[0] ?? '').trim();
+  return String(v).trim();
+}
 
 function relationshipTitle(type: string, t: (k: string) => string) {
   const u = String(type || '').toUpperCase();
@@ -29,9 +36,51 @@ export default function ProviderAffiliationAcceptScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
-  const params = useGlobalSearchParams<{ token?: string }>();
+  const glob = useGlobalSearchParams<{ token?: string | string[]; affiliationId?: string | string[] }>();
+  const loc = useLocalSearchParams<{ token?: string | string[]; affiliationId?: string | string[] }>();
 
-  const token = useMemo(() => String(params?.token || '').trim(), [params]);
+  const [linkToken, setLinkToken] = useState('');
+  const [linkAffiliationId, setLinkAffiliationId] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    const ingest = (url: string | null) => {
+      if (!url || !alive) return;
+      try {
+        const parsed = Linking.parse(url);
+        const qt = pickSearchParam(parsed.queryParams?.token as string | string[] | undefined);
+        const qa = pickSearchParam(parsed.queryParams?.affiliationId as string | string[] | undefined);
+        if (qt) setLinkToken((x) => x || qt);
+        if (qa) setLinkAffiliationId((x) => x || qa);
+      } catch {
+        /* ignore */
+      }
+    };
+    void Linking.getInitialURL().then(ingest);
+    const sub = Linking.addEventListener('url', ({ url }) => ingest(url));
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
+
+  const inviteToken = useMemo(
+    () =>
+      pickSearchParam(glob.token) ||
+      pickSearchParam(loc.token) ||
+      linkToken,
+    [glob.token, loc.token, linkToken],
+  );
+
+  const affiliationIdParam = useMemo(
+    () =>
+      pickSearchParam(glob.affiliationId) ||
+      pickSearchParam(loc.affiliationId) ||
+      linkAffiliationId,
+    [glob.affiliationId, loc.affiliationId, linkAffiliationId],
+  );
+
+  const useAffiliationIdOnly = !inviteToken && !!affiliationIdParam;
 
   const [busy, setBusy] = useState(false);
   const [invite, setInvite] = useState<ProviderAffiliation | null>(null);
@@ -40,30 +89,61 @@ export default function ProviderAffiliationAcceptScreen() {
   useEffect(() => {
     if (loading) return;
     if (!user) {
+      setInviteLoading(false);
+      if (inviteToken) {
+        router.replace({ pathname: '/auth/login', params: { paffToken: inviteToken } } as any);
+        return;
+      }
+      if (affiliationIdParam) {
+        router.replace({ pathname: '/auth/login', params: { paffId: affiliationIdParam } } as any);
+        return;
+      }
       Alert.alert('Entre na sua conta', 'Faça login para aceitar o convite.');
       router.replace('/auth/login' as any);
       return;
     }
-    if (!token) {
+    if (!inviteToken && !affiliationIdParam) {
       setInviteLoading(false);
-      Alert.alert('Convite inválido', 'Faltou o token do convite.');
+      Alert.alert('Convite inválido', 'Faltou o token do convite ou o identificador da afiliação.');
       return;
     }
     setInviteLoading(true);
-    ProviderAffiliationsApi.previewInvite(token)
-      .then((a) => setInvite(a))
+    if (inviteToken) {
+      ProviderAffiliationsApi.previewInvite(inviteToken)
+        .then((a) => setInvite(a))
+        .catch((e: unknown) => {
+          const msg = e instanceof Error ? e.message : String(e);
+          Alert.alert('Convite inválido', msg);
+        })
+        .finally(() => setInviteLoading(false));
+      return;
+    }
+    ProviderAffiliationsApi.getMeStatus()
+      .then(({ affiliations }) => {
+        const row = (affiliations || []).find((a) => String(a.id) === affiliationIdParam);
+        if (!row) throw new Error('Convite não encontrado nesta conta.');
+        if (String(row.status || '').toUpperCase() !== 'INVITED') {
+          throw new Error('Este convite já não está pendente de aceitação.');
+        }
+        setInvite(row);
+      })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
         Alert.alert('Convite inválido', msg);
       })
       .finally(() => setInviteLoading(false));
-  }, [token, user, loading, router]);
+  }, [inviteToken, affiliationIdParam, user, loading, router]);
 
   const doAccept = async () => {
-    if (!token) return;
     try {
       setBusy(true);
-      const accepted = await ProviderAffiliationsApi.acceptInvite(token);
+      let accepted: ProviderAffiliation;
+      if (useAffiliationIdOnly) {
+        accepted = await ProviderAffiliationsApi.acceptByAffiliationId(affiliationIdParam);
+      } else {
+        if (!inviteToken) return;
+        accepted = await ProviderAffiliationsApi.acceptInvite(inviteToken);
+      }
       setInvite((prev) => ({ ...(prev || ({} as ProviderAffiliation)), ...accepted }));
       Alert.alert(t('profile.affiliationsAcceptDoneTitle'), t('profile.affiliationsAcceptDoneBody'));
       router.replace('/profile/affiliations' as any);
@@ -76,7 +156,11 @@ export default function ProviderAffiliationAcceptScreen() {
   };
 
   const handlePressAccept = () => {
-    if (!token || !invite) return;
+    if (!invite) return;
+    if (!useAffiliationIdOnly && !inviteToken) {
+      Alert.alert('Convite inválido', 'Faltou o token do convite.');
+      return;
+    }
     Alert.alert(t('profile.affiliationsConsentTitle'), t('profile.affiliationsConsentBody'), [
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('profile.affiliationsConsentConfirm'), onPress: () => void doAccept() },
@@ -104,11 +188,21 @@ export default function ProviderAffiliationAcceptScreen() {
           <View style={{ gap: 8, marginBottom: 12 }}>
             {consequenceBullets(invite.relationshipType, t).map((b, idx) => (
               <Text key={idx} style={{ fontSize: 12, color: '#334155', lineHeight: 18 }}>
-                {'• '}{b}
+                {'• '}
+                {b}
               </Text>
             ))}
             {invite?.note ? (
-              <View style={{ marginTop: 6, backgroundColor: '#EFF6FF', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#BFDBFE' }}>
+              <View
+                style={{
+                  marginTop: 6,
+                  backgroundColor: '#EFF6FF',
+                  borderRadius: 12,
+                  padding: 12,
+                  borderWidth: 1,
+                  borderColor: '#BFDBFE',
+                }}
+              >
                 <Text style={{ fontSize: 12, fontWeight: '800', color: '#1D4ED8', marginBottom: 4 }}>Mensagem</Text>
                 <Text style={{ fontSize: 12, color: '#1E3A8A', lineHeight: 18 }}>{invite.note}</Text>
               </View>
@@ -143,4 +237,3 @@ export default function ProviderAffiliationAcceptScreen() {
     </View>
   );
 }
-

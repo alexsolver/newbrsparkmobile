@@ -79,11 +79,22 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inLogin =
       pathname.startsWith('/auth/login') || (segments[0] === 'auth' && otpSeg === 'login');
     const inProviderCatalog = segments[0] === 'provider-services';
+    /** Convite vínculo (`brsparkmobile://provider-affiliation/accept?…`) — não redireccionar antes do ecrã ler o token. */
+    const inProviderAffiliationInvite = pathname.startsWith('/provider-affiliation');
     const seg0 = (segments as string[])[0];
     /** `/` ou ecrã `index` — deixar `app/index` decidir login vs home (não forçar login aqui). */
     const atRootOrIndex = !seg0 || seg0 === 'index';
 
-    if (!user && !atRootOrIndex && !inAuthGroup && !inClient && !inProvider && !inProfile && !inProviderCatalog) {
+    if (
+      !user &&
+      !atRootOrIndex &&
+      !inAuthGroup &&
+      !inClient &&
+      !inProvider &&
+      !inProfile &&
+      !inProviderCatalog &&
+      !inProviderAffiliationInvite
+    ) {
       router.replace('/auth/login' as any);
       return;
     }

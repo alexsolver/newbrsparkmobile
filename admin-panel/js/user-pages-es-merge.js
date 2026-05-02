@@ -153,6 +153,8 @@ export const USER_PAGES_ES_MERGE = {
   pr_end_link: "Cerrar vínculo",
   pr_end_invite: "Cancelar invitación",
   pr_platform_use_email: "Usar correo",
+  pr_pick_email_feedback:
+    "Correo rellenado arriba («Correo del prestador»). Revise el tipo de vínculo y pulse «Crear invitación».",
   pr_badge_eligible: "Elegible para invitar",
   pr_badge_other: "Puede estar bloqueado",
   pr_candidates_empty_list:

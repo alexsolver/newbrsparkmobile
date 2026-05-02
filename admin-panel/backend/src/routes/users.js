@@ -40,6 +40,7 @@ const {
 } = require('../lib/providerTechnicianAffiliationSync');
 const { invalidateAppEffectiveTenantIdCache } = require('../lib/appLoginEffectiveTenant');
 const { resolveMergedProviderIdentityForUserId, normalizeEmail: normalizeEmailForPi } = require('../lib/providerIdentityMerge');
+const { trustedAutoVerifyProviderKycInTx } = require('../lib/providerTrustedKycAutoVerify');
 const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
 const {
   validateDedicatedExclusivePayload,
@@ -1395,47 +1396,15 @@ router.post('/:id/provider-onboarding/approve', express.json(), async (req, res)
     const { user, piFull, app } = resolved;
     const now = new Date();
 
-    const fromPiScore = Number(piFull.score);
-    const fromPi = {
-      score: Number.isFinite(fromPiScore) && fromPiScore >= 0 && fromPiScore <= 10 ? fromPiScore : undefined,
-      cft: piFull.cft != null && String(piFull.cft).trim() ? String(piFull.cft).trim() : undefined,
-      specialty: piFull.specialty != null && String(piFull.specialty).trim() ? String(piFull.specialty).trim() : undefined,
-      skillsJson: piFull.skillsJson != null ? piFull.skillsJson : undefined,
-    };
-
     await prisma.$transaction(async (tx) => {
       await tx.providerOnboardingApplication.update({
         where: { id: app.id },
         data: { status: 'APPROVED', resolvedAt: now, revisionNote: null },
       });
-      await tx.providerIdentity.update({
-        where: { id: piFull.id },
-        data: {
-          kycStatus: 'APPROVED',
-          globalStatus: 'VERIFIED',
-          kycReviewedAt: now,
-          kycReviewNote: null,
-        },
-      });
-
-      /** Imediatamente após aprovação de documentos/KYC: operação como prestador na plataforma (os & sincronização). */
-      await tx.technicianProfile.upsert({
-        where: { userId: user.id },
-        create: {
-          userId: user.id,
-          status: 'ACTIVE',
-          score: fromPi.score ?? 5,
-          cft: fromPi.cft ?? null,
-          specialty: fromPi.specialty ?? null,
-          ...(fromPi.skillsJson !== undefined ? { skillsJson: fromPi.skillsJson } : {}),
-        },
-        update: {
-          status: 'ACTIVE',
-          ...(fromPi.score !== undefined ? { score: fromPi.score } : {}),
-          ...(fromPi.cft !== undefined ? { cft: fromPi.cft } : {}),
-          ...(fromPi.specialty !== undefined ? { specialty: fromPi.specialty } : {}),
-          ...(fromPi.skillsJson !== undefined ? { skillsJson: fromPi.skillsJson } : {}),
-        },
+      await trustedAutoVerifyProviderKycInTx(tx, {
+        userId: user.id,
+        providerIdentityId: piFull.id,
+        responsesJson: app.responsesJson,
       });
     });
 

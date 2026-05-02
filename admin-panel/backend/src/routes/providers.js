@@ -40,6 +40,7 @@ const {
 } = require('../lib/providerDedicatedExclusiveService');
 const { hasActiveDedicatedAffiliationForAppUser } = require('../lib/providerOnboardingGuards');
 const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
+const { trustedAutoVerifyProviderKycInTx } = require('../lib/providerTrustedKycAutoVerify');
 
 const publicRouter = express.Router();
 const adminRouter = express.Router();
@@ -196,6 +197,34 @@ function dedicatedExclusiveForAppPayload(row) {
   const parsed = parseDedicatedExclusiveFromTenantScheduleJson(row?.tenantScheduleJson);
   if (!parsed) return null;
   return { timezone: parsed.timezone, weeklyWindows: parsed.weeklyWindows };
+}
+
+/** Após KYC auto-verificado: sincroniza vínculo dedicado na tenant «casa» do utilizador e invalida cache de login. */
+async function afterTrustedProviderKycVerified(userId) {
+  const uid = String(userId || '').trim();
+  if (!uid) return;
+  try {
+    const [tp, freshUser, tenantRow] = await Promise.all([
+      prisma.technicianProfile.findUnique({ where: { userId: uid }, select: { status: true } }),
+      prisma.user.findUnique({ where: { id: uid }, select: { isActive: true } }),
+      prisma.user.findUnique({
+        where: { id: uid },
+        select: { tenantId: true, tenant: { select: { kind: true } } },
+      }),
+    ]);
+    const techSt = String(tp?.status || '').toUpperCase();
+    const userActive = freshUser?.isActive !== false;
+    if (tp && techSt === 'ACTIVE' && userActive && tenantRow?.tenantId) {
+      await syncActiveAffiliationFromTechnicianStatus(prisma, {
+        userId: uid,
+        tenantId: tenantRow.tenantId,
+        tenantKind: tenantRow.tenant?.kind,
+      });
+    }
+    invalidateAppEffectiveTenantIdCache(uid);
+  } catch (e) {
+    console.error('[providers] afterTrustedProviderKycVerified:', e?.message || e);
+  }
 }
 
 function affiliationPayloadFromRow(row, extra = {}) {
@@ -369,14 +398,24 @@ publicRouter.post('/me/affiliations/:id/accept', authUser, async (req, res) => {
       });
     }
     if (!(await ensureProviderFirstEnabledOr403(res, row.tenantId))) return;
-    const updated = await prisma.providerTenantAffiliation.update({
-      where: { id: row.id },
-      data: {
-        status: 'REQUESTED',
-        requestedAt: new Date(),
-        invitationToken: null,
-      },
+    const ownerUserId = String(row.providerIdentity.userId || '').trim();
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.providerTenantAffiliation.update({
+        where: { id: row.id },
+        data: {
+          status: 'REQUESTED',
+          requestedAt: new Date(),
+          invitationToken: null,
+        },
+      });
+      await trustedAutoVerifyProviderKycInTx(tx, {
+        userId: ownerUserId,
+        providerIdentityId: String(row.providerIdentityId),
+        responsesJson: null,
+      });
+      return u;
     });
+    await afterTrustedProviderKycVerified(ownerUserId);
     invalidateAppEffectiveTenantIdCache(req.user.id);
     return res.json({
       ok: true,
@@ -618,26 +657,63 @@ publicRouter.post('/me/onboarding/submit', authUser, express.json(), async (req,
       return;
     }
     const editable = await findOrCreateEditableOnboardingApp(providerIdentity.id, null);
-    if (editable.status === 'SUBMITTED') return res.json({ ok: true, status: 'SUBMITTED' });
-    const updated = await prisma.providerOnboardingApplication.update({
-      where: { id: editable.id },
-      data: {
-        status: 'SUBMITTED',
-        submittedAt: new Date(),
-        resolvedAt: null,
-      },
+    const st = String(editable.status || '').toUpperCase();
+    if (st === 'APPROVED') {
+      return res.json({
+        ok: true,
+        status: 'APPROVED',
+        submittedAt: editable.submittedAt,
+        resolvedAt: editable.resolvedAt,
+      });
+    }
+    const now = new Date();
+    /** Já submetido (legado) mas KYC ainda pendente — conclui aprovação automática. */
+    if (st === 'SUBMITTED') {
+      const piLive = await prisma.providerIdentity.findUnique({
+        where: { id: providerIdentity.id },
+        select: { kycStatus: true },
+      });
+      if (String(piLive?.kycStatus || '').toUpperCase() === 'APPROVED') {
+        return res.json({ ok: true, status: 'SUBMITTED', submittedAt: editable.submittedAt });
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const appRow = await tx.providerOnboardingApplication.update({
+        where: { id: editable.id },
+        data: {
+          status: 'APPROVED',
+          submittedAt: editable.submittedAt || now,
+          resolvedAt: now,
+          revisionNote: null,
+        },
+      });
+      await trustedAutoVerifyProviderKycInTx(tx, {
+        userId: String(req.user.id),
+        providerIdentityId: String(providerIdentity.id),
+        responsesJson: editable.responsesJson,
+      });
+      return appRow;
     });
+
+    await afterTrustedProviderKycVerified(req.user.id);
     deliverBrsparkLaravelEvent({
       type: EVENT_TYPES.ONBOARDING_SUBMITTED,
-      idempotencyKey: `onboarding-${updated.id}-submitted`,
+      idempotencyKey: `onboarding-${updated.id}-self-service-approved`,
       payload: {
         userId: String(req.user.id),
         applicationId: updated.id,
         providerIdentityId: String(providerIdentity.id),
         status: updated.status,
+        selfServiceAutoApproved: true,
       },
     }).catch((e) => console.warn('[providers] sync onboarding.submitted', e));
-    return res.json({ ok: true, status: updated.status, submittedAt: updated.submittedAt });
+    return res.json({
+      ok: true,
+      status: updated.status,
+      submittedAt: updated.submittedAt,
+      resolvedAt: updated.resolvedAt,
+    });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -667,14 +743,25 @@ publicRouter.post('/affiliations/:token/accept', authUser, async (req, res) => {
         code: 'AFFILIATION_EMAIL_MISMATCH',
       });
     }
-    const updated = await prisma.providerTenantAffiliation.update({
-      where: { id: row.id },
-      data: {
-        status: 'REQUESTED',
-        requestedAt: new Date(),
-        invitationToken: null,
-      },
+    const ownerUserId = String(row.providerIdentity.userId || '').trim();
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.providerTenantAffiliation.update({
+        where: { id: row.id },
+        data: {
+          status: 'REQUESTED',
+          requestedAt: new Date(),
+          invitationToken: null,
+        },
+      });
+      await trustedAutoVerifyProviderKycInTx(tx, {
+        userId: ownerUserId,
+        providerIdentityId: String(row.providerIdentityId),
+        responsesJson: null,
+      });
+      return u;
     });
+    await afterTrustedProviderKycVerified(ownerUserId);
+    invalidateAppEffectiveTenantIdCache(req.user.id);
     return res.json({
       ok: true,
       affiliation: {

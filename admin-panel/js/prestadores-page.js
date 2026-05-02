@@ -687,7 +687,27 @@ function prFillInviteEmailFromRow(emRaw) {
   const em = String(emRaw || '').trim();
   if (!em) return;
   const input = document.getElementById('pr-invite-email');
-  if (input) input.value = em;
+  if (!input) return;
+  input.value = em;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  const grp = input.closest?.('.form-group');
+  if (grp) {
+    grp.style.transition = 'box-shadow 0.2s ease';
+    grp.style.boxShadow = '0 0 0 2px var(--blue, #2563eb)';
+    setTimeout(() => {
+      grp.style.boxShadow = '';
+    }, 1400);
+  }
+  input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  window.setTimeout(() => {
+    try {
+      input.focus({ preventScroll: true });
+    } catch {
+      input.focus();
+    }
+  }, 320);
+  const statusEl = document.getElementById('pr-platform-search-status');
+  if (statusEl) statusEl.textContent = t('pr_pick_email_feedback');
 }
 
 document.getElementById('pr-candidates-list')?.addEventListener('click', (e) => {
@@ -708,8 +728,9 @@ if (canManageTenantUsers) {
     clearPlatformDirectoryUi();
   });
   document.getElementById('pr-platform-search-results')?.addEventListener('click', (e) => {
-    const row = e.target?.closest?.('button.pr-dir-pick-row');
+    const row = e.target?.closest?.('.pr-dir-pick-row[data-pr-email]');
     if (!row) return;
+    e.preventDefault();
     prFillInviteEmailFromRow(row.getAttribute('data-pr-email'));
     row.style.boxShadow = 'inset 0 0 0 2px var(--blue, #2563eb)';
     setTimeout(() => {

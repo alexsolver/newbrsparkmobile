@@ -258,11 +258,18 @@ function Field({ label, value, onChangeText, placeholder, icon, secure, toggle, 
 
 export default function LoginScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ techRegToken?: string; register?: string }>();
+  const params = useLocalSearchParams<{ techRegToken?: string; register?: string; paffToken?: string; paffId?: string }>();
+  const pickParam = (v: string | string[] | undefined) => {
+    if (v == null) return '';
+    if (Array.isArray(v)) return String(v[0] ?? '').trim();
+    return String(v).trim();
+  };
   const techRegToken =
     typeof params.techRegToken === 'string' && params.techRegToken.trim()
       ? params.techRegToken.trim()
       : undefined;
+  const paffToken = pickParam(params.paffToken);
+  const paffId = pickParam(params.paffId);
   const { login, loginWithOAuth, logout, completeLoginWithOtp, user, loading: authBoot, clearSessionForRegistrationFlow } =
     useAuth();
   const { t, i18n } = useTranslation();
@@ -308,6 +315,17 @@ export default function LoginScreen() {
       params: { token: techRegToken },
     } as any);
   }, [authBoot, user, techRegToken, router]);
+
+  useEffect(() => {
+    if (authBoot || !user || techRegToken) return;
+    if (paffToken) {
+      router.replace({ pathname: '/provider-affiliation/accept', params: { token: paffToken } } as any);
+      return;
+    }
+    if (paffId) {
+      router.replace({ pathname: '/provider-affiliation/accept', params: { affiliationId: paffId } } as any);
+    }
+  }, [authBoot, user, techRegToken, paffToken, paffId, router]);
 
   // ─── 2FA State ───────────────────────────────────────────────────────────────
   const [twoFaVisible, setTwoFaVisible] = useState(false);

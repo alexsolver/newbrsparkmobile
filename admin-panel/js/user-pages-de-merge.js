@@ -78,6 +78,8 @@ export const USER_PAGES_DE_MERGE = {
   pr_end_link: 'Verknüpfung beenden',
   pr_end_invite: 'Einladung abbrechen',
   pr_platform_use_email: 'E-Mail übernehmen',
+  pr_pick_email_feedback:
+    'E-Mail oben eingetragen («E-Mail des Dienstleisters»). Verknüpfungstyp prüfen und «Einladung erstellen» tippen.',
   pr_badge_eligible: 'Einladung möglich',
   pr_badge_other: 'Ggf. blockiert',
   pr_candidates_empty_list:

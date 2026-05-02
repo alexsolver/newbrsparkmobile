@@ -737,7 +737,7 @@ const M = {
     pr_candidates_filter_ph: 'Filtrar a lista elegível (nome, e-mail ou cidade)…',
     pr_lbl_platform_search: 'Buscar prestador na plataforma',
     pr_platform_search_hint:
-      'Pesquisa na rede (nome, e-mail, especialidade ou CFT). Os resultados respeitam a mesma regra da lista elegível: não aparecem prestadores com vínculo dedicado bloqueante noutra empresa (ou pendente na sua). Toque em «Usar e-mail» para preencher o convite.',
+      'Pesquisa na rede (nome, e-mail, especialidade ou CFT). Os resultados respeitam a mesma regra da lista elegível: não aparecem prestadores com vínculo dedicado bloqueante noutra empresa (ou pendente na sua). Toque na linha ou em «Usar e-mail» para copiar o e-mail para o campo «E-mail do prestador» acima; depois use «Criar convite».',
     pr_platform_search_ph: 'Ex.: maria silva, cft, electricista…',
     pr_platform_search_clear: 'Limpar',
     pr_directory_filters_heading: 'Pesquisa na plataforma',
@@ -764,6 +764,8 @@ const M = {
     pr_result_score: 'Pontuação interna',
     pr_platform_search_error: 'Não foi possível concluir a busca. Verifique a sessão e a consola.',
     pr_platform_use_email: 'Usar e-mail',
+    pr_pick_email_feedback:
+      'E-mail preenchido no campo acima («E-mail do prestador»). Confira o tipo de vínculo e toque em «Criar convite».',
     pr_badge_eligible: 'Elegível para convite',
     pr_badge_other: 'Fora da lista pré-carregada (até 2000 nomes)',
     pr_suspend: 'Suspender',
@@ -1574,7 +1576,7 @@ const M = {
     pr_candidates_filter_ph: 'Filter the eligible list (name, email or city)…',
     pr_lbl_platform_search: 'Search the provider network',
     pr_platform_search_hint:
-      'Search across the network (name, email, specialty or council ID). Results follow the same rules as the eligible list: providers blocked by a dedicated link at another company (or pending at yours) are omitted. Click Use email to fill the invite.',
+      'Search across the network (name, email, specialty or council ID). Results follow the same rules as the eligible list: providers blocked by a dedicated link at another company (or pending at yours) are omitted. Click a row or «Use email» to copy the address into the «Provider email» field above, then tap «Create invite».',
     pr_platform_search_ph: 'e.g. maria, cft, electrician…',
     pr_platform_search_clear: 'Clear',
     pr_directory_filters_heading: 'Platform search',
@@ -1601,6 +1603,8 @@ const M = {
     pr_result_score: 'Internal score',
     pr_platform_search_error: 'Search failed. Check your session and the browser console.',
     pr_platform_use_email: 'Use email',
+    pr_pick_email_feedback:
+      'Email filled in the field above («Provider email»). Check the link type and tap «Create invite».',
     pr_badge_eligible: 'Eligible to invite',
     pr_badge_other: 'Not on the preloaded list (up to 2000 names)',
     pr_suspend: 'Suspend',
