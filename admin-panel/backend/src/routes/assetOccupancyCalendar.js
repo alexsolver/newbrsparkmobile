@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const prisma = require('../db');
 const authUser = require('../middleware/authUser');
 const { buildOccupancyIcs } = require('../lib/buildOccupancyIcs');
+const { assertUserCanAccessOwnedOrSharedAsset } = require('../lib/tenantAssetSyncPolicy');
 
 const router = express.Router();
 
@@ -29,15 +30,25 @@ router.post('/ensure', authUser, async (req, res) => {
       return res.status(400).json({ error: 'assetId é obrigatório.' });
     }
     const email = String(req.user.email || '').trim();
-    const tenantId = req.user.tenantId;
 
-    /** Ativos criados no app (brsp-*) podem ainda não ter sido sincronizados na tabela Asset. */
     const asset = await prisma.asset.findFirst({
       where: { id: assetId, deletedAt: null },
-      select: { id: true, title: true, tenantId: true },
+      select: { id: true, title: true, tenantId: true, createdByUserId: true, deletedAt: true },
     });
-    if (asset && asset.tenantId !== tenantId) {
-      return res.status(403).json({ error: 'Este ativo não pertence à sua organização.' });
+    if (!asset) {
+      return res.status(404).json({ error: 'Ativo não encontrado ou ainda não sincronizado.' });
+    }
+    try {
+      await assertUserCanAccessOwnedOrSharedAsset(prisma, {
+        userId: req.user.id,
+        userEmail: email,
+        asset,
+      });
+    } catch (e) {
+      if (e && e.code === 'ASSET_FORBIDDEN') {
+        return res.status(403).json({ error: 'Sem permissão para este ativo.' });
+      }
+      throw e;
     }
 
     const existing = await prisma.assetOccupancyCalendarFeed.findUnique({

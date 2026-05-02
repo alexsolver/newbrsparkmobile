@@ -122,11 +122,27 @@ async function loadTenantForAppJwtPayload(prisma, tenantId) {
  */
 async function buildPresentationUserForApp(prisma, freshUser) {
   if (!freshUser?.id) return freshUser;
-  const effTid = await resolveAppEffectiveTenantId(prisma, freshUser.id);
-  if (!effTid || effTid === freshUser.tenantId) return freshUser;
+  const homeTid = String(freshUser.tenantId || '').trim();
+  const effTidRaw = await resolveAppEffectiveTenantId(prisma, freshUser.id);
+  const effTid = effTidRaw && String(effTidRaw).trim() ? String(effTidRaw).trim() : homeTid;
+
+  if (!effTid || effTid === homeTid) {
+    return { ...freshUser, homeTenantId: homeTid };
+  }
+
   const effTenant = await loadTenantForAppJwtPayload(prisma, effTid);
-  if (!effTenant) return freshUser;
-  return { ...freshUser, tenantId: effTid, tenant: effTenant };
+  if (!effTenant) {
+    return { ...freshUser, homeTenantId: homeTid };
+  }
+
+  return {
+    ...freshUser,
+    tenantId: effTid,
+    tenant: effTenant,
+    homeTenantId: homeTid,
+    /** Snapshot da tenant de registo (piscina) — branding experiência cliente. */
+    _homeTenant: freshUser.tenant,
+  };
 }
 
 /**

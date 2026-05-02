@@ -355,6 +355,110 @@ router.get('/partnership-candidates', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/users/dispatch-assignee-suggestions
+ * Prestadores PROVIDER activos na org + vinculados por ProviderTenantAffiliation (mesmo sem User.tenantId = org).
+ * Query: q (filtro nome/e-mail), limit (máx. 200), tenantId (opc.; modo plataforma sem tenant no JWT).
+ */
+router.get('/dispatch-assignee-suggestions', async (req, res) => {
+  try {
+    const rawTid = req.query.tenantId != null ? String(req.query.tenantId).trim() : '';
+    const tid = scopedTenantIdFromReq(req, rawTid || null);
+    if (!tid) {
+      return res.status(400).json({
+        error:
+          'Selecione uma organização no painel (filtro de tenant) ou passe tenantId na URL para listar técnicos.',
+      });
+    }
+    if (!assertTenantAccess(req.authorization, tid)) {
+      return res.status(403).json({ error: 'Sem permissão para listar técnicos desta organização.' });
+    }
+
+    const qRaw = req.query.q != null ? String(req.query.q).trim() : '';
+    const qLow = qRaw.toLowerCase();
+    let takeLimit = parseInt(String(req.query.limit ?? '80'), 10);
+    if (!Number.isFinite(takeLimit) || takeLimit < 1) takeLimit = 80;
+    if (takeLimit > 200) takeLimit = 200;
+
+    const dispatchAffiliationStatuses = ['ACTIVE', 'INVITED', 'REQUESTED'];
+
+    const platformWide = isPlatformAdmin(req.authorization);
+    const directWhere = {
+      tenantId: tid,
+      role: 'PROVIDER',
+      isActive: true,
+      ...(platformWide ? {} : nonPlatformUserReadWhere(req.authorization)),
+    };
+
+    const [directProviders, affRows] = await Promise.all([
+      prisma.user.findMany({
+        where: directWhere,
+        select: userListSelect,
+        orderBy: { name: 'asc' },
+        take: takeLimit,
+      }),
+      prisma.providerTenantAffiliation.findMany({
+        where: {
+          tenantId: tid,
+          status: { in: dispatchAffiliationStatuses },
+        },
+        include: {
+          providerIdentity: {
+            include: {
+              user: {
+                select: userListSelect,
+              },
+            },
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: takeLimit,
+      }),
+    ]);
+
+    const byId = new Map();
+    for (const u of directProviders) {
+      if (u?.id) byId.set(String(u.id), u);
+    }
+    for (const row of affRows) {
+      const u = row.providerIdentity?.user;
+      if (!u?.id || !u.isActive) continue;
+      if (normalizeRole(u.role) !== 'PROVIDER') continue;
+      const id = String(u.id);
+      if (!byId.has(id)) byId.set(id, u);
+    }
+
+    const merged = [...byId.values()];
+    const enriched = await Promise.all(
+      merged.map(async (u) => ({
+        ...u,
+        loginEmailNorm: await resolveCanonicalEmailNormForUser(prisma, u),
+      })),
+    );
+
+    let filtered = enriched;
+    if (qLow) {
+      filtered = enriched.filter((u) => {
+        const name = String(u.name || '').toLowerCase();
+        const em = String(u.email || '').toLowerCase();
+        const canon = String(u.loginEmailNorm || '').toLowerCase();
+        return name.includes(qLow) || em.includes(qLow) || canon.includes(qLow);
+      });
+    }
+
+    filtered.sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), 'pt', { sensitivity: 'base' }),
+    );
+
+    const outCap = Math.min(48, takeLimit);
+    res.set('Cache-Control', 'no-store');
+    res.json({ data: filtered.slice(0, outCap) });
+  } catch (err) {
+    console.error('[GET /users/dispatch-assignee-suggestions]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/users — `tenantId` (um) ou `tenantIds` (vários); cria um registo User por tenant com o mesmo e-mail e senha.
 router.post('/', async (req, res) => {
   try {

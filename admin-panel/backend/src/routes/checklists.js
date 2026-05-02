@@ -41,6 +41,7 @@ const {
     isAppUserInDedicatedExclusiveAt,
 } = require('../lib/providerDedicatedExclusiveService');
 const { allAssigneesHaveDedicatedWithTenant } = require('../lib/providerDedicatedDispatch');
+const { resolveScopedTenantId } = require('../lib/authorization');
 const { resolveFieldTaskContextTenantIdForDispatch, FIELD_TASK_CONTEXT_TENANT_KEY } = require('../lib/fieldTaskExecutionTenantScope');
 const {
     TRANSIT_ETA_DISPLAY_SNAPSHOT_AT,
@@ -1613,7 +1614,7 @@ router.post('/executions', authUser, async (req, res) => {
 });
 
 // POST /api/checklists/dispatch (Admin Panel despacha um form)
-router.post('/dispatch', async (req, res) => {
+router.post('/dispatch', adminAuthThenPanel, async (req, res) => {
     try {
         const payload = req.body;
         if (!payload || !payload.refId) {
@@ -1643,14 +1644,17 @@ router.post('/dispatch', async (req, res) => {
             /* template not found is OK for ad-hoc */
         }
 
-        const scopedTenantId = loadedTemplate?.tenantId || null;
+        /** Tenant do modelo (se existir) + tenant efectivo do utilizador no painel (ou filtro SAAS). */
+        const templateTenantId = loadedTemplate?.tenantId || null;
+        const dispatcherTenantId = resolveScopedTenantId(req.authorization);
+        const tenantForAssigneeResolution = templateTenantId || dispatcherTenantId || undefined;
         let resolvedList = [];
         if (multi) {
             for (const raw of payload.candidateEmails) {
                 const r = await resolveFieldTaskAssigneeEmail(
                     prisma,
                     String(raw || '').trim(),
-                    scopedTenantId || undefined
+                    tenantForAssigneeResolution
                 );
                 if (r) resolvedList.push(r);
             }
@@ -1658,7 +1662,7 @@ router.post('/dispatch', async (req, res) => {
             const r = await resolveFieldTaskAssigneeEmail(
                 prisma,
                 String(payload.ownerEmail || '').trim(),
-                scopedTenantId || undefined
+                tenantForAssigneeResolution
             );
             if (r) resolvedList.push(r);
         }
@@ -1681,7 +1685,8 @@ router.post('/dispatch', async (req, res) => {
         const fieldTaskContextTenantId = await resolveFieldTaskContextTenantIdForDispatch(prisma, {
             loadedTemplate,
             resolvedList,
-            scopedTenantId,
+            scopedTenantId: templateTenantId || dispatcherTenantId || null,
+            panelDispatchTenantId: dispatcherTenantId || null,
         });
         if (!fieldTaskContextTenantId) {
             return res.status(400).json({
@@ -1743,7 +1748,7 @@ router.post('/dispatch', async (req, res) => {
         }
 
         {
-            const quotaTid = scopedTenantId || fieldTaskContextTenantId;
+            const quotaTid = templateTenantId || dispatcherTenantId || fieldTaskContextTenantId;
             if (quotaTid) {
                 const ftQ = await consumeQuota(prisma, quotaTid, 'FIELD_TASK', 1);
                 if (!ftQ.ok) {

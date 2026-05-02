@@ -141,9 +141,6 @@ Notifications.setNotificationHandler({
 /** Concha CLIENTE vs PRESTADOR — listas de alertas independentes (não misturar). */
 export type NotificationPersona = 'client' | 'provider';
 
-/** Id fixo do alerta «horários sobrepostos» na agenda do prestador (escopo `provider` apenas). */
-export const AGENDA_OVERLAP_IN_APP_ID = 'agenda_os_interval_overlap';
-
 export interface AppNotification {
   id: string;
   title: string;
@@ -217,6 +214,8 @@ export const NotificationService = {
           n.body === leakOverlapBody
         ),
     );
+    /** Alerta de sobreposição na agenda (local) — descontinuado; remover restos da lista. */
+    _notifications = _notifications.filter((n) => n.id !== 'agenda_os_interval_overlap');
 
     let generated: AppNotification[] = [];
 
@@ -408,7 +407,6 @@ export const NotificationService = {
         n.id.startsWith('n_') ||
         n.id.startsWith('paff_invite_') ||
         n.id.startsWith('eval_survey_') ||
-        n.id === AGENDA_OVERLAP_IN_APP_ID ||
         n.providerAffiliationId,
     );
 

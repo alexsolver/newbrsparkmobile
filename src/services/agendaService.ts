@@ -4,8 +4,6 @@ import { CostService } from './costService';
 import { InsuranceService } from './insuranceService';
 import { AgendaEvent } from '../types/agenda';
 import { overlayExecutionStatusOutboxOnTasks, pullTasks } from './syncService';
-import { AGENDA_OVERLAP_IN_APP_ID, NotificationService } from './notifications';
-import i18n from '../i18n';
 import { taskRowIsRoutineTask } from '../lib/routineTaskQueueUi';
 import { loadFtCloudTasks } from '../lib/cloudTasksBuckets';
 
@@ -29,8 +27,6 @@ export function isProviderScopeAgendaEvent(ev: AgendaEvent): boolean {
   if (ev.category === 'TASK' && ev.refId) return true;
   return false;
 }
-
-const AGENDA_OVERLAP_SIG_KEY = '@brspark_agenda_overlap_sig';
 
 /** Evita martelar `/api/sync/tasks` em focos rápidos (tabs / re-renders). */
 const providerPullTasksThrottle = new Map<string, number>();
@@ -58,26 +54,6 @@ function markAgendaOverlaps(events: AgendaEvent[]) {
         rows[j].ev.agendaOverlap = true;
       }
     }
-  }
-}
-
-async function notifyAgendaOverlapIfNeeded(overlapIds: string[]) {
-  const sig = overlapIds.slice().sort().join('|');
-  if (!sig) return;
-  try {
-    const prev = await AsyncStorage.getItem(AGENDA_OVERLAP_SIG_KEY);
-    if (prev === sig) return;
-    await AsyncStorage.setItem(AGENDA_OVERLAP_SIG_KEY, sig);
-    /** Só prestador: OS/checklist na agenda; nunca inbox do cliente. */
-    NotificationService.addNotification({
-      title: i18n.t('agenda.overlapNotificationTitle'),
-      body: i18n.t('agenda.overlapNotificationBody'),
-      category: 'alert',
-      personaScope: 'provider',
-      fixedId: AGENDA_OVERLAP_IN_APP_ID,
-    });
-  } catch {
-    /* ignore */
   }
 }
 
@@ -222,11 +198,6 @@ export const AgendaService = {
       mergedAll = mergedAll.filter((e) => isProviderScopeAgendaEvent(e));
     }
     markAgendaOverlaps(mergedAll);
-    const overlapIds = mergedAll.filter((e) => e.agendaOverlap).map((e) => e.id);
-    /** Sobreposição de blocos de OS só existe na vista prestador; evita alerta errado / escopo cliente. */
-    if (scope === 'PROVIDER' && overlapIds.length > 0) {
-      void notifyAgendaOverlapIfNeeded(overlapIds);
-    }
     return mergedAll;
   }
 };

@@ -194,6 +194,14 @@ export interface User {
     postalCode?: string | null;
     countryCode?: string | null;
   } | null;
+  /** Linha User: tenant de registo; pode diferir de `tenantId` quando há empresa dedicada no JWT. */
+  homeTenantId?: string;
+  /** Marca da experiência «cliente» (piscina) quando `homeTenantId` ≠ tenant da sessão. */
+  clientTenantBranding?: User['tenant'] extends infer T
+    ? T extends { branding?: infer B }
+      ? B
+      : never
+    : never;
   tenant?: {
     id: string;
     name: string;
@@ -1252,6 +1260,20 @@ export class AuthService {
             // Mesmo princípio para `technicianProfile`: se o servidor omitir, não apagar estado local.
             if (serverUser.technicianProfile == null && prev.technicianProfile != null) {
               out.technicianProfile = prev.technicianProfile;
+            }
+
+            const hPrev = String(prev.homeTenantId || '');
+            const hSrv = String(serverUser.homeTenantId || '');
+            const tSrv = String(serverUser.tenantId || '');
+            if (
+              serverUser.clientTenantBranding == null &&
+              prev.clientTenantBranding != null &&
+              hSrv &&
+              tSrv &&
+              hSrv === hPrev &&
+              hSrv !== tSrv
+            ) {
+              out.clientTenantBranding = prev.clientTenantBranding;
             }
 
             return out;

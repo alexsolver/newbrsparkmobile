@@ -39,8 +39,8 @@ async function main() {
       }
     });
 
-    // Create Admin User for Tenant
-    await prisma.user.upsert({
+    // Create Admin User for Tenant (bens demo ficam associados a este utilizador)
+    const tenantAdmin = await prisma.user.upsert({
       where: { email_tenantId: { email: t.email, tenantId: tenant.id } },
       update: {},
       create: { 
@@ -62,6 +62,7 @@ async function main() {
         const asset = await prisma.asset.create({
             data: {
                 tenantId: tenant.id,
+                createdByUserId: tenantAdmin.id,
                 title: `Asset ${i} - ${t.name}`,
                 type: i === 1 ? 'REAL_ESTATE' : 'TERRESTRIAL',
                 status: 'Operacional',

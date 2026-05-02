@@ -11,7 +11,7 @@ const { broadcastCandidateArray, normalizeEmail: normalizeSyncEmail } = require(
 const { resolveFieldTaskOwnerEmailCandidatesForAppUser } = require('../lib/userEmailUnique');
 const {
   getTenantKind,
-  buildAssetVisibilityWhere,
+  expandVisibleAssetIds,
   assertUserCanMutateAsset,
   assertProviderTenantAllowsCreate,
 } = require('../lib/tenantAssetSyncPolicy');
@@ -45,7 +45,7 @@ router.post('/push_token', async (req, res) => {
 });
 
 // ─── GET /api/sync/assets ─────────────────────────────────────────────────────
-// Lista de bens conforme o tipo de tenant (COMPANY / CLIENT / PROVIDER) + partilhas aceites.
+// Lista de bens: só os do utilizador (criador) + descendentes + partilhas aceites; empresas não têm inventário comum.
 router.get('/assets', async (req, res) => {
   try {
     const { tenantId, email, id: userId } = req.user;
@@ -61,24 +61,26 @@ router.get('/assets', async (req, res) => {
     const sharedAssetIds = shares.map((s) => s.assetId);
 
     const tenantKind = await getTenantKind(prisma, tenantId);
-    const visibilityWhere = buildAssetVisibilityWhere({
+    const visibleIds = await expandVisibleAssetIds(prisma, {
       tenantKind,
       tenantId,
       userId,
-      userEmail: email,
       sharedAssetIds,
     });
 
-    let assets = await prisma.asset.findMany({
-      where: visibilityWhere,
-      include: {
-        location: true,
-        stockItems: true,
-        children: { select: { id: true } },
-        parent: { select: { id: true, title: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    let assets =
+      visibleIds.length === 0
+        ? []
+        : await prisma.asset.findMany({
+            where: { id: { in: visibleIds } },
+            include: {
+              location: true,
+              stockItems: true,
+              children: { select: { id: true } },
+              parent: { select: { id: true, title: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
 
     // Injetar _isShared no details e formatar a saída final
     assets = assets.map((asset) => {

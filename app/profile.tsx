@@ -225,8 +225,10 @@ export default function ProfileScreen() {
     revisionNote?: string | null;
   } | null>(null);
 
-  /** Quando o backend indica DEDICATED+ACTIVE, esconde o CTA «Quero ser prestador». */
+  /** DEDICATED+ACTIVE — texto dedicado em «Horários e regiões» e parte do gate do onboarding. */
   const [skipSelfServiceOnboarding, setSkipSelfServiceOnboarding] = useState(false);
+  /** Já existe prestador na rede (identidade ou vínculos), mesmo sem DEDICATED+ACTIVE — esconde a tarja laranja. */
+  const [hideBecomeProviderLead, setHideBecomeProviderLead] = useState(false);
 
   const canManageDirectoryHero = userHasCapability(user, 'mobile.admin.quickActions');
 
@@ -436,13 +438,21 @@ export default function ProfileScreen() {
   const refreshSkipSelfServiceOnboarding = useCallback(async () => {
     if (!user?.id) {
       setSkipSelfServiceOnboarding(false);
+      setHideBecomeProviderLead(false);
       return;
     }
     try {
       const s = await ProviderAffiliationsApi.getMeStatus();
-      setSkipSelfServiceOnboarding(!!s.skipSelfServiceOnboarding);
+      const skip = !!s.skipSelfServiceOnboarding;
+      setSkipSelfServiceOnboarding(skip);
+      setHideBecomeProviderLead(
+        skip ||
+          !!s.providerIdentity?.id ||
+          (Array.isArray(s.affiliations) ? s.affiliations.length > 0 : false),
+      );
     } catch {
       setSkipSelfServiceOnboarding(false);
+      setHideBecomeProviderLead(false);
     }
   }, [user?.id]);
 
@@ -1071,7 +1081,8 @@ export default function ProfileScreen() {
     const k = String(user?.tenant?.kind || 'COMPANY').toUpperCase();
     const tenantIsWorkspaceSplit = k === 'CLIENT' || k === 'PROVIDER';
     return {
-      showBecomeProviderCta: b2c && !tenantIsWorkspaceSplit && !skipSelfServiceOnboarding,
+      showBecomeProviderCta:
+        b2c && !tenantIsWorkspaceSplit && !hideBecomeProviderLead,
       showProviderModeToggles:
         tenantIsWorkspaceSplit ||
         (!b2c &&
@@ -1079,7 +1090,7 @@ export default function ProfileScreen() {
             isTechnicianProfileActive(user) ||
             canUseProviderMode(user))),
     };
-  }, [user, skipSelfServiceOnboarding]);
+  }, [user, hideBecomeProviderLead]);
 
   const faceReenrollBioCount = useMemo(
     () => countBiometricFaceEnrollmentPhotos(user?.faceEnrollmentPhotos),

@@ -8346,6 +8346,32 @@ function parseCopilotReferenceUrlsFromInput() {
     return out;
 }
 
+/** Extrai até 5 URLs https:// do texto da mensagem (interface só chat — links colados na conversa). */
+function extractCopilotHttpsUrlsFromText(text) {
+    const raw = String(text || '');
+    const out = [];
+    const re = /https:\/\/[^\s<>"')\]]+/gi;
+    let m;
+    while ((m = re.exec(raw)) !== null && out.length < 5) {
+        let u = String(m[0] || '').trim();
+        u = u.replace(/[.,;:!?)]+$/, '');
+        if (u.length > 2048) u = u.slice(0, 2048);
+        if (out.indexOf(u) === -1) out.push(u);
+    }
+    return out;
+}
+
+function mergeCopilotReferenceUrlsForPayload(userLine, baseList) {
+    const base = Array.isArray(baseList) ? baseList.slice() : [];
+    const fromMsg = extractCopilotHttpsUrlsFromText(userLine);
+    for (let i = 0; i < fromMsg.length; i++) {
+        const u = fromMsg[i];
+        if (base.indexOf(u) === -1) base.push(u);
+        if (base.length >= 5) break;
+    }
+    return base.slice(0, 5);
+}
+
 if (typeof window.__brsparkCopilotFocusedField === 'undefined') window.__brsparkCopilotFocusedField = null;
 
 window.refreshCopilotCanvasFocusChip = function () {
@@ -8588,6 +8614,8 @@ function refreshCopilotThinkingDom() {
     if (fol) fol.disabled = dis;
     const cfc = document.getElementById('copilot-clear-focus-btn');
     if (cfc) cfc.disabled = dis;
+    const attFab = document.getElementById('ai-copilot-attach-fab');
+    if (attFab) attFab.disabled = dis || !!window.__brsparkCopilotExcelBusy;
     updateCopilotExcelUi();
 }
 
@@ -8671,7 +8699,6 @@ function copilotSetLogicDetailsOpen(shouldOpen) {
 }
 
 window.brsparkCopilotPickExcelFile = function () {
-    copilotSetContextDetailsOpen(true);
     const fi = document.getElementById('copilot-excel-file');
     if (fi) fi.click();
 };
@@ -8694,13 +8721,7 @@ function hasVisibleCopilotMessages() {
 }
 
 function updateCopilotStartScreenUi() {
-    const showStart = !!window.__brsparkCopilotShowStartScreen;
-    const composer = document.querySelector('#ai-copilot-panel .ai-copilot-composer-bar');
-    const journey = document.querySelector('#ai-copilot-panel .ai-copilot-journey-row');
-    const quick = document.getElementById('ai-copilot-quick-actions');
-    if (composer) composer.style.display = showStart ? 'none' : '';
-    if (journey) journey.style.display = showStart ? 'none' : '';
-    if (quick) quick.style.display = showStart ? 'none' : '';
+    /* UI só chat: a barra de composição fica sempre visível. */
 }
 
 window.brsparkCopilotAdvanceToChat = function () {
@@ -8737,38 +8758,12 @@ function renderCopilotMessages() {
         const empty = document.createElement('div');
         empty.className = 'ai-copilot-empty';
         const t1 = document.createElement('strong');
-        t1.textContent = 'Início do Composer';
+        t1.textContent = 'Composer';
         empty.appendChild(t1);
         const t2 = document.createElement('span');
         t2.textContent =
-            'Preencha contexto, links e arquivos no painel de opções. Depois, gere o rascunho inicial e siga no chat para ajustes finos.';
+            'Descreva o formulário ou o ajuste desejado. Pode colar links https:// na mensagem, anexar ficheiros pelo ícone ou arrastar ficheiros para esta área — tudo entra na mesma conversa.';
         empty.appendChild(t2);
-
-        const actions = document.createElement('div');
-        actions.style.display = 'flex';
-        actions.style.flexWrap = 'wrap';
-        actions.style.gap = '8px';
-        actions.style.marginTop = '12px';
-
-        const btnGenerate = document.createElement('button');
-        btnGenerate.type = 'button';
-        btnGenerate.className = 'btn btn-primary btn-sm';
-        btnGenerate.textContent = 'Gerar e abrir chat';
-        btnGenerate.onclick = function () {
-            window.brsparkCopilotGenerateFromContext();
-        };
-        actions.appendChild(btnGenerate);
-
-        const btnAdvance = document.createElement('button');
-        btnAdvance.type = 'button';
-        btnAdvance.className = 'btn btn-outline btn-sm';
-        btnAdvance.textContent = 'Avançar para chat';
-        btnAdvance.onclick = function () {
-            window.brsparkCopilotAdvanceToChat();
-        };
-        actions.appendChild(btnAdvance);
-
-        empty.appendChild(actions);
         root.appendChild(empty);
         updateCopilotStartScreenUi();
         return;
@@ -8955,75 +8950,66 @@ function buildCopilotInsightCards(data) {
     return cards;
 }
 
-function renderCopilotInsights(data) {
+function renderCopilotInsights() {
     const host = document.getElementById('ai-copilot-insights');
     if (!host) return;
-    const cards = buildCopilotInsightCards(data);
     host.innerHTML = '';
-    if (!cards.length) {
-        host.hidden = true;
-        return;
-    }
-    cards.forEach(function (card) {
-        const box = document.createElement('div');
-        box.className = 'ai-copilot-insight-card';
-        const title = document.createElement('h5');
-        title.textContent = card.title || 'Resumo';
-        box.appendChild(title);
-        if ((card.lines || []).length > 1) {
-            const list = document.createElement('ul');
-            card.lines.forEach(function (line) {
-                const li = document.createElement('li');
-                li.textContent = line;
-                list.appendChild(li);
-            });
-            box.appendChild(list);
-        } else {
-            const p = document.createElement('p');
-            p.textContent = (card.lines && card.lines[0]) || '';
-            box.appendChild(p);
-        }
-        host.appendChild(box);
-    });
-    host.hidden = false;
+    host.hidden = true;
 }
 
-/** Sincroniza rótulos ARIA e texto do botão do menu lateral do Composer. */
+/** Mantido por compatibilidade (menu lateral removido — vista única de chat). */
 function brsparkCopilotSyncSideMenuUi() {
-    const p = document.getElementById('ai-copilot-panel');
-    const btn = document.getElementById('ai-copilot-menu-toggle-btn');
-    const menu = document.getElementById('ai-copilot-side-menu');
-    if (!p || !btn) return;
-    const collapsed = p.classList.contains('ai-copilot-menu-collapsed');
-    const menuOpen = !collapsed;
-    btn.setAttribute('aria-expanded', menuOpen ? 'true' : 'false');
-    const label = btn.querySelector('.ai-copilot-menu-toggle-label');
-    if (label) label.textContent = menuOpen ? 'Ocultar opções' : 'Opções';
-    if (menu) menu.setAttribute('aria-hidden', menuOpen ? 'false' : 'true');
+    /* no-op */
 }
 
 /**
  * Abre ou fecha a coluna «Opções e contexto».
  * @param {boolean} [force] true = abrir; false = fechar; omitido = alternar.
  */
-window.brsparkCopilotToggleSideMenu = function (force) {
-    const p = document.getElementById('ai-copilot-panel');
-    if (!p) return;
-    if (force === true) {
-        p.classList.remove('ai-copilot-menu-collapsed');
-    } else if (force === false) {
-        p.classList.add('ai-copilot-menu-collapsed');
-    } else {
-        p.classList.toggle('ai-copilot-menu-collapsed');
-    }
-    brsparkCopilotSyncSideMenuUi();
+window.brsparkCopilotToggleSideMenu = function () {
+    /* Menu lateral descontinuado — vista única. */
 };
 
-function brsparkCopilotSetSideMenuOpen(open) {
-    const p = document.getElementById('ai-copilot-panel');
-    if (!p) return;
-    p.classList.toggle('ai-copilot-menu-collapsed', !open);
-    brsparkCopilotSyncSideMenuUi();
+function brsparkCopilotSetSideMenuOpen() {
+    /* no-op */
+}
+
+/** Arrastar ficheiros para o painel do Composer (mesmo fluxo que o clipe). */
+function brsparkCopilotInstallChatDropzone() {
+    const col = document.querySelector('#ai-copilot-panel .ai-copilot-col-chat');
+    if (!col || col.__brsparkCopilotDrop) return;
+    col.__brsparkCopilotDrop = true;
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function (evName) {
+        col.addEventListener(
+            evName,
+            function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            },
+            false,
+        );
+    });
+    col.addEventListener(
+        'drop',
+        function (e) {
+            const dt = e.dataTransfer;
+            if (!dt || !dt.files || !dt.files.length) return;
+            const inp = document.getElementById('copilot-excel-file');
+            if (!inp) return;
+            try {
+                var dt2 = new DataTransfer();
+                var n = Math.min(dt.files.length, BRSPARK_COPILOT_REF_MAX_FILES);
+                for (var i = 0; i < n; i++) {
+                    dt2.items.add(dt.files[i]);
+                }
+                inp.files = dt2.files;
+            } catch (err) {
+                return;
+            }
+            void window.brsparkCopilotAnalyzeExcelFile(inp);
+        },
+        false,
+    );
 }
 
 window.toggleAiCopilotPanel = function () {
@@ -9048,17 +9034,11 @@ window.toggleAiCopilotPanel = function () {
         refreshCopilotThinkingDom();
         window.refreshCopilotCanvasFocusChip();
         syncCopilotTroubleshootPanel();
-        if (!hasVisibleCopilotMessages()) {
-            window.__brsparkCopilotShowStartScreen = true;
-            brsparkCopilotSetSideMenuOpen(true);
-            copilotSetContextDetailsOpen(true);
-        }
+        window.__brsparkCopilotShowStartScreen = false;
         updateCopilotStartScreenUi();
-        if (window.__brsparkCopilotClarifyOptions && window.__brsparkCopilotClarifyOptions.length) {
-            brsparkCopilotSetSideMenuOpen(true);
-        }
+        brsparkCopilotInstallChatDropzone();
         const inpFocus = document.getElementById('ai-copilot-input');
-        if (inpFocus && !window.__brsparkCopilotShowStartScreen) {
+        if (inpFocus) {
             try {
                 requestAnimationFrame(function () {
                     inpFocus.focus();
@@ -9082,7 +9062,7 @@ window.brsparkCopilotClear = function () {
         window.brsparkCopilotCloseSchemaPreview(false);
     }
     window.__brsparkCopilotMessages = [];
-    window.__brsparkCopilotShowStartScreen = true;
+    window.__brsparkCopilotShowStartScreen = false;
     renderCopilotMessages();
     window.__brsparkCopilotLast = null;
     window.__brsparkCopilotLogicLast = null;
@@ -9094,6 +9074,12 @@ window.brsparkCopilotClear = function () {
     refreshCopilotThinkingDom();
     const fi = document.getElementById('copilot-excel-file');
     if (fi) fi.value = '';
+    var ctxObj = document.getElementById('copilot-ctx-objective');
+    if (ctxObj) ctxObj.value = '';
+    var ctxUrls = document.getElementById('copilot-ctx-ref-urls');
+    if (ctxUrls) ctxUrls.value = '';
+    var exHint = document.getElementById('copilot-excel-hint');
+    if (exHint) exHint.value = '';
     const st = document.getElementById('copilot-excel-status');
     if (st) st.textContent = '';
     updateCopilotExcelUi();
@@ -10142,9 +10128,6 @@ function brsparkCopilotApplyChatResponse(data) {
     renderCopilotMessages();
     const ch = document.getElementById('ai-copilot-clarify-hint');
     if (ch) ch.style.display = hasClarify ? 'block' : 'none';
-    if (hasClarify) {
-        brsparkCopilotSetSideMenuOpen(true);
-    }
 
     if (!hasClarify && useSchemaPreview) {
         brsparkCopilotOpenSchemaPreviewModal(data);
@@ -10294,7 +10277,7 @@ async function brsparkCopilotPostChatRound(userText, opts) {
     };
     if (tid) chatPayload.templateId = tid;
 
-    const refUrls = parseCopilotReferenceUrlsFromInput();
+    const refUrls = mergeCopilotReferenceUrlsForPayload(trimmed, parseCopilotReferenceUrlsFromInput());
     if (refUrls.length) {
         chatPayload.referenceUrls = refUrls;
     }
@@ -10534,8 +10517,6 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
         );
         files = files.slice(0, BRSPARK_COPILOT_REF_MAX_FILES);
     }
-
-    copilotSetContextDetailsOpen(true);
 
     const statusEl = document.getElementById('copilot-excel-status');
     beginCopilotThinking(

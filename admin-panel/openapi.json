@@ -467,7 +467,7 @@
     },
     "/api/login": {
       "post": {
-        "summary": "Login do usuário do app (JWT com tenantId)",
+        "summary": "Login do utilizador do app (JWT com tenantId efectivo)",
         "tags": [
           "App — Conta"
         ],
@@ -535,12 +535,80 @@
               }
             }
           }
-        }
+        },
+        "description": "Resposta inclui o mesmo payload de utilizador que `GET /api/me` (incl. `homeTenantId` / `clientTenantBranding` quando aplicável)."
       }
     },
     "/api/me": {
       "get": {
-        "summary": "Dados do usuário logado (app)",
+        "summary": "Perfil do utilizador + tenant efectiva (app)",
+        "tags": [
+          "App — Conta"
+        ],
+        "security": [
+          {
+            "bearerApp": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "400": {
+            "description": "Requisição inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Proibido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Inclui `tenant` / `tenantId` da organização efectiva (ex.: empresa com vínculo dedicado). `clientTenantBranding`: (1) se `homeTenantId` ≠ `tenantId`, marca da piscina/registo (BD se faltar snapshot); (2) se papel `USER` e a tenant da linha não é a piscina partilhada, marca BrSpark derivada da tenant de registo partilhada. Na app, persona cliente usa `clientTenantBranding` / piscina mascarada; modo prestador usa `tenant.branding`."
+      },
+      "put": {
+        "summary": "Atualizar perfil (app)",
         "tags": [
           "App — Conta"
         ],
@@ -605,8 +673,8 @@
           }
         }
       },
-      "put": {
-        "summary": "Atualizar perfil (app)",
+      "delete": {
+        "summary": "Excluir conta (anonimizar + desativar; LGPD)",
         "tags": [
           "App — Conta"
         ],
@@ -810,7 +878,7 @@
     },
     "/api/sync/assets": {
       "get": {
-        "summary": "Pull de bens do tenant",
+        "summary": "Pull de bens do utilizador (+ partilhas aceites)",
         "tags": [
           "App — Sincronização"
         ],
@@ -5194,26 +5262,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "description": "Despacho: refId e scheduledStartAt obrigatórios; ownerEmail OU candidateEmails. Modo BROADCAST (oferta / primeiro a aceitar) quando há 2+ candidatos, vínculo não exclusivamente dedicado, ou quando oferta=true com ≥1 candidato. broadcastClaimExpiresAt só em broadcast.",
-                "properties": {
-                  "refId": { "type": "string", "description": "ID do modelo de checklist" },
-                  "ownerEmail": { "type": "string", "description": "Único destinatário (modo DIRECT)" },
-                  "candidateEmails": {
-                    "type": "array",
-                    "items": { "type": "string" },
-                    "description": "Lista de e-mails de prestadores convidados; 1 ou mais. Com um só, use oferta=true para forçar fluxo de aceite (broadcast)."
-                  },
-                  "oferta": {
-                    "type": "boolean",
-                    "description": "Se true, força modo oferta (BROADCAST) mesmo com um único candidato (aceite explícito no app)."
-                  },
-                  "scheduledStartAt": { "type": "string", "format": "date-time" },
-                  "broadcastClaimExpiresAt": {
-                    "type": "string",
-                    "description": "Opcional em modo broadcast. Instantâneo UTC em que expira a janela de aceite (ISO 8601 ou Unix segundos/milissegundos). Deve ser no futuro."
-                  }
-                }
+                "type": "object"
               }
             }
           }
@@ -9690,6 +9739,84 @@
         ]
       }
     },
+    "/api/users/{id}": {
+      "delete": {
+        "summary": "Eliminar utilizador (membro do tenant)",
+        "tags": [
+          "Admin — Usuários"
+        ],
+        "security": [
+          {
+            "bearerAdmin": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "400": {
+            "description": "Requisição inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autorizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Proibido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Não encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Erro interno",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/api/plans": {
       "get": {
         "summary": "Listar planos",
@@ -10143,7 +10270,7 @@
     },
     "/api/assets": {
       "get": {
-        "summary": "Listar bens (read-only admin)",
+        "summary": "Listar bens por utilizador (read-only admin)",
         "tags": [
           "Admin — Bens"
         ],
@@ -10206,7 +10333,73 @@
               }
             }
           }
-        }
+        },
+        "description": "Inventário por criador: use `createdByUserId` (obrigatório salvo `listAll=1` para admin de plataforma). Opcional: `tenantId`, `type`, `q`, `page`, `limit`. Sem criador, resposta vazia com `_meta.policy=inventory_per_user`.",
+        "parameters": [
+          {
+            "name": "createdByUserId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ID do utilizador criador dos bens."
+          },
+          {
+            "name": "tenantId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "listAll",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "Apenas admin de plataforma: listagem global legada (filtros opcionais tenant/type/q)."
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          }
+        ]
       }
     },
     "/api/locations": {

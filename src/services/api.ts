@@ -119,7 +119,7 @@ export const ProviderService = {
  * Sincroniza dados do app com o servidor (PostgreSQL como fonte da verdade).
  *
  * Estratégia:
- * - Assets:    pull autenticado (dados do tenant do usuário)
+ * - Assets:    pull autenticado (bens do próprio utilizador + partilhas; não há inventário por empresa)
  * - Config:    pull PÚBLICO (metatags/tipos de ativo, sem auth)
  * - Providers: NÃO puxados aqui em massa — use ProviderService.search (substitui snapshot local na 1.ª página sem filtros).
  * - SQLite local = cache offline do diretório + bens + config

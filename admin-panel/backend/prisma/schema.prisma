@@ -657,7 +657,7 @@ model Asset {
   location    Location? @relation(fields: [locationId], references: [id])
   metadata    Json?    // custom fields (details, photos, etc.)
   deletedAt   DateTime? // soft delete para sync mobile
-  /// Quem criou o ativo no app (política de visibilidade em tenants CLIENT / PROVIDER).
+  /// Quem criou o ativo no app — visibilidade é sempre por utilizador (empresas não têm inventário comum).
   createdByUserId String? @map("created_by_user_id")
   createdByUser   User?   @relation("AssetCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())

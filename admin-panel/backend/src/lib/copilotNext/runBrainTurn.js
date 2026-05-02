@@ -13,7 +13,7 @@ const {
 const { applyCopilotParsedPayload } = require('../formAiCopilotApply');
 const { openAiCopilotJson, compactSchemaForPrompt } = require('../formAiCopilot');
 const { buildNextSystemPrompt } = require('./buildNextSystemPrompt');
-const { buildMandatoryOutlinePromptBlock, extractMarkdownHeadingsForCopilotOutline } = require('./extractDocOutlineForCopilot');
+const { buildMandatoryOutlinePromptBlock, extractDocumentOutlineForCopilot } = require('./extractDocOutlineForCopilot');
 const {
   isDocMirrorTooThin,
   buildDocMirrorRepairUserMessage,
@@ -416,18 +416,18 @@ async function runCopilotBrainTurn(input) {
       : '';
   const docText =
     input.documentationFetchedText && String(input.documentationFetchedText).trim()
-      ? String(input.documentationFetchedText).trim().slice(0, 38_000)
+      ? String(input.documentationFetchedText).trim().slice(0, 42_000)
       : '';
-  /** Lista numerada de ##/### extraída no servidor — o modelo tende a ignorar só instruções genéricas. */
+  /** Lista numerada de temas extraída no servidor (markdown ou texto plano/PDF) — o modelo tende a ignorar só instruções genéricas. */
   const serverExtractedOutline = docText ? buildMandatoryOutlinePromptBlock(docText) : '';
   const docBlock = docText
     ? '\n\n### Conteúdo web lido pelo servidor (referência do administrador)\n' +
-      'As secções «Fonte web» abaixo foram **descarregadas pelo painel** (HTTPS público). Trate-as como **fonte primária** para estruturar o formulário e as regras de negócio.\n' +
+      'As secções «Fonte web» abaixo foram **descarregadas pelo painel** (HTTPS público). Podem ser **HTML**, **PDF** (texto extraído) ou **documentos oficiais** (contratos, RIA, licitações, termos). Trate-as como **fonte primária** para estruturar o formulário e as regras de negócio.\n' +
       '- **Análise:** extraia requisitos, etapas, listas de verificação, condições e riscos descritos no texto; converta em **section_break**, campos e **logicSuggestions** quando couber.\n' +
       '- **Conhecimento geral:** pode complementar com práticas habituais do domínio (NR, saúde, qualidade, etc.), mas **não invente** requisitos contraditórios ao texto carregado. **Não** existe pesquisa web em tempo real além deste texto — não afirme que «pesquisou na web».\n' +
       '- **Integrações API:** se o link for documentação de API e o utilizador quiser preenchimento automático, proponha **API_FETCH** (HTTPS; regras como já definido no motor).\n\n' +
-      '#### Decomposição obrigatória de artigos / guias / checklists (crítico)\n' +
-      'Texto abaixo costuma ter **títulos** (##/###), **subtítulos** e **listas com marcadores** — isso é o **esqueleto** do formulário. **Proibido** condensar vários capítulos do texto num **único** campo genérico (ex.: um `checkbox` ou `multiselect` «Itens de segurança» com três ou quatro palavras **quando o artigo descreve capítulos distintos**: alarme/detecção, rotas de fuga, equipamentos, iluminação, produtos perigosos, etc.). Isso produz resultado **inferior** ao link — trate como **falha** de espelhamento.\n' +
+      '#### Decomposição obrigatória de artigos / guias / checklists / modelos oficiais (crítico)\n' +
+      'Texto abaixo costuma ter **títulos** (##/### em HTML), **ANEXO/APÊNDICE**, **itens numerados**, **cláusulas**, **subtítulos** e **listas com marcadores** — isso é o **esqueleto** do formulário. Em **PDF de modelo RIA / contrato / licitação**, cada bloco numerado ou coluna de critérios deve tender a **campos próprios** ou **repeatable_matrix**, não um único `text` «preencher conforme modelo». **Proibido** condensar vários capítulos do texto num **único** campo genérico (ex.: um `checkbox` ou `multiselect` «Itens de segurança» com três ou quatro palavras **quando o artigo descreve capítulos distintos**: alarme/detecção, rotas de fuga, equipamentos, iluminação, produtos perigosos, etc.). Isso produz resultado **inferior** ao link — trate como **falha** de espelhamento.\n' +
       '- **Por capítulo do texto** (cada tema principal: p.ex. detecção e alarme; saídas e rotas; extinção e hidrantes; iluminação e energia de reserva; materiais perigosos): pelo menos um **`section_break`** com rótulo fiel ao tema, seguido de campos que **desdobrem** o que o parágrafo ou a lista pedem.\n' +
       '- **Listas de verificação** sob um subtítulo (vários itens com «verificar», «teste», «inspeção»): **um critério verificável por linha** — `yes_no` + evidência, `repeatable_matrix`, ou `multiple_choice` por sub-item; **não** agrupe cinco verificações distintas numa única pergunta sim/não.\n' +
       '- **Tipos de campo:** inferir automaticamente o tipo ideal por requisito; não abrir entrevista de tipo de campo salvo ambiguidade técnica bloqueante.\n' +
@@ -497,7 +497,7 @@ async function runCopilotBrainTurn(input) {
     documentationFetchWarning: docFetchWarning || undefined,
   });
 
-  const outlineForRepair = docText ? extractMarkdownHeadingsForCopilotOutline(docText) : [];
+  const outlineForRepair = docText ? extractDocumentOutlineForCopilot(docText) : [];
   const needsMirrorRepair =
     docText &&
     outlineForRepair.length >= 5 &&

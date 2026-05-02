@@ -7,12 +7,15 @@ import { ProviderAffiliationsApi, ProviderAffiliation } from '../../src/services
 
 const DED_WD_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 
-function isDedicated(a: ProviderAffiliation) {
-  return String(a.relationshipType || '').toUpperCase() === 'DEDICATED';
+/** Vínculos com empresa operacional na app (não OWNER). Inclui legado PARTNER e tipo vazio (default BD). */
+function isOperationalCompanyAffiliation(a: ProviderAffiliation) {
+  const rt = String(a.relationshipType || '').toUpperCase();
+  if (rt === 'OWNER') return false;
+  return rt === 'DEDICATED' || rt === 'PARTNER' || rt === '';
 }
 
 function cardAccent(a: ProviderAffiliation) {
-  if (isDedicated(a)) return { bg: '#FFF7ED', border: '#FDBA74', title: '#9A3412', chipBg: '#FB923C' };
+  if (isOperationalCompanyAffiliation(a)) return { bg: '#FFF7ED', border: '#FDBA74', title: '#9A3412', chipBg: '#FB923C' };
   return { bg: '#F8FAFC', border: '#E2E8F0', title: '#0F172A', chipBg: '#64748B' };
 }
 
@@ -71,7 +74,7 @@ export default function ProviderAffiliationsScreen() {
 
   const dedicated = useMemo(() => {
     return rows
-      .filter((r) => isDedicated(r))
+      .filter((r) => isOperationalCompanyAffiliation(r))
       .sort((a, b) => String(b.activatedAt || b.invitedAt || '').localeCompare(String(a.activatedAt || a.invitedAt || '')));
   }, [rows]);
 
@@ -291,7 +294,7 @@ export default function ProviderAffiliationsScreen() {
             <Text style={{ fontSize: 12, color: '#334155', marginTop: 10, lineHeight: 18 }}>{a.note}</Text>
           ) : null}
 
-          {isDedicated(a) && a.dedicatedExclusive?.weeklyWindows?.length ? (
+          {a.dedicatedExclusive?.weeklyWindows?.length ? (
             <View
               style={{
                 marginTop: 10,

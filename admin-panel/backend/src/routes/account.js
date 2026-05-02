@@ -121,6 +121,10 @@ function buildSafeAppUserPayload(user) {
           createdAt: p.createdAt,
         }))
       : undefined;
+  const homeTid =
+    user.homeTenantId != null && String(user.homeTenantId).trim()
+      ? String(user.homeTenantId).trim()
+      : null;
   return {
     id: user.id,
     name: user.name,
@@ -131,6 +135,7 @@ function buildSafeAppUserPayload(user) {
     employeeMatricula: user.employeeMatricula ?? null,
     addressJson: user.addressJson ?? null,
     tenantId: user.tenantId,
+    ...(homeTid ? { homeTenantId: homeTid } : {}),
     tenant: buildSafeTenantForApp(user.tenant),
     technicianProfile: user.technicianProfile,
     ...(faceEnrollmentPhotos !== undefined ? { faceEnrollmentPhotos } : {}),
@@ -229,6 +234,65 @@ async function issueAppJwtAfterLogin(user, deviceId, auditResource, db = prisma)
  */
 async function buildSafeAppUserPayloadAsync(user, db = prisma) {
   const payload = buildSafeAppUserPayload(user);
+  const hid = payload.homeTenantId != null ? String(payload.homeTenantId).trim() : '';
+  const effId = String(user.tenantId || '').trim();
+
+  /**
+   * Com vínculo dedicado, `tenant` = empresa; experiência «cliente» (piscina) usa marca BrSpark / registo.
+   */
+  if (hid && effId && hid !== effId) {
+    try {
+      let homeRow = user._homeTenant;
+      if (!homeRow) {
+        homeRow = await db.tenant.findUnique({
+          where: { id: hid },
+          include: { subscription: { include: { plan: true } } },
+        });
+      }
+      if (homeRow) {
+        if (await tenantIsSharedAppRegistrationPool(db, hid)) {
+          const appLabel = 'BrSpark';
+          const branding = buildEffectiveTenantBranding({
+            tenantName: appLabel,
+            planFeatures: homeRow.subscription?.plan?.features,
+            tenantFeatures: homeRow.features,
+          });
+          payload.clientTenantBranding = branding.effective;
+        } else {
+          const safeHome = buildSafeTenantForApp(homeRow);
+          payload.clientTenantBranding = safeHome.branding;
+        }
+      }
+    } catch (e) {
+      console.warn('[account] clientTenantBranding', e && e.message);
+    }
+  }
+
+  /** Consumidor `USER` com linha na tenant empresa (não piscina): marca da app = piscina de registo. */
+  if (!payload.clientTenantBranding && String(user.role || '').toUpperCase() === 'USER' && effId) {
+    try {
+      if (!(await tenantIsSharedAppRegistrationPool(db, effId))) {
+        const shared = await resolveSharedRegistrationTenant(db);
+        if (shared?.id) {
+          const row = await db.tenant.findUnique({
+            where: { id: shared.id },
+            include: { subscription: { include: { plan: true } } },
+          });
+          if (row) {
+            const branding = buildEffectiveTenantBranding({
+              tenantName: 'BrSpark',
+              planFeatures: row.subscription?.plan?.features,
+              tenantFeatures: row.features,
+            });
+            payload.clientTenantBranding = branding.effective;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[account] clientTenantBrandingUserOnCompany', e && e.message);
+    }
+  }
+
   if (payload.tenant && user.tenant) {
     try {
       payload.tenant.visionDetectionEngine = await resolveVisionDetectionEngineLabelForApp(db, user.tenant.features);

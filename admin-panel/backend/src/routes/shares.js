@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const prisma = require('../db'); 
+const prisma = require('../db');
 const authUser = require('../middleware/authUser');
 const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('../lib/userEmailUnique');
+const { getTenantKind, assertUserCanMutateAsset } = require('../lib/tenantAssetSyncPolicy');
 
 router.use(authUser);
 
@@ -14,7 +15,7 @@ router.use(authUser);
 
 router.post('/invite', async (req, res) => {
   try {
-    const { email: rawEmail } = req.user;
+    const { email: rawEmail, tenantId, id: userId } = req.user;
     const email = rawEmail.toLowerCase();
     const { assetId, sharedWithEmail, permission, modules, shareChildren, expiresAt } = req.body;
 
@@ -24,6 +25,33 @@ router.post('/invite', async (req, res) => {
 
     if (email.toLowerCase() === sharedWithEmail.toLowerCase()) {
       return res.status(400).json({ error: 'Cannot share with yourself' });
+    }
+
+    const rootAsset = await prisma.asset.findFirst({
+      where: { id: assetId, deletedAt: null },
+    });
+    if (!rootAsset) {
+      return res.status(404).json({ error: 'Ativo não encontrado.' });
+    }
+    const tenantKind = await getTenantKind(prisma, tenantId);
+    try {
+      await assertUserCanMutateAsset(prisma, {
+        tenantId,
+        userId,
+        userEmail: rawEmail,
+        tenantKind,
+        asset: rootAsset,
+      });
+    } catch (e) {
+      if (e && (e.code === 'ASSET_FORBIDDEN' || e.code === 'ASSET_AMBIGUOUS_OWNER')) {
+        return res.status(403).json({
+          error:
+            e.code === 'ASSET_AMBIGUOUS_OWNER'
+              ? e.message
+              : 'Só pode partilhar ativos que são seus.',
+        });
+      }
+      throw e;
     }
 
     // Prepare list of assets to share

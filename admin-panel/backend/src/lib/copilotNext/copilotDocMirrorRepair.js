@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Deteta quando o canvas não espelha um artigo com esboço ##/### (muitos textos genéricos, poucas secções temáticas).
+ * Deteta quando o canvas não espelha um documento com esboço (##/### em HTML ou estrutura típica de PDF/modelo oficial).
  * Usado para disparar uma segunda passagem automática no Composer.
  */
 
@@ -99,8 +99,8 @@ function buildDocMirrorRepairUserMessage(schemaData, outlineHeadings) {
   const coverage = (scoreOutlineCoverage(schemaData, outlineHeadings) * 100).toFixed(0);
   return (
     '## VALIDADOR AUTOMÁTICO — primeira proposta REJEITADA\n\n' +
-    'O servidor detetou que o formulário **não espelha** o documento de referência: poucos temas do artigo aparecem em `section_break`, e/ou há demasiados campos `text` genéricos («Descrição…», «Documentação…», «Procedimentos…») em vez de verificações por capítulo.\n\n' +
-    `**Cobertura estimada dos títulos do artigo:** ${coverage}% (mínimo esperado: ~45–50% com secções nomeadas).\n\n` +
+    'O servidor detetou que o formulário **não espelha** o documento de referência: poucos temas listados no texto aparecem em `section_break`, e/ou há demasiados campos `text` genéricos («Descrição…», «Documentação…», «Procedimentos…») em vez de verificações por capítulo ou por item numerado.\n\n' +
+    `**Cobertura estimada dos temas do documento:** ${coverage}% (mínimo esperado: ~45–50% com secções nomeadas).\n\n` +
     '### Temas que **têm** de aparecer como etapas (cada um = `section_break` + campos **não** só texto livre):\n' +
     lines +
     '\n\n### Resumo do canvas actual\n' +

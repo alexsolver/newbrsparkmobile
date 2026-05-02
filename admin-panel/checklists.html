@@ -578,7 +578,7 @@
       right: max(8px, env(safe-area-inset-right, 0px));
       bottom: auto;
       left: auto;
-      width: min(840px, calc(100vw - 16px));
+      width: min(520px, calc(100vw - 16px));
       height: min(96dvh, 920px);
       max-height: min(96dvh, 920px);
       z-index: 200000;
@@ -598,9 +598,7 @@
       transition: none;
       box-shadow: 0 28px 72px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
     }
-    #ai-copilot-panel.ai-copilot-menu-collapsed {
-      width: min(520px, 100vw);
-    }
+    /* Painel unificado: só coluna de chat (sem menu lateral) */
     #ai-copilot-panel.is-open {
       display: flex;
     }
@@ -610,7 +608,7 @@
       border-bottom: 1px solid var(--color-border);
       background: linear-gradient(135deg, var(--color-surface) 0%, var(--color-bg) 100%);
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 10px;
       cursor: grab;
@@ -635,6 +633,7 @@
       align-items: center;
       gap: 2px;
       flex-shrink: 0;
+      margin-top: 2px;
     }
     #ai-copilot-menu-toggle-btn .ai-copilot-menu-toggle-label {
       font-size: 12px;
@@ -646,7 +645,6 @@
         display: none;
       }
     }
-    /* Corpo em duas colunas: chat (esq.) + menu scrollável (dir.) */
     .ai-copilot-body {
       flex: 1;
       min-height: 0;
@@ -655,20 +653,13 @@
       align-items: stretch;
     }
     .ai-copilot-col-chat {
-      flex: 1 1 52%;
+      flex: 1 1 100%;
       min-width: 0;
       display: flex;
       flex-direction: column;
       min-height: 0;
-      border-right: 1px solid var(--color-border);
-      background: linear-gradient(180deg, #eef2ff 0%, var(--color-divider) 50%, var(--color-bg) 100%);
-    }
-    #ai-copilot-panel.ai-copilot-menu-collapsed .ai-copilot-col-chat {
-      flex: 1 1 100%;
       border-right: none;
-    }
-    #ai-copilot-panel.ai-copilot-menu-collapsed .ai-copilot-col-menu {
-      display: none;
+      background: linear-gradient(180deg, #eef2ff 0%, var(--color-divider) 50%, var(--color-bg) 100%);
     }
     .ai-copilot-chat-scroll {
       flex: 1;
@@ -724,8 +715,7 @@
       padding-bottom: 8px;
     }
     @media (max-width: 700px) {
-      #ai-copilot-panel,
-      #ai-copilot-panel.ai-copilot-menu-collapsed {
+      #ai-copilot-panel {
         width: 100vw !important;
         max-width: 100vw;
         top: 0 !important;
@@ -748,16 +738,10 @@
         flex-direction: column;
       }
       .ai-copilot-col-chat {
-        flex: 1 1 55%;
+        flex: 1 1 auto;
         min-height: 0;
         border-right: none;
-        border-bottom: 1px solid var(--color-border);
-      }
-      .ai-copilot-col-menu {
-        flex: 1 1 45%;
-        max-width: none;
-        min-width: 0;
-        min-height: 0;
+        border-bottom: none;
       }
     }
     .ai-copilot-head h4 {
@@ -867,6 +851,39 @@
       gap: 10px;
       padding: 0 2px;
     }
+    .ai-copilot-util-bin {
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      border: 0 !important;
+      white-space: nowrap !important;
+    }
+    .ai-copilot-excel-status-line {
+      flex-shrink: 0;
+      padding: 4px 14px 0;
+      font-size: 12px;
+      color: #475569;
+      min-height: 0;
+      line-height: 1.35;
+    }
+    .ai-copilot-chat-footnote {
+      margin: 0;
+      padding: 2px 14px 6px;
+      font-size: 10px;
+      color: var(--color-text-light);
+      line-height: 1.35;
+    }
+    .ai-copilot-focus-chip-head {
+      font-size: 11px;
+      font-weight: 600;
+      color: #6366f1;
+      margin-top: 4px;
+      line-height: 1.3;
+    }
     #copilot-canvas-focus-panel {
       flex-shrink: 0;
       margin: 0;
@@ -874,15 +891,36 @@
       background: rgba(255, 255, 255, 0.95);
       border-bottom: 1px solid var(--color-border);
     }
-    .ai-copilot-menu-scroll .ai-copilot-details--advanced {
-      margin: 8px 12px 12px;
-      border: 1px solid var(--color-border);
-      border-radius: 14px;
-      overflow: hidden;
-      background: #fafafa;
+    .ai-copilot-composer-inner {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      width: 100%;
+      box-sizing: border-box;
     }
-    .ai-copilot-menu-scroll .ai-copilot-details--advanced > summary {
+    .ai-copilot-attach-fab {
+      flex-shrink: 0;
+      width: 44px;
+      height: 44px;
+      border: 1px solid var(--color-border);
+      border-radius: 50%;
       background: var(--color-bg);
+      color: #475569;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .ai-copilot-attach-fab:hover {
+      background: #eef2ff;
+      border-color: #a5b4fc;
+      color: #4338ca;
+    }
+    .ai-copilot-attach-fab:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
     }
     .ai-copilot-clarify-hint {
       margin: 10px 12px 8px;
@@ -1134,10 +1172,12 @@
     }
     .ai-copilot-composer-bar {
       flex-shrink: 0;
-      padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+      padding: 10px 10px calc(12px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--color-border);
       background: var(--color-surface);
       box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.08);
+      width: 100%;
+      box-sizing: border-box;
     }
     /* Revisão de campos proposta pela IA (antes de aplicar no canvas) */
     #copilot-schema-preview-modal {
@@ -1279,6 +1319,8 @@
       margin-right: auto;
     }
     .ai-copilot-input-wrap {
+      flex: 1 1 auto;
+      min-width: 0;
       display: flex;
       align-items: flex-end;
       gap: 10px;
@@ -1288,6 +1330,7 @@
       padding: 8px 8px 8px 14px;
       margin-bottom: 0;
       transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      box-sizing: border-box;
     }
     .ai-copilot-input-wrap:focus-within {
       border-color: #a5b4fc;
@@ -2223,81 +2266,27 @@
     </div>
 </div>
 
-<!-- Composer IA (painel lateral) -->
-<div id="ai-copilot-panel" class="ai-copilot-menu-collapsed" aria-hidden="true">
+<!-- Composer IA — só conversa (estilo chat); resto do motor em #ai-copilot-util-bin -->
+<div id="ai-copilot-panel" aria-hidden="true">
   <div class="ai-copilot-head">
-    <h4 title="Arraste pelo cabeçalho para mover o painel. Duplo clique aqui repõe a posição.">
-      <ion-icon name="chatbubbles" style="color:#6366f1"></ion-icon> <span id="mdl-copilot-head-text">Composer</span>
-    </h4>
+    <div style="flex:1;min-width:0">
+      <h4 title="Arraste pelo cabeçalho para mover o painel. Duplo clique aqui repõe a posição." style="margin:0;">
+        <ion-icon name="chatbubbles" style="color:#6366f1"></ion-icon> <span id="mdl-copilot-head-text">Composer</span>
+      </h4>
+      <div id="copilot-focus-chip" class="copilot-canvas-focus-chip ai-copilot-focus-chip-head" style="display:none;" aria-label="Campo em foco para o Composer"></div>
+    </div>
     <div class="ai-copilot-head-actions">
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm"
-        id="ai-copilot-menu-toggle-btn"
-        onclick="window.brsparkCopilotToggleSideMenu()"
-        aria-controls="ai-copilot-side-menu"
-        aria-expanded="false"
-        title="Mostrar ou ocultar opções, arquivos de referência e contexto"
-      >
-        <ion-icon name="options-outline" style="font-size:20px;vertical-align:-3px"></ion-icon>
-        <span class="ai-copilot-menu-toggle-label">Opções</span>
-      </button>
+      <button type="button" class="btn btn-ghost btn-sm" id="ai-copilot-undo-btn" onclick="window.brsparkCopilotUndo()" disabled title="Desfazer última alteração do Composer no canvas"><ion-icon name="arrow-undo-outline" style="font-size:20px"></ion-icon></button>
+      <button type="button" class="btn btn-ghost btn-sm" id="ai-copilot-clear-btn" onclick="window.brsparkCopilotClear()" title="Limpar conversa"><ion-icon name="trash-outline" style="font-size:20px"></ion-icon></button>
       <button type="button" id="ai-copilot-close-btn" class="btn btn-ghost btn-sm" onclick="window.toggleAiCopilotPanel()" aria-label="Fechar Composer"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
     </div>
   </div>
   <div class="ai-copilot-body">
     <div class="ai-copilot-col-chat">
       <div class="ai-copilot-chat-scroll">
-        <div id="ai-copilot-insights" class="ai-copilot-insights" hidden></div>
-        <div class="ai-copilot-journey-row">
-          <label for="copilot-journey-mode">Jornada do Composer</label>
-          <select id="copilot-journey-mode" aria-label="Modo de jornada do Composer">
-            <option value="auto">Automática — a IA interpreta o pedido</option>
-            <option value="create">Criar ou expandir o formulário</option>
-            <option value="refine">Ajustar campos existentes</option>
-            <option value="troubleshoot">Problema no app / algo não funciona</option>
-            <option value="rules">Regras e automações (mostrar, ocultar, API)</option>
-            <option value="import_assist">Apoio com ficheiros / importação</option>
-            <option value="explain">Só explicar (sem alterar o canvas)</option>
-          </select>
-        </div>
-        <div id="copilot-troubleshoot-panel" class="ai-copilot-ts-panel" hidden>
-          <p class="ai-copilot-ts-intro" id="copilot-ts-intro-txt">
-            Passo a passo: escolha o tipo de sintoma e descreva o que vê no técnico ou no editor. O Composer rankeia hipóteses e sugere correções.
-          </p>
-          <label for="copilot-ts-symptom">Tipo de problema</label>
-          <select id="copilot-ts-symptom" aria-label="Tipo de problema no formulário ou app">
-            <option value="visibility_show_hide">Campo ou secção não aparece / aparece no momento errado</option>
-            <option value="validation_required">Validação, obrigatoriedade ou bloqueio a gravar</option>
-            <option value="logic_rules">Regra (mostrar/ocultar/obrigar) não faz o esperado</option>
-            <option value="gps_geofence">GPS, cerca ou localização</option>
-            <option value="api_fetch">Preenchimento por API ou busca externa</option>
-            <option value="offline_sync">Offline ou sincronização</option>
-            <option value="other">Outro</option>
-          </select>
-          <label for="copilot-ts-detail">O que observa (obrigatório)</label>
-          <textarea
-            id="copilot-ts-detail"
-            rows="3"
-            maxlength="4000"
-            placeholder="Ex.: quando marco «Conforme» em Inspeção, a foto de não conformidade continua a pedir-se…"
-          ></textarea>
-          <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            id="copilot-ts-send-btn"
-            onclick="window.brsparkCopilotSendTroubleshootBundle()"
-          >
-            Pedir diagnóstico ao Composer
-          </button>
-        </div>
-        <div id="ai-copilot-quick-actions" class="ai-copilot-quick-actions">
-          <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Quero um primeiro rascunho profissional e simples para celular.')">Primeiro rascunho</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Simplifique o formulário para um usuário leigo no celular e reduza termos técnicos.')">Simplificar</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Adicione evidências úteis como fotos, assinatura, localização e comentários onde fizer sentido.')">Adicionar evidências</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="window.brsparkCopilotSendQuickAction('Gere uma versão enxuta, mais curta e rápida de preencher.')">Versão enxuta</button>
-        </div>
         <div id="ai-copilot-messages"></div>
+        <p id="ai-copilot-clarify-hint" class="ai-copilot-clarify-hint" style="display:none;">Marque uma ou mais opções em cada pergunta (toque de novo para desmarcar) e use «Enviar escolhas»; ou escreva livremente na caixa de texto.</p>
+        <div id="ai-copilot-clarify"></div>
         <div id="ai-copilot-thinking" role="status" aria-live="polite" aria-atomic="true">
           <div class="ai-copilot-thinking-bar" aria-hidden="true"></div>
           <div id="ai-copilot-thinking-inner">
@@ -2306,96 +2295,65 @@
           </div>
         </div>
       </div>
+      <div id="copilot-excel-status" class="ai-copilot-excel-status-line" role="status" aria-live="polite"></div>
       <div class="ai-copilot-composer-bar">
-        <div class="ai-copilot-input-wrap">
-          <textarea id="ai-copilot-input" rows="2" placeholder="Descreva o processo ou o ajuste desejado… (Enter envia, Shift+Enter nova linha)" style="font-size:14px;" onkeydown="window.brsparkCopilotInputKeydown(event)"></textarea>
-          <button type="button" class="ai-copilot-send-fab" id="ai-copilot-send-fab" onclick="window.brsparkCopilotSend()" title="Enviar" aria-label="Enviar mensagem"><ion-icon name="arrow-up"></ion-icon></button>
+        <div class="ai-copilot-composer-inner">
+          <button
+            type="button"
+            class="ai-copilot-attach-fab"
+            id="ai-copilot-attach-fab"
+            onclick="void window.brsparkCopilotPickExcelFile()"
+            title="Anexar ficheiros"
+            aria-label="Anexar ficheiros"
+          >
+            <ion-icon name="attach-outline" style="font-size:22px"></ion-icon>
+          </button>
+          <div class="ai-copilot-input-wrap">
+            <textarea id="ai-copilot-input" rows="2" placeholder="Escreva a mensagem ou cole links https://… (Enter envia, Shift+Enter nova linha)" style="font-size:14px;" onkeydown="window.brsparkCopilotInputKeydown(event)"></textarea>
+            <button type="button" class="ai-copilot-send-fab" id="ai-copilot-send-fab" onclick="window.brsparkCopilotSend()" title="Enviar" aria-label="Enviar mensagem"><ion-icon name="arrow-up"></ion-icon></button>
+          </div>
         </div>
       </div>
+      <p id="copilot-rag-footnote" class="ai-copilot-chat-footnote"></p>
+      <p id="copilot-telemetry-footnote" class="ai-copilot-chat-footnote ai-copilot-source-footnote"></p>
     </div>
-    <div
-      id="ai-copilot-side-menu"
-      class="ai-copilot-col-menu"
-      aria-label="Opções e contexto do Composer"
-      role="region"
-      aria-hidden="true"
-    >
-      <div class="ai-copilot-menu-eyebrow">
-        <span>Opções e contexto</span>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm ai-copilot-menu-collapse-btn"
-          onclick="window.brsparkCopilotToggleSideMenu(false)"
-          aria-label="Recolher menu de opções"
-          title="Recolher"
-        >
-          <ion-icon name="chevron-forward-outline" style="font-size:18px"></ion-icon>
-        </button>
-      </div>
-      <div class="ai-copilot-menu-scroll">
-        <div id="copilot-canvas-focus-panel">
-          <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:700;color:#475569;margin:0 0 8px;cursor:pointer;line-height:1.35;">
-            <input type="checkbox" id="copilot-follow-canvas" checked style="margin-top:2px;accent-color:#6366f1;" />
-            <span id="mdl-copilot-follow-txt">Ao clicar no canvas, usar esse campo na conversa</span>
-          </label>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
-            <button type="button" class="btn btn-outline btn-sm" id="copilot-pin-selection-btn" onclick="window.brsparkCopilotSyncFocusFromCanvasSelection()">Fixar seleção atual</button>
-            <button type="button" class="btn btn-ghost btn-sm" id="copilot-clear-focus-btn" style="display:none;" onclick="window.brsparkCopilotClearFocusedField()">Limpar foco</button>
-          </div>
-          <div id="copilot-focus-chip" class="copilot-canvas-focus-chip" style="display:none;" aria-label="Campo em foco para o Composer"></div>
-        </div>
-        <p id="ai-copilot-clarify-hint" class="ai-copilot-clarify-hint" style="display:none;">Marque uma ou mais opções em cada pergunta (toque de novo para desmarcar) e use «Enviar escolhas»; ou escreva livremente na caixa de texto.</p>
-        <div id="ai-copilot-clarify"></div>
-        <details id="copilot-context-details" class="ai-copilot-details ai-copilot-details--advanced">
-          <summary><span id="mdl-copilot-adv-summary-txt">Avançado: contexto, integrações e Excel</span> <span class="ai-copilot-details-chevron" aria-hidden="true">▼</span></summary>
-          <div class="ai-copilot-details-body">
-            <div class="ai-copilot-ctx-mini">
-              <label for="copilot-ctx-objective">Contexto e objetivo (opcional)</label>
-              <textarea id="copilot-ctx-objective" class="prop-input" rows="3" placeholder="Ex.: vistoria em campo com foto de evidência, leitura do patrimônio por etiqueta, chegada só perto do cliente… O Composer infere carimbo, barras, GPS, cerca e deslocamento a partir disto e da conversa." style="font-size:12px; margin-bottom:8px;"></textarea>
-              <p style="font-size:11px;color:var(--color-text-light);margin:0 0 8px;line-height:1.45;">Não é preciso marcar recursos à mão: a IA sugere e combina com você conforme o caso de uso.</p>
-              <div class="copilot-doc-url-strip" style="padding:10px 0 0; margin-top:10px; border-top:1px solid var(--color-border);">
-                <label for="copilot-ctx-ref-urls" class="prop-label" style="font-size:11px;">Links web de referência (opcional)</label>
-                <p style="font-size:10px;color:var(--color-text-light);margin:0 0 6px;line-height:1.45;">
-                  <strong>Uma linha por URL</strong> (só <code>https://</code>, até <strong>5</strong> links). O servidor descarrega o texto <strong>uma vez por mensagem</strong> e envia à IA: pode ser documentação, norma PDF/HTML, checklist público, página de produto, etc. A IA usa esse texto como base e complementa com conhecimento geral do domínio (sem pesquisa web em tempo real). Rede interna e <code>localhost</code> são bloqueados.
-                </p>
-                <textarea
-                  id="copilot-ctx-ref-urls"
-                  class="prop-input"
-                  rows="3"
-                  spellcheck="false"
-                  autocomplete="off"
-                  placeholder="https://exemplo.gov/documentacao&#10;https://docs.exemplo.com/api"
-                  style="font-size:12px; margin-bottom:0; font-family: ui-monospace, monospace; resize: vertical; min-height: 72px;"
-                ></textarea>
-              </div>
-            </div>
-            <div class="copilot-excel-strip" style="padding:12px 0 4px; margin-top:10px; border-top:1px solid var(--color-border);">
-              <label class="prop-label" style="font-size:11px;margin-bottom:4px;">Arquivos de referência (opcional)</label>
-              <p style="font-size:10px;color:var(--color-text-light);margin:0 0 8px;line-height:1.45;"><strong>Excel</strong> (.xlsx, .xlsm), <strong>Word</strong> (.docx), <strong>PDF</strong>, <strong>imagem</strong> (.png, .jpg, .webp), <strong>JSON</strong> (.json — schema BrSpark, Google Forms, Typeform ou outro). Pode <strong>selecionar vários</strong> de uma vez (Ctrl/Cmd+clique ou Shift); cada arquivo é analisado e o resumo acumulado entra no chat. Imagens usam OCR.</p>
-              <input type="file" id="copilot-excel-file" multiple accept=".xlsx,.xlsm,.docx,.pdf,.png,.jpg,.jpeg,.webp,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,image/png,image/jpeg,image/webp" style="display:none;" onchange="void window.brsparkCopilotAnalyzeExcelFile(this)" />
-              <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px;">
-                <button type="button" class="btn btn-outline btn-sm" id="copilot-excel-pick-btn" onclick="void window.brsparkCopilotPickExcelFile()"><ion-icon name="documents-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Escolher arquivos…</button>
-                <button type="button" class="btn btn-ghost btn-sm" id="copilot-excel-clear-btn" style="display:none;" onclick="window.brsparkCopilotClearSpreadsheet()">Remover arquivos</button>
-              </div>
-              <label class="prop-label" for="copilot-excel-hint" style="font-size:10px;">Dicas para a leitura (opcional)</label>
-              <textarea id="copilot-excel-hint" class="prop-input" rows="2" placeholder='Ex.: cada aba vira uma etapa; em PDF use só a primeira parte; em fotos peça campos por secção' style="font-size:12px;margin-bottom:6px;resize:vertical;"></textarea>
-              <div id="copilot-excel-status" style="font-size:11px;color:#475569;min-height:18px;line-height:1.35;"></div>
-            </div>
-            <p id="copilot-rag-footnote" style="font-size:10px;color:var(--color-text-light);margin:12px 0 0;line-height:1.45;"></p>
-            <p id="copilot-telemetry-footnote" class="ai-copilot-source-footnote"></p>
-          </div>
-        </details>
-        <div class="ai-copilot-confirm-block">
-          <p style="font-size:11px;color:var(--color-text-light);margin:0 0 10px;line-height:1.45;">O Composer aplica as alterações logo no formulário. Use o botão abaixo para desfazer só a última rodada (canvas + configurações + regras sugeridas nessa mensagem).</p>
-          <div class="ai-copilot-actions">
-            <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-undo-btn" onclick="window.brsparkCopilotUndo()" disabled title="Reverte o formulário ao estado antes da última alteração aplicada pelo Composer">Desfazer última alteração</button>
-          </div>
-          <div class="ai-copilot-footer-toolbar" style="margin-top:10px;margin-bottom:0;">
-            <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-clear-btn" onclick="window.brsparkCopilotClear()">Limpar conversa</button>
-          </div>
-        </div>
-      </div>
+  </div>
+  <div id="ai-copilot-util-bin" class="ai-copilot-util-bin" aria-hidden="true">
+    <div id="ai-copilot-insights" class="ai-copilot-insights" hidden></div>
+    <select id="copilot-journey-mode" aria-label="Modo de jornada do Composer" tabindex="-1">
+      <option value="auto" selected>Automática — a IA interpreta o pedido</option>
+      <option value="create">Criar ou expandir o formulário</option>
+      <option value="refine">Ajustar campos existentes</option>
+      <option value="troubleshoot">Problema no app / algo não funciona</option>
+      <option value="rules">Regras e automações (mostrar, ocultar, API)</option>
+      <option value="import_assist">Apoio com ficheiros / importação</option>
+      <option value="explain">Só explicar (sem alterar o canvas)</option>
+    </select>
+    <div id="copilot-troubleshoot-panel" class="ai-copilot-ts-panel" hidden>
+      <p class="ai-copilot-ts-intro" id="copilot-ts-intro-txt">Passo a passo: escolha o tipo de sintoma e descreva o que vê no técnico ou no editor.</p>
+      <label for="copilot-ts-symptom">Tipo de problema</label>
+      <select id="copilot-ts-symptom" aria-label="Tipo de problema no formulário ou app">
+        <option value="visibility_show_hide">Campo ou secção não aparece / aparece no momento errado</option>
+        <option value="validation_required">Validação, obrigatoriedade ou bloqueio a gravar</option>
+        <option value="logic_rules">Regra (mostrar/ocultar/obrigar) não faz o esperado</option>
+        <option value="gps_geofence">GPS, cerca ou localização</option>
+        <option value="api_fetch">Preenchimento por API ou busca externa</option>
+        <option value="offline_sync">Offline ou sincronização</option>
+        <option value="other">Outro</option>
+      </select>
+      <label for="copilot-ts-detail">O que observa (obrigatório)</label>
+      <textarea id="copilot-ts-detail" rows="3" maxlength="4000" placeholder="Descreva o sintoma…"></textarea>
+      <button type="button" class="btn btn-primary btn-sm" id="copilot-ts-send-btn" onclick="window.brsparkCopilotSendTroubleshootBundle()">Pedir diagnóstico ao Composer</button>
     </div>
+    <label><input type="checkbox" id="copilot-follow-canvas" checked tabindex="-1" /> <span id="mdl-copilot-follow-txt">Canvas</span></label>
+    <button type="button" id="copilot-pin-selection-btn" onclick="window.brsparkCopilotSyncFocusFromCanvasSelection()" tabindex="-1">Fixar seleção</button>
+    <button type="button" id="copilot-clear-focus-btn" onclick="window.brsparkCopilotClearFocusedField()" tabindex="-1">Limpar foco</button>
+    <textarea id="copilot-ctx-objective" tabindex="-1" aria-hidden="true"></textarea>
+    <textarea id="copilot-ctx-ref-urls" tabindex="-1" aria-hidden="true" spellcheck="false" autocomplete="off"></textarea>
+    <textarea id="copilot-excel-hint" tabindex="-1" aria-hidden="true"></textarea>
+    <input type="file" id="copilot-excel-file" multiple accept=".xlsx,.xlsm,.docx,.pdf,.png,.jpg,.jpeg,.webp,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,image/png,image/jpeg,image/webp" tabindex="-1" onchange="void window.brsparkCopilotAnalyzeExcelFile(this)" />
+    <button type="button" id="copilot-excel-pick-btn" onclick="void window.brsparkCopilotPickExcelFile()" tabindex="-1">Ficheiros</button>
+    <button type="button" id="copilot-excel-clear-btn" onclick="window.brsparkCopilotClearSpreadsheet()" tabindex="-1">Remover arquivos</button>
   </div>
   <!-- Campos ocultos para chamadas programáticas (ex.: rota só de lógica) -->
   <textarea id="ai-copilot-logic-goal" style="display:none;" aria-hidden="true"></textarea>

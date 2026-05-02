@@ -1587,6 +1587,20 @@ function escDispatchSuggest(s) {
     .replace(/</g, '&lt;');
 }
 
+/** SAAS sem tenant no JWT: reutiliza tenant seleccionado no painel (sessionStorage). */
+function opsDispatchSuggestionsTenantParam() {
+  try {
+    const raw = sessionStorage.getItem('brspark_panel_tenant');
+    if (!raw || raw === 'null') return '';
+    const o = JSON.parse(raw);
+    const id = o && (o.id || o.tenantId);
+    if (!id) return '';
+    return '&tenantId=' + encodeURIComponent(String(id));
+  } catch {
+    return '';
+  }
+}
+
 function hideDispatchTechSuggestions() {
   const ul = document.getElementById('d-email-suggestions');
   if (ul) {
@@ -1594,27 +1608,6 @@ function hideDispatchTechSuggestions() {
     ul.innerHTML = '';
   }
   _dispatchSuggestIndex = -1;
-}
-
-function filterDispatchTechCandidates(q) {
-  const query = String(q || '').trim().toLowerCase();
-  if (!_reopenUsersCache || !_reopenUsersCache.length) return [];
-  if (!query) {
-    const sorted = [..._reopenUsersCache].sort((a, b) =>
-      String(a.name || '').localeCompare(String(b.name || ''), opsSortLocale(), { sensitivity: 'base' })
-    );
-    return sorted.slice(0, 12);
-  }
-  const list = _reopenUsersCache.filter((u) => {
-    const name = String(u.name || '').toLowerCase();
-    const em = String(u.email || '').toLowerCase();
-    const canon = String(u.loginEmailNorm || '').toLowerCase();
-    return name.includes(query) || em.includes(query) || canon.includes(query);
-  });
-  list.sort((a, b) =>
-    String(a.name || '').localeCompare(String(b.name || ''), opsSortLocale(), { sensitivity: 'base' })
-  );
-  return list.slice(0, 14);
 }
 
 function renderDispatchTechSuggestions(users) {
@@ -1805,12 +1798,28 @@ window.selectDispatchTechEmail = function (email) {
 };
 
 async function refreshDispatchTechSuggestionsFromInput() {
-  await ensureOpsActiveUsersCache();
-  const input = document.getElementById('d-email');
-  const v = input ? input.value : '';
-  const users = filterDispatchTechCandidates(v);
-  _dispatchSuggestIndex = users.length ? 0 : -1;
-  renderDispatchTechSuggestions(users);
+  if (window._dispatchSuggestDebounceTimer) clearTimeout(window._dispatchSuggestDebounceTimer);
+  window._dispatchSuggestDebounceTimer = setTimeout(async () => {
+    const input = document.getElementById('d-email');
+    const v = input ? String(input.value || '').trim() : '';
+    const tenantQ = opsDispatchSuggestionsTenantParam();
+    const path =
+      '/users/dispatch-assignee-suggestions?limit=80&q=' + encodeURIComponent(v) + tenantQ;
+    let json = null;
+    try {
+      json = await CONFIG.get(path);
+    } catch {
+      hideDispatchTechSuggestions();
+      return;
+    }
+    if (!json || json.error || !Array.isArray(json.data)) {
+      hideDispatchTechSuggestions();
+      return;
+    }
+    const users = json.data;
+    _dispatchSuggestIndex = users.length ? 0 : -1;
+    renderDispatchTechSuggestions(users);
+  }, 160);
 }
 
 function initDispatchTechAutocomplete() {

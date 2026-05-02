@@ -501,7 +501,7 @@ async function main() {
   });
 
   const demoUserHash = await bcrypt.hash('demo123', 10);
-  await prisma.user.upsert({
+  const mariaDemo = await prisma.user.upsert({
     where: { email_tenantId: { email: 'maria@brspark.com', tenantId: tenantDemo.id } },
     update: {},
     create: {
@@ -663,12 +663,18 @@ async function main() {
     assetDemo = await prisma.asset.create({
       data: {
         tenantId: tenantDemo.id,
+        createdByUserId: mariaDemo.id,
         title: 'Apartamento Paulista',
         type: 'REAL_ESTATE',
         status: 'Operacional',
         description: 'Imóvel residencial — dados de demonstração do seed',
         imageUrl: 'https://images.unsplash.com/photo-1499793983690-e29da59ef1c2?w=800&q=80',
       },
+    });
+  } else if (!assetDemo.createdByUserId) {
+    await prisma.asset.update({
+      where: { id: assetDemo.id },
+      data: { createdByUserId: mariaDemo.id },
     });
   }
 

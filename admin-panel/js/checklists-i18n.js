@@ -650,9 +650,12 @@ const M = {
     mdl_copilot_options_title: 'Mostrar ou ocultar opções, arquivos de referência e contexto',
     mdl_copilot_close_aria: 'Fechar Composer',
     mdl_copilot_thinking: 'A IA está pensando…',
-    mdl_copilot_input_ph: 'Descreva o processo ou o ajuste desejado… (Enter envia, Shift+Enter nova linha)',
+    mdl_copilot_input_ph:
+      'Mensagem para o Composer… (Enter envia; pode colar links https://; clipe ou arrastar ficheiros)',
     mdl_copilot_send: 'Enviar',
     mdl_copilot_send_aria: 'Enviar mensagem',
+    mdl_copilot_attach_title: 'Anexar ficheiros (Excel, Word, PDF, imagem, JSON…)',
+    mdl_copilot_attach_aria: 'Anexar ficheiros de referência ao Composer',
     mdl_copilot_menu_eyebrow: 'Opções e contexto',
     mdl_copilot_collapse_aria: 'Recolher menu de opções',
     mdl_copilot_collapse_title: 'Recolher',
@@ -661,7 +664,7 @@ const M = {
     mdl_copilot_clear_focus: 'Limpar foco',
     mdl_copilot_clarify_hint:
       'Marque uma ou mais opções em cada pergunta (toque de novo para desmarcar) e use «Enviar escolhas»; ou escreva livremente na caixa de texto.',
-    mdl_copilot_adv_summary: 'Avançado: contexto, integrações e Excel',
+    mdl_copilot_adv_summary: 'Contexto, links e ficheiros (opcional)',
     mdl_copilot_undo_hint:
       'O Composer aplica as alterações logo no formulário. Use o botão abaixo para desfazer só a última rodada (canvas + configurações + regras sugeridas nessa mensagem).',
     mdl_copilot_undo: 'Desfazer última alteração',
@@ -1399,9 +1402,12 @@ const M = {
     mdl_copilot_options_title: 'Show or hide options, reference files, and context',
     mdl_copilot_close_aria: 'Close Composer',
     mdl_copilot_thinking: 'AI is thinking…',
-    mdl_copilot_input_ph: 'Describe the process or change… (Enter sends, Shift+Enter new line)',
+    mdl_copilot_input_ph:
+      'Message… (Enter sends; paste https:// links; attach or drop files)',
     mdl_copilot_send: 'Send',
     mdl_copilot_send_aria: 'Send message',
+    mdl_copilot_attach_title: 'Attach files (Excel, Word, PDF, image, JSON…)',
+    mdl_copilot_attach_aria: 'Attach reference files to Composer',
     mdl_copilot_menu_eyebrow: 'Options and context',
     mdl_copilot_collapse_aria: 'Collapse options menu',
     mdl_copilot_collapse_title: 'Collapse',
@@ -1410,7 +1416,7 @@ const M = {
     mdl_copilot_clear_focus: 'Clear focus',
     mdl_copilot_clarify_hint:
       'Select one or more options per question (tap again to deselect) and use “Send choices”; or type freely in the text box.',
-    mdl_copilot_adv_summary: 'Advanced: context, integrations, and Excel',
+    mdl_copilot_adv_summary: 'Context, links, and files (optional)',
     mdl_copilot_undo_hint:
       'Composer applies changes directly to the form. Use the button below to undo only the last round (canvas + settings + suggested rules from that message).',
     mdl_copilot_undo: 'Undo last change',
@@ -1993,6 +1999,11 @@ export function applyChecklistsModalsI18n() {
     sendFab.title = fbT('mdl_copilot_send');
     sendFab.setAttribute('aria-label', fbT('mdl_copilot_send_aria'));
   }
+  const attachFab = document.getElementById('ai-copilot-attach-fab');
+  if (attachFab) {
+    attachFab.title = fbT('mdl_copilot_attach_title');
+    attachFab.setAttribute('aria-label', fbT('mdl_copilot_attach_aria'));
+  }
   const menuEyebrow = document.querySelector('.ai-copilot-menu-eyebrow span');
   if (menuEyebrow) menuEyebrow.textContent = fbT('mdl_copilot_menu_eyebrow');
   const collBtn = document.querySelector('.ai-copilot-menu-collapse-btn');
@@ -2005,15 +2016,28 @@ export function applyChecklistsModalsI18n() {
   setText('copilot-clear-focus-btn', fbT('mdl_copilot_clear_focus'));
   const clar = document.getElementById('ai-copilot-clarify-hint');
   if (clar) clar.textContent = fbT('mdl_copilot_clarify_hint');
-  setText('mdl-copilot-adv-summary-txt', fbT('mdl_copilot_adv_summary'));
+  const advSummary = document.getElementById('mdl-copilot-adv-summary-txt');
+  if (advSummary) advSummary.textContent = fbT('mdl_copilot_adv_summary');
   const undoHint = document.querySelector('.ai-copilot-confirm-block p');
   if (undoHint) undoHint.textContent = fbT('mdl_copilot_undo_hint');
   const undoBtn = document.getElementById('ai-copilot-undo-btn');
   if (undoBtn) {
-    undoBtn.textContent = fbT('mdl_copilot_undo');
     undoBtn.title = fbT('mdl_copilot_undo_title');
+    undoBtn.setAttribute('aria-label', fbT('mdl_copilot_undo'));
+    if (!undoBtn.querySelector('ion-icon')) {
+      undoBtn.innerHTML =
+        '<ion-icon name="arrow-undo-outline" style="font-size:20px"></ion-icon>';
+    }
   }
-  setText('ai-copilot-clear-btn', fbT('mdl_copilot_clear_chat'));
+  const clearChatHead = document.getElementById('ai-copilot-clear-btn');
+  if (clearChatHead) {
+    clearChatHead.title = fbT('mdl_copilot_clear_chat');
+    clearChatHead.setAttribute('aria-label', fbT('mdl_copilot_clear_chat'));
+    if (!clearChatHead.querySelector('ion-icon')) {
+      clearChatHead.innerHTML =
+        '<ion-icon name="trash-outline" style="font-size:20px"></ion-icon>';
+    }
+  }
 
   const cph = document.getElementById('copilot-preview-intro');
   if (cph) cph.textContent = fbT('mdl_copilot_preview_intro');

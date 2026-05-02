@@ -19,6 +19,9 @@ function getDeviceLanguage(): SupportedLang {
     const locales = getLocales();
     if (locales.length > 0) {
       const tag = locales[0].languageTag; // e.g. 'pt-BR', 'en-US', 'es-MX', 'es-AR'
+      const region = String(locales[0].regionCode || '').toUpperCase();
+      // Brasil / Portugal: manter UI em pt-BR mesmo com sistema em inglês (textos do produto em pt-BR)
+      if (region === 'BR' || region === 'PT') return 'pt-BR';
       if (tag.startsWith('pt')) return 'pt-BR';
       if (tag.startsWith('es')) return 'es-ES'; // covers es-AR, es-MX, es-ES, etc.
       if (tag.startsWith('de')) return 'de-DE';
@@ -75,7 +78,7 @@ i18n.use(initReactI18next).init({
     'de-DE': { translation: deDE },
   },
   lng: getDeviceLanguage(),
-  fallbackLng: 'en-US',
+  fallbackLng: 'pt-BR',
   debug: false,
   interpolation: { escapeValue: false },
   compatibilityJSON: 'v4',

@@ -52,17 +52,25 @@ const ROUTES = [
   ['post', '/api/register', op('Registro de tenant + usuário (app)', ['App — Conta'], false, {
     requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/AppRegisterBody' } } } },
   })],
-  ['post', '/api/login', op('Login do usuário do app (JWT com tenantId)', ['App — Conta'], false, {
+  ['post', '/api/login', op('Login do utilizador do app (JWT com tenantId efectivo)', ['App — Conta'], false, {
     requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/AppLoginBody' } } } },
+    description:
+      'Resposta inclui o mesmo payload de utilizador que `GET /api/me` (incl. `homeTenantId` / `clientTenantBranding` quando aplicável).',
   })],
-  ['get', '/api/me', op('Dados do usuário logado (app)', ['App — Conta'], bearerApp)],
+  ['get', '/api/me', op('Perfil do utilizador + tenant efectiva (app)', ['App — Conta'], bearerApp, {
+    description:
+      'Inclui `tenant` / `tenantId` da organização efectiva (ex.: empresa com vínculo dedicado). ' +
+      '`clientTenantBranding`: (1) se `homeTenantId` ≠ `tenantId`, marca da piscina/registo (BD se faltar snapshot); ' +
+      '(2) se papel `USER` e a tenant da linha não é a piscina partilhada, marca BrSpark derivada da tenant de registo partilhada. ' +
+      'Na app, persona cliente usa `clientTenantBranding` / piscina mascarada; modo prestador usa `tenant.branding`.',
+  })],
   ['put', '/api/me', op('Atualizar perfil (app)', ['App — Conta'], bearerApp)],
   ['delete', '/api/me', op('Excluir conta (anonimizar + desativar; LGPD)', ['App — Conta'], bearerApp)],
   ['post', '/api/me/technician', op('Criar/atualizar perfil de técnico', ['App — Conta'], bearerApp)],
 
   // ── Sync core (/api/sync + authUser global no router)
   ['post', '/api/sync/push_token', op('Registrar token Expo para push', ['App — Sincronização'], bearerApp)],
-  ['get', '/api/sync/assets', op('Pull de bens do tenant', ['App — Sincronização'], bearerApp)],
+  ['get', '/api/sync/assets', op('Pull de bens do utilizador (+ partilhas aceites)', ['App — Sincronização'], bearerApp)],
   ['post', '/api/sync/push', op('Push de alterações locais (delta)', ['App — Sincronização'], bearerApp)],
   ['post', '/api/sync/asset', op('Criar/atualizar um bem', ['App — Sincronização'], bearerApp)],
   ['get', '/api/sync/providers', op('Lista de prestadores (cache/sync)', ['App — Sincronização'], bearerApp)],
@@ -408,7 +416,32 @@ const ROUTES = [
     parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
   })],
 
-  ['get', '/api/assets', op('Listar bens (read-only admin)', ['Admin — Bens'], bearerAdmin)],
+  ['get', '/api/assets', op('Listar bens por utilizador (read-only admin)', ['Admin — Bens'], bearerAdmin, {
+    description:
+      'Inventário por criador: use `createdByUserId` (obrigatório salvo `listAll=1` para admin de plataforma). ' +
+      'Opcional: `tenantId`, `type`, `q`, `page`, `limit`. Sem criador, resposta vazia com `_meta.policy=inventory_per_user`.',
+    parameters: [
+      {
+        name: 'createdByUserId',
+        in: 'query',
+        required: false,
+        schema: { type: 'string' },
+        description: 'ID do utilizador criador dos bens.',
+      },
+      { name: 'tenantId', in: 'query', required: false, schema: { type: 'string' } },
+      {
+        name: 'listAll',
+        in: 'query',
+        required: false,
+        schema: { type: 'string', enum: ['1'] },
+        description: 'Apenas admin de plataforma: listagem global legada (filtros opcionais tenant/type/q).',
+      },
+      { name: 'type', in: 'query', required: false, schema: { type: 'string' } },
+      { name: 'q', in: 'query', required: false, schema: { type: 'string' } },
+      { name: 'page', in: 'query', required: false, schema: { type: 'integer', default: 1 } },
+      { name: 'limit', in: 'query', required: false, schema: { type: 'integer', default: 50 } },
+    ],
+  })],
   ['get', '/api/locations', op('Listar localizações', ['Admin — Localizações'], bearerAdmin)],
   ['post', '/api/locations', op('Criar localização', ['Admin — Localizações'], bearerAdmin, {
     requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },

@@ -1,9 +1,12 @@
 'use strict';
 
+const pdfParse = require('pdf-parse');
+
 const MAX_BYTES = 400_000;
-const MAX_CHARS_OUT = 28_000;
+/** Por PDF extraído com pdf-parse — documentos longos (ex.: gov.br). */
+const MAX_CHARS_OUT = 34_000;
 /** Texto combinado máximo quando várias URLs são carregadas para o Composer. */
-const MAX_CHARS_COMBINED_REFERENCES = 36_000;
+const MAX_CHARS_COMBINED_REFERENCES = 40_000;
 
 /**
  * @param {string} hostname
@@ -23,6 +26,25 @@ function isBlockedHostname(hostname) {
     if (a === 172 && b >= 16 && b <= 31) return true;
   }
   return false;
+}
+
+function bufferLooksLikePdf(buf) {
+  if (!buf || buf.length < 5) return false;
+  return buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46;
+}
+
+/**
+ * @param {Buffer} buf
+ * @returns {Promise<string>}
+ */
+async function extractPdfTextForCopilot(buf) {
+  const parsed = await pdfParse(buf);
+  return String(parsed.text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function htmlToPlainText(html) {
@@ -93,13 +115,15 @@ async function fetchDocumentationForCopilot(rawUrl, opts = {}) {
   }
 
   try {
+    const pdfLikely = /\.pdf(\?|#|$)/i.test(trimmed);
     const res = await fetch(trimmed, {
       method: 'GET',
       redirect: 'follow',
-      signal: AbortSignal.timeout(12_000),
+      signal: AbortSignal.timeout(pdfLikely ? 45_000 : 18_000),
       headers: {
-        Accept: 'text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.8',
-        'User-Agent': 'BrSpark-Admin-CopilotDocFetch/1.0',
+        Accept:
+          'application/pdf,text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.7',
+        'User-Agent': 'BrSpark-Admin-CopilotDocFetch/1.1',
       },
     });
     if (!res.ok) {
@@ -110,15 +134,36 @@ async function fetchDocumentationForCopilot(rawUrl, opts = {}) {
       return { ok: false, text: '', error: 'Documentação demasiado grande (>400 KB).' };
     }
     const ct = (res.headers.get('content-type') || '').toLowerCase();
-    let body = buf.toString('utf8');
-    if (ct.includes('application/json') || /^\s*[\[{]/.test(body)) {
+    const isPdf =
+      ct.includes('application/pdf') || pdfLikely || bufferLooksLikePdf(buf);
+
+    let body;
+    if (isPdf) {
       try {
-        body = JSON.stringify(JSON.parse(body), null, 2);
-      } catch {
-        body = htmlToPlainText(body);
+        body = await extractPdfTextForCopilot(buf);
+      } catch (e) {
+        const msg = e && e.message ? String(e.message) : String(e);
+        return { ok: false, text: '', error: 'Falha ao extrair texto do PDF: ' + msg.slice(0, 200) };
+      }
+      if (!body || body.length < 80) {
+        return {
+          ok: false,
+          text: '',
+          error:
+            'PDF sem texto seleccionável (pode ser só imagem). Anexe o ficheiro para análise com OCR ou use uma página HTML com o mesmo conteúdo.',
+        };
       }
     } else {
-      body = htmlToPlainText(body);
+      body = buf.toString('utf8');
+      if (ct.includes('application/json') || /^\s*[\[{]/.test(body)) {
+        try {
+          body = JSON.stringify(JSON.parse(body), null, 2);
+        } catch {
+          body = htmlToPlainText(body);
+        }
+      } else {
+        body = htmlToPlainText(body);
+      }
     }
     const cap =
       typeof opts.maxCharsOut === 'number' && opts.maxCharsOut > 500

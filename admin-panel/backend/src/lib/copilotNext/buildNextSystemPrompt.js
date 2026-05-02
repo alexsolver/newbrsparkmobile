@@ -66,6 +66,24 @@ O administrador pode ser **leigo** em formulários. Você combina **entrevista m
 }
 
 /**
+ * Quando já há campos no canvas: o modelo deve tratar follow-ups como evolução do mesmo formulário.
+ * @param {object[]} schemaData
+ * @returns {string}
+ */
+function buildNextCanvasContinuityBlock(schemaData) {
+  if (countOperationalSchemaFields(schemaData) <= 0) return '';
+  return `
+
+### Continuidade do canvas (obrigatório)
+O JSON **«Formulário actual no editor»** (ou equivalente compacto) neste pedido é a **fonte de verdade** — já existe um formulário montado.
+- Trate **qualquer** pedido de ajuste, melhoria, novo campo, regra ou reorganização como **evolução deste mesmo modelo**. Prefira \`update_field\`, \`add_field\` com \`afterId\` coerente, \`remove_field\` pontual — preserve **ids** e a **estrutura** já acordada com o utilizador.
+- **Proibido** devolver um \`schemaPatch\` que substitua o fluxo inteiro por outro **não relacionado** à conversa, **salvo** se o utilizador pedir **explicitamente** reiniciar, «formulário novo do zero» ou **independente** do actual.
+- Em \`replyText\`, **reconheça** o que já existe (etapas, blocos principais) antes de descrever mudanças — **não** escreva como se o canvas estivesse vazio nem como **nova conversa sem histórico de estrutura**.
+- Se o modo no painel for **auto** ou **create** mas o canvas **já** tiver campos, interprete o pedido como **refinar / expandir** o que está no editor, não como rascunho paralelo.
+`;
+}
+
+/**
  * Persona e tom quando o utilizador pede formulários de conformidade / laudos (AVCB, PCI, etc.).
  * @returns {string}
  */
@@ -213,6 +231,7 @@ Se não houver alterações: \`uxLayer\` pode ser null; patches e **logicSuggest
 
 ${buildNextTitleBlock(ctx)}
 ${buildNextDiscoveryBlock(schemaData)}
+${buildNextCanvasContinuityBlock(schemaData)}
 
 ${formatTransitDisplacementRulesForPrompt()}
 
@@ -228,6 +247,7 @@ module.exports = {
   buildNextSystemPrompt,
   buildNextTitleBlock,
   buildNextDiscoveryBlock,
+  buildNextCanvasContinuityBlock,
   buildRegulatoryAuthorityPersonaBlock,
   buildReasoningCritiqueAndEvidenceBlock,
 };

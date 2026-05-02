@@ -160,10 +160,25 @@ async function usersForFieldTaskContextByDispatchEmails(prisma, rawEmails) {
  *   loadedTemplate: import('@prisma/client').ChecklistTemplate | null,
  *   resolvedList: string[],
  *   scopedTenantId: string | null,
+ *   panelDispatchTenantId?: string | null,
  * }} opts
  * @returns {Promise<string | null>}
  */
-async function resolveFieldTaskContextTenantIdForDispatch(prisma, { loadedTemplate, resolvedList, scopedTenantId }) {
+async function resolveFieldTaskContextTenantIdForDispatch(
+  prisma,
+  { loadedTemplate, resolvedList, scopedTenantId, panelDispatchTenantId }
+) {
+  const panelTid = String(panelDispatchTenantId || '').trim();
+  const tplTid = loadedTemplate?.tenantId ? String(loadedTemplate.tenantId).trim() : '';
+
+  /**
+   * TENANT_ADMIN / MANAGER ou SAAS com filtro de org no painel: a OS deve aparecer no quadro dessa org.
+   * Modelos globais ou de catálogo (`template.tenantId` vazio ou ≠ org do gestor) não podem roubar o âmbito.
+   */
+  if (panelTid && (!tplTid || tplTid !== panelTid)) {
+    return panelTid;
+  }
+
   if (loadedTemplate && loadedTemplate.tenantId) {
     return String(loadedTemplate.tenantId);
   }

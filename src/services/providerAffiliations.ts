@@ -35,9 +35,18 @@ export type ProviderAffiliation = {
   dedicatedExclusive?: DedicatedExclusiveSchedule | null;
 };
 
+export type ProviderMeOnboardingIdentity = {
+  id: string;
+  globalStatus?: string | null;
+  kycStatus?: string | null;
+  kycReviewNote?: string | null;
+  updatedAt?: string | null;
+};
+
 export const ProviderAffiliationsApi = {
   async getMeStatus(): Promise<{
     affiliations: ProviderAffiliation[];
+    providerIdentity: ProviderMeOnboardingIdentity | null;
     /** Backend: DEDICATED+ACTIVE — não oferecer autoatendimento de onboarding / «Quero ser prestador». */
     skipSelfServiceOnboarding?: boolean;
   }> {
@@ -47,8 +56,20 @@ export const ProviderAffiliationsApi = {
     });
     const j = await r.json();
     if (!r.ok) throw new Error(j?.error || 'Falha ao carregar status do prestador.');
+    const pi = j?.providerIdentity;
+    const providerIdentity =
+      pi && typeof pi.id === 'string' && String(pi.id).trim()
+        ? ({
+            id: String(pi.id).trim(),
+            globalStatus: pi.globalStatus ?? null,
+            kycStatus: pi.kycStatus ?? null,
+            kycReviewNote: pi.kycReviewNote ?? null,
+            updatedAt: pi.updatedAt ?? null,
+          } satisfies ProviderMeOnboardingIdentity)
+        : null;
     return {
       affiliations: (j?.affiliations || []) as ProviderAffiliation[],
+      providerIdentity,
       skipSelfServiceOnboarding: !!j?.skipSelfServiceOnboarding,
     };
   },

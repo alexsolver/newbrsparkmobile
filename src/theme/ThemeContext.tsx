@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { lightColors, darkColors, ColorPalette } from './colors';
 import { useAuth } from '../hooks/useAuth';
+import { usePersona } from '../context/PersonaContext';
 import { API_BASE, GUEST_LOGIN_BRANDING_KEY } from '../services/auth';
 
 const BRANDING_CACHE_KEY = '@brspark:tenant_branding_cache';
@@ -223,6 +224,7 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
   const [brandingCache, setBrandingCache] = useState<TenantBranding | null>(null);
   const [logoCache, setLogoCache] = useState<BrandingLogoCache | null>(null);
   const { user, loading: authLoading } = useAuth();
+  const { activePersona } = usePersona();
 
   useEffect(() => {
     AsyncStorage.getItem('@pref_dark_mode')
@@ -316,18 +318,80 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem('@pref_dark_mode', JSON.stringify(val));
   };
 
+  /**
+   * Persona «cliente» com registo (piscina) ≠ tenant da sessão (empresa dedicada): nunca misturar com cache da empresa.
+   */
+  const dedicatedHomeMismatch =
+    !!user?.homeTenantId &&
+    !!user?.tenantId &&
+    String(user.homeTenantId) !== String(user.tenantId);
+
+  /** Backend mascara a piscina como nome «BrSpark» — aí o `tenant.branding` já é o da app. */
+  const poolMaskedTenantName = String(user?.tenant?.name || '').trim() === 'BrSpark';
+
+  /**
+   * UI «cliente» sobre tenant que não é a piscina mascarada (ex.: empresa): não usar white-label operacional.
+   * Inclui consumidor na empresa e técnico com persona cliente.
+   */
+  const enterpriseClientUi = activePersona === 'client' && !poolMaskedTenantName;
+
+  const useClientSurfaceBranding =
+    activePersona === 'client' &&
+    (user?.clientTenantBranding != null || dedicatedHomeMismatch || enterpriseClientUi);
+
   /** Cores / logótipo / fundo: só com white-label ligado no plano + tenant. */
-  const liveBranding = user?.tenant?.branding?.enabled ? user.tenant.branding : null;
+  const liveBranding = (() => {
+    if (activePersona !== 'client') {
+      return user?.tenant?.branding?.enabled ? user.tenant.branding : null;
+    }
+    if (user?.clientTenantBranding?.enabled) return user.clientTenantBranding;
+    if (poolMaskedTenantName) {
+      return user?.tenant?.branding?.enabled ? user.tenant.branding : null;
+    }
+    return null;
+  })();
+
   /** Nome: o backend preenche `effective` mesmo com `enabled: false` (ex.: nome da org). Slogan só com marca ativa. */
-  const serverTenantBranding = user?.tenant?.branding;
-  const branding =
-    liveBranding && Number(liveBranding.brandingVersion || 0) >= Number(brandingCache?.brandingVersion || 0)
+  const serverTenantBranding =
+    activePersona === 'client' && poolMaskedTenantName
+      ? user?.tenant?.branding
+      : activePersona === 'client'
+        ? user?.clientTenantBranding
+        : user?.tenant?.branding;
+
+  /**
+   * Superfície cliente: não comparar com `brandingCache` da empresa (versões mais altas roubavam a marca da piscina).
+   */
+  const branding = useClientSurfaceBranding
+    ? liveBranding || null
+    : liveBranding && Number(liveBranding.brandingVersion || 0) >= Number(brandingCache?.brandingVersion || 0)
       ? liveBranding
       : brandingCache?.enabled
         ? brandingCache
         : liveBranding;
 
   useEffect(() => {
+    if (useClientSurfaceBranding) {
+      const tb = user?.clientTenantBranding;
+      if (tb && tb.enabled === false) {
+        setBrandingCache(null);
+        AsyncStorage.multiRemove([BRANDING_CACHE_KEY, GUEST_LOGIN_BRANDING_KEY]).catch(() => {});
+        return;
+      }
+      if (liveBranding?.enabled) {
+        const nextRaw = JSON.stringify(liveBranding);
+        const prevRaw = JSON.stringify(brandingCache || null);
+        if (nextRaw !== prevRaw) {
+          setBrandingCache(liveBranding);
+          AsyncStorage.setItem(BRANDING_CACHE_KEY, nextRaw).catch(() => {});
+        }
+        return;
+      }
+      setBrandingCache(null);
+      AsyncStorage.removeItem(BRANDING_CACHE_KEY).catch(() => {});
+      return;
+    }
+
     const tb = user?.tenant?.branding;
     /** Só limpar cache quando o servidor diz explicitamente que o branding está desligado.
      *  Nunca apagar só porque `branding` veio ausente na resposta (rede parcial / /me sem aninhar tenant). */
@@ -342,7 +406,7 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     if (nextRaw === prevRaw) return;
     setBrandingCache(liveBranding);
     AsyncStorage.setItem(BRANDING_CACHE_KEY, nextRaw).catch(() => {});
-  }, [liveBranding, brandingCache, user?.tenant?.branding]);
+  }, [liveBranding, brandingCache, user?.tenant?.branding, user?.clientTenantBranding, useClientSurfaceBranding]);
 
   useEffect(() => {
     let cancelled = false;
@@ -443,22 +507,30 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     () => resolveTenantPalette(dark ? darkColors : lightColors, branding || null),
     [dark, branding],
   );
-  const appDisplayName = user
-    ? String(
-        serverTenantBranding?.appDisplayName ||
-          user.tenant?.ownerName ||
-          user.tenant?.name ||
-          '',
-      ).trim() || 'BrSpark'
-    : (branding?.enabled && String(branding.appDisplayName || '').trim()) || 'BrSpark';
+  const appDisplayName =
+    user && activePersona === 'client' && enterpriseClientUi
+      ? String(user?.clientTenantBranding?.appDisplayName || '').trim() || 'BrSpark'
+      : user
+        ? String(
+            serverTenantBranding?.appDisplayName ||
+              user.tenant?.ownerName ||
+              user.tenant?.name ||
+              '',
+          ).trim() || 'BrSpark'
+        : (branding?.enabled && String(branding.appDisplayName || '').trim()) || 'BrSpark';
   /** Slogan só com white-label ativo; vazio no painel/CMS não mostra (evita mirror CMS + payload legado). */
-  const appTagline = user
-    ? serverTenantBranding?.enabled
-      ? String(serverTenantBranding?.tagline || '').trim()
-      : ''
-    : branding?.enabled
-      ? String(branding.tagline || '').trim()
-      : '';
+  const appTagline =
+    user && activePersona === 'client' && enterpriseClientUi
+      ? user?.clientTenantBranding?.enabled
+        ? String(user.clientTenantBranding?.tagline || '').trim()
+        : ''
+      : user
+        ? serverTenantBranding?.enabled
+          ? String(serverTenantBranding?.tagline || '').trim()
+          : ''
+        : branding?.enabled
+          ? String(branding.tagline || '').trim()
+          : '';
 
   /** Remoto resolvido (mesma lógica que o efeito de cache) — fallback quando `downloadAsync` falha no aparelho. */
   const brandingLogoRemoteLight = useMemo(() => {
