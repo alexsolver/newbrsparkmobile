@@ -849,6 +849,8 @@ export default function LiveRouteMapCard({
   const trackingChatMessagesRef = useRef<TrackingChatRow[]>([]);
   const clientUnreadBaselineDoneRef = useRef(false);
   const lastSeenClientMsgMsRef = useRef(0);
+  /** Evita baseline com lista vazia antes do 1.º GET — senão `lastSeen=0` e toda a história do cliente fica «não lida» após hidratar. */
+  const trackingChatHydratedRef = useRef(false);
 
   useEffect(() => {
     trackingChatMessagesRef.current = trackingChatMessages;
@@ -858,6 +860,7 @@ export default function LiveRouteMapCard({
     if (!taskId || String(taskId).trim() === '') return;
     clientUnreadBaselineDoneRef.current = false;
     lastSeenClientMsgMsRef.current = 0;
+    trackingChatHydratedRef.current = false;
     setTrackingChatClientUnread(false);
   }, [taskId]);
 
@@ -1154,6 +1157,9 @@ export default function LiveRouteMapCard({
     if (!taskId) return;
     const looksLikeChatNotReady = (msg: string) =>
       /não iniciado|deslocamento não iniciado|indisponível.*iniciado/i.test(msg);
+    const markHydrated = () => {
+      trackingChatHydratedRef.current = true;
+    };
     try {
       let lastMsg = 'Não foi possível carregar o chat.';
       for (let attempt = 0; attempt < 8; attempt++) {
@@ -1162,6 +1168,7 @@ export default function LiveRouteMapCard({
         if (r.ok) {
           setTrackingChatError(null);
           setTrackingChatMessages(mapServerChatMessages(j.messages));
+          markHydrated();
           return;
         }
         const msg = typeof j.error === 'string' && j.error.trim() ? j.error.trim() : lastMsg;
@@ -1171,11 +1178,14 @@ export default function LiveRouteMapCard({
           continue;
         }
         setTrackingChatError(msg);
+        markHydrated();
         return;
       }
       setTrackingChatError(lastMsg);
+      markHydrated();
     } catch {
       setTrackingChatError('Sem ligação. Tente de novo.');
+      markHydrated();
     }
   }, [taskId]);
 
@@ -1204,8 +1214,10 @@ export default function LiveRouteMapCard({
     if (!taskId || !visible || suppressOperationalDestinationUi) return;
     const msgs = trackingChatMessages;
     if (!clientUnreadBaselineDoneRef.current) {
+      if (!trackingChatHydratedRef.current) return;
       clientUnreadBaselineDoneRef.current = true;
       lastSeenClientMsgMsRef.current = maxClientMessageTimeMs(msgs);
+      setTrackingChatClientUnread(false);
       return;
     }
     if (trackingChatOpen) return;
@@ -2407,12 +2419,14 @@ export default function LiveRouteMapCard({
             activeOpacity={0.75}
             accessibilityLabel="Abrir mapa de navegação"
           >
-            <Ionicons name="map" size={24} color={C.accent} />
+            <Ionicons name="map" size={24} color="#fff" />
             <View style={{ flex: 1 }}>
               <Text style={styles.minimizedTitle}>Mapa da Rota Oculto</Text>
-              <Text style={{ fontSize: 12, color: '#64748b' }}>Toque para voltar à navegação.</Text>
+              <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.92)' }}>
+                Toque para voltar à navegação.
+              </Text>
             </View>
-            <Ionicons name="expand" size={20} color={C.accent} />
+            <Ionicons name="expand" size={20} color="#fff" />
           </TouchableOpacity>
           {taskId ? (
             <TrackingChatMapEntryButton
@@ -3115,14 +3129,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingLeft: 14,
     paddingRight: 10,
-    backgroundColor: '#fff',
+    backgroundColor: '#dc2626',
     borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
     elevation: 4,
   },
   minimizedCardTapExpand: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
@@ -3136,7 +3150,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fed7aa',
   },
-  minimizedTitle: { fontSize: 15, fontWeight: '700', color: '#0f172a' },
+  minimizedTitle: { fontSize: 15, fontWeight: '700', color: '#fff' },
   
   floatingHeader: { position: 'absolute', left: 16, right: 16, zIndex: 10, backgroundColor: '#fff', borderRadius: 12, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 5, borderLeftWidth: 4 },
   headerTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 4 },

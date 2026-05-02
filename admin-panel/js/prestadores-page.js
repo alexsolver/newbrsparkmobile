@@ -402,10 +402,10 @@ function renderDirectorySearchResults(rows) {
           ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">${escAttr(t('pr_result_score'))}: ${escAttr(String(sc))}</div>`
           : '';
       const low = String(u.email || '').trim().toLowerCase();
-      const eligible = partnershipCandidateEmails.has(low);
-      const badge = eligible
+      const onPreloadedEligibleList = partnershipCandidateEmails.has(low);
+      const badge = onPreloadedEligibleList
         ? `<span class="pr-platform-row-badge pr-platform-row-badge--ok">${escAttr(t('pr_badge_eligible'))}</span>`
-        : `<span class="pr-platform-row-badge pr-platform-row-badge--warn">${escAttr(t('pr_badge_other'))}</span>`;
+        : '';
       return `<button type="button" class="pr-dir-pick-row" data-pr-email="${em}" style="display:block;width:100%;text-align:left;padding:10px 14px;border:none;border-bottom:1px solid var(--border);background:transparent;cursor:pointer;font-size:13px;color:var(--text)">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
           <div style="min-width:0;flex:1"><div style="font-weight:800">${nm}</div><div style="font-size:12px;color:var(--text2);margin-top:2px">${em}</div>${specSub}${scoreSub}</div>

@@ -45,7 +45,10 @@ const {
   validateDedicatedExclusivePayload,
   buildTenantScheduleJsonDedicatedExclusive,
 } = require('../lib/dedicatedExclusiveTime');
-const { assertNoDedicatedOverlapForProviderIdentity } = require('../lib/providerDedicatedExclusiveService');
+const {
+  assertNoDedicatedOverlapForProviderIdentity,
+  dedicatedAffiliationBlocksPartnershipInvite,
+} = require('../lib/providerDedicatedExclusiveService');
 const {
   allocateUniqueUserRowEmail,
   resolveActiveUserIdsForDispatchOwnerEmail,
@@ -280,20 +283,6 @@ router.get('/', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-const DEDICATED_TERMINAL = new Set(['REJECTED', 'INACTIVE']);
-
-/**
- * Vínculo dedicado que impede novo convite de parceria (outra empresa ou dedicado activo/pendente na mesma).
- */
-function dedicatedAffiliationBlocksPartnershipInvite(aff, invitingTenantId) {
-  if (String(aff.relationshipType || '').toUpperCase() !== 'DEDICATED') return false;
-  const st = String(aff.status || '').toUpperCase();
-  if (DEDICATED_TERMINAL.has(st)) return false;
-  const tid = String(aff.tenantId || '');
-  if (tid !== invitingTenantId) return true;
-  return ['ACTIVE', 'INVITED', 'REQUESTED', 'SUSPENDED'].includes(st);
-}
 
 // GET /api/users/partnership-candidates?tenantId= — prestadores com identidade global sem dedicado bloqueante
 router.get('/partnership-candidates', async (req, res) => {

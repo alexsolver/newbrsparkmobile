@@ -36,6 +36,7 @@ const { parseDedicatedExclusiveFromTenantScheduleJson } = require('../lib/dedica
 const {
   isHiddenFromCompanyDirectoryAt,
   isHiddenFromPublicDirectoryAt,
+  dedicatedAffiliationBlocksPartnershipInvite,
 } = require('../lib/providerDedicatedExclusiveService');
 const { hasActiveDedicatedAffiliationForAppUser } = require('../lib/providerOnboardingGuards');
 const { resolveCanonicalEmailNormForUser } = require('../lib/userEmailUnique');
@@ -1340,6 +1341,48 @@ async function directoryDbTenantClauseResolved(prismaClient, tenantFilter, autho
   return { OR: orBranches };
 }
 
+/**
+ * Texto geral (≥2 caracteres) no `where` do Prisma. Sem isto, o diretório pedia só os `maxFetch`
+ * utilizadores mais recentes por `updatedAt` e filtrava o texto em memória — com muitas contas
+ * activas, prestadores elegíveis ficavam fora do lote e a busca vinha vazia.
+ */
+function directoryUserDbTextSearchClause(qSearch) {
+  const q = String(qSearch || '').trim();
+  if (q.length < 2) return null;
+  const qn = q.toLowerCase();
+  return {
+    OR: [
+      { name: { contains: q, mode: 'insensitive' } },
+      { email: { contains: q, mode: 'insensitive' } },
+      {
+        appAccount: {
+          is: { emailNorm: { contains: qn, mode: 'insensitive' } },
+        },
+      },
+      {
+        technicianProfile: {
+          is: {
+            OR: [
+              { specialty: { contains: q, mode: 'insensitive' } },
+              { cft: { contains: q, mode: 'insensitive' } },
+            ],
+          },
+        },
+      },
+      {
+        providerIdentity: {
+          is: {
+            OR: [
+              { specialty: { contains: q, mode: 'insensitive' } },
+              { cft: { contains: q, mode: 'insensitive' } },
+            ],
+          },
+        },
+      },
+    ],
+  };
+}
+
 function rowMatchesDirectoryFilters(u, { qSearch, skill, locationId, hasSchedule, hasCoverage, minScore }) {
   const tp = u.technicianProfile;
   const pi = u.providerIdentity;
@@ -1408,6 +1451,14 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
       tenantFilter = null;
     }
 
+    /** Mesmo tenant que em GET /users/partnership-candidates — para excluir quem já tem dedicado bloqueante. */
+    let partnershipInviteTenantId = null;
+    if (isPlatformAdmin(req.authorization)) {
+      if (qTenant && assertTenantAccess(req.authorization, qTenant)) partnershipInviteTenantId = qTenant;
+    } else {
+      partnershipInviteTenantId = resolveScopedTenantId(req.authorization, qTenant || null);
+    }
+
     const qSearch = req.query.q != null ? String(req.query.q).trim().slice(0, 200) : '';
     const skill = req.query.skill != null ? String(req.query.skill).trim().slice(0, 120) : '';
     const locationId = req.query.locationId != null ? String(req.query.locationId).trim() : '';
@@ -1424,7 +1475,16 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
 
     const page = Math.max(1, Math.min(500, parseInt(String(req.query.page || '1'), 10) || 1));
     const pageSize = Math.max(10, Math.min(100, parseInt(String(req.query.pageSize || '50'), 10) || 50));
-    const maxFetch = Math.min(5000, Math.max(500, page * pageSize + 800));
+    const dbTextSearch = directoryUserDbTextSearchClause(qSearch);
+    const hasAdvancedFiltersNoText =
+      !dbTextSearch &&
+      Boolean(skill || locationId || hasSchedule === '1' || hasCoverage === '1' || minScore != null || techStatus);
+    const maxFetchCap = hasAdvancedFiltersNoText ? 8000 : 5000;
+    const maxFetchFloor = hasAdvancedFiltersNoText ? 2500 : 500;
+    const maxFetch = Math.min(
+      maxFetchCap,
+      Math.max(maxFetchFloor, page * pageSize + (hasAdvancedFiltersNoText ? 1500 : 800)),
+    );
 
     const where = {
       isActive: true,
@@ -1440,6 +1500,9 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
     }
     if (!isPlatformAdmin(req.authorization)) {
       where.AND.push(nonPlatformUserReadWhere(req.authorization));
+    }
+    if (dbTextSearch) {
+      where.AND.push(dbTextSearch);
     }
 
     const rows = await prisma.user.findMany({
@@ -1479,7 +1542,10 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
             skillsJson: true,
             updatedAt: true,
             affiliations: {
-              where: { relationshipType: 'DEDICATED', status: 'ACTIVE' },
+              where: {
+                relationshipType: 'DEDICATED',
+                status: { notIn: ['REJECTED', 'INACTIVE'] },
+              },
               select: { tenantId: true, status: true, relationshipType: true, tenantScheduleJson: true },
             },
           },
@@ -1494,12 +1560,19 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
         loginEmailNorm: (await resolveCanonicalEmailNormForUser(prisma, u)) || '',
       })),
     );
+    const directoryExclusiveViewerTenantId = tenantFilter || partnershipInviteTenantId;
     const filtered = enriched.filter((u) => {
       if (!rowMatchesDirectoryFilters(u, post)) return false;
       if (includeDedicatedBound) return true;
       const pi = u.providerIdentity;
-      if (tenantFilter) {
-        return !isHiddenFromCompanyDirectoryAt(pi, tenantFilter, at);
+      if (partnershipInviteTenantId && pi) {
+        const affs = Array.isArray(pi.affiliations) ? pi.affiliations : [];
+        if (affs.some((a) => dedicatedAffiliationBlocksPartnershipInvite(a, partnershipInviteTenantId))) {
+          return false;
+        }
+      }
+      if (directoryExclusiveViewerTenantId) {
+        return !isHiddenFromCompanyDirectoryAt(pi, directoryExclusiveViewerTenantId, at);
       }
       return !isHiddenFromPublicDirectoryAt(pi, at);
     });
@@ -1548,9 +1621,10 @@ adminRouter.get('/panel/saas-provider-directory', async (req, res) => {
         includeDedicatedBound,
         directoryEligibility: includeDedicatedBound
           ? 'all'
-          : tenantFilter
+          : directoryExclusiveViewerTenantId
             ? 'visibleOutsideDedicatedExclusiveWindowsForViewerTenant'
             : 'visibleOutsideDedicatedExclusiveWindowsGlobally',
+        partnershipInviteFiltered: !!partnershipInviteTenantId,
       },
     });
   } catch (err) {

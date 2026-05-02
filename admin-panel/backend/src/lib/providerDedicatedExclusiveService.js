@@ -7,6 +7,22 @@ const {
 } = require('./dedicatedExclusiveTime');
 const { normalizeEmail } = require('./fieldTaskExecutionAccess');
 
+const DEDICATED_TERMINAL = new Set(['REJECTED', 'INACTIVE']);
+
+/**
+ * Vínculo dedicado que impede novo convite de parceria (outra empresa ou dedicado activo/pendente na mesma).
+ * @param {{ relationshipType?: string, status?: string, tenantId?: string }} aff
+ * @param {string} invitingTenantId
+ */
+function dedicatedAffiliationBlocksPartnershipInvite(aff, invitingTenantId) {
+  if (String(aff.relationshipType || '').toUpperCase() !== 'DEDICATED') return false;
+  const st = String(aff.status || '').toUpperCase();
+  if (DEDICATED_TERMINAL.has(st)) return false;
+  const tid = String(aff.tenantId || '');
+  if (tid !== invitingTenantId) return true;
+  return ['ACTIVE', 'INVITED', 'REQUESTED', 'SUSPENDED'].includes(st);
+}
+
 /**
  * Todos os `providerIdentityId` ligados ao mesmo `AppAccount` do utilizador (sessão app).
  * @param {import('@prisma/client').PrismaClient} prisma
@@ -197,4 +213,5 @@ module.exports = {
   assertNoDedicatedOverlapForProviderIdentity,
   isHiddenFromPublicDirectoryAt,
   isHiddenFromCompanyDirectoryAt,
+  dedicatedAffiliationBlocksPartnershipInvite,
 };
