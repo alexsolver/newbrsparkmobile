@@ -146,6 +146,7 @@ function defaultFieldShell(type, label) {
           visionQuestions: [{ id: 'q1', text: DEFAULT_VISION_COMPARISON_PROMPT }],
           visionCaptureMode: 'photo_only',
           visionComparisonReferenceDataUrl: '',
+          visionComparisonShowReferenceInForm: true,
           visionAnalysisGrid: '1x1',
           visionRating0To10Enabled: true,
           visionShowAiResponseInForm: true,
@@ -291,6 +292,12 @@ function normalizeSchemaItem(raw, usedIds) {
       }
       base.visionCaptureMode = 'photo_only';
       base.visionRating0To10Enabled = true;
+      const vcsr =
+        raw.visionComparisonShowReferenceInForm ?? raw.vision_comparison_show_reference_in_form;
+      base.visionComparisonShowReferenceInForm =
+        vcsr === false || vcsr === 'false' || vcsr === 0 || vcsr === '0' || vcsr === 'off' || vcsr === 'no'
+          ? false
+          : true;
     }
     const vcm = raw.visionCaptureMode ?? raw.vision_capture_mode;
     if (typeof vcm === 'string') {

@@ -6502,6 +6502,15 @@ export default function ChecklistEngine() {
             status: 'draft',
           };
           hi(field.id, JSON.stringify(nextObj), scope ?? null);
+          const ftAuto = effectiveSchemaFieldType(field);
+          if (
+            (ftAuto === 'vision_ai_analysis' || ftAuto === 'vision_ai_comparison') &&
+            slots.every((u) => String(u || '').trim().length > 0)
+          ) {
+            queueMicrotask(() => {
+              startVisionGridAnalyze(field, scope ?? null);
+            });
+          }
         } catch (err: any) {
           Alert.alert(
             t('checklistForm.cameraUnavailableTitle'),
@@ -10791,9 +10800,14 @@ export default function ChecklistEngine() {
                     </TouchableOpacity>
                   </View>
                 ))}
-              {(field.type === 'vision_checklist' ||
-                field.type === 'vision_ai_analysis' ||
-                field.type === 'vision_ai_comparison') && (
+              {(() => {
+                    const vftVisionGate = effectiveSchemaFieldType(field);
+                    return (
+                      vftVisionGate === 'vision_checklist' ||
+                      vftVisionGate === 'vision_ai_analysis' ||
+                      vftVisionGate === 'vision_ai_comparison'
+                    );
+                  })() && (
                 <View style={{ marginTop: 6 }}>
                   {(() => {
                     const vftVision = effectiveSchemaFieldType(field);
@@ -11106,7 +11120,10 @@ export default function ChecklistEngine() {
                             >
                               Grelha {gridLayout.cols}×{gridLayout.rows}: são necessárias{' '}
                               <Text style={{ fontWeight: '800', color: '#0f172a' }}>{gridLayout.count} fotos</Text> pela
-                              câmera (sem galeria). Junte todas antes de tocar em «Analisar com IA».
+                              câmera (sem galeria).
+                              {useGeminiAnalysis || useVisionComparison
+                                ? ' A análise inicia automaticamente ao capturar a última foto.'
+                                : ' Junte todas antes de tocar em «Analisar com IA».'}
                             </Text>
                             {Array.from({ length: gridLayout.rows }).map((_, rowIdx) => (
                               <View
@@ -11160,34 +11177,54 @@ export default function ChecklistEngine() {
                                 })}
                               </View>
                             ))}
-                            <TouchableOpacity
-                              onPress={() => startVisionGridAnalyze(field, scope)}
-                              disabled={busy || composingThisField || !slotUris.every(Boolean)}
-                              activeOpacity={0.88}
-                              style={{
-                                marginTop: 6,
-                                paddingVertical: 14,
-                                paddingHorizontal: 16,
-                                borderRadius: 14,
-                                backgroundColor:
-                                  !slotUris.every(Boolean) || composingThisField ? '#cbd5e1' : '#dc2626',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                            >
-                              {composingThisField || busy ? (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                  <ActivityIndicator color="#fff" />
-                                  <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                            {useGeminiAnalysis || useVisionComparison ? (
+                              composingThisField || busy ? (
+                                <View
+                                  style={{
+                                    marginTop: 10,
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 10,
+                                    paddingVertical: 14,
+                                  }}
+                                >
+                                  <ActivityIndicator color={visionPalette.badgeStrong} />
+                                  <Text style={{ color: '#475569', fontWeight: '800', fontSize: 14 }}>
                                     {composingThisField ? 'A preparar grelha…' : 'Analisando…'}
                                   </Text>
                                 </View>
-                              ) : (
-                                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
-                                  Analisar com IA
-                                </Text>
-                              )}
-                            </TouchableOpacity>
+                              ) : null
+                            ) : (
+                              <TouchableOpacity
+                                onPress={() => startVisionGridAnalyze(field, scope)}
+                                disabled={busy || composingThisField || !slotUris.every(Boolean)}
+                                activeOpacity={0.88}
+                                style={{
+                                  marginTop: 6,
+                                  paddingVertical: 14,
+                                  paddingHorizontal: 16,
+                                  borderRadius: 14,
+                                  backgroundColor:
+                                    !slotUris.every(Boolean) || composingThisField ? '#cbd5e1' : '#dc2626',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                {composingThisField || busy ? (
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                    <ActivityIndicator color="#fff" />
+                                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                                      {composingThisField ? 'A preparar grelha…' : 'Analisando…'}
+                                    </Text>
+                                  </View>
+                                ) : (
+                                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
+                                    Analisar com IA
+                                  </Text>
+                                )}
+                              </TouchableOpacity>
+                            )}
                             {slotUris.some(Boolean) ? (
                               <TouchableOpacity
                                 onPress={() => hi(field.id, null)}

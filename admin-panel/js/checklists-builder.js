@@ -2609,6 +2609,7 @@ function createNewFieldFromToolboxType(type, rawText, existingTransitStartCount)
                   ],
                   visionCaptureMode: 'photo_only',
                   visionComparisonReferenceDataUrl: '',
+                  visionComparisonShowReferenceInForm: true,
                   visionAnalysisGrid: '1x1',
                   visionRating0To10Enabled: true,
                   visionShowAiResponseInForm: true,
