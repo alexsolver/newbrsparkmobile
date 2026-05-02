@@ -27,6 +27,16 @@ const DEFAULT_VISION_ANALYSIS_PROMPT =
   '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
   'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.';
 
+/** Prompt padrão para comparação referência × cena atual (Gemini). */
+const DEFAULT_VISION_COMPARISON_PROMPT =
+  'Compare a cena atual com a imagem de referência.\n\n' +
+  'Tarefa:\n' +
+  '1) Avalie o quão a foto de campo corresponde ao padrão da referência (mesmo tipo de instalação/objeto, estado, limpeza e elementos visíveis).\n' +
+  '2) Na justificativa, liste diferenças concretas (ângulo, iluminação, peças em falta ou a mais, organização, etiquetas, sujidade, danos aparentes).\n\n' +
+  'Use a nota 0–10 na rubrica: 0–2 muito diferente ou irrelevante; 3–4 várias divergências; 5–6 aceitável com ressalvas; 7–8 bom alinhamento; 9–10 muito próximo do padrão.';
+
+const MAX_VISION_COMPARISON_REFERENCE_DATA_URL_CHARS = 9 * 1024 * 1024;
+
 /**
  * Garante que cada campo tem uma paleta completa de tipos (IA + catálogo BrSpark), sem duplicar por `type`.
  * @param {string} itemKey
@@ -130,6 +140,17 @@ function defaultFieldShell(type, label) {
           visionShowAiResponseInForm: true,
         }
       : {}),
+    ...(t === 'vision_ai_comparison'
+      ? {
+          visionStructuredPrompt: DEFAULT_VISION_COMPARISON_PROMPT,
+          visionQuestions: [{ id: 'q1', text: DEFAULT_VISION_COMPARISON_PROMPT }],
+          visionCaptureMode: 'photo_only',
+          visionComparisonReferenceDataUrl: '',
+          visionAnalysisGrid: '1x1',
+          visionRating0To10Enabled: true,
+          visionShowAiResponseInForm: true,
+        }
+      : {}),
     ...(t === 'leitura' ? { contentHtml: '', required: false } : {}),
     ...(t === 'voice_note' ? { voiceTranscribeLanguage: 'pt' } : {}),
     ...(t === 'image_annotation'
@@ -219,7 +240,7 @@ function normalizeSchemaItem(raw, usedIds) {
       ? raw.summarySourceFieldIds.map((x) => String(x || '').trim()).filter(Boolean)
       : [];
   }
-  if (type === 'vision_checklist' || type === 'vision_ai_analysis') {
+  if (type === 'vision_checklist' || type === 'vision_ai_analysis' || type === 'vision_ai_comparison') {
     const rawVq = raw.visionQuestions ?? raw.vision_questions;
     const parseVisionQuestionItems = () => {
       if (!Array.isArray(rawVq) || !rawVq.length) return [];
@@ -247,19 +268,40 @@ function normalizeSchemaItem(raw, usedIds) {
             .join('\n\n');
         }
       }
-      if (!structured) structured = DEFAULT_VISION_ANALYSIS_PROMPT;
+      if (!structured) {
+        structured =
+          type === 'vision_ai_comparison' ? DEFAULT_VISION_COMPARISON_PROMPT : DEFAULT_VISION_ANALYSIS_PROMPT;
+      }
       structured = structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
       base.visionStructuredPrompt = structured;
       base.visionQuestions = [{ id: 'q1', text: structured }];
+    }
+    if (type === 'vision_ai_comparison') {
+      const refRaw =
+        raw.visionComparisonReferenceDataUrl != null
+          ? String(raw.visionComparisonReferenceDataUrl)
+          : raw.vision_comparison_reference_data_url != null
+            ? String(raw.vision_comparison_reference_data_url)
+            : '';
+      const refTrim = refRaw.trim();
+      if (refTrim.startsWith('data:image/') && refTrim.length <= MAX_VISION_COMPARISON_REFERENCE_DATA_URL_CHARS) {
+        base.visionComparisonReferenceDataUrl = refTrim;
+      } else {
+        base.visionComparisonReferenceDataUrl = '';
+      }
+      base.visionCaptureMode = 'photo_only';
+      base.visionRating0To10Enabled = true;
     }
     const vcm = raw.visionCaptureMode ?? raw.vision_capture_mode;
     if (typeof vcm === 'string') {
       const m = vcm.trim();
       if (m === 'photo_only' || m === 'video_only' || m === 'photo_and_video') {
-        base.visionCaptureMode = m;
+        if (type !== 'vision_ai_comparison') {
+          base.visionCaptureMode = m;
+        }
       }
     }
-    if (type === 'vision_ai_analysis' || type === 'vision_checklist') {
+    if (type === 'vision_ai_analysis' || type === 'vision_checklist' || type === 'vision_ai_comparison') {
       const grid = raw.visionAnalysisGrid ?? raw.vision_analysis_grid;
       if (typeof grid === 'string') {
         const g = grid.trim().toLowerCase().replace(/\*/g, 'x');
@@ -272,7 +314,12 @@ function normalizeSchemaItem(raw, usedIds) {
       if (!base.visionAnalysisGrid) base.visionAnalysisGrid = '1x1';
       const vr = raw.visionRating0To10Enabled ?? raw.vision_rating_0_to_10_enabled;
       base.visionRating0To10Enabled =
-        vr === true || vr === 'true' || vr === 1 || vr === '1' || vr === 'on';
+        type === 'vision_ai_comparison' ||
+        vr === true ||
+        vr === 'true' ||
+        vr === 1 ||
+        vr === '1' ||
+        vr === 'on';
       const vsr = raw.visionShowAiResponseInForm ?? raw.vision_show_ai_response_in_form;
       base.visionShowAiResponseInForm =
         vsr === false || vsr === 'false' || vsr === 0 || vsr === '0' || vsr === 'off' || vsr === 'no'

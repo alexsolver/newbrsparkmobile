@@ -11,7 +11,11 @@ const {
   buildMultipartBuffer,
   fetchVisionPostPreservingMethod,
 } = require('../lib/visionChecklistAnalyze');
-const { findGoogleAiStudioIntegration, analyzeWithGoogleAiStudio } = require('../lib/visionStudioAnalyze');
+const {
+  findGoogleAiStudioIntegration,
+  analyzeWithGoogleAiStudio,
+  analyzeWithGoogleAiStudioComparison,
+} = require('../lib/visionStudioAnalyze');
 const { findMoondreamIntegration, analyzeWithMoondream } = require('../lib/visionMoondreamAnalyze');
 const { pickVisionDetectionBackend } = require('../lib/visionDetectionRouting');
 const { consumeQuota } = require('../lib/planQuotaService');
@@ -28,6 +32,14 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 95 * 1024 * 1024 },
 });
+
+const uploadVisionCompare = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 95 * 1024 * 1024 },
+}).fields([
+  { name: 'media', maxCount: 1 },
+  { name: 'referenceMedia', maxCount: 1 },
+]);
 
 /**
  * React Native / multipart: `mimetype` pode vir vazio ou `application/octet-stream`.
@@ -57,6 +69,117 @@ function resolveVisionUploadMime(file) {
  * multipart: media (imagem ou vídeo), questions (JSON array {id,text}), engine, opcional visionRating0To10 (1/true para nota 0–10 na raiz do JSON, só Gemini)
  * Autenticação: JWT do app (técnico).
  */
+/**
+ * POST /api/checklists/vision/compare
+ * multipart: referenceMedia (imagem referência), media (imagem cena atual), questions (JSON array {id,text})
+ * Só Google AI Studio (Gemini). Ambas as imagens devem ser image/*.
+ */
+router.post('/vision/compare', authUser, uploadVisionCompare, async (req, res) => {
+  try {
+    const files = req.files;
+    const sceneFile = files && files.media && files.media[0];
+    const refFile = files && files.referenceMedia && files.referenceMedia[0];
+    if (!sceneFile?.buffer || !refFile?.buffer) {
+      return res.status(400).json({
+        error: 'Envie "referenceMedia" e "media" (ambas imagens).',
+      });
+    }
+
+    let questions = [];
+    const rawQ = req.body && req.body.questions != null ? req.body.questions : '';
+    if (typeof rawQ === 'string' && rawQ.trim()) {
+      try {
+        const parsed = JSON.parse(rawQ);
+        if (Array.isArray(parsed)) {
+          const mapped = parsed
+            .map((x, i) => {
+              if (!x || typeof x !== 'object') return null;
+              const id = String(x.id || `q_${i + 1}`).replace(/[^\w-]/g, '_').slice(0, 64);
+              return { id, rawText: String(x.text || x.question || '').trim() };
+            })
+            .filter((x) => x && x.rawText);
+          questions = mapped
+            .map((x) => {
+              const text = x.rawText.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+              if (!text) return null;
+              return { id: x.id, text };
+            })
+            .filter(Boolean);
+        }
+      } catch {
+        return res.status(400).json({ error: 'Campo "questions" deve ser JSON válido (array de {id, text}).' });
+      }
+    }
+    if (!questions.length) {
+      return res.status(400).json({ error: 'Indique pelo menos uma pergunta (questions).' });
+    }
+    if (questions.length > MAX_VISION_SIMNAO_QUESTIONS) {
+      return res.status(400).json({
+        error: `Comparação aceita no máximo ${MAX_VISION_SIMNAO_QUESTIONS} perguntas (use um único critério estruturado).`,
+      });
+    }
+    if (questions.length > 1) {
+      const merged = questions
+        .map((q) => q.text)
+        .join('\n\n')
+        .slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
+      questions = [{ id: 'q1', text: merged }];
+    }
+
+    const refMt = resolveVisionUploadMime(refFile);
+    const sceneMt = resolveVisionUploadMime(sceneFile);
+    if (!refMt.startsWith('image/') || !sceneMt.startsWith('image/')) {
+      return res.status(400).json({ error: 'Comparação exige duas imagens (referência e cena atual).' });
+    }
+
+    const studioInt = await findGoogleAiStudioIntegration();
+    if (!studioInt || !String(studioInt.apiKey || '').trim()) {
+      return res.status(503).json({
+        error:
+          'Integração "Google AI Studio" não configurada ou sem API key. Configure em Integrações no painel admin.',
+      });
+    }
+
+    if (req.user?.tenantId) {
+      const q = await consumeQuota(prisma, req.user.tenantId, 'AI_VISION_ANALYSIS', 1);
+      if (!q.ok) {
+        return res.status(403).json({ error: q.error, code: q.code || 'PLAN_QUOTA_EXCEEDED' });
+      }
+    }
+
+    try {
+      const normalized = await analyzeWithGoogleAiStudioComparison({
+        referenceBuffer: refFile.buffer,
+        referenceMimetype: refMt,
+        sceneBuffer: sceneFile.buffer,
+        sceneMimetype: sceneMt,
+        questions,
+        integration: studioInt,
+      });
+      if (!normalized.ok) {
+        return res.status(502).json({ error: normalized.error });
+      }
+      return res.json(normalized.payload);
+    } catch (e) {
+      const name = e && e.name;
+      const msg = e && e.message ? String(e.message) : String(e);
+      const isTimeout = name === 'AbortError' || name === 'TimeoutError';
+      const outMsg = isTimeout ? 'Tempo esgotado ao contatar o Google AI Studio (Gemini).' : msg;
+      const status = isTimeout ? 502 : 500;
+      console.error('[checklists/vision/compare] google_ai_studio', {
+        status,
+        name,
+        msg,
+        stack: e && e.stack,
+      });
+      return res.status(status).json({ error: outMsg });
+    }
+  } catch (err) {
+    console.error('[checklists/vision/compare]', err);
+    return res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
+});
+
 router.post('/vision/analyze', authUser, upload.single('media'), async (req, res) => {
   /** Origem+path da integração (para mensagens de erro; sem query/chave). */
   let visionIntegrationTarget = '';

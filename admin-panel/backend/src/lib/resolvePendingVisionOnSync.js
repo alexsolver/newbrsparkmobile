@@ -6,7 +6,12 @@ const {
   buildMultipartBuffer,
   fetchVisionPostPreservingMethod,
 } = require('./visionChecklistAnalyze');
-const { findGoogleAiStudioIntegration, analyzeWithGoogleAiStudio } = require('./visionStudioAnalyze');
+const {
+  findGoogleAiStudioIntegration,
+  analyzeWithGoogleAiStudio,
+  analyzeWithGoogleAiStudioComparison,
+} = require('./visionStudioAnalyze');
+const { parseVisionComparisonReferenceFromField } = require('./visionComparisonReference');
 const { findMoondreamIntegration, analyzeWithMoondream } = require('./visionMoondreamAnalyze');
 const { pickVisionDetectionBackend } = require('./visionDetectionRouting');
 const { consumeQuota } = require('./planQuotaService');
@@ -61,9 +66,10 @@ function normalizeVisionGridSlotUris(raw, count) {
   return out;
 }
 
-/** Alinhado ao app: grelha só em `vision_ai_analysis`. */
+/** Alinhado ao app: grelha em `vision_ai_analysis` e `vision_ai_comparison`. */
 function visionAnalysisGridCount(field) {
-  if (effectiveFieldType(field) !== 'vision_ai_analysis') return 1;
+  const ft = effectiveFieldType(field);
+  if (ft !== 'vision_ai_analysis' && ft !== 'vision_ai_comparison') return 1;
   const s = String(field?.visionAnalysisGrid || field?.vision_analysis_grid || '1x1')
     .trim()
     .toLowerCase()
@@ -124,7 +130,7 @@ function getVisionQuestionsFromField(field) {
 
   const ft = effectiveFieldType(field);
 
-  if (ft === 'vision_ai_analysis') {
+  if (ft === 'vision_ai_analysis' || ft === 'vision_ai_comparison') {
     if (structured) {
       return [{ id: 'q1', text: structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS) }];
     }
@@ -274,7 +280,32 @@ async function resolvePendingVisionAnalysisOnSync(prisma, { responses, templateI
     }
 
     let normalized;
-    if (ft === 'vision_ai_analysis') {
+    if (ft === 'vision_ai_comparison') {
+      const refParsed = parseVisionComparisonReferenceFromField(field);
+      if (!refParsed) {
+        console.warn('[resolvePendingVisionOnSync] comparação sem referência válida no modelo', fieldId);
+        return;
+      }
+      if (!String(mime || '').toLowerCase().startsWith('image/')) {
+        console.warn('[resolvePendingVisionOnSync] comparação sync só imagem na cena atual', fieldId);
+        return;
+      }
+      const studioInt = await findGoogleAiStudioIntegration();
+      if (!studioInt || !String(studioInt.apiKey || '').trim()) return;
+      const q = await consumeQuota(prisma, tenantId, 'AI_VISION_ANALYSIS', 1);
+      if (!q.ok) {
+        console.warn('[resolvePendingVisionOnSync] quota Gemini comparação', q.error);
+        return;
+      }
+      normalized = await analyzeWithGoogleAiStudioComparison({
+        referenceBuffer: refParsed.buffer,
+        referenceMimetype: refParsed.mimetype,
+        sceneBuffer: buf,
+        sceneMimetype: mime || 'application/octet-stream',
+        questions: qs,
+        integration: studioInt,
+      });
+    } else if (ft === 'vision_ai_analysis') {
       const studioInt = await findGoogleAiStudioIntegration();
       if (!studioInt || !String(studioInt.apiKey || '').trim()) return;
       const q = await consumeQuota(prisma, tenantId, 'AI_VISION_ANALYSIS', 1);
@@ -390,7 +421,7 @@ async function resolvePendingVisionAnalysisOnSync(prisma, { responses, templateI
       continue;
     }
     const ft = effectiveFieldType(f);
-    if (ft !== 'vision_checklist' && ft !== 'vision_ai_analysis') continue;
+    if (ft !== 'vision_checklist' && ft !== 'vision_ai_analysis' && ft !== 'vision_ai_comparison') continue;
 
     if (!curSecRepeat) {
       await tryResolveOne(f, null);

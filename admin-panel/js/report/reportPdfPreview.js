@@ -579,7 +579,7 @@ function formatSpecialFieldHtml(val, f, th, responses, row) {
     return formatTransitPayloadHtml(asObj, th);
   }
 
-  if (fType === 'vision_checklist' || fType === 'vision_ai_analysis') {
+  if (fType === 'vision_checklist' || fType === 'vision_ai_analysis' || fType === 'vision_ai_comparison') {
     const vh = buildVisionChecklistReportHtml(val, fType, esc);
     if (vh) return vh;
   }
@@ -595,7 +595,7 @@ function formatSpecialFieldHtml(val, f, th, responses, row) {
   if (guessedVision) return guessedVision;
 
   /** Tipo errado no schema (ex.: órfão como `text`) mas valor é claramente foto com traços. */
-  if (fType !== 'vision_checklist' && fType !== 'vision_ai_analysis') {
+  if (fType !== 'vision_checklist' && fType !== 'vision_ai_analysis' && fType !== 'vision_ai_comparison') {
     const maybeAnnot = tryParseObject(val);
     if (
       maybeAnnot &&

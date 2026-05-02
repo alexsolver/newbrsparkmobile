@@ -326,6 +326,44 @@ router.post('/help-image', adminAuthThenPanel, async (req, res) => {
   }
 });
 
+/** Proxy MyMemory (servidor → MyMemory): o browser do painel chama a própria API (evita bloqueios CSP/rede a domínios externos). */
+const TRANSLATE_MYMEMORY_ALLOWED_PAIRS = new Set(['pt|en', 'pt|es', 'pt|de']);
+
+router.get('/translate-mymemory', adminAuthThenPanel, async (req, res) => {
+  try {
+    const q = typeof req.query.q === 'string' ? String(req.query.q).trim().slice(0, 500) : '';
+    const langpair =
+      typeof req.query.langpair === 'string' ? String(req.query.langpair).trim() : '';
+    if (!q) {
+      return res.status(400).json({ error: 'Parâmetro q é obrigatório.' });
+    }
+    if (!TRANSLATE_MYMEMORY_ALLOWED_PAIRS.has(langpair)) {
+      return res.status(400).json({ error: 'langpair inválido.' });
+    }
+    const url =
+      'https://api.mymemory.translated.net/get?q=' +
+      encodeURIComponent(q) +
+      '&langpair=' +
+      encodeURIComponent(langpair);
+    const r = await fetch(url);
+    if (!r.ok) {
+      return res.status(502).json({
+        error: 'Falha ao contactar serviço de tradução.',
+        status: r.status,
+      });
+    }
+    const data = await r.json();
+    const out = data && data.responseData && data.responseData.translatedText;
+    if (out == null || typeof out !== 'string') {
+      return res.status(502).json({ error: 'Resposta de tradução inválida.' });
+    }
+    res.json({ translatedText: String(out).trim() });
+  } catch (err) {
+    console.error('[checklists/translate-mymemory]', err);
+    res.status(500).json({ error: err.message || 'Erro interno.' });
+  }
+});
+
 // --- Pastas de modelos (Form Builder → "Meus formulários") ---
 router.get('/template-folders', async (req, res) => {
   try {

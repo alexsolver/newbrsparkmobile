@@ -35,7 +35,7 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
       if (f.sectionFillMode) o.sectionFillMode = String(f.sectionFillMode);
     }
     if (
-      (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') &&
+      (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis' || f.type === 'vision_ai_comparison') &&
       f.visionStructuredPrompt != null &&
       String(f.visionStructuredPrompt).trim()
     ) {
@@ -44,11 +44,15 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
         .slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
     }
     if (
-      (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') &&
+      (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis' || f.type === 'vision_ai_comparison') &&
       Array.isArray(f.visionQuestions)
     ) {
-      const maxQ = f.type === 'vision_checklist' ? MAX_VISION_CHECKLIST_QUESTIONS : MAX_VISION_SIMNAO_QUESTIONS;
-      const textCap = f.type === 'vision_checklist' ? MAX_VISION_STRUCTURED_PROMPT_CHARS : 220;
+      const maxQ =
+        f.type === 'vision_checklist' ? MAX_VISION_CHECKLIST_QUESTIONS : MAX_VISION_SIMNAO_QUESTIONS;
+      const textCap =
+        f.type === 'vision_checklist' || f.type === 'vision_ai_comparison'
+          ? MAX_VISION_STRUCTURED_PROMPT_CHARS
+          : 220;
       o.visionQuestions = f.visionQuestions
         .map((q) => ({
           id: String(q?.id || '').slice(0, 64),
@@ -58,17 +62,30 @@ function compactSchemaForPrompt(schemaData, maxChars = 55000) {
         .slice(0, maxQ);
     }
     if (
-      (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') &&
+      (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis' || f.type === 'vision_ai_comparison') &&
       f.visionCaptureMode != null &&
       ['photo_only', 'video_only', 'photo_and_video'].includes(String(f.visionCaptureMode).trim())
     ) {
       o.visionCaptureMode = String(f.visionCaptureMode).trim();
     }
-    if (f.type === 'vision_ai_analysis' && f.visionRating0To10Enabled === true) {
+    if (
+      (f.type === 'vision_ai_analysis' || f.type === 'vision_ai_comparison') &&
+      f.visionRating0To10Enabled === true
+    ) {
       o.visionRating0To10Enabled = true;
     }
-    if (f.type === 'vision_ai_analysis' && f.visionShowAiResponseInForm === false) {
+    if (
+      (f.type === 'vision_ai_analysis' || f.type === 'vision_ai_comparison') &&
+      f.visionShowAiResponseInForm === false
+    ) {
       o.visionShowAiResponseInForm = false;
+    }
+    if (
+      f.type === 'vision_ai_comparison' &&
+      f.visionComparisonReferenceDataUrl != null &&
+      String(f.visionComparisonReferenceDataUrl).trim().startsWith('data:image/')
+    ) {
+      o.hasVisionComparisonReference = true;
     }
     if (f.type === 'lookup_select') {
       if (f.lookupSource) o.lookupSource = String(f.lookupSource);

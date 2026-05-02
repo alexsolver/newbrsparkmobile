@@ -428,7 +428,7 @@ function looksLikeVoiceNotePayload(o) {
  * HTML para PDF / pré-visualização: `vision_checklist` e `vision_ai_analysis`.
  * Se existir `gridSlotUris` com mais de uma URI (Gemini, grelha), mostra miniaturas por célula antes da imagem composta (`localUri`).
  * @param {unknown} val
- * @param {'vision_checklist'|'vision_ai_analysis'} fieldType
+ * @param {'vision_checklist'|'vision_ai_analysis'|'vision_ai_comparison'} fieldType
  * @param {(s: string) => string} escHtml
  * @returns {string|null}
  */
@@ -576,7 +576,7 @@ export function buildVisionChecklistReportHtml(val, fieldType, escHtml) {
   const mainStamp = visionMediaStampLine(o, stampRefUri);
   const mainGeo = visionMediaGeoStampLine(o, stampRefUri);
 
-  if (fieldType === 'vision_ai_analysis' && slots.length > 1) {
+  if ((fieldType === 'vision_ai_analysis' || fieldType === 'vision_ai_comparison') && slots.length > 1) {
     html += `<div style="font-size:10px;font-weight:800;color:#991b1b;margin:0 0 8px;letter-spacing:0.02em">${escHtml(`Fotos individuais da grelha (${slots.length})`)}</div>`;
     html += `<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">`;
     slots.forEach((u, i) => {
@@ -608,7 +608,7 @@ export function buildVisionChecklistReportHtml(val, fieldType, escHtml) {
     const isVideo =
       o.mediaMimeType != null && String(o.mediaMimeType).toLowerCase().startsWith('video');
     const title =
-      fieldType === 'vision_ai_analysis' && slots.length > 1
+      (fieldType === 'vision_ai_analysis' || fieldType === 'vision_ai_comparison') && slots.length > 1
         ? 'Imagem enviada à análise (composta)'
         : 'Mídia analisada';
     html += `<div style="font-size:10px;font-weight:800;color:#0f172a;margin:0 0 6px">${escHtml(title)}</div>`;

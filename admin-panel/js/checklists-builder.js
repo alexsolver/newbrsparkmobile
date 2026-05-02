@@ -106,6 +106,19 @@ function fbStr(key, vars, fallbackPt) {
   return fallbackPt != null ? String(fallbackPt) : String(key);
 }
 
+/** Como `fbStr`, mas usa `fbTCanvas` (idioma do seletor «Rótulos (edição)») — só para o canvas e preview ligado. */
+function fbCanvasStr(key, vars, fallbackPt) {
+  try {
+    if (typeof window.fbTCanvas === 'function') {
+      const s = window.fbTCanvas(key, vars);
+      if (s && s !== key) return s;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  return fallbackPt != null ? String(fallbackPt) : String(key);
+}
+
 function fbAlert(key, vars, fallbackPt) {
   alert(fbStr(key, vars, fallbackPt));
 }
@@ -138,13 +151,13 @@ function glabPrimary(f) {
 /** Rótulo de `section_break` no canvas: reconhece «Etapa N» / «Step N» / marcadores por defeito em qualquer idioma. */
 function translateStepLabelForCanvasDisplay(rawLabel) {
   const s = String(rawLabel || '').trim();
-  if (!s) return fbStr('fb_canvas_new_step', null, 'Nova etapa');
+  if (!s) return fbCanvasStr('fb_canvas_new_step', null, 'Nova etapa');
   const mEt = s.match(/^Etapa\s+(\d+)$/i);
-  if (mEt) return fbStr('fb_canvas_step_n', { n: mEt[1] }, 'Etapa ' + mEt[1]);
+  if (mEt) return fbCanvasStr('fb_canvas_step_n', { n: mEt[1] }, 'Etapa ' + mEt[1]);
   const mSt = s.match(/^Step\s+(\d+)$/i);
-  if (mSt) return fbStr('fb_canvas_step_n', { n: mSt[1] }, 'Step ' + mSt[1]);
+  if (mSt) return fbCanvasStr('fb_canvas_step_n', { n: mSt[1] }, 'Step ' + mSt[1]);
   const u = s.toUpperCase();
-  if (u === 'NOVA ETAPA' || u === 'NEW STEP') return fbStr('fb_canvas_new_step', null, 'Nova etapa');
+  if (u === 'NOVA ETAPA' || u === 'NEW STEP') return fbCanvasStr('fb_canvas_new_step', null, 'Nova etapa');
   return s;
 }
 
@@ -557,7 +570,9 @@ function ensureShowFieldInstructionsFlag(f) {
 
 /** Visão IA (análise e detecção): só 1×1 e 2×2; valores antigos migram para 2×2. */
 function normalizeVisionAnalysisGridStored(f) {
-  if (!f || (f.type !== 'vision_ai_analysis' && f.type !== 'vision_checklist')) return f;
+  if (!f || (f.type !== 'vision_ai_analysis' && f.type !== 'vision_checklist' && f.type !== 'vision_ai_comparison')) {
+    return f;
+  }
   const raw = String(f.visionAnalysisGrid || '1x1')
     .trim()
     .toLowerCase()
@@ -1792,6 +1807,7 @@ const iconMap = {
     'facial_recognition': '<ion-icon name="person-outline"></ion-icon>',
     'vision_checklist': '<ion-icon name="videocam-outline"></ion-icon>',
     'vision_ai_analysis': '<ion-icon name="sparkles-outline"></ion-icon>',
+    'vision_ai_comparison': '<ion-icon name="git-compare-outline"></ion-icon>',
     'barcode_scan': '<ion-icon name="barcode-outline"></ion-icon>',
     'materials_consumption': '<ion-icon name="cube-outline"></ion-icon>',
     'materials_receipt': '<ion-icon name="arrow-down-circle-outline"></ion-icon>',
@@ -2423,6 +2439,7 @@ function canvasHasStrayPaletteNodes() {
 function defaultLabelForNewToolboxField(type, rawText) {
     if (type === 'vision_checklist') return 'Visão de IA Detecção';
     if (type === 'vision_ai_analysis') return 'Visão de IA Análise';
+    if (type === 'vision_ai_comparison') return 'Visão de IA Comparação';
     if (type === 'technician_finance_expense') return 'Despesas do técnico';
     if (type === 'technician_finance_revenue') return 'Receitas do técnico';
     if (type === 'currency') return 'Valor (moeda)';
@@ -2565,6 +2582,39 @@ function createNewFieldFromToolboxType(type, rawText, existingTransitStartCount)
                   visionShowAiResponseInForm: true,
               }
             : {}),
+        ...(type === 'vision_ai_comparison'
+            ? {
+                  visionStructuredPrompt: fbStr(
+                      'fb_prop_vision_comparison_default_prompt',
+                      null,
+                      'Compare a cena atual com a imagem de referência.\n\n' +
+                          'Tarefa:\n' +
+                          '1) Avalie o quão a foto de campo corresponde ao padrão da referência (mesmo tipo de instalação/objeto, estado, limpeza e elementos visíveis).\n' +
+                          '2) Na justificativa, liste diferenças concretas (ângulo, iluminação, peças em falta ou a mais, organização, etiquetas, sujidade, danos aparentes).\n\n' +
+                          'Use a nota 0–10 na rubrica: 0–2 muito diferente ou irrelevante; 3–4 várias divergências; 5–6 aceitável com ressalvas; 7–8 bom alinhamento; 9–10 muito próximo do padrão.',
+                  ),
+                  visionQuestions: [
+                      {
+                          id: 'q1',
+                          text: fbStr(
+                              'fb_prop_vision_comparison_default_prompt',
+                              null,
+                              'Compare a cena atual com a imagem de referência.\n\n' +
+                                  'Tarefa:\n' +
+                                  '1) Avalie o quão a foto de campo corresponde ao padrão da referência (mesmo tipo de instalação/objeto, estado, limpeza e elementos visíveis).\n' +
+                                  '2) Na justificativa, liste diferenças concretas (ângulo, iluminação, peças em falta ou a mais, organização, etiquetas, sujidade, danos aparentes).\n\n' +
+                                  'Use a nota 0–10 na rubrica: 0–2 muito diferente ou irrelevante; 3–4 várias divergências; 5–6 aceitável com ressalvas; 7–8 bom alinhamento; 9–10 muito próximo do padrão.',
+                          ),
+                      },
+                  ],
+                  visionCaptureMode: 'photo_only',
+                  visionComparisonReferenceDataUrl: '',
+                  visionAnalysisGrid: '1x1',
+                  visionRating0To10Enabled: true,
+                  visionShowAiResponseInForm: true,
+                  requireOnlineValidation: false,
+              }
+            : {}),
         ...(type === 'signature_summary' ? { summarySourceFieldIds: [] } : {}),
         ...(type === 'leitura' ? { contentHtml: '', required: false } : {}),
         ...(type === 'form_complete_button' ? { required: false } : {}),
@@ -2620,7 +2670,7 @@ function countSectionBreaksInArray(fieldArr) {
 /** Próximo rótulo «Etapa N» com base nas secções já presentes em `fieldArr` (antes de inserir a nova). */
 function nextSectionBreakLabel(fieldArr) {
     const n = String(countSectionBreaksInArray(fieldArr) + 1);
-    return fbStr('fb_canvas_step_n', { n }, 'Etapa ' + n);
+    return fbCanvasStr('fb_canvas_step_n', { n }, 'Etapa ' + n);
 }
 
 /**
@@ -2924,6 +2974,7 @@ function buildCanvasFieldElement(f) {
         'signature_summary',
         'vision_checklist',
         'vision_ai_analysis',
+        'vision_ai_comparison',
         'leitura',
         'voice_note',
         'image_annotation',
@@ -2987,30 +3038,43 @@ function buildCanvasFieldElement(f) {
     return div;
 }
 
+/** Rótulo do tipo de campo no `<select>` do cartão — segue `fb_tb_*` e o locale efectivo do builder. */
+function builderFieldTypeOptionLabel(typeId) {
+    const t = String(typeId || '').trim();
+    if (!t) return '';
+    const key = 'fb_tb_' + t;
+    let fallback = t;
+    if (typeof brsparkCopilotPreviewTypeLabel === 'function') {
+        fallback = brsparkCopilotPreviewTypeLabel(t);
+    }
+    return fbCanvasStr(key, null, fallback);
+}
+
 function buildCanvasInlineTypeOptionsHtml(currentType) {
     const cur = String(currentType || '').trim();
-    const list = Array.isArray(COPILOT_PREVIEW_FIELD_TYPE_LABELS) && COPILOT_PREVIEW_FIELD_TYPE_LABELS.length
-        ? COPILOT_PREVIEW_FIELD_TYPE_LABELS
-        : [
-              ['text', 'Texto'],
-              ['number', 'Número'],
-              ['yes_no', 'Sim / Não'],
-              ['dropdown', 'Lista (uma)'],
-              ['multiselect', 'Lista (várias)'],
-              ['date', 'Data / hora'],
-              ['email', 'E-mail'],
-              ['phone', 'Telefone'],
-              ['photo', 'Foto'],
-              ['file_upload', 'Anexo'],
-              ['signature', 'Assinatura'],
-          ];
+    const list =
+        Array.isArray(COPILOT_PREVIEW_FIELD_TYPE_LABELS) && COPILOT_PREVIEW_FIELD_TYPE_LABELS.length
+            ? COPILOT_PREVIEW_FIELD_TYPE_LABELS
+            : [
+                  ['text', 'Texto'],
+                  ['number', 'Número'],
+                  ['yes_no', 'Sim / Não'],
+                  ['dropdown', 'Lista (uma)'],
+                  ['multiselect', 'Lista (várias)'],
+                  ['date', 'Data / hora'],
+                  ['email', 'E-mail'],
+                  ['phone', 'Telefone'],
+                  ['photo', 'Foto'],
+                  ['file_upload', 'Anexo'],
+                  ['signature', 'Assinatura'],
+              ];
     const filtered = list.filter(function (pair) {
         return String(pair[0] || '') !== 'section_break';
     });
     return filtered
         .map(function (pair) {
             const t = String(pair[0] || '').trim();
-            const lbl = String(pair[1] || t).trim();
+            const lbl = builderFieldTypeOptionLabel(t);
             const sel = t === cur ? ' selected' : '';
             return '<option value="' + escapeHtmlLogic(t) + '"' + sel + '>' + escapeHtmlLogic(lbl) + '</option>';
         })
@@ -3154,7 +3218,7 @@ function renderCanvas() {
         chev.setAttribute('tabindex', '0');
         chev.setAttribute(
             'aria-label',
-            fbStr('fb_canvas_aria_toggle_section', null, 'Recolher ou expandir esta seção')
+            fbCanvasStr('fb_canvas_aria_toggle_section', null, 'Recolher ou expandir esta seção')
         );
         chev.style.cursor = 'pointer';
         chev.addEventListener('click', (e) => {
@@ -3180,11 +3244,11 @@ function renderCanvas() {
         if (isPreamble) {
             titleEl.innerHTML =
                 '<ion-icon name="document-text-outline" style="vertical-align:-3px;margin-right:6px;color:var(--color-text-light);"></ion-icon> ' +
-                escapeHtml(fbStr('fb_canvas_preamble_title', null, 'Área Externa'));
+                escapeHtml(fbCanvasStr('fb_canvas_preamble_title', null, 'Área Externa'));
             badge.textContent =
                 answerableCount === 1
-                    ? fbStr('fb_canvas_fields_one', { n: String(answerableCount) }, answerableCount + ' campo')
-                    : fbStr('fb_canvas_fields_many', { n: String(answerableCount) }, answerableCount + ' campos');
+                    ? fbCanvasStr('fb_canvas_fields_one', { n: String(answerableCount) }, answerableCount + ' campo')
+                    : fbCanvasStr('fb_canvas_fields_many', { n: String(answerableCount) }, answerableCount + ' campos');
             if (canReorderSections) head.appendChild(makeSectionHeadDragGrip());
             head.appendChild(chev);
             head.appendChild(titleEl);
@@ -3193,7 +3257,7 @@ function renderCanvas() {
             const sf = group.sectionField;
             const stepTarget = document.createElement('div');
             stepTarget.className = 'canvas-section-head__step-edit-target';
-            stepTarget.title = fbStr(
+            stepTarget.title = fbCanvasStr(
                 'fb_canvas_step_edit_title',
                 null,
                 'Clique para editar o nome e o ícone desta etapa'
@@ -3211,7 +3275,7 @@ function renderCanvas() {
             iconBox.className = 'canvas-section-head__step-icon';
             iconBox.innerHTML = sectionStepIconCanvasHtml(sf);
             const labSp = document.createElement('span');
-            labSp.textContent = fbStr('fb_canvas_section_prefix', null, 'Seção ·');
+            labSp.textContent = fbCanvasStr('fb_canvas_section_prefix', null, 'Seção ·');
             labSp.style.flexShrink = '0';
             labSp.style.color = '#64748b';
             labSp.style.fontWeight = '600';
@@ -3239,9 +3303,9 @@ function renderCanvas() {
             const innerCount = Math.max(0, group.items.length - 1);
             let badgeTxt =
                 innerCount === 1
-                    ? fbStr('fb_canvas_questions_one', { n: String(innerCount) }, innerCount + ' pergunta')
-                    : fbStr('fb_canvas_questions_many', { n: String(innerCount) }, innerCount + ' perguntas');
-            if (sf.multiple) badgeTxt += fbStr('fb_canvas_questions_list_suffix', null, ' · lista');
+                    ? fbCanvasStr('fb_canvas_questions_one', { n: String(innerCount) }, innerCount + ' pergunta')
+                    : fbCanvasStr('fb_canvas_questions_many', { n: String(innerCount) }, innerCount + ' perguntas');
+            if (sf.multiple) badgeTxt += fbCanvasStr('fb_canvas_questions_list_suffix', null, ' · lista');
             badge.textContent = badgeTxt;
 
             const toolbar = document.createElement('div');
@@ -3260,7 +3324,7 @@ function renderCanvas() {
             };
             toolbar.appendChild(
                 mkBtn(
-                    fbStr('fb_canvas_section_props', null, 'Propriedades da seção'),
+                    fbCanvasStr('fb_canvas_section_props', null, 'Propriedades da seção'),
                     'settings-outline',
                     false,
                     () => {
@@ -3271,12 +3335,12 @@ function renderCanvas() {
             const reqSec = document.createElement('button');
             reqSec.type = 'button';
             reqSec.title = sf.required
-                ? fbStr(
+                ? fbCanvasStr(
                       'fb_canvas_step_req_required',
                       null,
                       'Etapa obrigatória — clique para tornar opcional'
                   )
-                : fbStr(
+                : fbCanvasStr(
                       'fb_canvas_step_req_optional',
                       null,
                       'Etapa opcional — clique para tornar obrigatória'
@@ -3290,17 +3354,17 @@ function renderCanvas() {
             });
             toolbar.appendChild(reqSec);
             toolbar.appendChild(
-                mkBtn(fbStr('fb_canvas_section_logic', null, 'Lógica e regras'), 'options-outline', false, () => {
+                mkBtn(fbCanvasStr('fb_canvas_section_logic', null, 'Lógica e regras'), 'options-outline', false, () => {
                     window.openLogicModal(null, sf.id);
                 })
             );
             toolbar.appendChild(
-                mkBtn(fbStr('fb_canvas_section_dup', null, 'Duplicar seção'), 'copy-outline', false, () => {
+                mkBtn(fbCanvasStr('fb_canvas_section_dup', null, 'Duplicar seção'), 'copy-outline', false, () => {
                     window.cloneSection(sf.id);
                 })
             );
             toolbar.appendChild(
-                mkBtn(fbStr('fb_canvas_section_del', null, 'Excluir seção'), 'trash-outline', true, () => {
+                mkBtn(fbCanvasStr('fb_canvas_section_del', null, 'Excluir seção'), 'trash-outline', true, () => {
                     window.deleteSection(sf.id);
                 })
             );
@@ -3345,7 +3409,7 @@ function renderCanvas() {
     addBtn.className = 'btn btn-outline btn-sm';
     addBtn.innerHTML =
         '<ion-icon name="add-circle-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> ' +
-        escapeHtml(fbStr('fb_canvas_add_section', null, 'Nova seção'));
+        escapeHtml(fbCanvasStr('fb_canvas_add_section', null, 'Nova seção'));
     addBtn.addEventListener('click', () => window.builderAddSectionAfterLast());
     addSecBar.appendChild(addBtn);
     elCanvas.appendChild(addSecBar);
@@ -3418,6 +3482,7 @@ window.handleInlineFieldTypeUpdate = function (e, id) {
         'repeatable_matrix',
         'vision_checklist',
         'vision_ai_analysis',
+        'vision_ai_comparison',
         'lookup_select',
         'image_annotation',
         'materials_consumption',
@@ -3985,8 +4050,10 @@ function renderProperties() {
                 📷 ${escapeHtmlLogic(fbStr('fb_prop_facial_camera_note', null, 'A captura facial na app usa sempre a câmera do sistema (alta resolução).'))}
             </div>
         </div>`;
-    } else if (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') {
+    } else if (f.type === 'vision_checklist' || f.type === 'vision_ai_analysis' || f.type === 'vision_ai_comparison') {
         const isVisionAnalysis = f.type === 'vision_ai_analysis';
+        const isVisionComparison = f.type === 'vision_ai_comparison';
+        const useGeminiVision = isVisionAnalysis || isVisionComparison;
         const defaultStructuredPromptFb = () =>
             fbStr(
                 'fb_prop_vision_default_structured_prompt',
@@ -4018,15 +4085,22 @@ function renderProperties() {
             }
             return defaultStructuredPromptFb();
         })();
-        const capMode =
-            f.visionCaptureMode === 'photo_only' ||
-            f.visionCaptureMode === 'video_only' ||
-            f.visionCaptureMode === 'photo_and_video'
-                ? f.visionCaptureMode
-                : 'photo_and_video';
-        const vBoxBg = isVisionAnalysis ? '#fef2f2' : '#f0f9ff';
-        const vBoxBr = isVisionAnalysis ? '#f87171' : '#38bdf8';
-        const vTitle = isVisionAnalysis
+        const capMode = isVisionComparison
+            ? 'photo_only'
+            : f.visionCaptureMode === 'photo_only' ||
+                f.visionCaptureMode === 'video_only' ||
+                f.visionCaptureMode === 'photo_and_video'
+              ? f.visionCaptureMode
+              : 'photo_and_video';
+        const vBoxBg = useGeminiVision ? (isVisionComparison ? '#faf5ff' : '#fef2f2') : '#f0f9ff';
+        const vBoxBr = useGeminiVision ? (isVisionComparison ? '#e879f9' : '#f87171') : '#38bdf8';
+        const vTitle = isVisionComparison
+            ? fbStr(
+                  'fb_prop_vision_title_comparison_html',
+                  null,
+                  '<ion-icon name="git-compare-outline" style="color:#a21caf"></ion-icon> <span style="color:#86198f;font-weight:900">Visão de IA — comparação</span>',
+              )
+            : isVisionAnalysis
             ? fbStr(
                   'fb_prop_vision_title_analysis_html',
                   null,
@@ -4037,20 +4111,26 @@ function renderProperties() {
                   null,
                   '<ion-icon name="videocam-outline"></ion-icon> Visão de IA — detecção',
               );
-        const vTitleColor = isVisionAnalysis ? '#991b1b' : '#0369a1';
-        const vBody = isVisionAnalysis
+        const vTitleColor = useGeminiVision ? (isVisionComparison ? '#86198f' : '#991b1b') : '#0369a1';
+        const vBody = isVisionComparison
             ? fbStr(
-                  'fb_prop_vision_body_analysis_html',
+                  'fb_prop_vision_body_comparison_html',
                   null,
-                  'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança (e racional) para o conjunto.',
+                  'Carregue abaixo a <b>foto de referência</b> (padrão esperado). No app, o técnico vê essa referência e captura <b>só foto</b> pela câmera. O BrSpark envia as duas imagens ao <b>Gemini</b> (Google AI Studio) e devolve <b>nota 0–10</b> e texto com as <b>diferenças</b> face à referência. Com grelha 2×2, as quatro fotos compõem-se numa única imagem antes da comparação.',
               )
-            : fbStr(
-                  'fb_prop_vision_body_detection_html',
-                  null,
-                  'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança para o conjunto.',
-              );
-        const vBodyColor = isVisionAnalysis ? '#7f1d1d' : '#0c4a6e';
-        const vLabel = isVisionAnalysis ? '#b91c1c' : '#0369a1';
+            : isVisionAnalysis
+              ? fbStr(
+                    'fb_prop_vision_body_analysis_html',
+                    null,
+                    'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança (e racional) para o conjunto.',
+                )
+              : fbStr(
+                    'fb_prop_vision_body_detection_html',
+                    null,
+                    'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança para o conjunto.',
+                );
+        const vBodyColor = useGeminiVision ? (isVisionComparison ? '#701a75' : '#7f1d1d') : '#0c4a6e';
+        const vLabel = useGeminiVision ? (isVisionComparison ? '#a21caf' : '#b91c1c') : '#0369a1';
         const curGridRaw = String(f.visionAnalysisGrid || '1x1')
             .trim()
             .toLowerCase()
@@ -4074,6 +4154,9 @@ function renderProperties() {
         ];
         const ratingEnabled = !!f.visionRating0To10Enabled;
         const ratingPickHtml = (() => {
+            if (isVisionComparison) {
+                return `<div style="margin-bottom:12px;padding:8px 10px;border-radius:8px;border:1px solid #f0abfc;background:#fdf4ff;font-size:12px;font-weight:700;color:#701a75;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_vision_comparison_rating_fixed', null, 'Classificação 0–10 e texto das diferenças: sempre ativos neste campo (comparação referência × foto de campo).'))}</div>`;
+            }
             const red = isVisionAnalysis;
             const border = ratingEnabled ? (red ? '#fecaca' : '#7dd3fc') : '#e2e8f0';
             const bg = ratingEnabled ? (red ? '#fff1f2' : '#f0f9ff') : '#fff';
@@ -4091,16 +4174,16 @@ function renderProperties() {
             )}</div>`;
         })();
         const showAiResp = f.visionShowAiResponseInForm !== false;
-        const visionShowAiAccent = isVisionAnalysis ? '#dc2626' : '#0284c7';
-        const visionShowAiTextColor = isVisionAnalysis ? '#450a0a' : '#0c4a6e';
+        const visionShowAiAccent = useGeminiVision ? (isVisionComparison ? '#a21caf' : '#dc2626') : '#0284c7';
+        const visionShowAiTextColor = useGeminiVision ? (isVisionComparison ? '#701a75' : '#450a0a') : '#0c4a6e';
         const showAiResponseHtml = `
             <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff">
               <input type="checkbox" ${showAiResp ? 'checked' : ''} onchange="window.handleFieldUpdate('visionShowAiResponseInForm', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:${visionShowAiAccent};width:16px;height:16px;flex-shrink:0;margin-top:2px" />
               <span style="font-size:12px;font-weight:700;color:${visionShowAiTextColor};line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_show_ai_chk_lbl', null, 'Mostrar detalhes da resposta da IA no app'))}</span>
             </label>
             <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_show_ai_hint', null, 'Desmarque para ocultar no formulário do técnico o texto da resposta, confiança, racional e bloco de classificação 0–10 (a mídia e o estado «concluído» mantêm-se). Relatórios e resumo de assinatura podem continuar a mostrar os dados.'))}</div>`;
-        const gridAccent = isVisionAnalysis ? '#dc2626' : '#0284c7';
-        const gridLabelStrong = isVisionAnalysis ? '#450a0a' : '#0c4a6e';
+        const gridAccent = useGeminiVision ? (isVisionComparison ? '#c026d3' : '#dc2626') : '#0284c7';
+        const gridLabelStrong = useGeminiVision ? (isVisionComparison ? '#86198f' : '#450a0a') : '#0c4a6e';
         const gridPickHtml = `
             <label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_grid_lbl', null, 'Grade de fotos (composição única antes do envio)'))}</label>
             <div style="font-size:9px;color:#64748b;margin:-2px 0 10px;line-height:1.35">
@@ -4116,7 +4199,7 @@ function renderProperties() {
                         (o) => `
                 <label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;border:1px solid ${
                     curGridNorm === o.v ? gridAccent : '#e2e8f0'
-                };background:${curGridNorm === o.v ? (isVisionAnalysis ? '#fff1f2' : '#f0f9ff') : '#fff'}">
+                };background:${curGridNorm === o.v ? (useGeminiVision ? (isVisionComparison ? '#faf5ff' : '#fff1f2') : '#f0f9ff') : '#fff'}">
                   <input type="radio" name="visionAnalysisGrid_${escapeHtmlAttr(f.id)}" value="${o.v}" ${
                             curGridNorm === o.v ? 'checked' : ''
                         } onchange="window.handleFieldUpdate('visionAnalysisGrid', this.value); if(typeof renderProperties==='function')renderProperties();" style="accent-color:${gridAccent};flex-shrink:0" />
@@ -4126,8 +4209,8 @@ function renderProperties() {
                     )
                     .join('')}
             </div>`;
-        const exBtnBorder = isVisionAnalysis ? '#fecaca' : '#7dd3fc';
-        const exBtnColor = isVisionAnalysis ? '#b91c1c' : '#0369a1';
+        const exBtnBorder = useGeminiVision ? (isVisionComparison ? '#f0abfc' : '#fecaca') : '#7dd3fc';
+        const exBtnColor = useGeminiVision ? (isVisionComparison ? '#a21caf' : '#b91c1c') : '#0369a1';
         const visionPromptLabelRow = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
             <label class="prop-label" style="color:${vLabel}; font-size:10px; margin:0;">${escapeHtmlLogic(fbStr('fb_prop_vision_prompt_lbl', null, 'Prompt estruturado (único)'))}</label>
             <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px;white-space:nowrap;border-color:${exBtnBorder};color:${exBtnColor};" onclick="window.openVisionAiStructuredPromptExamplesModal()" title="${escapeHtmlAttr(
@@ -4135,27 +4218,45 @@ function renderProperties() {
             )}"><ion-icon name="sparkles-outline" style="vertical-align:-2px"></ion-icon> ${escapeHtmlLogic(fbStr('fb_vision_prompt_ex_btn', null, 'Exemplos'))}</button>
           </div>`;
         const visionPromptBlurHandler = 'window.updateVisionStructuredPrompt(this.value)';
-        const visionPromptHintBlock = fbStr(
-            'fb_prop_vision_ai_structured_prompt_hint',
-            {
-                max:
-                    typeof window.fbFormatInt === 'function'
-                        ? window.fbFormatInt(MAX_VISION_STRUCTURED_PROMPT_CHARS)
-                        : String(MAX_VISION_STRUCTURED_PROMPT_CHARS),
-            },
-            'Descreva critérios, o formato desejado da resposta e o que a IA deve verificar na mídia. Limite aproximado de ' +
-                MAX_VISION_STRUCTURED_PROMPT_CHARS.toLocaleString('pt-BR') +
-                ' caracteres. A API responde em JSON com a lista <code>answers</code> (cada item com o identificador da pergunta, ex.: <code>q1</code>). Se você ativar a classificação 0–10 acima, o objeto na raiz também inclui <code>rating0To10</code>.',
-        );
-        extraProps = `
-        <div class="prop-group" style="background:${vBoxBg}; border:1px solid ${vBoxBr}; padding:12px; border-radius:8px; margin-top:16px;">
-            <div style="font-size:11px; font-weight:800; color:${vTitleColor}; margin-bottom:6px">${vTitle}</div>
-            <div style="font-size:10px; color:${vBodyColor}; line-height:1.35; margin-bottom:10px;">
-              ${vBody}
-            </div>
-            ${ratingPickHtml}
-            ${showAiResponseHtml}
-            <label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_capture_lbl', null, 'Tipo de captura pela câmera'))}</label>
+        const visionPromptHintBlock = isVisionComparison
+            ? fbStr(
+                  'fb_prop_vision_comparison_structured_prompt_hint',
+                  {
+                      max:
+                          typeof window.fbFormatInt === 'function'
+                              ? window.fbFormatInt(MAX_VISION_STRUCTURED_PROMPT_CHARS)
+                              : String(MAX_VISION_STRUCTURED_PROMPT_CHARS),
+                  },
+                  'Defina critérios de comparação entre a <b>referência</b> e a <b>foto de campo</b>. Limite ~' +
+                      MAX_VISION_STRUCTURED_PROMPT_CHARS.toLocaleString('pt-BR') +
+                      ' caracteres. A API devolve <code>rating0To10</code> e em <code>answers[0].rationale</code> as diferenças em pt-BR.',
+              )
+            : fbStr(
+                  'fb_prop_vision_ai_structured_prompt_hint',
+                  {
+                      max:
+                          typeof window.fbFormatInt === 'function'
+                              ? window.fbFormatInt(MAX_VISION_STRUCTURED_PROMPT_CHARS)
+                              : String(MAX_VISION_STRUCTURED_PROMPT_CHARS),
+                  },
+                  'Descreva critérios, o formato desejado da resposta e o que a IA deve verificar na mídia. Limite aproximado de ' +
+                      MAX_VISION_STRUCTURED_PROMPT_CHARS.toLocaleString('pt-BR') +
+                      ' caracteres. A API responde em JSON com a lista <code>answers</code> (cada item com o identificador da pergunta, ex.: <code>q1</code>). Se você ativar a classificação 0–10 acima, o objeto na raiz também inclui <code>rating0To10</code>.',
+              );
+        const refUrlRaw = String(f.visionComparisonReferenceDataUrl || '').trim();
+        const referencePickHtml = isVisionComparison
+            ? `<label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_lbl', null, 'Imagem de referência'))}</label>
+            <input type="file" accept="image/jpeg,image/png,image/webp" style="font-size:11px;margin-bottom:8px;width:100%;box-sizing:border-box;" onchange="window.handleVisionComparisonReferencePick(event)" />
+            <div style="font-size:9px;color:#64748b;margin-bottom:10px;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_hint', null, 'JPEG, PNG ou WebP (recomendado até ~2,5 MB).'))}</div>
+            ${
+                refUrlRaw
+                    ? `<div style="margin-bottom:10px;"><img src="${escapeHtmlAttr(refUrlRaw)}" alt="" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid #e9d5ff;object-fit:contain;background:#fafafa" /><div style="margin-top:8px;"><button type="button" class="btn btn-outline btn-sm" style="font-size:11px;border-color:#e879f9;color:#a21caf" onclick="window.handleFieldUpdate('visionComparisonReferenceDataUrl','');if(typeof renderProperties==='function')renderProperties();">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_clear', null, 'Remover referência'))}</button></div></div>`
+                    : `<div style="font-size:11px;color:#b45309;font-weight:700;margin-bottom:10px;padding:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_missing', null, 'Configure uma imagem de referência — sem ela o técnico não consegue comparar.'))}</div>`
+            }`
+            : '';
+        const capturePickHtml = isVisionComparison
+            ? `<div style="font-size:12px;font-weight:700;color:${vLabel};margin-bottom:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_comparison_capture_fixed', null, 'Captura no app: somente foto (câmera).'))}</div>`
+            : `<label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_capture_lbl', null, 'Tipo de captura pela câmera'))}</label>
             <select class="prop-input" style="font-size:12px; margin-bottom:10px;" onchange="window.handleFieldUpdate('visionCaptureMode', this.value)">
                 <option value="photo_only" ${capMode === 'photo_only' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_vision_capture_photo_only', null, 'Somente foto'))}</option>
                 <option value="video_only" ${capMode === 'video_only' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_vision_capture_video_only', null, 'Somente vídeo'))}</option>
@@ -4167,7 +4268,17 @@ function renderProperties() {
                     null,
                     'Na app, em campos de Visão de IA (detecção ou análise), cada vídeo tem no máximo 10 segundos; clips mais longos são recusados. Na detecção (YOLO), o envio ao servidor usa uma imagem extraída do primeiro instante do vídeo — o serviço externo continua a receber só imagem.',
                 ),
-            )}</div>
+            )}</div>`;
+        extraProps = `
+        <div class="prop-group" style="background:${vBoxBg}; border:1px solid ${vBoxBr}; padding:12px; border-radius:8px; margin-top:16px;">
+            <div style="font-size:11px; font-weight:800; color:${vTitleColor}; margin-bottom:6px">${vTitle}</div>
+            <div style="font-size:10px; color:${vBodyColor}; line-height:1.35; margin-bottom:10px;">
+              ${vBody}
+            </div>
+            ${referencePickHtml}
+            ${ratingPickHtml}
+            ${showAiResponseHtml}
+            ${capturePickHtml}
             ${gridPickHtml}
             ${visionPromptLabelRow}
             <textarea class="prop-input" placeholder="${escapeHtmlAttr(
@@ -4470,7 +4581,7 @@ function renderProperties() {
     const onlineValHint =
         f.type === 'facial_recognition'
             ? fbStr('fb_prop_online_validation_face', null, '')
-            : f.type === 'vision_checklist' || f.type === 'vision_ai_analysis'
+            : f.type === 'vision_checklist' || f.type === 'vision_ai_analysis' || f.type === 'vision_ai_comparison'
               ? fbStr('fb_prop_online_validation_vision', null, '')
               : f.type === 'voice_note'
                 ? fbStr('fb_prop_online_validation_voice', null, '')
@@ -4599,7 +4710,7 @@ function renderProperties() {
         `
         }
         
-        ${f.type !== 'section_break' && f.type !== 'leitura' && f.type !== 'form_complete_button' && f.type !== 'voice_note' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'signature_summary' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance_expense' && f.type !== 'technician_finance_revenue' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' && f.type !== 'image_annotation' && f.type !== 'lookup_select' && f.type !== 'repeatable_matrix' && f.type !== 'opinion_scale' ? `
+        ${f.type !== 'section_break' && f.type !== 'leitura' && f.type !== 'form_complete_button' && f.type !== 'voice_note' && f.type !== 'photo' && f.type !== 'photo_stamped' && f.type !== 'facial_recognition' && f.type !== 'vision_checklist' && f.type !== 'vision_ai_analysis' && f.type !== 'vision_ai_comparison' && f.type !== 'file_upload' && f.type !== 'signature' && f.type !== 'signature_summary' && f.type !== 'materials_consumption' && f.type !== 'materials_receipt' && f.type !== 'technician_finance_expense' && f.type !== 'technician_finance_revenue' && f.type !== 'geofence_check' && f.type !== 'location_pick' && f.type !== 'transit_start' && f.type !== 'transit_end' && f.type !== 'image_annotation' && f.type !== 'lookup_select' && f.type !== 'repeatable_matrix' && f.type !== 'opinion_scale' ? `
         <div class="prop-group">
             <label class="prop-label">${escapeHtmlLogic(
                 fbStr('fb_prop_default_value_lbl', null, 'Auto-preenchimento / valor padrão (opcional)')
@@ -4632,7 +4743,7 @@ function renderProperties() {
         }
 
         ${f.type !== 'section_break' &&
-        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance_expense', 'technician_finance_revenue', 'signature', 'signature_summary', 'vision_checklist', 'vision_ai_analysis', 'leitura', 'form_complete_button', 'voice_note', 'image_annotation', 'lookup_select', 'repeatable_matrix', 'opinion_scale'].includes(f.type) ? `
+        !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance_expense', 'technician_finance_revenue', 'signature', 'signature_summary', 'vision_checklist', 'vision_ai_analysis', 'vision_ai_comparison', 'leitura', 'form_complete_button', 'voice_note', 'image_annotation', 'lookup_select', 'repeatable_matrix', 'opinion_scale'].includes(f.type) ? `
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
                 <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
@@ -4662,7 +4773,7 @@ function renderProperties() {
         </div>
         ` : ''}
 
-        ${['photo', 'photo_stamped', 'facial_recognition', 'vision_checklist', 'vision_ai_analysis', 'file_upload', 'image_annotation'].includes(f.type) ? `
+        ${['photo', 'photo_stamped', 'facial_recognition', 'vision_checklist', 'vision_ai_analysis', 'vision_ai_comparison', 'file_upload', 'image_annotation'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:12px; background:#ecfdf5; border:1px solid #a7f3d0; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-allow-media-desc" ${f.allowMediaDescription ? 'checked' : ''} onchange="window.handleFieldUpdate('allowMediaDescription', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
             <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
@@ -4698,7 +4809,7 @@ function renderProperties() {
         </div>
         ` : ''}
 
-        ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'vision_checklist', 'vision_ai_analysis', 'voice_note', 'signature', 'signature_summary', 'barcode_scan', 'lookup_select'].includes(f.type) ? `
+        ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'vision_checklist', 'vision_ai_analysis', 'vision_ai_comparison', 'voice_note', 'signature', 'signature_summary', 'barcode_scan', 'lookup_select'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:center; gap:10px; margin-top:12px; background:#fefce8; border:1px solid #fef08a; padding:12px; border-radius:8px;">
             <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2)" />
             <div style="display:flex; flex-direction:column;">
@@ -4767,30 +4878,79 @@ window.onCalcFormulaInsertPick = function (sel) {
     sel.selectedIndex = 0;
 };
 
+window.handleVisionComparisonReferencePick = function (ev) {
+    try {
+        const input = ev && ev.target ? ev.target : null;
+        const file = input && input.files && input.files[0];
+        if (!file || !file.type || !String(file.type).startsWith('image/')) {
+            fbAlert('fb_prop_vision_ref_invalid', null, 'Escolha uma imagem (JPEG, PNG ou WebP).');
+            return;
+        }
+        if (file.size > 2.6 * 1024 * 1024) {
+            fbAlert('fb_prop_vision_ref_too_large', null, 'Imagem demasiado grande (máx. ~2,5 MB). Comprima ou reduza a resolução.');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = function () {
+            const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+            if (!dataUrl || dataUrl.length > 9 * 1024 * 1024) {
+                fbAlert('fb_prop_vision_ref_too_large', null, 'Imagem demasiado grande após leitura.');
+                return;
+            }
+            window.handleFieldUpdate('visionComparisonReferenceDataUrl', dataUrl);
+            if (typeof renderProperties === 'function') renderProperties();
+            if (typeof renderCanvas === 'function') renderCanvas();
+        };
+        reader.readAsDataURL(file);
+    } catch (e) {
+        console.warn('[handleVisionComparisonReferencePick]', e);
+    }
+    try {
+        if (ev && ev.target) ev.target.value = '';
+    } catch (_) {
+        /* ignore */
+    }
+};
+
 window.updateVisionStructuredPrompt = function (text) {
     if (!selectedFieldId) return;
     const f = fields.find((x) => x.id === selectedFieldId);
-    if (!f || (f.type !== 'vision_ai_analysis' && f.type !== 'vision_checklist')) return;
+    if (
+        !f ||
+        (f.type !== 'vision_ai_analysis' && f.type !== 'vision_checklist' && f.type !== 'vision_ai_comparison')
+    )
+        return;
     const raw = String(text || '').trim();
     const s = raw.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
-    const fallback = fbStr(
-        'fb_prop_vision_default_structured_prompt',
-        null,
-        'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
-            'Tarefa:\n' +
-            '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
-            '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
-            'Campo value (obrigatório):\n' +
-            '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
-            '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
-            'Rubrica orientativa:\n' +
-            '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
-            '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
-            '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
-            '- 7–8: bom estado geral; apenas falhas leves.\n' +
-            '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
-            'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
-    );
+    const fallback =
+        f.type === 'vision_ai_comparison'
+            ? fbStr(
+                  'fb_prop_vision_comparison_default_prompt',
+                  null,
+                  'Compare a cena atual com a imagem de referência.\n\n' +
+                      'Tarefa:\n' +
+                      '1) Avalie o quão a foto de campo corresponde ao padrão da referência (mesmo tipo de instalação/objeto, estado, limpeza e elementos visíveis).\n' +
+                      '2) Na justificativa, liste diferenças concretas (ângulo, iluminação, peças em falta ou a mais, organização, etiquetas, sujidade, danos aparentes).\n\n' +
+                      'Use a nota 0–10 na rubrica: 0–2 muito diferente ou irrelevante; 3–4 várias divergências; 5–6 aceitável com ressalvas; 7–8 bom alinhamento; 9–10 muito próximo do padrão.',
+              )
+            : fbStr(
+                  'fb_prop_vision_default_structured_prompt',
+                  null,
+                  'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\n' +
+                      'Tarefa:\n' +
+                      '1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n' +
+                      '2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\n' +
+                      'Campo value (obrigatório):\n' +
+                      '- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n' +
+                      '- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\n' +
+                      'Rubrica orientativa:\n' +
+                      '- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n' +
+                      '- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n' +
+                      '- 5–6: aceitável com ressalvas; melhorias necessárias.\n' +
+                      '- 7–8: bom estado geral; apenas falhas leves.\n' +
+                      '- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\n' +
+                      'No rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
+              );
     const finalText = s || fallback;
     f.visionStructuredPrompt = finalText;
     f.visionQuestions = [{ id: 'q1', text: finalText }];
@@ -4992,7 +5152,7 @@ function closeVisionDetectionPromptExamplesModal() {
 /** Modal com modelos de prompt (só «Visão de IA — análise»). */
 window.openVisionAiStructuredPromptExamplesModal = function () {
     openVisionPromptExamplesModal({
-        fieldTypes: ['vision_ai_analysis', 'vision_checklist'],
+        fieldTypes: ['vision_ai_analysis', 'vision_ai_comparison', 'vision_checklist'],
         fieldType: 'vision_ai_analysis',
         modalId: 'vision-ai-prompt-examples-modal',
         titleKey: 'fb_vision_prompt_ex_modal_title',
@@ -5211,6 +5371,7 @@ function getFieldsEligibleForSignatureSummary(excludeFieldId) {
             o.type !== 'hidden' &&
             o.type !== 'vision_checklist' &&
             o.type !== 'vision_ai_analysis' &&
+            o.type !== 'vision_ai_comparison' &&
             o.type !== 'leitura' &&
             o.type !== 'form_complete_button' &&
             o.type !== 'voice_note',
@@ -5599,6 +5760,9 @@ window.importJSON = function() {
                     renderProperties();
                     if (typeof window.syncBuilderPersistBaseline === 'function') {
                         window.syncBuilderPersistBaseline();
+                    }
+                    if (typeof window.fbScheduleSchemaLocaleAutoTranslate === 'function') {
+                        window.fbScheduleSchemaLocaleAutoTranslate();
                     }
                     fbAlert(
                         'fb_alert_import_ok',
@@ -6062,10 +6226,10 @@ window.previewPDF = function() {
              doc.text("[ Placeholder onde a imagem do S3 é impressa no Backend Node.js ]", 25, currentY + 30);
              currentY += 60;
          }
-         else if(f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') {
+         else if(f.type === 'vision_checklist' || f.type === 'vision_ai_analysis' || f.type === 'vision_ai_comparison') {
              doc.setFontSize(9).setFont("helvetica", "normal");
              doc.setTextColor(3, 105, 161);
-             doc.text('Mídia + respostas sim/não com confiança (ver execução / relatório completo).', 20, currentY + 10);
+             doc.text('Mídia + respostas de visão IA (ver execução / relatório completo).', 20, currentY + 10);
              doc.setTextColor(0);
              currentY += 22;
          }
@@ -6243,6 +6407,66 @@ function formatFormUpdatedShort(iso) {
     }
 }
 
+const FB_FORM_LIST_LOCALE_ORDER = ['pt-BR', 'en-US', 'es-ES', 'de-DE'];
+
+function normalizeFormListLocaleTag(k) {
+    try {
+        if (typeof window !== 'undefined' && window.BrSparkSchemaLocale && window.BrSparkSchemaLocale.normalizeSchemaLocaleTag) {
+            return window.BrSparkSchemaLocale.normalizeSchemaLocaleTag(k);
+        }
+    } catch (_) {
+        /* ignore */
+    }
+    return String(k || 'pt-BR')
+        .trim()
+        .replace(/_/g, '-') || 'pt-BR';
+}
+
+/** Abreviatura para pills na lista «Meus formulários». */
+function localeTagToShortBadgeForList(tag) {
+    const n = normalizeFormListLocaleTag(tag);
+    const low = n.toLowerCase();
+    if (low === 'pt-br' || low.startsWith('pt')) return 'PT';
+    if (low === 'en-us' || low.startsWith('en')) return 'EN';
+    if (low === 'es-es' || low.startsWith('es')) return 'ES';
+    if (low === 'de-de' || low.startsWith('de')) return 'DE';
+    const base = n.split('-')[0] || n;
+    return base.length <= 4 ? base.toUpperCase() : base.slice(0, 3).toUpperCase();
+}
+
+/**
+ * Idiomas (BCP-47 normalizado) que têm pelo menos um rótulo não vazio em algum campo do schema.
+ */
+function collectFormSchemaLocaleTags(schema) {
+    const seen = new Set();
+    if (!Array.isArray(schema)) return [];
+    for (const f of schema) {
+        if (!f || typeof f !== 'object') continue;
+        const L = f.labels;
+        if (L && typeof L === 'object' && !Array.isArray(L)) {
+            for (const k of Object.keys(L)) {
+                if (String(L[k] || '').trim()) {
+                    seen.add(normalizeFormListLocaleTag(k));
+                }
+            }
+        }
+        const leg = f.label != null ? String(f.label).trim() : '';
+        if (leg) {
+            seen.add(normalizeFormListLocaleTag('pt-BR'));
+        }
+    }
+    const arr = Array.from(seen);
+    arr.sort(function (a, b) {
+        const ia = FB_FORM_LIST_LOCALE_ORDER.indexOf(a);
+        const ib = FB_FORM_LIST_LOCALE_ORDER.indexOf(b);
+        if (ia !== -1 || ib !== -1) {
+            return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+        }
+        return String(a).localeCompare(String(b));
+    });
+    return arr;
+}
+
 function renderFolderTreeSidebar() {
     const container = document.getElementById('forms-folder-tree');
     if (!container) return;
@@ -6401,10 +6625,24 @@ function renderFolderTreeSidebar() {
         const fid = String(form.id || '');
         const archived = form.isActive === false;
         const padLeft = 10 + depth * 14;
+        const sch = Array.isArray(form.schema)
+            ? form.schema
+            : Array.isArray(form.schemaData)
+              ? form.schemaData
+              : [];
+        const locTagsForSearch = collectFormSchemaLocaleTags(sch);
 
         const wrap = document.createElement('div');
         wrap.className = 'fb-sidebar-form-row fb-tree-form-row';
-        const searchTitle = [form.title || '', fid, shortTemplateIdForUi(fid)].join(' ').trim();
+        const searchTitle = [
+            form.title || '',
+            fid,
+            shortTemplateIdForUi(fid),
+            locTagsForSearch.join(' '),
+            locTagsForSearch.map(localeTagToShortBadgeForList).join(' '),
+        ]
+            .join(' ')
+            .trim();
         wrap.setAttribute('data-title', searchTitle);
         wrap.setAttribute('data-archived', archived ? '1' : '0');
         wrap.draggable = true;
@@ -6463,12 +6701,7 @@ function renderFolderTreeSidebar() {
 
         const metaRow = document.createElement('div');
         metaRow.style.cssText =
-            'display:flex;align-items:center;gap:5px;flex-wrap:nowrap;min-width:0;overflow:hidden;';
-        const sch = Array.isArray(form.schema)
-            ? form.schema
-            : Array.isArray(form.schemaData)
-              ? form.schemaData
-              : [];
+            'display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0;overflow:hidden;';
         const nFields = sch.length;
         const fieldsSpan = document.createElement('span');
         fieldsSpan.textContent = nFields === 1 ? '1 campo' : String(nFields) + ' campos';
@@ -6492,6 +6725,38 @@ function renderFolderTreeSidebar() {
         metaRow.insertBefore(fieldsSpan, metaRow.firstChild);
         metaRow.appendChild(idSpan);
         metaRow.appendChild(badgeWrap);
+
+        const locTags = locTagsForSearch;
+        if (locTags.length) {
+            const locWrap = document.createElement('span');
+            locWrap.className = 'fb-form-list-locale-badges';
+            locWrap.style.cssText =
+                'display:inline-flex;align-items:center;gap:3px;flex-wrap:wrap;flex-shrink:1;min-width:0;max-width:100%;';
+            const tipList = locTags.join(', ');
+            locWrap.title = fbStr(
+                'fb_forms_list_locales_tip',
+                { list: tipList },
+                'Idiomas com rótulos neste modelo: ' + tipList
+            );
+            const multilang = locTags.length >= 2;
+            locTags.forEach(function (tag) {
+                const pill = document.createElement('span');
+                pill.textContent = localeTagToShortBadgeForList(tag);
+                pill.title = tag;
+                const tone = multilang ? '#4f46e5' : '#64748b';
+                const bg = multilang ? 'rgba(99,102,241,0.12)' : '#f1f5f9';
+                pill.style.cssText =
+                    'font-size:8px;font-weight:800;line-height:1;padding:2px 5px;border-radius:4px;color:' +
+                    tone +
+                    ';background:' +
+                    bg +
+                    ';border:1px solid ' +
+                    (multilang ? 'rgba(99,102,241,0.35)' : '#e2e8f0') +
+                    ';letter-spacing:0.02em;flex-shrink:0;';
+                locWrap.appendChild(pill);
+            });
+            metaRow.appendChild(locWrap);
+        }
 
         mid.appendChild(titleClick);
         mid.appendChild(metaRow);
@@ -7167,6 +7432,9 @@ window.loadChecklist = function(id) {
         renderCanvas();
         renderProperties();
         if (typeof window.syncBuilderPersistBaseline === 'function') window.syncBuilderPersistBaseline();
+        if (typeof window.fbScheduleSchemaLocaleAutoTranslate === 'function') {
+            window.fbScheduleSchemaLocaleAutoTranslate();
+        }
     }
 };
 
@@ -7224,6 +7492,9 @@ window.confirmCreateNewChecklist = function () {
     renderCanvas();
     renderProperties();
     if (typeof window.syncBuilderPersistBaseline === 'function') window.syncBuilderPersistBaseline();
+    if (typeof window.fbScheduleSchemaLocaleAutoTranslate === 'function') {
+        window.fbScheduleSchemaLocaleAutoTranslate();
+    }
 
     const select = document.getElementById('saved-forms-select');
     if (select) {
@@ -7452,14 +7723,22 @@ function renderMobilePreview() {
         if(f.type === 'photo') inputMock = `<div style="background:#f1f5f9; border:2px dashed #cbd5e1; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#64748b; font-size:13px;"><ion-icon name="camera" style="font-size:28px; margin-bottom:4px"></ion-icon> Tocar para Fotografar</div>`;
         if(f.type === 'photo_stamped') inputMock = `<div style="background:#fffbeb; border:2px dashed #f59e0b; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#b45309; text-align:center; padding:10px;"><ion-icon name="scan" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Câmera Ao Vivo (Anti-Fraude)</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">O App inserirá GPS e Hora. Galeria bloqueada.</span></div>`;
         if(f.type === 'facial_recognition') inputMock = `<div style="background:#fff1f2; border:2px dashed #e11d48; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#9f1239; text-align:center; padding:10px;"><ion-icon name="person" style="font-size:28px; margin-bottom:4px"></ion-icon> <b>Reconhecimento Facial</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Será comparado com o rosto cadastrado do técnico.</span></div>`;
-        if(f.type === 'vision_checklist' || f.type === 'vision_ai_analysis') {
+        if(f.type === 'vision_checklist' || f.type === 'vision_ai_analysis' || f.type === 'vision_ai_comparison') {
             const _cm =
-                f.visionCaptureMode === 'photo_only'
+                f.type === 'vision_ai_comparison'
                     ? 'Só foto'
-                    : f.visionCaptureMode === 'video_only'
-                      ? 'Só vídeo (até 10 s)'
-                      : 'Foto ou vídeo (vídeo até 10 s)';
-            if (f.type === 'vision_ai_analysis') {
+                    : f.visionCaptureMode === 'photo_only'
+                      ? 'Só foto'
+                      : f.visionCaptureMode === 'video_only'
+                        ? 'Só vídeo (até 10 s)'
+                        : 'Foto ou vídeo (vídeo até 10 s)';
+            if (f.type === 'vision_ai_comparison') {
+                const _grid =
+                    f.visionAnalysisGrid === '2x2' || f.vision_analysis_grid === '2x2'
+                        ? 'grelha 2×2'
+                        : '1×1';
+                inputMock = `<div style="background:#faf5ff; border:2px dashed #c026d3; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#86198f; text-align:center; padding:10px;"><ion-icon name="git-compare-outline" style="font-size:28px; margin-bottom:4px;color:#a21caf"></ion-icon> <b style="color:#86198f">Visão IA Comparação</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Referência no painel · ${_cm} · ${_grid} · Gemini · nota 0–10 + diferenças.</span></div>`;
+            } else if (f.type === 'vision_ai_analysis') {
                 inputMock = `<div style="background:#fef2f2; border:2px dashed #dc2626; border-radius:10px; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#991b1b; text-align:center; padding:10px;"><ion-icon name="sparkles" style="font-size:28px; margin-bottom:4px;color:#dc2626"></ion-icon> <b style="color:#dc2626">Visão IA Análise</b><span style="font-size:10px; line-height:1.2; margin-top:2px;">Câmera: ${_cm} · Gemini · ${f.visionRating0To10Enabled ? 'com nota 0–10' : 'resposta + confiança'}.</span></div>`;
             } else {
                 const _grid =
@@ -7841,7 +8120,9 @@ function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
 
     const visionRatingHint =
         fld &&
-        (fld.type === 'vision_ai_analysis' || fld.type === 'vision_checklist') &&
+        (fld.type === 'vision_ai_analysis' ||
+            fld.type === 'vision_ai_comparison' ||
+            fld.type === 'vision_checklist') &&
         fld.visionRating0To10Enabled &&
         !isFormClock &&
         !isSection
@@ -9503,6 +9784,7 @@ var COPILOT_PREVIEW_FIELD_TYPE_LABELS = [
     ['facial_recognition', 'Biometria facial'],
     ['vision_checklist', 'Visão de IA Detecção'],
     ['vision_ai_analysis', 'Visão de IA Análise'],
+    ['vision_ai_comparison', 'Visão de IA Comparação'],
     ['image_annotation', 'Foto com anotações'],
     ['lookup_select', 'Lista dinâmica'],
     ['repeatable_matrix', 'Matriz repetível'],
@@ -9595,7 +9877,7 @@ function brsparkCopilotExtractPreviewAiSeed(field) {
         }
     }
     var type = String(field.type || '').trim();
-    if (type === 'vision_ai_analysis' || type === 'vision_checklist') {
+    if (type === 'vision_ai_analysis' || type === 'vision_ai_comparison' || type === 'vision_checklist') {
         var structured = String(field.visionStructuredPrompt || '').trim();
         if (structured) return structured.slice(0, 1200);
         if (Array.isArray(field.visionQuestions)) {
@@ -9659,7 +9941,7 @@ function brsparkCopilotBuildDefaultPreviewAiNote(row) {
     var type = String(row.type || '').trim();
     var interview = brsparkCopilotBuildInterviewPreviewContext();
     var blob = normalizeFieldLabelKey([label, description, interview].join(' '));
-    if (type === 'vision_ai_analysis' || type === 'vision_checklist') {
+    if (type === 'vision_ai_analysis' || type === 'vision_ai_comparison' || type === 'vision_checklist') {
         if (blob.indexOf('epi') >= 0 || blob.indexOf('equipamento de protecao') >= 0) {
             return 'Pedir à IA para avaliar presença, uso e condição dos EPIs esperados na imagem.'
                 .slice(0, 1200);
@@ -10023,6 +10305,7 @@ function brsparkCopilotGuessTaskIconFromSchema(schema, ctx) {
     if (types.signature || types.signature_summary) return 'create-outline';
     if (types.photo || types.photo_stamped) return 'images-outline';
     if (types.geofence_check || types.location_pick) return 'location-outline';
+    if (types.vision_ai_comparison) return 'git-compare-outline';
     if (types.vision_ai_analysis) return 'sparkles-outline';
     if (types.vision_checklist) return 'videocam-outline';
     if (types.opinion_scale) return 'analytics-outline';
@@ -10754,6 +11037,9 @@ window.brsparkCopilotApplyPatch = function (opts) {
     }
     renderCanvas();
     renderProperties();
+    if (hasSchema && typeof window.fbScheduleSchemaLocaleAutoTranslate === 'function') {
+        window.fbScheduleSchemaLocaleAutoTranslate();
+    }
     const ub = document.getElementById('ai-copilot-undo-btn');
     if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
 };
@@ -10782,6 +11068,9 @@ window.brsparkCopilotUndo = function () {
     }
     renderCanvas();
     renderProperties();
+    if (typeof window.fbScheduleSchemaLocaleAutoTranslate === 'function') {
+        window.fbScheduleSchemaLocaleAutoTranslate();
+    }
     const ub = document.getElementById('ai-copilot-undo-btn');
     if (ub) ub.disabled = st.length === 0;
 };
@@ -10913,6 +11202,365 @@ window.brsparkCopilotApplyLogic = function (opts) {
     if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
 };
 
+/** «Traduzir agora»: spinner + texto enquanto corre MyMemory. */
+function fbSetTranslateNowButtonBusy(isBusy) {
+    const btn = document.getElementById('fb-schema-translate-now-btn');
+    if (!btn) return;
+    if (isBusy) {
+        btn.setAttribute('aria-busy', 'true');
+        btn.classList.add('fb-translate-btn--loading');
+        const loadingTxt = fbStr('fb_schema_translate_now_loading', null, 'A traduzir…');
+        btn.innerHTML =
+            '<i class="fas fa-spinner fa-spin" aria-hidden="true" style="margin-right:6px;opacity:0.85"></i><span>' +
+            escapeHtml(loadingTxt) +
+            '</span>';
+    } else {
+        btn.removeAttribute('aria-busy');
+        btn.classList.remove('fb-translate-btn--loading');
+        btn.textContent = fbStr('fb_schema_translate_now', null, 'Traduzir agora');
+    }
+}
+
+window.updateFbSchemaCopyButtonState = function () {
+    const btn = document.getElementById('fb-schema-locale-copy-btn');
+    const trBtn = document.getElementById('fb-schema-translate-now-btn');
+    const sl = fbSchemaLocale();
+    const target = formEditLocaleTag();
+    const prim = sl ? sl.PRIMARY : 'pt-BR';
+    const same = target === prim;
+    if (btn) {
+        btn.disabled = !!same;
+        btn.style.opacity = same ? '0.45' : '1';
+        btn.style.cursor = same ? 'not-allowed' : 'pointer';
+    }
+    if (trBtn) {
+        trBtn.disabled = !!same;
+        trBtn.style.opacity = same ? '0.45' : '1';
+        trBtn.style.cursor = same ? 'not-allowed' : 'pointer';
+    }
+};
+
+/** Copia o texto em pt-BR de cada campo/etapa para o locale de edição actual (base para rever ou traduzir). */
+window.fbCopySchemaLabelsFromPrimary = function () {
+    const sl = fbSchemaLocale();
+    if (!sl) return;
+    const target = formEditLocaleTag();
+    if (target === sl.PRIMARY) return;
+    for (const f of fields || []) {
+        if (!f || !f.type) continue;
+        const text = sl.getLocalizedFieldLabel(f, sl.PRIMARY);
+        sl.setLocalizedFieldLabel(f, target, text);
+    }
+    renderCanvas();
+    if (selectedFieldId && window.fieldPropertiesModalOpen && typeof renderProperties === 'function') {
+        renderProperties();
+    }
+    if (typeof renderMobilePreview === 'function') renderMobilePreview();
+    syncFieldPropertiesModalSubtitle();
+    if (typeof window.scheduleBuilderDirtyRecompute === 'function') window.scheduleBuilderDirtyRecompute();
+};
+
+/** Par `langpair` da API MyMemory (fonte pt → destino). */
+var FB_SCHEMA_MYMEMORY_PAIR = { 'en-US': 'pt|en', 'es-ES': 'pt|es', 'de-DE': 'pt|de' };
+
+/**
+ * Enriquece o texto em pt-BR só para o pedido MyMemory (não altera o que está gravado em labels.pt-BR).
+ * «Deslocamento» em apps de field service é viagem do técnico — não scroll de página, nem «stroke» gráfico.
+ */
+function buildMyMemoryQueryFromPtFieldLabel(ptLabel, fieldType) {
+    const base = String(ptLabel || '').trim();
+    if (!base) return { query: '', expanded: false };
+    const ft = String(fieldType || '');
+
+    if (ft === 'transit_start') {
+        if (/^in[ií]cio\s+do\s+deslocamento$/i.test(base) || /^iniciar\s+deslocamento$/i.test(base)) {
+            return {
+                query: base + ' (viagem do técnico até ao local da ordem de serviço; início do trajeto)',
+                expanded: true,
+            };
+        }
+        if (base.length <= 48 && /\bdeslocamento\b/i.test(base) && !/\(/.test(base)) {
+            return {
+                query: base + ' (trajeto em campo até ao cliente, não offset nem desvio de layout)',
+                expanded: true,
+            };
+        }
+    }
+    if (ft === 'transit_end') {
+        if (/^fim\s+do\s+deslocamento$/i.test(base) || /^finalizar\s+deslocamento$/i.test(base)) {
+            return {
+                query: base + ' (término do trajeto do técnico; não «scroll» nem rolagem de página)',
+                expanded: true,
+            };
+        }
+        if (base.length <= 48 && /\bfim\b/i.test(base) && /\bdeslocamento\b/i.test(base) && !/\(/.test(base)) {
+            return {
+                query: base + ' (fim do deslocamento do técnico em campo)',
+                expanded: true,
+            };
+        }
+    }
+    if (ft === 'section_break') {
+        if (/^deslocamento$/i.test(base)) {
+            return {
+                query: 'Deslocamento (secção: deslocamento e viagem do técnico em field service)',
+                expanded: true,
+            };
+        }
+        if (/^nova\s+etapa$/i.test(base) || /^etapa\s+\d+$/i.test(base)) {
+            return { query: base + ' (formulário de assistência técnica em campo)', expanded: true };
+        }
+    }
+    if (ft === 'form_complete_button' && /^concluir$/i.test(base)) {
+        return {
+            query: base + ' (botão para concluir o formulário ou a ordem de serviço)',
+            expanded: true,
+        };
+    }
+    if (/\bdeslocamento\b/i.test(base) && !/\(/.test(base) && base.length < 56) {
+        return {
+            query: base + ' (em contexto de OS: deslocamento do técnico até ao cliente)',
+            expanded: true,
+        };
+    }
+    return { query: base, expanded: false };
+}
+
+/** Remove explicação entre parêntesis no fim, se a API a trouxe para inglês. */
+function stripTrailingParenExplanationEn(s) {
+    let o = String(s || '').trim();
+    const m = o.match(/^(.+?)\s*\([^)]{6,120}\)\s*$/);
+    if (m) return m[1].trim();
+    return o;
+}
+
+/**
+ * Corrige traduções absurdas do MyMemory para termos de field service (inglês).
+ */
+function refineMyMemoryEnFieldServiceOutput(translated, fieldType, sourcePt) {
+    let o = String(translated || '').trim();
+    if (!o) return o;
+    const src = String(sourcePt || '');
+
+    o = stripTrailingParenExplanationEn(o);
+
+    if (/\bdeslocamento\b/i.test(src) || /desloc|in[ií]cio\s+do|fim\s+do|iniciar|finalizar/i.test(src)) {
+        o = o.replace(/\bFinish\s+scrolling\b/gi, 'End travel');
+        o = o.replace(/\bfinish\s+scrolling\b/gi, 'End travel');
+        o = o.replace(/\bStart\s+Offset:?\s*$/gim, 'Start travel');
+        o = o.replace(/\bStart\s+offset\b/gi, 'Start travel');
+        o = o.replace(/\bSTROKE\b/g, 'Travel');
+        o = o.replace(/\bStroke\b/g, 'Travel');
+        o = o.replace(/\s*\(\s*IN\s*\)\s*$/i, '');
+        o = o.replace(/\s*·\s*travel\s*$/i, '');
+    }
+    if (String(fieldType || '') === 'transit_start' && /in[ií]cio|iniciar|desloc/i.test(src)) {
+        if (/^start\s+offset/i.test(o)) o = 'Start travel';
+        if (/^stroke\b/i.test(o)) o = 'Start travel';
+    }
+    if (String(fieldType || '') === 'transit_end' && /fim|finalizar|desloc/i.test(src)) {
+        if (/scroll/i.test(o) && /finish|end/i.test(o)) o = 'End travel';
+        if (/^end\s+scroll/i.test(o)) o = 'End travel';
+    }
+    if (String(fieldType || '') === 'form_complete_button' && /^concluir$/i.test(src.trim()) && /^conclude$/i.test(o)) {
+        o = 'Complete';
+    }
+
+    return o.trim();
+}
+
+async function translateOneLabelMyMemory(text, langpair) {
+    const q = String(text || '').trim();
+    if (!q) return '';
+    const qp = encodeURIComponent(q.slice(0, 500));
+    const lp = encodeURIComponent(langpair);
+
+    function normalizeTranslatedPayload(data) {
+        if (!data || typeof data !== 'object') return null;
+        if (data.translatedText != null && typeof data.translatedText === 'string') {
+            return String(data.translatedText).trim();
+        }
+        const inner = data.responseData && data.responseData.translatedText;
+        if (inner != null && typeof inner === 'string') return String(inner).trim();
+        return null;
+    }
+
+    function assertNotQuota(trimmed) {
+        if (/MYMEMORY\s+WARNING|QUOTA|LIMIT\s+REACHED/i.test(trimmed)) {
+            throw new Error('MyMemory quota ou limite (resposta: ' + trimmed.slice(0, 80) + '…)');
+        }
+    }
+
+    /** 1) Mesma origem da API Node — contorna CSP / bloqueios a domínios externos no browser. */
+    try {
+        const proxyUrl =
+            brsparkApiBase() + '/checklists/translate-mymemory?q=' + qp + '&langpair=' + lp;
+        const res = await fetch(proxyUrl, {
+            headers: adminJsonHeaders(),
+            credentials: 'include',
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const trimmed = normalizeTranslatedPayload(data);
+            if (trimmed) {
+                assertNotQuota(trimmed);
+                return trimmed;
+            }
+        }
+    } catch (e) {
+        console.warn('[checklists-builder] translate-mymemory (proxy):', e && e.message ? e.message : e);
+    }
+
+    /** 2) Fallback: chamada direta (útil em dev ou se a rota ainda não existir no servidor). */
+    const directUrl =
+        'https://api.mymemory.translated.net/get?q=' + qp + '&langpair=' + lp;
+    const res = await fetch(directUrl, { mode: 'cors' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const trimmed = normalizeTranslatedPayload(data);
+    if (trimmed == null || trimmed === '') throw new Error('bad response');
+    assertNotQuota(trimmed);
+    return trimmed;
+}
+
+/**
+ * Preenche `labels[destino]` a partir do texto em pt-BR (MyMemory):
+ * — campo vazio no destino, ou
+ * — texto no destino ainda igual ao pt-BR (ex.: após «Copiar de pt-BR», que copia o mesmo texto).
+ * Não sobrescreve se o destino já tiver um texto diferente do base (tradução manual).
+ * Não redesenha o canvas — o chamador deve chamar renderCanvas / renderProperties.
+ */
+window.fbTranslateEmptySchemaLabelsFromPrimary = async function (targetLocale) {
+    const sl = fbSchemaLocale();
+    if (!sl) return;
+    const prim = sl.PRIMARY;
+    const t = sl.normalizeSchemaLocaleTag(targetLocale);
+    if (t === prim) return;
+    const pair = FB_SCHEMA_MYMEMORY_PAIR[t];
+    if (!pair) return;
+
+    var ok = 0;
+    var fail = 0;
+
+    for (const f of fields || []) {
+        if (!f || !f.type) continue;
+        const primaryText = sl.getLocalizedFieldLabel(f, prim);
+        const primTrim = String(primaryText || '').trim();
+        if (!primTrim) continue;
+
+        const rawT =
+            f.labels && typeof f.labels === 'object' && f.labels[t] != null ? String(f.labels[t]) : '';
+        const existing = String(rawT || '').trim();
+        /** Já existe tradução própria (diferente do texto base). */
+        if (existing && existing !== primTrim) continue;
+
+        await new Promise(function (r) {
+            setTimeout(r, 130);
+        });
+        try {
+            const built = buildMyMemoryQueryFromPtFieldLabel(primaryText, f.type);
+            const translatedRaw = await translateOneLabelMyMemory(built.query, pair);
+            let translated = String(translatedRaw || '').trim();
+            if (pair === 'pt|en' && translated) {
+                translated = refineMyMemoryEnFieldServiceOutput(translated, f.type, primaryText);
+                if (built.expanded) {
+                    translated = stripTrailingParenExplanationEn(translated);
+                }
+            }
+            if (translated) {
+                sl.setLocalizedFieldLabel(f, t, translated);
+                ok++;
+            }
+        } catch (e) {
+            fail++;
+            console.warn('[checklists-builder] auto-translate label', f.id, e);
+        }
+    }
+
+    try {
+        if (ok > 0 || fail > 0) {
+            const el = document.getElementById('fb-sync-status');
+            if (el) {
+                el.title =
+                    (ok ? ok + ' rótulo(s) traduzido(s) (MyMemory). ' : '') +
+                    (fail ? fail + ' falha(s) — ver consola; rede, quota ou CSP.' : '');
+                setTimeout(function () {
+                    try {
+                        if (el) el.title = '';
+                    } catch (e2) {
+                        /* ignore */
+                    }
+                }, 10000);
+            }
+            if (fail > 0 && ok === 0 && typeof window.alert === 'function') {
+                window.alert(
+                    'Tradução automática não concluiu (0 sucessos). Possíveis causas: limite diário MyMemory, bloqueio de rede/CSP no browser, ou API indisponível. Abra a consola (F12) para detalhes.',
+                );
+            }
+        }
+    } catch (eTitle) {
+        /* ignore */
+    }
+};
+
+function fbGetSchemaLocaleAutoTranslateState() {
+    var sel = document.getElementById('fb-schema-locale-select');
+    var sl = typeof fbSchemaLocale === 'function' ? fbSchemaLocale() : null;
+    var target = (sel && sel.value) || window.__formSchemaEditLocale || 'pt-BR';
+    var autoEl = document.getElementById('fb-schema-auto-translate');
+    var optedOut = autoEl && !autoEl.checked;
+    var wantAuto =
+        !optedOut &&
+        sl &&
+        target !== sl.PRIMARY &&
+        FB_SCHEMA_MYMEMORY_PAIR[sl.normalizeSchemaLocaleTag(target)];
+    return { wantAuto: !!wantAuto, target: target, sel: sel, sl: sl };
+}
+
+/** Após mudar locale ou traduzir rótulos: redesenha canvas, painel e preview. */
+window.fbSchemaLocaleRunAfter = function () {
+    renderCanvas();
+    if (selectedFieldId && window.fieldPropertiesModalOpen && typeof renderProperties === 'function') {
+        renderProperties();
+    }
+    if (typeof renderMobilePreview === 'function') renderMobilePreview();
+    if (typeof syncFieldPropertiesModalSubtitle === 'function') syncFieldPropertiesModalSubtitle();
+};
+
+/**
+ * Tradução automática (MyMemory) quando o idioma de edição já é EN/ES/DE ao abrir o formulário
+ * ou recarregar — não só ao mudar o select (caso em que não há evento `change`).
+ */
+window.fbRunSchemaLocaleAutoTranslateIfNeeded = function () {
+    var st = fbGetSchemaLocaleAutoTranslateState();
+    if (!st.wantAuto) return;
+    if (!fields || !fields.length) return;
+    var sel = st.sel;
+    if (sel) sel.disabled = true;
+    return window
+        .fbTranslateEmptySchemaLabelsFromPrimary(st.target)
+        .catch(function () {
+            /* erros já em console */
+        })
+        .finally(function () {
+            if (sel) sel.disabled = false;
+            window.fbSchemaLocaleRunAfter();
+        });
+};
+
+var __fbSchemaLocaleAutoTranslateDebounceTimer = null;
+window.fbScheduleSchemaLocaleAutoTranslate = function () {
+    if (__fbSchemaLocaleAutoTranslateDebounceTimer) {
+        clearTimeout(__fbSchemaLocaleAutoTranslateDebounceTimer);
+    }
+    __fbSchemaLocaleAutoTranslateDebounceTimer = setTimeout(function () {
+        __fbSchemaLocaleAutoTranslateDebounceTimer = null;
+        if (typeof window.fbRunSchemaLocaleAutoTranslateIfNeeded === 'function') {
+            window.fbRunSchemaLocaleAutoTranslateIfNeeded();
+        }
+    }, 600);
+};
+
 /**
  * O HTML inicial do #canvas só tinha .canvas-empty; o Sortable vive em .canvas-section-body
  * criado por renderCanvas(). Sem esta chamada ao carregar, não há lista receptora até
@@ -10931,6 +11579,64 @@ function initFormSchemaLocaleSelect() {
         /* ignore */
     }
     window.__formSchemaEditLocale = sel.value || 'pt-BR';
+
+    const autoCb = document.getElementById('fb-schema-auto-translate');
+    if (autoCb && autoCb.dataset.fbBound !== '1') {
+        autoCb.dataset.fbBound = '1';
+        try {
+            var saved = localStorage.getItem('brspark_form_schema_auto_translate');
+            if (saved === '0') autoCb.checked = false;
+            else if (saved === '1') autoCb.checked = true;
+            else {
+                autoCb.checked = true;
+                localStorage.setItem('brspark_form_schema_auto_translate', '1');
+            }
+        } catch (e0) {
+            /* ignore */
+        }
+        autoCb.addEventListener('change', function () {
+            try {
+                localStorage.setItem('brspark_form_schema_auto_translate', autoCb.checked ? '1' : '0');
+            } catch (e1) {
+                /* ignore */
+            }
+        });
+    }
+
+    const copyBtn = document.getElementById('fb-schema-locale-copy-btn');
+    if (copyBtn && copyBtn.dataset.fbCopyBound !== '1') {
+        copyBtn.dataset.fbCopyBound = '1';
+        copyBtn.addEventListener('click', function () {
+            if (copyBtn.disabled) return;
+            window.fbCopySchemaLabelsFromPrimary();
+        });
+    }
+    const trNowBtn = document.getElementById('fb-schema-translate-now-btn');
+    if (trNowBtn && trNowBtn.dataset.fbTranslateBound !== '1') {
+        trNowBtn.dataset.fbTranslateBound = '1';
+        trNowBtn.addEventListener('click', function () {
+            if (trNowBtn.disabled) return;
+            var st = fbGetSchemaLocaleAutoTranslateState();
+            if (!st.sl || st.target === st.sl.PRIMARY) return;
+            var localeSel = document.getElementById('fb-schema-locale-select');
+            fbSetTranslateNowButtonBusy(true);
+            if (localeSel) localeSel.disabled = true;
+            trNowBtn.disabled = true;
+            window
+                .fbTranslateEmptySchemaLabelsFromPrimary(st.target)
+                .catch(function () {
+                    /* erros em consola */
+                })
+                .finally(function () {
+                    fbSetTranslateNowButtonBusy(false);
+                    if (localeSel) localeSel.disabled = false;
+                    trNowBtn.disabled = false;
+                    window.updateFbSchemaCopyButtonState();
+                    window.fbSchemaLocaleRunAfter();
+                });
+        });
+    }
+    window.updateFbSchemaCopyButtonState();
     sel.addEventListener('change', function () {
         window.__formSchemaEditLocale = sel.value || 'pt-BR';
         try {
@@ -10938,13 +11644,31 @@ function initFormSchemaLocaleSelect() {
         } catch (e2) {
             /* ignore */
         }
-        renderCanvas();
-        if (selectedFieldId && window.fieldPropertiesModalOpen && typeof renderProperties === 'function') {
-            renderProperties();
+        window.updateFbSchemaCopyButtonState();
+
+        var st = fbGetSchemaLocaleAutoTranslateState();
+        window.__formSchemaEditLocale = st.target;
+
+        /** Por defeito ligado: traduz vazios ao mudar para EN/ES/DE. Só não corre se o utilizador desmarcar a caixa (opt-out). */
+        if (st.wantAuto) {
+            sel.disabled = true;
+            window
+                .fbTranslateEmptySchemaLabelsFromPrimary(st.target)
+                .catch(function () {
+                    /* erros já em console */
+                })
+                .finally(function () {
+                    sel.disabled = false;
+                    window.fbSchemaLocaleRunAfter();
+                });
+        } else {
+            window.fbSchemaLocaleRunAfter();
         }
-        if (typeof renderMobilePreview === 'function') renderMobilePreview();
-        syncFieldPropertiesModalSubtitle();
     });
+
+    if (typeof window.fbScheduleSchemaLocaleAutoTranslate === 'function') {
+        window.fbScheduleSchemaLocaleAutoTranslate();
+    }
 }
 
 try {

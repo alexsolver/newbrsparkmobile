@@ -354,7 +354,11 @@ export function evaluateBusinessCondition(
   const depDisplay = responseDisplayString(depValueForNorm).trim();
   const targetNorm = parseToNorm(condValue);
   const targetDisplay = String(condValue ?? '').trim();
-  if (condFieldType === 'vision_checklist' || condFieldType === 'vision_ai_analysis') {
+  if (
+    condFieldType === 'vision_checklist' ||
+    condFieldType === 'vision_ai_analysis' ||
+    condFieldType === 'vision_ai_comparison'
+  ) {
     const visionFilled = (() => {
       if (rawDepVal === undefined || rawDepVal === null) return false;
       let o: unknown = rawDepVal;
@@ -376,7 +380,7 @@ export function evaluateBusinessCondition(
 
   /** Classificação 0–10 (`rating0To10`) quando o modelo ativa `visionRating0To10Enabled` neste campo. */
   const visionAiRatingEnabled =
-    condFieldType === 'vision_ai_analysis' &&
+    (condFieldType === 'vision_ai_analysis' || condFieldType === 'vision_ai_comparison') &&
     (condFieldDef as { visionRating0To10Enabled?: unknown } | undefined)?.visionRating0To10Enabled === true;
   if (visionAiRatingEnabled) {
     const RATING_OPS = new Set([

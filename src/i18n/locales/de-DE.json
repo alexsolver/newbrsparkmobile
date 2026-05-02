@@ -2499,7 +2499,10 @@
     "visionVideoTooLongTitle": "Video zu lang",
     "visionVideoTooLongBody": "In diesem Feld sind Videos bis zu zulässig{{seconds}}Sekunden. Nehmen Sie einen kürzeren Clip auf.",
     "visionYoloVideoFrameTitle": "Video",
-    "visionYoloVideoFrameBody": "Der Erkennungsdienst (YOLO) akzeptiert nur Bilder. Es konnte kein Frame aus dem Video extrahiert werden. Machen Sie ein Foto oder versuchen Sie es erneut."
+    "visionYoloVideoFrameBody": "Der Erkennungsdienst (YOLO) akzeptiert nur Bilder. Es konnte kein Frame aus dem Video extrahiert werden. Machen Sie ein Foto oder versuchen Sie es erneut.",
+    "visionComparisonPhotoOnlyTitle": "Vergleich mit Referenz",
+    "visionComparisonPhotoOnlyBody": "Dieses Feld akzeptiert nur ein Foto (kein Video) zum Vergleich mit dem Referenzbild.",
+    "visionComparisonMissingReferenceBody": "Die Vorlage für dieses Feld enthält kein gültiges Referenzbild. Bitten Sie einen Administrator, das Formular zu konfigurieren."
   },
   "pause": {
     "pickCategory": "Pausengrund",

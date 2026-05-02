@@ -2499,7 +2499,10 @@
     "visionVideoTooLongTitle": "Vídeo longo demais",
     "visionVideoTooLongBody": "Neste campo o vídeo pode ter no máximo {{seconds}} segundos. Grave outro clip.",
     "visionYoloVideoFrameTitle": "Vídeo",
-    "visionYoloVideoFrameBody": "O serviço de detecção (YOLO) só aceita imagem. Não foi possível gerar uma imagem a partir do vídeo. Grave uma foto ou tente novamente."
+    "visionYoloVideoFrameBody": "O serviço de detecção (YOLO) só aceita imagem. Não foi possível gerar uma imagem a partir do vídeo. Grave uma foto ou tente novamente.",
+    "visionComparisonPhotoOnlyTitle": "Comparação com referência",
+    "visionComparisonPhotoOnlyBody": "Este campo só aceita foto (não vídeo) para comparar com a imagem de referência.",
+    "visionComparisonMissingReferenceBody": "O modelo deste campo não tem imagem de referência válida. Peça ao administrador para configurar o formulário."
   },
   "pause": {
     "pickCategory": "Motivo da pausa",

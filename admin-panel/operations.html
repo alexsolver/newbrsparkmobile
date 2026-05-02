@@ -5688,7 +5688,11 @@ function buildReportTab(t) {
       const rh = buildRepeatableMatrixReportHtml(val, fieldDef || { matrixColumns: null }, escHtml);
       if (rh) return rh;
     }
-    if (fieldType === 'vision_checklist' || fieldType === 'vision_ai_analysis') {
+    if (
+      fieldType === 'vision_checklist' ||
+      fieldType === 'vision_ai_analysis' ||
+      fieldType === 'vision_ai_comparison'
+    ) {
       const vh = buildVisionChecklistReportHtml(val, fieldType, escHtml);
       if (vh) return vh;
       return '<em style="color:var(--text3)">(sem dados de visão IA)</em>';
@@ -7354,7 +7358,9 @@ window.printReport = async function() {
           displayVal = ih || '<span style="color:#94a3b8;font-style:italic">Sem foto anotada</span>';
       } else if (
         fieldDef &&
-        (fieldTypeNorm === 'vision_checklist' || fieldTypeNorm === 'vision_ai_analysis')
+        (fieldTypeNorm === 'vision_checklist' ||
+          fieldTypeNorm === 'vision_ai_analysis' ||
+          fieldTypeNorm === 'vision_ai_comparison')
       ) {
           const vh = buildVisionChecklistReportHtml(val, fieldTypeNorm, escPdf);
           displayVal = vh || '<span style="color:#94a3b8;font-style:italic">Sem dados de visão IA</span>';

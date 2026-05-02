@@ -1,11 +1,28 @@
 /**
  * Textos do Forms Builder (painel admin), pt-BR, en-US, es-ES e de-DE.
  * Preferência: `getAdminUiLocale()` (localStorage `brspark_admin_ui_locale`; padrão pt-BR).
+ * O seletor «Rótulos (edição)» (`window.__formSchemaEditLocale`) afeta só textos do **canvas**
+ * via `fbTCanvas` — o chrome do painel continua no idioma do admin.
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
 
 const LS_LOCALE = 'brspark_admin_ui_locale';
+
+const FB_CHECKLISTS_SYNC_LOCALES = new Set(['pt-BR', 'en-US', 'es-ES', 'de-DE']);
+
+/** Locale do canvas (rótulos / pré-visualização do bloco central) — segue o seletor de schema, não o idioma do painel. */
+function formBuilderCanvasUiLocale() {
+  try {
+    if (typeof window !== 'undefined' && window.__formSchemaEditLocale) {
+      const o = String(window.__formSchemaEditLocale).trim();
+      if (FB_CHECKLISTS_SYNC_LOCALES.has(o)) return o;
+    }
+  } catch {
+    /* ignore */
+  }
+  return getAdminUiLocale();
+}
 
 const M = {
   'pt-BR': {
@@ -84,6 +101,7 @@ const M = {
     fb_tb_facial_recognition: 'Reconhecimento facial',
     fb_tb_vision_checklist: 'Visão de IA, detecção',
     fb_tb_vision_ai_analysis: 'Visão de IA, análise',
+    fb_tb_vision_ai_comparison: 'Visão de IA, comparação',
 
     fb_canvas_section_prefix: 'Seção ·',
     fb_canvas_preamble_title: 'Área Externa',
@@ -404,6 +422,19 @@ const M = {
       'Percentagem — o valor da expressão é tratado como fração (ex.: 0,15 → 15%).',
 
     fb_canvas_panel: 'Canvas do formulário',
+    fb_schema_locale_hint: 'Rótulos (edição)',
+    fb_schema_locale_select_title:
+      'Idioma em que edita e grava os rótulos no JSON. Só o canvas (centro) usa este idioma para textos de UI; o resto do painel segue o idioma da conta.',
+    fb_schema_copy_primary: 'Copiar de pt-BR',
+    fb_schema_copy_primary_title:
+      'Copia o texto em pt-BR de cada campo/etapa para o idioma de edição atual (útil como base para rever ou traduzir).',
+    fb_schema_auto_translate_lbl: 'Traduzir ao mudar idioma (vazios ou ainda iguais ao pt-BR)',
+    fb_schema_auto_translate_title:
+      'Se estiver ligado: ao escolher EN/ES/DE, o builder pede tradução (MyMemory) para cada rótulo em que o destino está vazio ou ainda é o mesmo texto que em pt-BR — por exemplo depois de «Copiar de pt-BR». Não substitui um texto em inglês (ou outro) que já seja diferente do português. Pode falhar: rede, quota MyMemory ou bloqueio do browser.',
+    fb_schema_translate_now: 'Traduzir agora',
+    fb_schema_translate_now_loading: 'A traduzir…',
+    fb_schema_translate_now_title:
+      'Executa já a tradução automática para o idioma selecionado (útil se abriu o formulário e os rótulos continuaram em português).',
     fb_canvas_loading:
       'Carregando o canvas… Pode colocar campos na «Área Externa» ou dentro de cada etapa; arraste da barra lateral.',
     fb_label_form_title: 'Título do formulário',
@@ -479,6 +510,7 @@ const M = {
         'Arraste o cartão para uma pasta para mover. O sufixo #xxxxxx distingue títulos iguais. «Mover para outra pasta» fica no detalhe, só quando precisar.',
     mdl_forms_new_folder: '+ Nova pasta',
     mdl_forms_new_here: 'Novo formulário aqui',
+    fb_forms_list_locales_tip: 'Idiomas com rótulos neste modelo: {list}',
     mdl_folder_title: 'Nova pasta',
     mdl_folder_sub: 'A pasta será criada no nível atual (breadcrumb).',
     mdl_folder_name_lbl: 'Nome',
@@ -836,6 +868,7 @@ const M = {
     fb_tb_facial_recognition: 'Face recognition',
     fb_tb_vision_checklist: 'AI vision, detection',
     fb_tb_vision_ai_analysis: 'AI vision, analysis',
+    fb_tb_vision_ai_comparison: 'AI vision, comparison',
 
     fb_canvas_section_prefix: 'Section ·',
     fb_canvas_preamble_title: 'External area',
@@ -1156,6 +1189,19 @@ const M = {
       'Percent — expression value is a fraction (e.g. 0.15 → 15%).',
 
     fb_canvas_panel: 'Form canvas',
+    fb_schema_locale_hint: 'Labels (editing)',
+    fb_schema_locale_select_title:
+      'Language in which you edit and save labels in the JSON. Only the center canvas uses this for UI strings; the rest of the panel follows your account language.',
+    fb_schema_copy_primary: 'Copy from pt-BR',
+    fb_schema_copy_primary_title:
+      'Copies each field/section text from pt-BR into the current edit language (as a starting point to review or translate).',
+    fb_schema_auto_translate_lbl: 'Auto-translate on language change (empty or still Portuguese)',
+    fb_schema_auto_translate_title:
+      'When enabled: choosing EN/ES/DE triggers MyMemory for each label whose target slot is empty or still matches the pt-BR text (e.g. after «Copy from pt-BR»). It does not overwrite text that already differs from Portuguese. May fail: network, MyMemory quota, or browser blocking.',
+    fb_schema_translate_now: 'Translate now',
+    fb_schema_translate_now_loading: 'Translating…',
+    fb_schema_translate_now_title:
+      'Run automatic translation for the selected language now (useful if labels stayed in Portuguese after opening the form).',
     fb_canvas_loading:
       'Loading canvas… Place fields in the “External area” or inside each step; drag from the sidebar.',
     fb_label_form_title: 'Form title',
@@ -1231,6 +1277,7 @@ const M = {
         'Drag a card onto a folder to move it. The #xxxxxx suffix distinguishes duplicate titles. Expand «Move to another folder…» only when needed.',
     mdl_forms_new_folder: '+ New folder',
     mdl_forms_new_here: 'New form here',
+    fb_forms_list_locales_tip: 'Languages with labels in this template: {list}',
     mdl_folder_title: 'New folder',
     mdl_folder_sub: 'The folder is created at the current level (breadcrumb).',
     mdl_folder_name_lbl: 'Name',
@@ -1515,6 +1562,13 @@ const M = {
 };
 M['es-ES'] = { ...M['en-US'] };
 Object.assign(M['es-ES'], {
+  fb_schema_auto_translate_lbl: 'Traducir al cambiar idioma (vacíos o aún iguales a pt-BR)',
+  fb_schema_auto_translate_title:
+    'Si está activada: al elegir EN/ES/DE, pide traducción (MyMemory) para cada etiqueta cuyo destino esté vacío o siga siendo el mismo texto que en pt-BR. No sobrescribe un texto que ya sea distinto del portugués. Puede fallar: red, cuota o bloqueo.',
+  fb_schema_translate_now: 'Traducir ahora',
+  fb_schema_translate_now_loading: 'Traduciendo…',
+  fb_schema_translate_now_title:
+    'Ejecuta ya la traducción automática para el idioma seleccionado (útil si las etiquetas siguen en portugués).',
   fb_tb_currency: 'Moneda (importe)',
   fb_prop_voice_lang_hint:
     'Lista basada en los <b>perfiles regionales activos</b> de la plataforma (SaaS). Opcional; ayuda con acento y ruido.',
@@ -1523,6 +1577,7 @@ Object.assign(M['es-ES'], {
   mdl_forms_filter_non_archived: 'Solo no archivados',
   mdl_forms_tree_tip:
     'Arrastre la tarjeta a una carpeta para moverla. El sufijo #xxxxxx distingue títulos duplicados. «Mover a otra carpeta…» está plegado hasta que lo necesite.',
+  fb_forms_list_locales_tip: 'Idiomas con etiquetas en esta plantilla: {list}',
   fb_vision_prompt_ex_btn: 'Ejemplos',
   fb_vision_prompt_ex_btn_title: 'Modelos de prompt para servicios de campo (visión IA, análisis)',
   fb_vision_prompt_ex_modal_title: 'Ejemplos de prompt estructurado',
@@ -1650,6 +1705,14 @@ Object.assign(M['es-ES'], {
 
 M['de-DE'] = { ...M['en-US'] };
 Object.assign(M['de-DE'], {
+  fb_schema_auto_translate_lbl: 'Beim Sprachwechsel übersetzen (leer oder noch wie pt-BR)',
+  fb_schema_auto_translate_title:
+    'Wenn aktiv: Bei EN/ES/DE wird MyMemory für jede Bezeichnung aufgerufen, deren Ziel leer ist oder noch dem pt-BR-Text entspricht. Bereits abweichende Übersetzungen bleiben erhalten. Fehler möglich: Netz, Kontingent, Browser.',
+  fb_schema_translate_now: 'Jetzt übersetzen',
+  fb_schema_translate_now_loading: 'Übersetze…',
+  fb_schema_translate_now_title:
+    'Übersetzung sofort für die gewählte Sprache ausführen (hilfreich, wenn Beschriftungen weiterhin Portugiesisch sind).',
+  fb_forms_list_locales_tip: 'Sprachen mit Beschriftungen in dieser Vorlage: {list}',
   fb_locale_lbl: 'Admin-Sprache',
   fb_pageTitle: 'BrSpark Admin, Formular-Editor',
   fb_bc_panel: 'Start',
@@ -1677,13 +1740,19 @@ function interpolate(str, vars) {
   return out;
 }
 
-/** Formata inteiro para o locale do painel admin (ex.: 12.000 vs 12,000). */
+/** Formata inteiro para o locale da interface do admin (não o seletor de rótulos do canvas). */
 export function fbFormatInt(n) {
   return Number(n).toLocaleString(adminIntlLocale(getAdminUiLocale()));
 }
 
 export function fbT(key, vars) {
   const raw = adminResolve(M, getAdminUiLocale(), key);
+  return vars ? interpolate(raw, vars) : raw;
+}
+
+/** Traduções só para o canvas / cartões / TYPE no canvas — alinhadas a `__formSchemaEditLocale`. */
+export function fbTCanvas(key, vars) {
+  const raw = adminResolve(M, formBuilderCanvasUiLocale(), key);
   return vars ? interpolate(raw, vars) : raw;
 }
 
@@ -1768,6 +1837,34 @@ export function applyChecklistsBuilderChromeI18n() {
   applyChecklistsToolboxI18n();
 
   setText('fb-canvas-panel-title', fbT('fb_canvas_panel'));
+  setText('fb-schema-locale-hint', fbT('fb_schema_locale_hint'));
+  const schemaLocSel = document.getElementById('fb-schema-locale-select');
+  if (schemaLocSel) {
+    schemaLocSel.setAttribute('title', fbT('fb_schema_locale_select_title'));
+  }
+  const schemaCopyBtn = document.getElementById('fb-schema-locale-copy-btn');
+  if (schemaCopyBtn) {
+    schemaCopyBtn.textContent = fbT('fb_schema_copy_primary');
+    schemaCopyBtn.setAttribute('title', fbT('fb_schema_copy_primary_title'));
+    schemaCopyBtn.setAttribute('aria-label', fbT('fb_schema_copy_primary_title'));
+  }
+  const schemaTranslateNowBtn = document.getElementById('fb-schema-translate-now-btn');
+  if (schemaTranslateNowBtn) {
+    schemaTranslateNowBtn.textContent = fbT('fb_schema_translate_now');
+    schemaTranslateNowBtn.setAttribute('title', fbT('fb_schema_translate_now_title'));
+    schemaTranslateNowBtn.setAttribute('aria-label', fbT('fb_schema_translate_now_title'));
+  }
+  setText('fb-schema-auto-translate-lbl', fbT('fb_schema_auto_translate_lbl'));
+  const autoTrCb = document.getElementById('fb-schema-auto-translate');
+  if (autoTrCb) {
+    autoTrCb.setAttribute('title', fbT('fb_schema_auto_translate_title'));
+    autoTrCb.setAttribute('aria-label', fbT('fb_schema_auto_translate_title'));
+  }
+  try {
+    if (typeof window.updateFbSchemaCopyButtonState === 'function') window.updateFbSchemaCopyButtonState();
+  } catch {
+    /* builder ainda não carregou */
+  }
 
   setText('fb-label-tpl-title', fbT('fb_label_form_title'));
   setText('fb-label-form-active', fbT('fb_label_form_active'));
@@ -1871,6 +1968,11 @@ export function applyChecklistsToolboxI18n() {
     if (type === 'vision_ai_analysis') {
       el.innerHTML =
         iconHtml + '<span style="color:#991b1b;font-weight:800">' + escapeToolboxLabelHtml(label) + '</span>';
+      return;
+    }
+    if (type === 'vision_ai_comparison') {
+      el.innerHTML =
+        iconHtml + '<span style="color:#86198f;font-weight:800">' + escapeToolboxLabelHtml(label) + '</span>';
       return;
     }
     el.innerHTML = iconHtml + escapeToolboxLabelHtml(label);

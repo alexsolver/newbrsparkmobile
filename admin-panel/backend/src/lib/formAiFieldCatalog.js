@@ -118,6 +118,14 @@ const FIELD_SPECS = [
       'Visão de IA Análise: câmera, perguntas sim/não, grelha opcional 1×1 ou 2×2 (todas as fotos obrigatórias antes de analisar; só foto); análise no servidor via integração "Google AI Studio" (API Gemini).',
   },
   {
+    type: 'vision_ai_comparison',
+    tier: 'advanced',
+    proposalsDefault: false,
+    contextFlag: 'allowVisionAiAnalysis',
+    descPt:
+      'Visão de IA Comparação: foto de referência definida no painel + captura em campo (só foto; grelha 1×1 ou 2×2 como na análise); Gemini compara as imagens, devolve nota 0–10 e texto das diferenças (endpoint /api/checklists/vision/compare).',
+  },
+  {
     type: 'transit_start',
     tier: 'advanced',
     proposalsDefault: false,
@@ -258,7 +266,7 @@ function inferContextFlagsFromSchema(schemaData) {
     if (t === 'transit_start' || t === 'transit_end') flags.allowTransit = true;
     if (t === 'facial_recognition') flags.allowFacial = true;
     if (t === 'vision_checklist') flags.allowVisionChecklist = true;
-    if (t === 'vision_ai_analysis') flags.allowVisionAiAnalysis = true;
+    if (t === 'vision_ai_analysis' || t === 'vision_ai_comparison') flags.allowVisionAiAnalysis = true;
     if (t === 'calculated') flags.allowCalculated = true;
   }
   return flags;
@@ -365,6 +373,7 @@ const DEFAULT_BRSPARK_TYPE_ICONS = {
   facial_recognition: { icon: 'scan-outline', iconColor: '#7e22ce' },
   vision_checklist: { icon: 'videocam-outline', iconColor: '#0369a1' },
   vision_ai_analysis: { icon: 'sparkles-outline', iconColor: '#dc2626' },
+  vision_ai_comparison: { icon: 'git-compare-outline', iconColor: '#a21caf' },
   transit_start: { icon: 'rocket-outline', iconColor: '#2563eb' },
   transit_end: { icon: 'flag-outline', iconColor: '#dc2626' },
   geofence_check: { icon: 'navigate-circle-outline', iconColor: '#ea580c' },
@@ -478,6 +487,7 @@ const ANALYZE_OPTION_SHORT_PT = {
   facial_recognition: 'Biometria facial',
   vision_checklist: 'Visão de IA Detecção',
   vision_ai_analysis: 'Visão IA Análise',
+  vision_ai_comparison: 'Visão IA Comparação',
   transit_start: 'Início deslocamento',
   transit_end: 'Fim deslocamento',
   geofence_check: 'Cerca (geofence)',

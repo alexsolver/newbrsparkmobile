@@ -264,7 +264,7 @@ function applySchemaPatch(schemaData, patch) {
       cur.allowMediaDescription = p.allowMediaDescription;
     }
     if (p.facialAuthMode != null) cur.facialAuthMode = String(p.facialAuthMode).trim();
-    if (cur.type === 'vision_checklist' || cur.type === 'vision_ai_analysis') {
+    if (cur.type === 'vision_checklist' || cur.type === 'vision_ai_analysis' || cur.type === 'vision_ai_comparison') {
       if (p.visionCaptureMode != null) {
         const m = String(p.visionCaptureMode).trim();
         if (m === 'photo_only' || m === 'video_only' || m === 'photo_and_video') {
@@ -291,7 +291,7 @@ function applySchemaPatch(schemaData, patch) {
           .slice(0, MAX_VISION_SIMNAO_QUESTIONS);
         if (!rawItems.length) {
           /* mantém estado anterior */
-        } else if (cur.type === 'vision_ai_analysis') {
+        } else if (cur.type === 'vision_ai_analysis' || cur.type === 'vision_ai_comparison') {
           if (rawItems.length === 1) {
             const text = rawItems[0].text.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS);
             cur.visionQuestions = [{ id: rawItems[0].id || 'q1', text }];
@@ -323,7 +323,10 @@ function applySchemaPatch(schemaData, patch) {
           }
         }
       }
-      if (cur.type === 'vision_ai_analysis' && p.visionAnalysisGrid != null) {
+      if (
+        (cur.type === 'vision_ai_analysis' || cur.type === 'vision_ai_comparison') &&
+        p.visionAnalysisGrid != null
+      ) {
         const g = String(p.visionAnalysisGrid)
           .trim()
           .toLowerCase()
@@ -332,6 +335,11 @@ function applySchemaPatch(schemaData, patch) {
           cur.visionAnalysisGrid = g;
         }
       }
+      if (cur.type === 'vision_ai_comparison' && p.visionComparisonReferenceDataUrl != null) {
+        const s = String(p.visionComparisonReferenceDataUrl).trim();
+        cur.visionComparisonReferenceDataUrl =
+          s.startsWith('data:image/') && s.length <= 9 * 1024 * 1024 ? s : '';
+      }
       if (
         cur.type === 'vision_ai_analysis' &&
         (p.visionRating0To10Enabled === true || p.visionRating0To10Enabled === false)
@@ -339,7 +347,7 @@ function applySchemaPatch(schemaData, patch) {
         cur.visionRating0To10Enabled = !!p.visionRating0To10Enabled;
       }
       if (
-        cur.type === 'vision_ai_analysis' &&
+        (cur.type === 'vision_ai_analysis' || cur.type === 'vision_ai_comparison') &&
         (p.visionShowAiResponseInForm === true || p.visionShowAiResponseInForm === false)
       ) {
         cur.visionShowAiResponseInForm = !!p.visionShowAiResponseInForm;

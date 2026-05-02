@@ -593,7 +593,7 @@ const REVISION_SESSION_FIELD_TYPES = new Set([
 
 /** Campos de mídia + prompt estruturado (sim/não) analisados no servidor (YOLO ou Gemini). */
 function isVisionSimNaoMediaFieldType(t: string): boolean {
-  return t === 'vision_checklist' || t === 'vision_ai_analysis';
+  return t === 'vision_checklist' || t === 'vision_ai_analysis' || t === 'vision_ai_comparison';
 }
 
 /** Assinatura e deslocamento: não reaproveitar após reabertura; demais respostas mantêm-se. */
@@ -868,8 +868,8 @@ function getVisionQuestionsFromField(field: any): { id: string; text: string }[]
 
   const ft = effectiveSchemaFieldType(field);
 
-  /** Análise (Gemini): manter um único critério `q1` com texto longo (comportamento legado). */
-  if (ft === 'vision_ai_analysis') {
+  /** Análise / comparação (Gemini): manter um único critério `q1` com texto longo (comportamento legado). */
+  if (ft === 'vision_ai_analysis' || ft === 'vision_ai_comparison') {
     if (structured) {
       return [{ id: 'q1', text: structured.slice(0, MAX_VISION_STRUCTURED_PROMPT_CHARS) }];
     }
@@ -929,12 +929,13 @@ function formatVisionIaAnswerLabel(raw: unknown): string {
 /** Visão IA (análise e detecção): mostrar texto/confiança/nota no formulário (padrão: sim). */
 function visionAiShowsResponseInForm(field: any): boolean {
   const ft = effectiveSchemaFieldType(field);
-  if (ft !== 'vision_ai_analysis' && ft !== 'vision_checklist') return true;
+  if (ft !== 'vision_ai_analysis' && ft !== 'vision_ai_comparison' && ft !== 'vision_checklist') return true;
   return field?.visionShowAiResponseInForm !== false;
 }
 
 /** Alinha ao Form Builder: `photo_only` | `video_only` | `photo_and_video` (padrão). */
 function normalizeVisionCaptureMode(field: any): 'photo_only' | 'video_only' | 'photo_and_video' {
+  if (effectiveSchemaFieldType(field) === 'vision_ai_comparison') return 'photo_only';
   const m = String(field?.visionCaptureMode ?? field?.vision_capture_mode ?? '').trim();
   if (m === 'photo_only' || m === 'video_only' || m === 'photo_and_video') return m;
   return 'photo_and_video';
@@ -1044,6 +1045,43 @@ function inferMimeFromVisionCameraAsset(a: ImagePicker.ImagePickerAsset): string
   return explicit || 'application/octet-stream';
 }
 
+function parseVisionComparisonReferenceDataUrl(
+  dataUrl: string,
+): { mime: string; base64: string } | null {
+  const s = String(dataUrl || '').trim();
+  if (!s.startsWith('data:')) return null;
+  const comma = s.indexOf(',');
+  if (comma < 8) return null;
+  const header = s.slice(5, comma);
+  const semi = header.indexOf(';');
+  const mime = (semi > 0 ? header.slice(0, semi) : header).trim().toLowerCase();
+  const b64 = s.slice(comma + 1).trim();
+  if (!mime.startsWith('image/') || !b64) return null;
+  return { mime, base64: b64 };
+}
+
+async function writeVisionComparisonReferenceTempFile(
+  field: any,
+): Promise<{ uri: string; mime: string; name: string } | null> {
+  const raw = String(
+    field?.visionComparisonReferenceDataUrl ?? field?.vision_comparison_reference_data_url ?? '',
+  ).trim();
+  const parsed = parseVisionComparisonReferenceDataUrl(raw);
+  if (!parsed) return null;
+  const baseDir = FileSystem.cacheDirectory || '';
+  if (!baseDir) return null;
+  const ext = parsed.mime.includes('png') ? 'png' : parsed.mime.includes('webp') ? 'webp' : 'jpg';
+  const out = `${baseDir}vision_ref_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.${ext}`;
+  try {
+    await FileSystem.writeAsStringAsync(out, parsed.base64, { encoding: 'base64' });
+    const info = await FileSystem.getInfoAsync(out);
+    if (!info.exists || !info.size || info.size < 32) return null;
+    return { uri: out, mime: parsed.mime, name: `referencia.${ext}` };
+  } catch {
+    return null;
+  }
+}
+
 function parseVisionChecklistStored(raw: unknown): Record<string, any> | null {
   if (raw === undefined || raw === null) return null;
   let o: unknown = raw;
@@ -1079,7 +1117,7 @@ function helpInstructionCapturePreviewUri(field: any, raw: unknown): string | nu
     if (uri && (uri.startsWith('http') || uri.startsWith('file:'))) return uri;
     return null;
   }
-  if (ft === 'vision_checklist' || ft === 'vision_ai_analysis') {
+  if (ft === 'vision_checklist' || ft === 'vision_ai_analysis' || ft === 'vision_ai_comparison') {
     const o = parseVisionChecklistStored(raw);
     const u = o?.localUri != null ? String(o.localUri).trim() : '';
     if (u && (u.startsWith('http') || u.startsWith('file:'))) return u;
@@ -1122,10 +1160,10 @@ function normalizeVisionAnalysisGridKey(raw: unknown): VisionAnalysisGridKey {
   return '1x1';
 }
 
-/** Grelha 1×1 ou 2×2 para `vision_ai_analysis` e `vision_checklist` (composição única antes do envio à API). */
+/** Grelha 1×1 ou 2×2 para visão IA análise/comparação e detecção (composição única antes do envio à API). */
 function getVisionAnalysisGridLayout(field: any): { key: VisionAnalysisGridKey; cols: number; rows: number; count: number } {
   const ft = effectiveSchemaFieldType(field);
-  if (ft !== 'vision_ai_analysis' && ft !== 'vision_checklist') {
+  if (ft !== 'vision_ai_analysis' && ft !== 'vision_ai_comparison' && ft !== 'vision_checklist') {
     return { key: '1x1', cols: 1, rows: 1, count: 1 };
   }
   const key = normalizeVisionAnalysisGridKey(field?.visionAnalysisGrid ?? field?.vision_analysis_grid);
@@ -1179,6 +1217,7 @@ const MULTIPLE_EXCLUDED_FIELD_TYPES = new Set([
   'signature_summary',
   'vision_checklist',
   'vision_ai_analysis',
+  'vision_ai_comparison',
   'leitura',
   'voice_note',
   'image_annotation',
@@ -1777,7 +1816,7 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
     });
     const joined = parts.length ? parts.join(' · ') : '—';
     if (
-      t === 'vision_ai_analysis' &&
+      (t === 'vision_ai_analysis' || t === 'vision_ai_comparison') &&
       fieldDef?.visionRating0To10Enabled === true &&
       typeof (o as any).rating0To10 === 'number' &&
       Number.isFinite((o as any).rating0To10)
@@ -3892,7 +3931,8 @@ export default function ChecklistEngine() {
 
   const ensureOnlineValidation = async (field: any, action: () => void | Promise<void>) => {
     const ft = effectiveSchemaFieldType(field);
-    const isVisionDeferredField = ft === 'vision_checklist' || ft === 'vision_ai_analysis';
+    const isVisionDeferredField =
+      ft === 'vision_checklist' || ft === 'vision_ai_analysis' || ft === 'vision_ai_comparison';
     /** Visão IA: permite captura offline; a análise no servidor fica pendente até haver rede (submit continua a exigir análise concluída quando `requireOnlineValidation`). */
     if (schemaFieldRequiresOnlineValidation(field) && !isVisionDeferredField) {
       try {
@@ -5364,6 +5404,7 @@ export default function ChecklistEngine() {
         'facial_recognition',
         'vision_checklist',
         'vision_ai_analysis',
+        'vision_ai_comparison',
         'file_upload',
         'signature',
         'signature_summary',
@@ -5855,7 +5896,8 @@ export default function ChecklistEngine() {
       if (fieldId.startsWith('__')) return;
       const roField = template?.schemaData?.find((f: any) => f.id === fieldId);
       const roFt = roField ? effectiveSchemaFieldType(roField) : '';
-      const roVision = roFt === 'vision_checklist' || roFt === 'vision_ai_analysis';
+      const roVision =
+        roFt === 'vision_checklist' || roFt === 'vision_ai_analysis' || roFt === 'vision_ai_comparison';
       const roSt =
         value && typeof value === 'object' && !Array.isArray(value)
           ? String((value as Record<string, unknown>).status || '').toLowerCase()
@@ -6115,18 +6157,45 @@ export default function ChecklistEngine() {
           }
         }
 
+        const vftRun = effectiveSchemaFieldType(field);
+        const isVisionComparisonRun = vftRun === 'vision_ai_comparison';
+        if (isVisionComparisonRun && String(uploadMime).toLowerCase().startsWith('video/')) {
+          if (!quiet) {
+            Alert.alert(
+              t('checklistForm.visionComparisonPhotoOnlyTitle'),
+              t('checklistForm.visionComparisonPhotoOnlyBody'),
+            );
+          }
+          return;
+        }
+
+        let referenceTemp: { uri: string; mime: string; name: string } | null = null;
+        if (isVisionComparisonRun) {
+          referenceTemp = await writeVisionComparisonReferenceTempFile(field);
+          if (!referenceTemp) {
+            if (!quiet) {
+              Alert.alert(
+                t('appAlerts.checklist.modelPromptTitle'),
+                t('checklistForm.visionComparisonMissingReferenceBody'),
+              );
+            }
+            return;
+          }
+        }
+
         const form = new FormData();
         form.append(
           'engine',
-          field.type === 'vision_ai_analysis'
+          vftRun === 'vision_ai_analysis' || isVisionComparisonRun
             ? 'google_ai_studio'
             : user?.tenant?.visionDetectionEngine === 'moondream'
               ? 'moondream'
               : 'yolo',
         );
         if (
-          (effectiveSchemaFieldType(field) === 'vision_ai_analysis' ||
-            effectiveSchemaFieldType(field) === 'vision_checklist') &&
+          (vftRun === 'vision_ai_analysis' ||
+            vftRun === 'vision_ai_comparison' ||
+            vftRun === 'vision_checklist') &&
           field.visionRating0To10Enabled === true
         ) {
           form.append('visionRating0To10', '1');
@@ -6137,13 +6206,26 @@ export default function ChecklistEngine() {
           type: uploadMime,
           name: uploadName,
         } as any);
-        const res = await apiFetch('/api/checklists/vision/analyze', {
+        if (isVisionComparisonRun && referenceTemp) {
+          form.append('referenceMedia', {
+            uri: referenceTemp.uri,
+            type: referenceTemp.mime,
+            name: referenceTemp.name,
+          } as any);
+        }
+        const visionApiPath = isVisionComparisonRun
+          ? '/api/checklists/vision/compare'
+          : '/api/checklists/vision/analyze';
+        const res = await apiFetch(visionApiPath, {
           method: 'POST',
           body: form,
           /** Análise Gemini pode demorar; manter ≥ timeout do servidor (`visionStudioAnalyze`). */
           timeoutMs: 360_000,
         });
         visionApiReturned = true;
+        if (referenceTemp?.uri) {
+          FileSystem.deleteAsync(referenceTemp.uri.split('?')[0], { idempotent: true }).catch(() => {});
+        }
         const text = await res.text();
         let json: any;
         try {
@@ -6169,8 +6251,9 @@ export default function ChecklistEngine() {
           throw new Error(baseErr + extra);
         }
         if (!Array.isArray(json?.answers)) {
+          const ftErr = effectiveSchemaFieldType(field);
           throw new Error(
-            field.type === 'vision_ai_analysis'
+            ftErr === 'vision_ai_analysis' || ftErr === 'vision_ai_comparison'
               ? 'A resposta do servidor não contém a lista de respostas esperada. Verifique a integração «Google AI Studio» e o modelo configurado.'
               : 'A resposta do servidor não contém a lista de respostas esperada. Verifique o serviço de visão (integrações «Visão IA - YOLO» ou «Visão IA - Moondream» no painel).',
           );
@@ -6319,7 +6402,23 @@ export default function ChecklistEngine() {
     }
     const gridLayout = getVisionAnalysisGridLayout(field);
     const vft = effectiveSchemaFieldType(field);
-    if ((vft === 'vision_ai_analysis' || vft === 'vision_checklist') && gridLayout.count > 1) {
+    if (vft === 'vision_ai_comparison') {
+      if (
+        !parseVisionComparisonReferenceDataUrl(
+          String(field?.visionComparisonReferenceDataUrl ?? field?.vision_comparison_reference_data_url ?? '').trim(),
+        )
+      ) {
+        Alert.alert(
+          t('appAlerts.checklist.modelPromptTitle'),
+          t('checklistForm.visionComparisonMissingReferenceBody'),
+        );
+        return;
+      }
+    }
+    if (
+      (vft === 'vision_ai_analysis' || vft === 'vision_ai_comparison' || vft === 'vision_checklist') &&
+      gridLayout.count > 1
+    ) {
       return;
     }
     void (async () => {
@@ -10692,10 +10791,59 @@ export default function ChecklistEngine() {
                     </TouchableOpacity>
                   </View>
                 ))}
-              {(field.type === 'vision_checklist' || field.type === 'vision_ai_analysis') && (
+              {(field.type === 'vision_checklist' ||
+                field.type === 'vision_ai_analysis' ||
+                field.type === 'vision_ai_comparison') && (
                 <View style={{ marginTop: 6 }}>
                   {(() => {
-                    const useGeminiAnalysis = field.type === 'vision_ai_analysis';
+                    const vftVision = effectiveSchemaFieldType(field);
+                    const useGeminiAnalysis = vftVision === 'vision_ai_analysis';
+                    const useVisionComparison = vftVision === 'vision_ai_comparison';
+                    const visionPalette = useVisionComparison
+                      ? {
+                          heroGrad: ['#1e0533', '#581c87', '#86198f'] as [string, string, string],
+                          border: 'rgba(232, 121, 249, 0.35)',
+                          badgeBg: 'rgba(232, 121, 249, 0.15)',
+                          badgeBr: 'rgba(243, 232, 255, 0.45)',
+                          badgeMuted: '#fae8ff',
+                          badgeStrong: '#86198f',
+                          spin: '#f5d0fe',
+                          iconGrad: ['#e879f9', '#a21caf'] as [string, string],
+                          chipIcon: '#e879f9' as const,
+                          subtitleAccent: '#f5d0fe',
+                        }
+                      : useGeminiAnalysis
+                        ? {
+                            heroGrad: ['#1c0a0a', '#450a0a', '#7f1d1d'] as [string, string, string],
+                            border: 'rgba(248, 113, 113, 0.35)',
+                            badgeBg: 'rgba(248, 113, 113, 0.15)',
+                            badgeBr: 'rgba(254, 202, 202, 0.45)',
+                            badgeMuted: '#fecaca',
+                            badgeStrong: '#ef4444',
+                            spin: '#fecaca',
+                            iconGrad: ['#f87171', '#b91c1c'] as [string, string],
+                            chipIcon: '#fca5a5' as const,
+                            subtitleAccent: '#fecaca',
+                          }
+                        : {
+                            heroGrad: ['#0b1220', '#0f172a', '#134e4a'] as [string, string, string],
+                            border: 'rgba(56, 189, 248, 0.28)',
+                            badgeBg: 'rgba(56, 189, 248, 0.12)',
+                            badgeBr: 'rgba(125, 211, 252, 0.35)',
+                            badgeMuted: '#e0f2fe',
+                            badgeStrong: '#38bdf8',
+                            spin: '#7dd3fc',
+                            iconGrad: ['#22d3ee', '#6366f1'] as [string, string],
+                            chipIcon: '#7dd3fc' as const,
+                            subtitleAccent: '#7dd3fc',
+                          };
+                    const refThumbUri = useVisionComparison
+                      ? String(
+                          field?.visionComparisonReferenceDataUrl ??
+                            field?.vision_comparison_reference_data_url ??
+                            '',
+                        ).trim()
+                      : '';
                     const showAiResponseInForm = visionAiShowsResponseInForm(field);
                     const stored = parseVisionChecklistStored(vv(field.id));
                     const busy = visionAnalyzeBusyId === visionAnalyzeBusyKey(field.id, scope ?? null);
@@ -10732,6 +10880,25 @@ export default function ChecklistEngine() {
 
                     return (
                       <>
+                        {showVisionCaptureHero && useVisionComparison && refThumbUri ? (
+                          <View style={{ marginBottom: 10, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: '#86198f', marginBottom: 6 }}>
+                              Referência (padrão)
+                            </Text>
+                            <Image
+                              source={{ uri: refThumbUri }}
+                              style={{
+                                width: 132,
+                                height: 132,
+                                borderRadius: 14,
+                                borderWidth: 1,
+                                borderColor: '#e9d5ff',
+                                backgroundColor: '#fafafa',
+                              }}
+                              resizeMode="cover"
+                            />
+                          </View>
+                        ) : null}
                         {showVisionCaptureHero ? (
                           <TouchableOpacity
                             onPress={() => openVisionChecklistMedia(field, scope)}
@@ -10748,11 +10915,7 @@ export default function ChecklistEngine() {
                             }}
                           >
                             <LinearGradient
-                              colors={
-                                useGeminiAnalysis
-                                  ? ['#1c0a0a', '#450a0a', '#7f1d1d']
-                                  : ['#0b1220', '#0f172a', '#134e4a']
-                              }
+                              colors={visionPalette.heroGrad}
                               start={{ x: 0, y: 0 }}
                               end={{ x: 1, y: 1 }}
                               style={{
@@ -10760,17 +10923,12 @@ export default function ChecklistEngine() {
                                 paddingHorizontal: 18,
                                 alignItems: 'center',
                                 borderWidth: 1,
-                                borderColor: useGeminiAnalysis
-                                  ? 'rgba(248, 113, 113, 0.35)'
-                                  : 'rgba(56, 189, 248, 0.28)',
+                                borderColor: visionPalette.border,
                               }}
                             >
                               {busy ? (
                                 <View style={{ paddingVertical: 18 }}>
-                                  <ActivityIndicator
-                                    color={useGeminiAnalysis ? '#fecaca' : '#7dd3fc'}
-                                    size="large"
-                                  />
+                                  <ActivityIndicator color={visionPalette.spin} size="large" />
                                   <Text style={{ marginTop: 12, fontSize: 13, fontWeight: '600', color: '#94a3b8' }}>
                                     Analisando…
                                   </Text>
@@ -10786,31 +10944,34 @@ export default function ChecklistEngine() {
                                       paddingHorizontal: 12,
                                       paddingVertical: 5,
                                       borderRadius: 999,
-                                      backgroundColor: useGeminiAnalysis
-                                        ? 'rgba(248, 113, 113, 0.15)'
-                                        : 'rgba(56, 189, 248, 0.12)',
+                                      backgroundColor: visionPalette.badgeBg,
                                       borderWidth: 1,
-                                      borderColor: useGeminiAnalysis
-                                        ? 'rgba(254, 202, 202, 0.45)'
-                                        : 'rgba(125, 211, 252, 0.35)',
+                                      borderColor: visionPalette.badgeBr,
                                       marginBottom: 16,
                                     }}
                                   >
                                     <Ionicons
-                                      name="sparkles"
+                                      name={useVisionComparison ? 'git-compare-outline' : 'sparkles'}
                                       size={15}
-                                      color={useGeminiAnalysis ? '#fca5a5' : '#7dd3fc'}
+                                      color={visionPalette.chipIcon}
                                     />
                                     <Text
                                       style={{
                                         fontSize: 11,
                                         fontWeight: '800',
-                                        color: useGeminiAnalysis ? '#fecaca' : '#e0f2fe',
+                                        color: visionPalette.badgeMuted,
                                         letterSpacing: 0.6,
                                         textTransform: 'uppercase',
                                       }}
                                     >
-                                      {useGeminiAnalysis ? (
+                                      {useVisionComparison ? (
+                                        <Text>
+                                          <Text style={{ color: visionPalette.badgeMuted }}>Visão IA </Text>
+                                          <Text style={{ color: visionPalette.badgeStrong, fontWeight: '900' }}>
+                                            Comparação
+                                          </Text>
+                                        </Text>
+                                      ) : useGeminiAnalysis ? (
                                         <Text>
                                           <Text style={{ color: '#fecaca' }}>Visão IA </Text>
                                           <Text style={{ color: '#ef4444', fontWeight: '900' }}>Análise</Text>
@@ -10838,9 +10999,7 @@ export default function ChecklistEngine() {
                                     }}
                                   >
                                     <LinearGradient
-                                      colors={
-                                        useGeminiAnalysis ? ['#f87171', '#b91c1c'] : ['#22d3ee', '#6366f1']
-                                      }
+                                      colors={visionPalette.iconGrad}
                                       start={{ x: 0, y: 0 }}
                                       end={{ x: 1, y: 1 }}
                                       style={{
@@ -10863,14 +11022,14 @@ export default function ChecklistEngine() {
                                       textAlign: 'center',
                                     }}
                                   >
-                                    {useGeminiAnalysis ? 'Analisar' : 'Detectar'}
+                                    {useVisionComparison ? 'Comparar' : useGeminiAnalysis ? 'Analisar' : 'Detectar'}
                                   </Text>
                                   <Text
                                     style={{
                                       marginTop: 4,
                                       fontSize: 13,
                                       fontWeight: '700',
-                                      color: useGeminiAnalysis ? '#fecaca' : '#7dd3fc',
+                                      color: visionPalette.subtitleAccent,
                                       textAlign: 'center',
                                     }}
                                   >
@@ -11081,6 +11240,7 @@ export default function ChecklistEngine() {
                             {stored.status === 'completed' && Array.isArray(stored.answers) ? (
                               <View style={{ padding: 12, backgroundColor: '#f8fafc' }}>
                                 {(useGeminiAnalysis ||
+                                  useVisionComparison ||
                                   effectiveSchemaFieldType(field) === 'vision_checklist') &&
                                 !showAiResponseInForm ? (
                                   <View>
@@ -11094,6 +11254,7 @@ export default function ChecklistEngine() {
                                 ) : (
                                   <>
                                     {((useGeminiAnalysis ||
+                                      useVisionComparison ||
                                       effectiveSchemaFieldType(field) === 'vision_checklist') &&
                                       field.visionRating0To10Enabled === true) ? (
                                       <View

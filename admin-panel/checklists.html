@@ -78,6 +78,9 @@
       outline: 2px solid var(--primary, #4f46e5);
       outline-offset: 2px;
     }
+    #fb-schema-translate-now-btn.fb-translate-btn--loading {
+      cursor: wait;
+    }
     /* Lista de formulários: mover pasta (details) sem marcador nativo */
     .fb-form-move-details > summary {
       list-style: none;
@@ -1946,6 +1949,7 @@
            <div class="toolbox-item" data-type="facial_recognition" style="border-left: 3px solid #e11d48; background:#fff1f2"><ion-icon name="person-outline" style="margin-right:6px; font-size:16px; color:#e11d48;"></ion-icon>Reconhecimento Facial</div>
            <div class="toolbox-item" data-type="vision_checklist" style="border-left: 3px solid #0369a1; background:#f0f9ff"><ion-icon name="videocam-outline" style="margin-right:6px; font-size:16px; color:#0369a1;"></ion-icon>Visão de IA Detecção</div>
            <div class="toolbox-item" data-type="vision_ai_analysis" style="border-left: 3px solid #dc2626; background:#fef2f2"><ion-icon name="sparkles-outline" style="margin-right:6px; font-size:16px; color:#b91c1c;"></ion-icon><span style="color:#991b1b;font-weight:800">Visão de IA Análise</span></div>
+           <div class="toolbox-item" data-type="vision_ai_comparison" style="border-left: 3px solid #c026d3; background:#faf5ff"><ion-icon name="git-compare-outline" style="margin-right:6px; font-size:16px; color:#a21caf;"></ion-icon><span style="color:#86198f;font-weight:800">Visão de IA Comparação</span></div>
               </div>
             </div>
           </div>
@@ -1956,7 +1960,7 @@
       <div class="panel" style="flex: 1; display:flex; flex-direction:column; height: 100%; margin-bottom: 0; min-height: 0;">
         <div class="panel-header" style="flex-wrap:wrap; gap:10px;">
            <span id="fb-canvas-panel-title" class="panel-title">Canvas do formulário</span>
-           <label style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--text2, #64748b);margin-left:auto;">
+           <label style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--text2, #64748b);margin-left:auto;flex-wrap:wrap;">
              <span id="fb-schema-locale-hint">Rótulos (edição)</span>
              <select id="fb-schema-locale-select" title="Idioma em que está a editar rótulos de perguntas e etapas — o mesmo formulário, várias línguas gravadas no JSON." style="font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--color-surface);font-weight:700;color:var(--text1, #0f172a);cursor:pointer;">
                <option value="pt-BR">PT · pt-BR</option>
@@ -1964,6 +1968,12 @@
                <option value="es-ES">ES · es-ES</option>
                <option value="de-DE">DE · de-DE</option>
              </select>
+             <button type="button" id="fb-schema-locale-copy-btn" class="btn btn-outline btn-sm" style="font-size:11px;padding:5px 10px;border-radius:8px;font-weight:700;">Copiar de pt-BR</button>
+             <button type="button" id="fb-schema-translate-now-btn" class="btn btn-outline btn-sm" style="font-size:11px;padding:5px 10px;border-radius:8px;font-weight:700;">Traduzir agora</button>
+             <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--text2, #64748b);cursor:pointer;user-select:none;">
+               <input type="checkbox" id="fb-schema-auto-translate" checked style="cursor:pointer;" />
+               <span id="fb-schema-auto-translate-lbl">Traduzir ao mudar idioma (vazios ou ainda iguais ao pt-BR)</span>
+             </label>
            </label>
         </div>
         <div class="panel-body" style="flex:1; background:var(--color-bg); padding:20px; border-radius:8px; overflow-y:auto;">
@@ -2442,6 +2452,7 @@
     bindChecklistsBuilderLocaleHotReload,
     fbFormatInt,
     fbT,
+    fbTCanvas,
     initToolboxTypeFilter,
     setFbSyncStatus,
   } from './js/checklists-i18n.js';
@@ -2465,7 +2476,9 @@
     document.body.appendChild(s1);
   });
   window.fbT = fbT;
+  window.fbTCanvas = fbTCanvas;
   window.fbFormatInt = fbFormatInt;
+  window.applyChecklistsBuilderChromeI18n = applyChecklistsBuilderChromeI18n;
   window.getVisionAiExampleCatalog = () => getVisionAiExampleCatalog(getAdminUiLocale());
   window.getVisionDetectionExampleCatalog = () => getVisionDetectionExampleCatalog(getAdminUiLocale());
   window.applyChecklistsModalsI18n = applyChecklistsModalsI18n;
