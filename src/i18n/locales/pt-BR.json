@@ -1456,7 +1456,10 @@
     "catEvaluation": "Desempenho",
     "affInviteTitle": "Convite de vínculo",
     "affInviteBody": "«{{name}}» convidou-o. Toque para abrir Organizações e aceitar.",
-    "affInviteBodyShort": "Novo convite de empresa. Abra Organizações."
+    "affInviteBodyShort": "Novo convite de empresa. Abra Organizações.",
+    "affActivatedTitle": "Vínculo ativo",
+    "affActivatedBody": "«{{name}}» ativou o seu vínculo dedicado. Abra Organizações e parcerias.",
+    "affActivatedCompanyFallback": "Empresa"
   },
   "calendar": {
     "title": "Calendário",

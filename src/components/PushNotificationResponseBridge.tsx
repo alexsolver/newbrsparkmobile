@@ -165,6 +165,29 @@ async function handleNotificationResponse(
     return;
   }
 
+  /** Empresa ativou o vínculo (REQUESTED → ACTIVE no painel). */
+  if (type === 'PROVIDER_AFFILIATION_ACTIVATED') {
+    if (!isDefault) return;
+    const affiliationId = String(data.affiliationId || '').trim();
+    const tenantName = String(data.tenantName || '').trim() || i18n.t('notificationHub.affActivatedCompanyFallback');
+    const content = response.notification.request.content;
+    if (affiliationId) {
+      NotificationService.addNotification({
+        title: String(content.title || i18n.t('notificationHub.affActivatedTitle')),
+        body: String(
+          content.body || i18n.t('notificationHub.affActivatedBody', { name: tenantName }),
+        ),
+        category: 'info',
+        personaScope: 'provider',
+        providerAffiliationId: affiliationId,
+        fixedId: `paff_active_${affiliationId}`,
+        suppressLocalBanner: true,
+      });
+    }
+    router.push('/profile/affiliations' as never);
+    return;
+  }
+
   /** Leilão: outro prestador aceitou primeiro — atualiza lista local. */
   if (type === 'os_broadcast_taken') {
     if (!isDefault) return;

@@ -96,7 +96,7 @@ export default function NotificationsScreen() {
         }
         return;
       }
-      if (t === 'PROVIDER_AFFILIATION_INVITED') {
+      if (t === 'PROVIDER_AFFILIATION_INVITED' || t === 'PROVIDER_AFFILIATION_ACTIVATED') {
         router.push('/profile/affiliations' as any);
         return;
       }

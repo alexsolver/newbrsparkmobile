@@ -225,6 +225,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           suppressLocalBanner: true,
         });
       }
+      if (t === 'PROVIDER_AFFILIATION_ACTIVATED') {
+        const affiliationId =
+          typeof data?.affiliationId === 'string' ? data.affiliationId.trim() : '';
+        if (!affiliationId) return;
+        const tenantName =
+          typeof data?.tenantName === 'string' && data.tenantName.trim()
+            ? data.tenantName.trim()
+            : i18n.t('notificationHub.affActivatedCompanyFallback');
+        const content = notification.request.content;
+        NotificationService.addNotification({
+          title: String(content.title || i18n.t('notificationHub.affActivatedTitle')),
+          body: String(
+            content.body || i18n.t('notificationHub.affActivatedBody', { name: tenantName }),
+          ),
+          category: 'info',
+          personaScope: 'provider',
+          providerAffiliationId: affiliationId,
+          fixedId: `paff_active_${affiliationId}`,
+          suppressLocalBanner: true,
+        });
+      }
     });
     return () => {
       unsub();

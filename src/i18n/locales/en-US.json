@@ -1454,6 +1454,9 @@
     "catAlert": "Alert",
     "catInfo": "Info",
     "catEvaluation": "Performance",
+    "affActivatedTitle": "Partnership active",
+    "affActivatedBody": "«{{name}}» activated your dedicated link. Open Organizations & partnerships.",
+    "affActivatedCompanyFallback": "Company",
     "affInviteTitle": "Company link invite",
     "affInviteBody": "«{{name}}» invited you. Tap to open Organizations and accept.",
     "affInviteBodyShort": "New company invite. Open Organizations."

@@ -1456,7 +1456,10 @@
     "catEvaluation": "Leistung",
     "affInviteTitle": "Einladung (Unternehmensbindung)",
     "affInviteBody": "«{{name}}» hat Sie eingeladen. Tippen Sie auf Organisationen, um anzunehmen.",
-    "affInviteBodyShort": "Neue Firmeneinladung. Öffnen Sie Organisationen."
+    "affInviteBodyShort": "Neue Firmeneinladung. Öffnen Sie Organisationen.",
+    "affActivatedTitle": "Bindung aktiv",
+    "affActivatedBody": "«{{name}}» hat Ihre dedizierte Bindung aktiviert. Öffnen Sie Organisationen & Partnerschaften.",
+    "affActivatedCompanyFallback": "Unternehmen"
   },
   "calendar": {
     "title": "Kalender",

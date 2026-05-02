@@ -1091,12 +1091,13 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
     const row = await prisma.providerTenantAffiliation.findUnique({
       where: { id },
       include: {
+        tenant: { select: { name: true, slug: true } },
         providerIdentity: {
           select: {
             id: true,
             kycStatus: true,
             userId: true,
-            user: { select: { email: true } },
+            user: { select: { email: true, appAccountId: true } },
           },
         },
       },
@@ -1173,6 +1174,48 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
       .catch(() => {});
 
     invalidateAppEffectiveTenantIdCache(uid);
+
+    const tenantLabel =
+      String(row.tenant?.name || row.tenant?.slug || row.tenantId).trim() || 'Empresa';
+    const notify = { pushSent: 0, pushErrors: 0, pushTokenCount: 0, pushFirstError: null };
+    const appAccId = row.providerIdentity?.user?.appAccountId;
+    let activatePushUserIds = [];
+    if (appAccId) {
+      activatePushUserIds = (
+        await prisma.user.findMany({
+          where: { appAccountId: String(appAccId) },
+          select: { id: true },
+        })
+      ).map((u) => String(u.id));
+    } else if (uid) {
+      activatePushUserIds = [uid];
+    }
+    if (activatePushUserIds.length) {
+      try {
+        const tokens = await prisma.pushToken.findMany({ where: { userId: { in: activatePushUserIds } } });
+        notify.pushTokenCount = tokens.length;
+        if (tokens.length) {
+          const pushRes = await sendExpoPushToMany(tokens, {
+            title: 'Vínculo ativo — BrSpark',
+            body: `${tenantLabel}: a empresa ativou o seu vínculo dedicado. Abra a app para ver em Organizações e parcerias.`,
+            android: { channelId: 'brspark-tecnico', sound: 'default' },
+            data: {
+              type: 'PROVIDER_AFFILIATION_ACTIVATED',
+              tenantId: String(row.tenantId),
+              affiliationId: row.id,
+              tenantName: tenantLabel,
+            },
+          });
+          notify.pushSent = Number(pushRes?.sent) || 0;
+          notify.pushErrors = Number(pushRes?.errors) || 0;
+          const bad = (pushRes.tickets || []).find((x) => x && x.status === 'error');
+          if (bad) notify.pushFirstError = String(bad.message || 'erro Expo').slice(0, 200);
+        }
+      } catch (e) {
+        console.error('[providers/affiliations/activate] Expo push:', e?.message || e);
+      }
+    }
+
     return res.json({
       ok: true,
       affiliation: {
@@ -1181,6 +1224,7 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
         relationshipType: updated.relationshipType || 'DEDICATED',
         activatedAt: updated.activatedAt,
       },
+      notify,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });
