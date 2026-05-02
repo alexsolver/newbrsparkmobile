@@ -801,6 +801,31 @@ export async function pushSyncQueue(ownerEmail?: string): Promise<void> {
   }
 }
 
+const sleepSyncPoll = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Garante um ciclo de `pushSyncQueue` quando o worker global não está ocupado.
+ * `pushSyncQueue` devolve logo se `isSyncing` — com `void` no checklist isso gerava falsos
+ * «Envio à central pendente» logo após POST bem-sucedido.
+ */
+export async function awaitIdleAndPushSyncQueue(
+  ownerEmail?: string,
+  opts?: { maxWaitMs?: number }
+): Promise<void> {
+  const maxWaitMs = opts?.maxWaitMs ?? 28000;
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    while (isSyncing && Date.now() < deadline) {
+      await sleepSyncPoll(100);
+    }
+    await pushSyncQueue(ownerEmail).catch(() => {});
+    while (isSyncing && Date.now() < deadline) {
+      await sleepSyncPoll(100);
+    }
+    if (!pendingSyncRequested) return;
+  }
+}
+
 // ── Helpers genéricos ─────────────────────────────────────────────────────────
 
 /** Linhas de secção repetível — mídia aqui estava fora do upload (só a raiz era percorrida). */
@@ -1569,10 +1594,12 @@ async function enrichFacialBiometricAddressesInOutbox(outbox: any[]): Promise<nu
 }
 
 /**
- * Envio da outbox de checklists. O corpo principal corre dentro de `withAsyncStorageKeyLock(@brspark_outbox)`;
- * outras escritas na mesma chave devem usar `updateStoredJsonArray` (lock por chave) ou este fluxo — nunca `setItem` solto.
+ * Envia POST /api/checklists/executions para itens em `@brspark_outbox` (ex.: OS recém-concluída).
+ * Corre dentro de `withAsyncStorageKeyLock(@brspark_outbox)`; outras escritas na mesma chave devem usar
+ * `updateStoredJsonArray` ou `updateStoredJsonArrayWhileLockHeld` — nunca `setItem` solto na outbox.
+ * Exportado para o checklist aguardar o 1.º envio antes de fechar o ecrã.
  */
-async function pushChecklistOutbox() {
+export async function pushChecklistOutbox() {
   try {
     await autoRequeueMediaStuckConflictsBeforeChecklistPush();
 

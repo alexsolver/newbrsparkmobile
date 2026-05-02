@@ -24,6 +24,7 @@ const {
   findChecklistExecutionForAppUser,
   canAppUserAccessFieldTaskExecution,
   broadcastCandidateArray,
+  resolveAppUserOwnerEmailKeys,
 } = require('../lib/fieldTaskExecutionAccess');
 const { FIELD_TASK_CONTEXT_TENANT_KEY } = require('../lib/fieldTaskExecutionTenantScope');
 const {
@@ -255,12 +256,19 @@ async function findExecutionForOpsChat(req, executionId) {
   const id = String(executionId || '').trim();
   if (!id) return null;
   if (req.appUser) {
-    return findChecklistExecutionForAppUser(prisma, id, req.appUser.email, req.appUser.tenantId, {
-      id: true,
-      ownerEmail: true,
-      osNumber: true,
-      routineTaskNumber: true,
-    });
+    return findChecklistExecutionForAppUser(
+      prisma,
+      id,
+      req.appUser.email,
+      req.appUser.tenantId,
+      {
+        id: true,
+        ownerEmail: true,
+        osNumber: true,
+        routineTaskNumber: true,
+      },
+      { appUserId: req.appUser.id },
+    );
   }
   if (req.admin) {
     return prisma.checklistExecution.findFirst({
@@ -309,9 +317,19 @@ router.get('/my-ops-chat-threads', rejectOsAuth, async (req, res) => {
 
     if (req.appUser) {
       const email = String(req.appUser.email || '').trim();
+      const ownerKeys = await resolveAppUserOwnerEmailKeys(prisma, email, req.appUser.id);
+      const ownerWhere =
+        ownerKeys.length === 0
+          ? { ownerEmail: { equals: email, mode: 'insensitive' } }
+          : ownerKeys.length === 1
+            ? { ownerEmail: { equals: ownerKeys[0], mode: 'insensitive' } }
+            : {
+                OR: ownerKeys.map((e) => ({
+                  ownerEmail: { equals: e, mode: 'insensitive' },
+                })),
+              };
       const baseWhere = {
-        ownerEmail: { equals: email, mode: 'insensitive' },
-        opsChatMessages: { some: {} },
+        AND: [ownerWhere, { opsChatMessages: { some: {} } }],
       };
       const rows = await prisma.checklistExecution.findMany({
         where: baseWhere,

@@ -54,15 +54,45 @@ async function prismaWhereExecutionBelongsToAppFieldTaskScope(prisma, { effectiv
     select: { tenantId: true, appAccountId: true },
   });
   const scopeIdSet = new Set([eff, String(homeRow?.tenantId || '').trim()].filter(Boolean));
+  /** Utilizadores do mesmo login (`AppAccount`) — FT pode estar na org de outra filiação. */
+  const userIdsForAffiliations = new Set([uid]);
   if (homeRow?.appAccountId) {
     const sibs = await prisma.user.findMany({
       where: { appAccountId: String(homeRow.appAccountId), isActive: true },
-      select: { tenantId: true },
+      select: { id: true, tenantId: true },
     });
     for (const s of sibs) {
       const t = String(s.tenantId || '').trim();
       if (t) scopeIdSet.add(t);
+      if (s.id) userIdsForAffiliations.add(String(s.id));
     }
+  }
+  /**
+   * Tenants de empresas com vínculo prestador (ACTIVE / convite em curso): o despacho usa
+   * `template.tenantId` ou `metadata.fieldTaskContextTenantId` da **empresa**, que muitas vezes
+   * não coincide com `User.tenantId` da linha com que o técnico fez login — sem isto `/api/sync/tasks` vinha [].
+   */
+  try {
+    const identities = await prisma.providerIdentity.findMany({
+      where: { userId: { in: [...userIdsForAffiliations] } },
+      select: { id: true },
+    });
+    const piIds = identities.map((p) => p.id).filter(Boolean);
+    if (piIds.length) {
+      const affs = await prisma.providerTenantAffiliation.findMany({
+        where: {
+          providerIdentityId: { in: piIds },
+          status: { in: ['ACTIVE', 'INVITED', 'REQUESTED'] },
+        },
+        select: { tenantId: true },
+      });
+      for (const a of affs) {
+        const t = String(a.tenantId || '').trim();
+        if (t) scopeIdSet.add(t);
+      }
+    }
+  } catch {
+    /* não bloquear sync se o schema/BD divergir */
   }
   const scopeIds = [...scopeIdSet];
   if (!scopeIds.length) return { OR: [] };

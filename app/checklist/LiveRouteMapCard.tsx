@@ -183,7 +183,7 @@ function TrackingChatMapEntryButton({
         {...(mini ? { hitSlop: { top: 10, bottom: 10, left: 10, right: 10 } } : {})}
         accessibilityLabel="Abrir chat com o cliente"
       >
-        <Ionicons name="chatbubbles-outline" size={22} color={iconColor} />
+        <Ionicons name="chatbubble-outline" size={22} color={iconColor} />
       </TouchableOpacity>
     </View>
   );

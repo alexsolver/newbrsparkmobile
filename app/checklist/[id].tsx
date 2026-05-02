@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
+  Animated,
   View,
   Text,
   TextInput,
@@ -17,6 +18,7 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   TouchableWithoutFeedback,
+  Easing,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -104,6 +106,9 @@ import { applyChecklistTextMask, uiValueForChecklistMask } from '../../src/check
 import {
   enqueueExecutionStatusPatch,
   pushSyncQueue,
+  awaitIdleAndPushSyncQueue,
+  pushChecklistOutbox,
+  getTaskIdsWithPendingLocalSyncOverlay,
   COMPLETED_BODY_LOCAL_TTL_MS,
   checklistOutboxIdentityKey,
   clearExecutionStatusOutboxForTask,
@@ -3382,6 +3387,8 @@ export default function ChecklistEngine() {
   const [sigModalVisible, setSigModalVisible] = useState(false);
   /** Indicador no ícone: mensagem do gestor mais recente que a última leitura no app. */
   const [opsChatGestorBadge, setOpsChatGestorBadge] = useState(false);
+  const gestorChatBadgePing = useRef(new Animated.Value(0)).current;
+  const gestorChatBadgeDotPulse = useRef(new Animated.Value(1)).current;
   const [savingSignature, setSavingSignature] = useState(false);
   const [currentSigField, setCurrentSigField] = useState<string|null>(null);
   const [currentSigScope, setCurrentSigScope] = useState<SectionRepeatScope | null>(null);
@@ -3571,6 +3578,54 @@ export default function ChecklistEngine() {
       clearInterval(iv);
     };
   }, [resolvedTaskId, user?.preferredChatLocale, i18n.language]);
+
+  /** Anel + pulso no badge de mensagem nova do gestor (header). */
+  useEffect(() => {
+    if (!opsChatGestorBadge) {
+      gestorChatBadgePing.setValue(0);
+      gestorChatBadgeDotPulse.setValue(1);
+      return;
+    }
+    const pingLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(gestorChatBadgePing, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic),
+        }),
+        Animated.timing(gestorChatBadgePing, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+        Animated.delay(280),
+      ])
+    );
+    const dotLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(gestorChatBadgeDotPulse, {
+          toValue: 1.22,
+          duration: 320,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.quad),
+        }),
+        Animated.timing(gestorChatBadgeDotPulse, {
+          toValue: 1,
+          duration: 320,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.quad),
+        }),
+        Animated.delay(520),
+      ])
+    );
+    pingLoop.start();
+    dotLoop.start();
+    return () => {
+      pingLoop.stop();
+      dotLoop.stop();
+    };
+  }, [opsChatGestorBadge, gestorChatBadgePing, gestorChatBadgeDotPulse]);
 
   const [ruleTick, setRuleTick] = useState(0);
   const fgSegmentStartRef = useRef<number | null>(null);
@@ -7135,11 +7190,39 @@ export default function ChecklistEngine() {
           }
         }
         
-        // Aciona explicitamente o Sync Worker em background se possível
-        try {
-          const { pushSyncQueue } = require('../../src/services/syncService');
+        // Enviar conclusão à nuvem (reintentos curtos: mídia/upload ou rede instável).
+        if (submitTaskId) {
+          const tid = String(submitTaskId).trim();
+          const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+          try {
+            const net = await Network.getNetworkStateAsync();
+            const online = net?.isConnected === true;
+            if (online) {
+              const maxAttempts = 6;
+              for (let a = 0; a < maxAttempts; a++) {
+                await pushChecklistOutbox();
+                const pending = await getTaskIdsWithPendingLocalSyncOverlay();
+                if (!pending.has(tid)) break;
+                if (a < maxAttempts - 1) await sleep(900);
+              }
+            }
+            await awaitIdleAndPushSyncQueue(uEmail, { maxWaitMs: 30000 });
+            const stillPending = (await getTaskIdsWithPendingLocalSyncOverlay()).has(tid);
+            if (stillPending) {
+              Alert.alert(
+                'Envio à central pendente',
+                online
+                  ? 'A OS está guardada neste telefone mas ainda não foi confirmada no servidor (fotos/vídeo ou rede). Em Mais → Sincronização use «Sincronizar agora» ou abra Conflitos de sync.'
+                  : 'Sem ligação à internet. A OS será enviada automaticamente quando houver rede — o ícone na lista de Concluídas indica que ainda não subiu à nuvem.'
+              );
+            }
+          } catch (e) {
+            console.warn('[checklist] Envio após conclusão:', e);
+            await awaitIdleAndPushSyncQueue(uEmail, { maxWaitMs: 30000 }).catch(() => {});
+          }
+        } else {
           void pushSyncQueue(uEmail).catch(() => {});
-        } catch (e) {}
+        }
 
         // Volta ao estado IDLE e dispara cálculo de métricas da OS
         dataCollectionService.setState('IDLE', {
@@ -8939,25 +9022,59 @@ export default function ChecklistEngine() {
                 } as never);
               }}
               accessibilityLabel="Mensagens do gestor sobre esta FT"
-              style={{ position: 'relative' }}
+              style={{ position: 'relative', overflow: 'visible' }}
             >
-              <Ionicons name="chatbubbles-outline" size={26} color="#FFF" />
-              {opsChatGestorBadge ? (
-                <View
-                  pointerEvents="none"
-                  style={{
-                    position: 'absolute',
-                    top: -1,
-                    right: -2,
-                    width: 10,
-                    height: 10,
-                    borderRadius: 5,
-                    backgroundColor: '#EF4444',
-                    borderWidth: 2,
-                    borderColor: 'rgba(255,255,255,0.95)',
-                  }}
-                />
-              ) : null}
+              <View style={{ overflow: 'visible' }}>
+                <Ionicons name="business-outline" size={26} color="#FFF" />
+                {opsChatGestorBadge ? (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      top: -10,
+                      right: -8,
+                      width: 30,
+                      height: 30,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Animated.View
+                      style={{
+                        position: 'absolute',
+                        width: 14,
+                        height: 14,
+                        borderRadius: 7,
+                        borderWidth: 2,
+                        borderColor: '#fecaca',
+                        opacity: gestorChatBadgePing.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.88, 0],
+                        }),
+                        transform: [
+                          {
+                            scale: gestorChatBadgePing.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0.4, 2.75],
+                            }),
+                          },
+                        ],
+                      }}
+                    />
+                    <Animated.View
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 5,
+                        backgroundColor: '#EF4444',
+                        borderWidth: 2,
+                        borderColor: 'rgba(255,255,255,0.95)',
+                        transform: [{ scale: gestorChatBadgeDotPulse }],
+                      }}
+                    />
+                  </View>
+                ) : null}
+              </View>
             </TouchableOpacity>
           ) : null}
           {taskId && !isReadOnly && !responses.__form_paused_since && !activeTransitLeg ? (
