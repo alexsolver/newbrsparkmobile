@@ -1954,8 +1954,17 @@
       
       <!-- Canvas Column -->
       <div class="panel" style="flex: 1; display:flex; flex-direction:column; height: 100%; margin-bottom: 0; min-height: 0;">
-        <div class="panel-header">
+        <div class="panel-header" style="flex-wrap:wrap; gap:10px;">
            <span id="fb-canvas-panel-title" class="panel-title">Canvas do formulário</span>
+           <label style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--text2, #64748b);margin-left:auto;">
+             <span id="fb-schema-locale-hint">Rótulos (edição)</span>
+             <select id="fb-schema-locale-select" title="Idioma em que está a editar rótulos de perguntas e etapas — o mesmo formulário, várias línguas gravadas no JSON." style="font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--border, #e2e8f0);background:var(--color-surface);font-weight:700;color:var(--text1, #0f172a);cursor:pointer;">
+               <option value="pt-BR">PT · pt-BR</option>
+               <option value="en-US">EN · en-US</option>
+               <option value="es-ES">ES · es-ES</option>
+               <option value="de-DE">DE · de-DE</option>
+             </select>
+           </label>
         </div>
         <div class="panel-body" style="flex:1; background:var(--color-bg); padding:20px; border-radius:8px; overflow-y:auto;">
            <div id="canvas" style="min-height: 200px;">
@@ -2442,11 +2451,18 @@
   await ensureAdminApiDetected();
   window.__BRSPARK_API_BASE__ = resolveApiBase();
   await new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'js/checklists-builder.js?v=' + Date.now();
-    s.onload = resolve;
-    s.onerror = () => reject(new Error('Falha ao carregar o script do Form Builder (checklists-builder.js).'));
-    document.body.appendChild(s);
+    const s1 = document.createElement('script');
+    s1.src = 'js/schemaLocale.js?v=' + Date.now();
+    s1.onload = () => {
+      const s = document.createElement('script');
+      s.src = 'js/checklists-builder.js?v=' + Date.now();
+      s.onload = resolve;
+      s.onerror = () =>
+        reject(new Error('Falha ao carregar o script do Form Builder (checklists-builder.js).'));
+      document.body.appendChild(s);
+    };
+    s1.onerror = () => reject(new Error('Falha ao carregar schemaLocale.js.'));
+    document.body.appendChild(s1);
   });
   window.fbT = fbT;
   window.fbFormatInt = fbFormatInt;

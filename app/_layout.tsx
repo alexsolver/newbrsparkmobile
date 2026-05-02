@@ -330,15 +330,15 @@ function FontLoadingGate({ onRetryLoadFonts }: { onRetryLoadFonts: () => void })
     <I18nextProvider i18n={i18n}>
       <AuthProvider>
         <PersonaProvider>
-          <ThemeProvider>
-            <AutomaticTimeGate>
-              <GpsIntegrityGate>
-                <AppProvider>
+          <AppProvider>
+            <ThemeProvider>
+              <AutomaticTimeGate>
+                <GpsIntegrityGate>
                   <MainLayout />
-                </AppProvider>
-              </GpsIntegrityGate>
-            </AutomaticTimeGate>
-          </ThemeProvider>
+                </GpsIntegrityGate>
+              </AutomaticTimeGate>
+            </ThemeProvider>
+          </AppProvider>
         </PersonaProvider>
       </AuthProvider>
     </I18nextProvider>

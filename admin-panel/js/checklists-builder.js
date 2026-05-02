@@ -110,6 +110,31 @@ function fbAlert(key, vars, fallbackPt) {
   alert(fbStr(key, vars, fallbackPt));
 }
 
+/** Helpers para rótulos por locale (`labels` + `label` legado pt-BR). Requer `schemaLocale.js`. */
+function fbSchemaLocale() {
+  return typeof window !== 'undefined' && window.BrSparkSchemaLocale ? window.BrSparkSchemaLocale : null;
+}
+function formEditLocaleTag() {
+  return (typeof window !== 'undefined' && window.__formSchemaEditLocale) || 'pt-BR';
+}
+function glab(f) {
+  const sl = fbSchemaLocale();
+  if (sl && f) return sl.getLocalizedFieldLabel(f, formEditLocaleTag());
+  return f && f.label != null ? String(f.label) : '';
+}
+function setSchemaLabelOnField(f, v) {
+  const sl = fbSchemaLocale();
+  if (sl && f) sl.setLocalizedFieldLabel(f, formEditLocaleTag(), v);
+  else if (f) f.label = v;
+}
+
+/** Rótulo no locale primário (pt-BR) — exportações, Copilot e validação. */
+function glabPrimary(f) {
+  const sl = fbSchemaLocale();
+  if (sl && f) return sl.getLocalizedFieldLabel(f, sl.PRIMARY);
+  return f && f.label != null ? String(f.label) : '';
+}
+
 /** Rótulo de `section_break` no canvas: reconhece «Etapa N» / «Step N» / marcadores por defeito em qualquer idioma. */
 function translateStepLabelForCanvasDisplay(rawLabel) {
   const s = String(rawLabel || '').trim();
@@ -1349,7 +1374,7 @@ window.openSectionStepEditModal = function (sectionId) {
     window.selectField(sf.id);
     window.__sectionStepEditDraft = {
         sectionId: sf.id,
-        label: sf.label || '',
+        label: glab(sf) || '',
         icon: sf.icon || '',
         iconLibrary: sf.iconLibrary || 'Ionicons',
         iconColor: sf.iconColor || lastIconPickerColor,
@@ -1404,7 +1429,12 @@ window.applySectionStepEditModal = function () {
         window.closeSectionStepEditModal();
         return;
     }
-    sf.label = inp ? String(inp.value || '') : d.label;
+    const sl = fbSchemaLocale();
+    if (sl && sf) {
+        sl.setLocalizedFieldLabel(sf, formEditLocaleTag(), inp ? String(inp.value || '') : d.label);
+    } else {
+        sf.label = inp ? String(inp.value || '') : d.label;
+    }
     if (d.icon) {
         sf.icon = d.icon;
         sf.iconLibrary = d.iconLibrary || 'Ionicons';
@@ -1540,9 +1570,13 @@ window.scheduleBuilderDirtyRecompute = function () {
 function validateChecklistLightBeforeSave() {
     const out = [];
     let emptyLabel = false;
+    const sl = fbSchemaLocale();
+    const primary = sl ? sl.PRIMARY : 'pt-BR';
     for (const f of fields || []) {
         if (!f || f.type === 'section_break') continue;
-        if (!String(f.label || '').trim()) emptyLabel = true;
+        const lab =
+            sl && f ? sl.getLocalizedFieldLabel(f, primary) : String(f.label || '');
+        if (!String(lab || '').trim()) emptyLabel = true;
     }
     if (emptyLabel) {
         out.push(
@@ -1682,10 +1716,10 @@ function syncFieldPropertiesModalSubtitle() {
                 : fbStr(typeKey, null, String(f.type || '').replace(/_/g, ' '));
         const head =
             f.type === 'section_break'
-                ? String(f.label || '').trim()
-                    ? translateStepLabelForCanvasDisplay(String(f.label).trim())
+                ? String(glab(f) || '').trim()
+                    ? translateStepLabelForCanvasDisplay(String(glab(f)).trim())
                     : f.id
-                : f.label || f.id;
+                : glab(f) || f.id;
         sub.textContent = `${head} · ${kind}`;
     }
 }
@@ -2912,7 +2946,7 @@ function buildCanvasFieldElement(f) {
                     </div>
                     <div style="flex:1; min-width:0;">
                         <div style="font-size:14.5px; color:var(--text1); display:flex; align-items:center; min-width:0;">
-                            <input type="text" class="canvas-item-title-input" style="background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--text1); font-weight:bold; font-size:14.5px; outline:none; flex:1; min-width:0; width:100%; cursor:text;" value="${escapeHtmlLogic(f.label)}" onfocus="this.style.borderBottomColor='#cbd5e1'; window.selectField('${f.id}', { skipPropertiesIfSame: true, fromCanvasTitleFocus: true });" onblur="this.style.borderBottomColor='transparent'" oninput="window.handleInlineLabelUpdate(event, '${f.id}')" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" />
+                            <input type="text" class="canvas-item-title-input" style="background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--text1); font-weight:bold; font-size:14.5px; outline:none; flex:1; min-width:0; width:100%; cursor:text;" value="${escapeHtmlLogic(glab(f))}" onfocus="this.style.borderBottomColor='#cbd5e1'; window.selectField('${f.id}', { skipPropertiesIfSame: true, fromCanvasTitleFocus: true });" onblur="this.style.borderBottomColor='transparent'" oninput="window.handleInlineLabelUpdate(event, '${f.id}')" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" />
                         </div>
                         <div class="canvas-item-tags">${multiTag}${condTag}</div>
                         <div class="canvas-item-meta" style="font-size:11px; color:var(--text3); margin-top:6px; letter-spacing:0.3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -3184,7 +3218,7 @@ function renderCanvas() {
             labSp.style.fontSize = '12px';
             const nameSp = document.createElement('span');
             nameSp.className = 'canvas-section-head__step-name';
-            nameSp.textContent = translateStepLabelForCanvasDisplay((sf.label || '').trim());
+            nameSp.textContent = translateStepLabelForCanvasDisplay((glab(sf) || '').trim());
             nameSp.style.fontWeight = '800';
             nameSp.style.color = '#4c1d95';
             nameSp.style.textTransform = 'uppercase';
@@ -3333,10 +3367,10 @@ window.renderCanvas = renderCanvas;
 window.handleInlineLabelUpdate = function(e, id) {
     const f = fields.find(x => x.id === id);
     if(f) {
-        f.label = e.target.value;
+        setSchemaLabelOnField(f, e.target.value);
         if (selectedFieldId === id) {
             const sidebarInput = document.getElementById('prop-label-input');
-            if (sidebarInput) sidebarInput.value = f.label;
+            if (sidebarInput) sidebarInput.value = glab(f);
         }
         if(typeof window.renderMobilePreview === 'function') {
             window.renderMobilePreview();
@@ -3425,6 +3459,9 @@ window.handleInlineFieldTypeUpdate = function (e, id) {
     // Preserva identidade e dados úteis do campo anterior.
     rebuilt.id = old.id;
     rebuilt.label = old.label;
+    if (old.labels && typeof old.labels === 'object' && !Array.isArray(old.labels)) {
+        rebuilt.labels = JSON.parse(JSON.stringify(old.labels));
+    }
     rebuilt.required = !!old.required && nextType !== 'leitura';
     if (old.description != null && String(old.description).trim()) rebuilt.description = String(old.description);
     if (old.defaultValue != null && String(old.defaultValue).trim()) rebuilt.defaultValue = String(old.defaultValue);
@@ -3663,7 +3700,11 @@ function updateField(key, val, opts) {
     if(!selectedFieldId) return;
     const f = fields.find(x => x.id === selectedFieldId);
     if(f) {
-        f[key] = val;
+        if (key === 'label') {
+            setSchemaLabelOnField(f, val);
+        } else {
+            f[key] = val;
+        }
         if (!opts || !opts.skipCanvas) renderCanvas();
     }
 }
@@ -4383,7 +4424,7 @@ function renderProperties() {
         const pickRows = eligible
             .map((o) => {
                 const ck = ids.has(o.id) ? 'checked' : '';
-                const lab = escapeHtmlLogic(o.label || o.id);
+                const lab = escapeHtmlLogic(glab(o) || o.id);
                 const typ = escapeHtmlLogic(o.type || '');
                 const oid = escapeHtmlAttr(o.id);
                 return `<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;border:1px solid #e2e8f0;margin-bottom:4px;background:#fff;">
@@ -4444,7 +4485,7 @@ function renderProperties() {
                     ? fbStr('fb_prop_label_section_title', null, 'Nome da etapa ou seção (como aparece no app móvel)')
                     : fbStr('fb_prop_label_question_panel', null, 'Rótulo da pergunta no painel (técnico vê no app)')
             )}</label>
-            <input id="prop-label-input" class="prop-input" type="text" value="${f.label}" onkeyup="window.handleFieldUpdate('label', this.value)" />
+            <input id="prop-label-input" class="prop-input" type="text" value="${escapeHtmlAttr(glab(f))}" onkeyup="window.handleFieldUpdate('label', this.value)" />
         </div>
         <div class="prop-group">
             <label class="prop-label">${escapeHtmlLogic(fbStr('fb_prop_internal_id', null, 'ID interno do campo (slug)'))}</label>
@@ -5350,7 +5391,7 @@ function splitBuilderFieldsIntoSectionPages(flds) {
                 });
             }
             cur = [];
-            pageTitle = f.label || `Página ${rawPages.length + 1}`;
+            pageTitle = glab(f) || `Página ${rawPages.length + 1}`;
             pageId = f.id || 'sec';
             pageVisible = true;
         } else {
@@ -5998,7 +6039,7 @@ window.previewPDF = function() {
          // Base Text
          doc.setFontSize(12);
          doc.setFont("helvetica", "bold");
-         doc.text(`${idx + 1}. [${f.type.toUpperCase()}] ${f.label} ${f.required ? '(*)' : ''}`, 20, currentY);
+         doc.text(`${idx + 1}. [${f.type.toUpperCase()}] ${glab(f)} ${f.required ? '(*)' : ''}`, 20, currentY);
          
          // Injeta sinal de Condicional em vermelho
          if(f.dependsOnId) {
@@ -7354,8 +7395,8 @@ function renderMobilePreview() {
             : '';
         const labelText =
             hasCustomIcon || f.type === 'leitura' || f.type === 'form_complete_button'
-                ? String(f.label || '')
-                : `${num}. ${String(f.label || '')}`;
+                ? String(glab(f) || '')
+                : `${num}. ${String(glab(f) || '')}`;
         const labelHtml = `<div style="font-size:15px;font-weight:800;color:#0F172A;line-height:1.3;">${escapeHtmlLogic(labelText)}${
             f.required && f.type !== 'leitura' && f.type !== 'form_complete_button' ? '<span style="color:#EF4444"> *</span>' : ''
         }</div>`;
@@ -7386,7 +7427,7 @@ function renderMobilePreview() {
         if(f.type === 'calculated') inputMock = `<div style="background:#f5f3ff; border:1px solid #c4b5fd; border-radius:8px; padding:12px; font-size:14px; color:#7c3aed; font-family:monospace; text-align:right">R$ 0,00 [Cálculo Auto]</div>`;
         if(f.type === 'hidden') inputMock = `<div style="background:#f1f5f9; border:1px dashed #94a3b8; border-radius:8px; padding:12px; font-size:12px; color:#64748b; text-align:center;"><ion-icon name="eye-off"></ion-icon> Este campo ficará invisível no Celular</div>`;
         if (f.type === 'form_complete_button') {
-            const bt = String(f.label || '').trim() || 'Concluir';
+            const bt = String(glab(f) || '').trim() || 'Concluir';
             inputMock = `<button type="button" disabled style="width:100%;box-sizing:border-box;border:none;border-radius:14px;padding:14px 16px;background:linear-gradient(135deg,#059669,#047857);color:#fff;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:default;"><ion-icon name="checkmark-done" style="font-size:22px;color:#fff"></ion-icon>${escapeHtmlLogic(bt)}</button><div style="font-size:10px;color:#64748b;margin-top:6px;line-height:1.35;text-align:center;">Mesma ação do botão fixo no rodapé do app (avançar / hub / concluir OS).</div>`;
         }
         if (f.type === 'leitura') {
@@ -7631,11 +7672,12 @@ function logicFieldSelectLabel(fld) {
     if (!fld) return '';
     const secPrefix = logicStr('fb_logic_field_section_prefix', '[Seção/Etapa]');
     const unnamed = logicStr('fb_logic_field_unnamed', '(sem nome)');
+    const rawShown = glab(fld);
     if (fld.type === 'section_break') {
-        const stepShown = translateStoredFieldLabelForDisplay(fld.label) || unnamed;
+        const stepShown = translateStoredFieldLabelForDisplay(rawShown) || unnamed;
         return `${secPrefix} ${stepShown} — ${fld.id}`;
     }
-    const shown = translateStoredFieldLabelForDisplay(fld.label) || String(fld.id || '');
+    const shown = translateStoredFieldLabelForDisplay(rawShown) || String(fld.id || '');
     return `${shown} (${fld.id})`;
 }
 
@@ -7909,10 +7951,10 @@ let currentLogicFieldId = null;
 window.handleLogicModalLabelInput = function (val) {
     const field = fields.find((f) => f.id === currentLogicFieldId);
     if (!field) return;
-    field.label = val;
+    setSchemaLabelOnField(field, val);
     if (selectedFieldId === field.id) {
         const si = document.getElementById('prop-label-input');
-        if (si) si.value = val;
+        if (si) si.value = glab(field);
     }
     if (typeof window.renderMobilePreview === 'function') window.renderMobilePreview();
 };
@@ -7924,10 +7966,10 @@ window.handleLogicModalLabelBlur = function () {
 window.hideLogicModal = function () {
     const inp = document.getElementById('logic-modal-field-label');
     const field = currentLogicFieldId && fields.find((f) => f.id === currentLogicFieldId);
-    if (inp && field) field.label = inp.value;
+    if (inp && field) setSchemaLabelOnField(field, inp.value);
     if (field && selectedFieldId === field.id) {
         const si = document.getElementById('prop-label-input');
-        if (si) si.value = field.label;
+        if (si) si.value = glab(field);
     }
     const m = document.getElementById('logic-modal');
     if (m) m.style.display = 'none';
@@ -7965,9 +8007,9 @@ window.openLogicModal = function(evt, fieldId) {
     inp.id = 'logic-modal-field-label';
     inp.className = 'prop-input';
     inp.value =
-        field.label != null && String(field.label).trim() !== ''
-            ? translateStoredFieldLabelForDisplay(field.label)
-            : String(field.label || '');
+        glab(field) != null && String(glab(field)).trim() !== ''
+            ? translateStoredFieldLabelForDisplay(glab(field))
+            : String(glab(field) || '');
     inp.setAttribute('aria-label', fb('mdl_logic_field_label_aria'));
     inp.style.cssText =
         'flex:1; min-width:200px; max-width:min(380px,65vw); font-weight:700; font-size:13px; padding:8px 10px; margin:0;';
@@ -8385,7 +8427,7 @@ window.refreshCopilotCanvasFocusChip = function () {
         if (clr) clr.style.display = 'none';
         return;
     }
-    const lab = f.label != null ? String(f.label) : '';
+    const lab = glab(f);
     const typ = f.type != null ? String(f.type) : '';
     chip.style.display = 'block';
     chip.textContent =
@@ -8404,7 +8446,7 @@ window.brsparkCopilotPinFieldFromCanvas = function (id, opts) {
     }
     window.__brsparkCopilotFocusedField = {
         id: f.id,
-        label: f.label != null ? String(f.label) : '',
+        label: glabPrimary(f),
         type: f.type != null ? String(f.type) : '',
     };
     window.refreshCopilotCanvasFocusChip();
@@ -9933,17 +9975,17 @@ function brsparkCopilotDeriveFallbackTaskTitle(schema, ctx) {
     var firstSec = null;
     for (var i = 0; i < (schema || []).length; i++) {
         var f = schema[i];
-        if (f && f.type === 'section_break' && String(f.label || '').trim()) {
+        if (f && f.type === 'section_break' && String(glabPrimary(f) || '').trim()) {
             firstSec = f;
             break;
         }
     }
-    if (firstSec) return String(firstSec.label).trim().slice(0, 200);
+    if (firstSec) return String(glabPrimary(firstSec)).trim().slice(0, 200);
     if (ctx && String(ctx.objective || '').trim()) return String(ctx.objective).trim().slice(0, 200);
     for (var j = 0; j < (schema || []).length; j++) {
         var g = schema[j];
-        if (g && g.type && String(g.type) !== 'section_break' && String(g.label || '').trim()) {
-            return String(g.label).trim().slice(0, 200);
+        if (g && g.type && String(g.type) !== 'section_break' && String(glabPrimary(g) || '').trim()) {
+            return String(glabPrimary(g)).trim().slice(0, 200);
         }
     }
     return 'Formulário';
@@ -9954,7 +9996,8 @@ function brsparkCopilotGuessTaskIconFromSchema(schema, ctx) {
     if (ctx && ctx.objective) parts.push(String(ctx.objective));
     (schema || []).forEach(function (f) {
         if (!f) return;
-        if (f.label) parts.push(String(f.label));
+        var pl = glabPrimary(f);
+        if (pl) parts.push(String(pl));
         if (f.description) parts.push(String(f.description));
     });
     var blob = parts.join(' ').toLowerCase();
@@ -10875,7 +10918,37 @@ window.brsparkCopilotApplyLogic = function (opts) {
  * criado por renderCanvas(). Sem esta chamada ao carregar, não há lista receptora até
  * "Criar novo" ou "Abrir formulário".
  */
+function initFormSchemaLocaleSelect() {
+    if (typeof window.__formSchemaEditLocale === 'undefined') window.__formSchemaEditLocale = 'pt-BR';
+    const sel = document.getElementById('fb-schema-locale-select');
+    if (!sel) return;
+    try {
+        const ls = localStorage.getItem('brspark_form_schema_edit_locale');
+        if (ls && window.BrSparkSchemaLocale && window.BrSparkSchemaLocale.SUPPORTED.indexOf(ls) >= 0) {
+            sel.value = ls;
+        }
+    } catch (e) {
+        /* ignore */
+    }
+    window.__formSchemaEditLocale = sel.value || 'pt-BR';
+    sel.addEventListener('change', function () {
+        window.__formSchemaEditLocale = sel.value || 'pt-BR';
+        try {
+            localStorage.setItem('brspark_form_schema_edit_locale', window.__formSchemaEditLocale);
+        } catch (e2) {
+            /* ignore */
+        }
+        renderCanvas();
+        if (selectedFieldId && window.fieldPropertiesModalOpen && typeof renderProperties === 'function') {
+            renderProperties();
+        }
+        if (typeof renderMobilePreview === 'function') renderMobilePreview();
+        syncFieldPropertiesModalSubtitle();
+    });
+}
+
 try {
+    initFormSchemaLocaleSelect();
     renderCanvas();
 } catch (e) {
     console.warn('[checklists-builder] renderCanvas inicial:', e);

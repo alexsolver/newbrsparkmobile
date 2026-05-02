@@ -3,8 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { lightColors, darkColors, ColorPalette } from './colors';
 import { useAuth } from '../hooks/useAuth';
-import { usePersona } from '../context/PersonaContext';
-import { API_BASE, GUEST_LOGIN_BRANDING_KEY } from '../services/auth';
+import { useAppContext } from '../context/AppContext';
+import { API_BASE, GUEST_LOGIN_BRANDING_KEY, canUseProviderMode } from '../services/auth';
 
 const BRANDING_CACHE_KEY = '@brspark:tenant_branding_cache';
 const BRANDING_LOGO_CACHE_KEY = '@brspark:tenant_branding_logo_cache';
@@ -224,7 +224,11 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
   const [brandingCache, setBrandingCache] = useState<TenantBranding | null>(null);
   const [logoCache, setLogoCache] = useState<BrandingLogoCache | null>(null);
   const { user, loading: authLoading } = useAuth();
-  const { activePersona } = usePersona();
+  const { mode } = useAppContext();
+  /** Marca da empresa (tenant da sessão) só no modo operacional prestador; SERVICES/ASSETS = experiência cliente. */
+  const providerWorkMode =
+    !!user && canUseProviderMode(user) && mode === 'PROVIDER';
+  const clientExperienceUi = !providerWorkMode;
 
   useEffect(() => {
     AsyncStorage.getItem('@pref_dark_mode')
@@ -331,17 +335,17 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
 
   /**
    * UI «cliente» sobre tenant que não é a piscina mascarada (ex.: empresa): não usar white-label operacional.
-   * Inclui consumidor na empresa e técnico com persona cliente.
+   * Inclui consumidor na empresa e técnico em modo SERVIÇOS/ATIVOS (não PROVIDER).
    */
-  const enterpriseClientUi = activePersona === 'client' && !poolMaskedTenantName;
+  const enterpriseClientUi = clientExperienceUi && !poolMaskedTenantName;
 
   const useClientSurfaceBranding =
-    activePersona === 'client' &&
+    clientExperienceUi &&
     (user?.clientTenantBranding != null || dedicatedHomeMismatch || enterpriseClientUi);
 
   /** Cores / logótipo / fundo: só com white-label ligado no plano + tenant. */
   const liveBranding = (() => {
-    if (activePersona !== 'client') {
+    if (providerWorkMode) {
       return user?.tenant?.branding?.enabled ? user.tenant.branding : null;
     }
     if (user?.clientTenantBranding?.enabled) return user.clientTenantBranding;
@@ -353,9 +357,9 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
 
   /** Nome: o backend preenche `effective` mesmo com `enabled: false` (ex.: nome da org). Slogan só com marca ativa. */
   const serverTenantBranding =
-    activePersona === 'client' && poolMaskedTenantName
+    clientExperienceUi && poolMaskedTenantName
       ? user?.tenant?.branding
-      : activePersona === 'client'
+      : clientExperienceUi
         ? user?.clientTenantBranding
         : user?.tenant?.branding;
 
@@ -508,7 +512,7 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     [dark, branding],
   );
   const appDisplayName =
-    user && activePersona === 'client' && enterpriseClientUi
+    user && enterpriseClientUi
       ? String(user?.clientTenantBranding?.appDisplayName || '').trim() || 'BrSpark'
       : user
         ? String(
@@ -520,7 +524,7 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
         : (branding?.enabled && String(branding.appDisplayName || '').trim()) || 'BrSpark';
   /** Slogan só com white-label ativo; vazio no painel/CMS não mostra (evita mirror CMS + payload legado). */
   const appTagline =
-    user && activePersona === 'client' && enterpriseClientUi
+    user && enterpriseClientUi
       ? user?.clientTenantBranding?.enabled
         ? String(user.clientTenantBranding?.tagline || '').trim()
         : ''

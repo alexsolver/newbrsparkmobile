@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ScrollView, Image, Dimensions, Switch, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ScrollView, Image, Dimensions, Switch, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager, Linking, ActivityIndicator } from 'react-native';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -215,6 +215,10 @@ export default function ProfileScreen() {
 
   /** Evita martelar `/api/me` em navegações rápidas entre abas. */
   const lastProfileFocusRefreshRef = useRef(0);
+  /** Bloqueio síncrono: `setSyncing` é assíncrono e permitia vários toques antes do re-render. */
+  const personaWorkspaceSwitchRef = useRef(false);
+  const [personaWorkspaceBusy, setPersonaWorkspaceBusy] = useState(false);
+  const [personaWorkspaceTarget, setPersonaWorkspaceTarget] = useState<'CLIENT' | 'PROVIDER' | null>(null);
 
   /** Estado da candidatura: em aberto (token), já enviada, ou ainda sem registo (fluxo antigo). */
   const [techRegResume, setTechRegResume] = useState<{
@@ -1129,10 +1133,14 @@ export default function ProfileScreen() {
   const ensurePersonaWorkspace = useCallback(
     async (target: 'CLIENT' | 'PROVIDER') => {
       if (!user) return;
+      if (personaWorkspaceSwitchRef.current) return;
+      personaWorkspaceSwitchRef.current = true;
+      setPersonaWorkspaceTarget(target);
+      setPersonaWorkspaceBusy(true);
+      setSyncing(true);
       const targetKind = target === 'CLIENT' ? 'CLIENT' : 'PROVIDER';
 
       try {
-        setSyncing(true);
 
         /** Sincronizar com `/api/me` antes de validar capability e `technicianProfile` (evita estado obsoleto após aprovação no painel). */
         const refreshed = await refreshUser();
@@ -1187,6 +1195,9 @@ export default function ProfileScreen() {
         const msg = e instanceof Error ? e.message : String(e);
         Alert.alert(t('common.error'), msg || t('profile.switchWorkspaceError'));
       } finally {
+        personaWorkspaceSwitchRef.current = false;
+        setPersonaWorkspaceTarget(null);
+        setPersonaWorkspaceBusy(false);
         setSyncing(false);
       }
     },
@@ -1468,7 +1479,9 @@ export default function ProfileScreen() {
                 }}
               >
                 <TouchableOpacity
-                  onPress={() => ensurePersonaWorkspace('CLIENT')}
+                  onPress={() => void ensurePersonaWorkspace('CLIENT')}
+                  disabled={personaWorkspaceBusy}
+                  accessibilityState={{ busy: personaWorkspaceBusy }}
                   style={{
                     flex: 1,
                     paddingVertical: 12,
@@ -1481,14 +1494,21 @@ export default function ProfileScreen() {
                     shadowOpacity: personaRoleForUi === 'CLIENT' ? 0.06 : 0,
                     shadowRadius: 2,
                     elevation: personaRoleForUi === 'CLIENT' ? 2 : 0,
+                    opacity: personaWorkspaceBusy ? 0.72 : 1,
                   }}
                 >
-                  <Text style={{ color: personaRoleForUi === 'CLIENT' ? '#059669' : '#64748B', fontWeight: '800', fontSize: 14 }}>
-                    {t('profile.personaClient')}
-                  </Text>
+                  {personaWorkspaceBusy && personaWorkspaceTarget === 'CLIENT' ? (
+                    <ActivityIndicator size="small" color="#059669" accessibilityLabel={t('common.loading')} />
+                  ) : (
+                    <Text style={{ color: personaRoleForUi === 'CLIENT' ? '#059669' : '#64748B', fontWeight: '800', fontSize: 14 }}>
+                      {t('profile.personaClient')}
+                    </Text>
+                  )}
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => ensurePersonaWorkspace('PROVIDER')}
+                  onPress={() => void ensurePersonaWorkspace('PROVIDER')}
+                  disabled={personaWorkspaceBusy}
+                  accessibilityState={{ busy: personaWorkspaceBusy }}
                   style={{
                     flex: 1,
                     paddingVertical: 12,
@@ -1501,11 +1521,16 @@ export default function ProfileScreen() {
                     shadowOpacity: personaRoleForUi === 'TECHNICIAN' ? 0.06 : 0,
                     shadowRadius: 2,
                     elevation: personaRoleForUi === 'TECHNICIAN' ? 2 : 0,
+                    opacity: personaWorkspaceBusy ? 0.72 : 1,
                   }}
                 >
-                  <Text style={{ color: personaRoleForUi === 'TECHNICIAN' ? '#C2410C' : '#64748B', fontWeight: '800', fontSize: 14 }}>
-                    {t('profile.personaProvider')}
-                  </Text>
+                  {personaWorkspaceBusy && personaWorkspaceTarget === 'PROVIDER' ? (
+                    <ActivityIndicator size="small" color="#C2410C" accessibilityLabel={t('common.loading')} />
+                  ) : (
+                    <Text style={{ color: personaRoleForUi === 'TECHNICIAN' ? '#C2410C' : '#64748B', fontWeight: '800', fontSize: 14 }}>
+                      {t('profile.personaProvider')}
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>

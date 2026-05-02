@@ -102,6 +102,7 @@ import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { fetchExecutionOpsChat, getOpsChatAckStorageKey } from '../../src/services/executionOpsChat';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
+import { getLocalizedSchemaLabel } from '../../src/checklist/schemaLocale';
 import { applyChecklistTextMask, uiValueForChecklistMask } from '../../src/checklist/applyTextMask';
 import {
   enqueueExecutionStatusPatch,
@@ -2205,7 +2206,7 @@ function getFirstBlockingPendingFacialFieldLabel(
       if (!(audit as { pending?: boolean } | null)?.pending) return null;
       const uriRaw = getScopedFieldValue(res, scope, f.id);
       if (!firstFacialMediaUri(uriRaw)) return null;
-      return String(f.label || f.id);
+      return getLocalizedSchemaLabel(f, i18next.language || 'pt-BR') || String(f.id);
     };
 
     if (!curSecRepeat) {
@@ -2243,7 +2244,7 @@ function getFirstBlockingVisionPendingRequiringOnline(
       const raw = getScopedFieldValue(res, scope, f.id);
       const o = parseVisionChecklistStored(raw);
       if (!o || !isVisionPendingAnalysisRecord(o) || !visionStoredHasRunnableMedia(f, o)) return null;
-      return String(f.label || f.id);
+      return getLocalizedSchemaLabel(f, i18next.language || 'pt-BR') || String(f.id);
     };
 
     if (!curSecRepeat) {
@@ -3269,6 +3270,11 @@ function activityFieldIconBadgeByExecutionStatus(
 
 export default function ChecklistEngine() {
   const { t, i18n } = useTranslation();
+  const schemaLabel = useCallback(
+    (field: { id?: string; label?: string; labels?: Record<string, string> } | null | undefined) =>
+      getLocalizedSchemaLabel(field, i18n.language),
+    [i18n.language],
+  );
   const { user } = useAuth();
   const { id, taskId, routineTask, rtNumber } = useLocalSearchParams();
   const router = useRouter();
@@ -6926,7 +6932,7 @@ export default function ChecklistEngine() {
         if (fieldMustAnswerForProgress(f)) {
           const ans = responses[f.id];
           if (!isFieldAnswerFilled(f, ans)) {
-            const fl = String(f.label || f.id || '').trim() || f.id;
+            const fl = String(schemaLabel(f) || f.id || '').trim() || f.id;
             Alert.alert(
               'Atenção',
               f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
@@ -6946,7 +6952,7 @@ export default function ChecklistEngine() {
       }
       const sh = sectionHeaders[secKey];
       const repeat = sh && sectionAllowsRepeat(sh);
-      const sectionTitleForMsg = String(sh?.label || '').trim() || secKey;
+      const sectionTitleForMsg = String(schemaLabel(sh) || '').trim() || secKey;
       if (repeat) {
         const rows = getRepeatRows(responses, secKey);
         const minR = sectionRepeatMinRows(sh);
@@ -6954,14 +6960,14 @@ export default function ChecklistEngine() {
         if (rows.length < minR) {
           Alert.alert(
             'Atenção',
-            `A seção "${sh.label || secKey}" exige pelo menos ${minR} preenchimento(s) repetido(s).`
+            `A seção "${schemaLabel(sh) || secKey}" exige pelo menos ${minR} preenchimento(s) repetido(s).`
           );
           return;
         }
         if (maxR != null && rows.length > maxR) {
           Alert.alert(
             'Atenção',
-            `A seção "${sh.label || secKey}" admite no máximo ${maxR} preenchimento(s).`
+            `A seção "${schemaLabel(sh) || secKey}" admite no máximo ${maxR} preenchimento(s).`
           );
           return;
         }
@@ -6972,7 +6978,7 @@ export default function ChecklistEngine() {
           for (let ri = 0; ri < n; ri++) {
             const ans = rows[ri]?.[f.id];
             if (fieldMustAnswerForProgress(f) && !isFieldAnswerFilled(f, ans)) {
-              const fl = String(f.label || f.id || '').trim() || f.id;
+              const fl = String(schemaLabel(f) || f.id || '').trim() || f.id;
               Alert.alert(
                 'Atenção',
                 f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
@@ -7570,7 +7576,7 @@ export default function ChecklistEngine() {
       }
       _curFields = [];
       _openingSectionBreak = f;
-      _currentSectionTitle = f.label || `Página ${rawPages.length + 1}`;
+      _currentSectionTitle = schemaLabel(f) || `Página ${rawPages.length + 1}`;
       _currentSectionId = f.id;
       _currentSectionVisible = isFieldVisible(f, true);
       _currentSectionIcon = String(f.icon || '').trim();
@@ -8515,8 +8521,8 @@ export default function ChecklistEngine() {
         Alert.alert(
           'Atenção',
           f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
-            ? `Valide a localização em «${f.label}» (dentro da área) antes de ${actionLabel}.`
-            : `O campo '${f.label}' é obrigatório.`,
+            ? `Valide a localização em «${schemaLabel(f)}» (dentro da área) antes de ${actionLabel}.`
+            : `O campo '${schemaLabel(f)}' é obrigatório.`,
         );
         return false;
       }
@@ -8589,7 +8595,7 @@ export default function ChecklistEngine() {
         Alert.alert(
           t('common.attention'),
           t('appAlerts.checklist.wizardSectionMinRowsBody', {
-            label: sb.label || '',
+            label: schemaLabel(sb) || '',
             min: minR,
           }),
         );
@@ -8609,11 +8615,11 @@ export default function ChecklistEngine() {
               t('common.attention'),
               f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
                 ? t('appAlerts.checklist.wizardFieldGeofenceRepeatBody', {
-                    label: f.label || f.id,
+                    label: schemaLabel(f) || f.id,
                     index: ri + 1,
                   })
                 : t('appAlerts.checklist.wizardFieldRequiredRepeatBody', {
-                    label: f.label || f.id,
+                    label: schemaLabel(f) || f.id,
                     index: ri + 1,
                   }),
             );
@@ -8630,8 +8636,8 @@ export default function ChecklistEngine() {
             Alert.alert(
               t('common.attention'),
               f.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(f)
-                ? t('appAlerts.checklist.wizardFieldGeofenceSingleBody', { label: f.label })
-                : t('appAlerts.checklist.wizardFieldRequiredSingleBody', { label: f.label }),
+                ? t('appAlerts.checklist.wizardFieldGeofenceSingleBody', { label: schemaLabel(f) })
+                : t('appAlerts.checklist.wizardFieldRequiredSingleBody', { label: schemaLabel(f) }),
             );
             return;
           }
@@ -8659,8 +8665,8 @@ export default function ChecklistEngine() {
         Alert.alert(
           t('common.attention'),
           cur.type === 'geofence_check' && geofenceCheckEnforcesProgressGate(cur)
-            ? t('appAlerts.checklist.wizardFieldGeofenceSingleBody', { label: cur.label })
-            : t('appAlerts.checklist.wizardFieldRequiredSingleBody', { label: cur.label }),
+            ? t('appAlerts.checklist.wizardFieldGeofenceSingleBody', { label: schemaLabel(cur) })
+            : t('appAlerts.checklist.wizardFieldRequiredSingleBody', { label: schemaLabel(cur) }),
         );
         return;
       }
@@ -9810,7 +9816,7 @@ export default function ChecklistEngine() {
                       }}
                       disabled={submitting}
                       accessibilityRole="button"
-                      accessibilityLabel={String(field.label || '').trim() || 'Concluir'}
+                      accessibilityLabel={String(schemaLabel(field) || '').trim() || 'Concluir'}
                     >
                       {submitting ? (
                         <ActivityIndicator color="#FFF" />
@@ -9824,7 +9830,7 @@ export default function ChecklistEngine() {
                           }}
                         >
                           <Text style={styles.submitText}>
-                            {String(field.label || '').trim() || 'CONCLUIR'}
+                            {String(schemaLabel(field) || '').trim() || 'CONCLUIR'}
                           </Text>
                           {renderFormCompleteButtonGlyph(field, 22, true)}
                         </View>
@@ -9843,7 +9849,7 @@ export default function ChecklistEngine() {
                       }}
                     >
                       <Text style={{ color: '#64748B', fontWeight: '700', fontSize: 13 }}>
-                        {String(field.label || '').trim() || 'Concluir'}
+                        {String(schemaLabel(field) || '').trim() || 'Concluir'}
                       </Text>
                     </View>
                   )
@@ -9959,7 +9965,7 @@ export default function ChecklistEngine() {
                         : field.type === 'leitura' || field._globalIdx == null
                           ? ''
                           : `${field._globalIdx}. `}
-                      {field.label}
+                      {schemaLabel(field)}
                       {fieldMustAnswerForProgress(field) ? (
                         <Text style={{ color: '#EF4444' }}> *</Text>
                       ) : null}
@@ -9988,14 +9994,14 @@ export default function ChecklistEngine() {
                       onPress={runPrimaryFooterAction}
                       disabled={submitting}
                       accessibilityRole="button"
-                      accessibilityLabel={String(field.label || '').trim() || primaryFooterButtonLabel()}
+                      accessibilityLabel={String(schemaLabel(field) || '').trim() || primaryFooterButtonLabel()}
                     >
                       {submitting ? (
                         <ActivityIndicator color="#FFF" />
                       ) : (
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                           <Text style={styles.submitText}>
-                            {String(field.label || '').trim() || primaryFooterButtonLabel()}
+                            {String(schemaLabel(field) || '').trim() || primaryFooterButtonLabel()}
                           </Text>
                           {renderFormCompleteButtonGlyph(field, 22, true)}
                         </View>
@@ -10015,7 +10021,7 @@ export default function ChecklistEngine() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                         {renderFormCompleteButtonGlyph(field, 20, false)}
                         <Text style={{ color: '#64748B', fontWeight: '700', fontSize: 13 }}>
-                          {String(field.label || '').trim() || primaryFooterButtonLabel()}
+                          {String(schemaLabel(field) || '').trim() || primaryFooterButtonLabel()}
                         </Text>
                       </View>
                     </View>
@@ -12318,7 +12324,7 @@ export default function ChecklistEngine() {
                               }}
                             >
                               <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569' }}>
-                                {def?.label || sid}
+                                {schemaLabel(def) || sid}
                               </Text>
                               {thumbUris.length > 0 ? (
                                 <View
@@ -12576,7 +12582,7 @@ export default function ChecklistEngine() {
                       }}
                     >
                       <Text style={{ fontWeight: '800', color: '#4f46e5' }}>
-                        {sb.label || 'Seção'} · {ri + 1}
+                        {schemaLabel(sb) || 'Seção'} · {ri + 1}
                       </Text>
                       {!isReadOnly && rs.length > minR ? (
                         <TouchableOpacity
@@ -12604,7 +12610,7 @@ export default function ChecklistEngine() {
                 {!isReadOnly && !useSectionHub && (maxR == null || rs.length < maxR) ? (
                   <TouchableOpacity
                     onPress={() => {
-                      if (!ensureCanAppendRepeatInstance(sb.label || 'Seção', sb.id, rs)) return;
+                      if (!ensureCanAppendRepeatInstance(schemaLabel(sb) || 'Seção', sb.id, rs)) return;
                       const rkey = sectionRepeatStorageKey(sb.id);
                       setResponses((prev: any) => {
                         const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
@@ -12639,7 +12645,7 @@ export default function ChecklistEngine() {
                       <View key={`fcrep_${sb.id}_${ci}`} style={{ marginBottom: 20 }}>
                         {chunk.fields.length > 0 ? (
                           <Text style={{ fontWeight: '800', fontSize: 15, marginBottom: 10, color: '#0f172a' }}>
-                            {sb.label || 'Seção'}
+                            {schemaLabel(sb) || 'Seção'}
                           </Text>
                         ) : null}
                         {idxs.map((ri) => (
@@ -12663,7 +12669,7 @@ export default function ChecklistEngine() {
                         {!isReadOnly && !useSectionHub && (maxR == null || rs.length < maxR) ? (
                           <TouchableOpacity
                             onPress={() => {
-                              if (!ensureCanAppendRepeatInstance(sb.label || 'Seção', sb.id, rs)) return;
+                              if (!ensureCanAppendRepeatInstance(schemaLabel(sb) || 'Seção', sb.id, rs)) return;
                               const rkey = sectionRepeatStorageKey(sb.id);
                               setResponses((prev: any) => {
                                 const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
@@ -12713,7 +12719,7 @@ export default function ChecklistEngine() {
                     }}
                   >
                     <Text style={{ fontWeight: '800', color: '#4f46e5', marginBottom: 10 }}>
-                      {sb.label || 'Seção'} · {ri + 1}
+                      {schemaLabel(sb) || 'Seção'} · {ri + 1}
                     </Text>
                     {renderFieldList(currentFieldsToRender, { sectionId: sb.id, rowIndex: ri })}
                   </View>
@@ -12721,7 +12727,7 @@ export default function ChecklistEngine() {
                 {!isReadOnly && !useSectionHub && (maxR == null || rs.length < maxR) ? (
                   <TouchableOpacity
                     onPress={() => {
-                      if (!ensureCanAppendRepeatInstance(sb.label || 'Seção', sb.id, rs)) return;
+                      if (!ensureCanAppendRepeatInstance(schemaLabel(sb) || 'Seção', sb.id, rs)) return;
                       const rkey = sectionRepeatStorageKey(sb.id);
                       setResponses((prev: any) => {
                         const rows = Array.isArray(prev[rkey]) ? [...prev[rkey]] : [];
