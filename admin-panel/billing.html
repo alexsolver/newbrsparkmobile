@@ -30,7 +30,7 @@
           <a class="btn btn-outline btn-sm" href="subscriptions.html">Assinaturas</a>
         </div>
         <div class="data-toolbar-actions">
-          <button type="button" class="btn btn-primary" onclick="openNewPlanModal()">
+          <button type="button" class="btn btn-primary" id="bil-btn-new">
             <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
             Novo plano
           </button>
@@ -106,7 +106,7 @@
   <div class="modal" style="max-width:760px">
     <div class="modal-header">
       <span class="modal-title" id="plan-modal-title">Novo Plano</span>
-      <button class="modal-close" onclick="closeModal('plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="bil-plan-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body" style="max-height:min(85vh,720px);overflow-y:auto">
       <input type="hidden" id="plan-id" />
@@ -198,7 +198,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('plan-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" id="bil-plan-modal-cancel">Cancelar</button>
       <button class="btn btn-primary" id="save-plan-btn">Salvar Plano</button>
     </div>
   </div>
@@ -207,7 +207,7 @@
 <!-- Change Plan Modal -->
 <div class="modal-overlay" id="change-plan-modal">
   <div class="modal" style="max-width:400px">
-    <div class="modal-header"><span class="modal-title">Alterar Plano</span><button class="modal-close" onclick="closeModal('change-plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-header"><span class="modal-title">Alterar Plano</span><button type="button" class="modal-close" id="bil-change-plan-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
     <div class="modal-body">
       <input type="hidden" id="change-sub-id" />
       <div class="form-group"><label class="form-label">Novo Plano</label>
@@ -220,7 +220,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('change-plan-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" id="bil-change-plan-modal-cancel">Cancelar</button>
       <button class="btn btn-primary" id="confirm-change-btn">Confirmar</button>
     </div>
   </div>
@@ -232,6 +232,10 @@
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
   );
+  document.getElementById('bil-plan-modal-close')?.addEventListener('click', () => closeModal('plan-modal'));
+  document.getElementById('bil-plan-modal-cancel')?.addEventListener('click', () => closeModal('plan-modal'));
+  document.getElementById('bil-change-plan-modal-close')?.addEventListener('click', () => closeModal('change-plan-modal'));
+  document.getElementById('bil-change-plan-modal-cancel')?.addEventListener('click', () => closeModal('change-plan-modal'));
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
@@ -393,6 +397,7 @@
     writePlanFeaturesToDom(defaultPlanFeaturesForNew());
     openModal('plan-modal');
   };
+  document.getElementById('bil-btn-new')?.addEventListener('click', () => void window.openNewPlanModal());
 
   document.getElementById('save-plan-btn').addEventListener('click', async () => {
     if (!canManageBilling) return;

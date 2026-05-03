@@ -52,7 +52,7 @@
             </label>
           </div>
           <div class="data-toolbar-actions">
-            <button type="button" class="btn btn-primary" id="sub-btn-assign" onclick="openModal('assign-plan-modal')">
+            <button type="button" class="btn btn-primary" id="sub-btn-assign">
               <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
               Atribuir plano
             </button>
@@ -91,7 +91,7 @@
   <div class="modal" style="max-width:440px">
     <div class="modal-header">
       <span class="modal-title"><ion-icon name="scan-outline" style="vertical-align:-2px"></ion-icon> <span id="sub-facial-modal-title">Biometria facial — API por plano</span></span>
-      <button type="button" class="modal-close" onclick="closeModal('facial-plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="sub-facial-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="facial-plan-id" />
@@ -111,7 +111,7 @@
       </p>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost" id="sub-facial-cancel" onclick="closeModal('facial-plan-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" id="sub-facial-cancel">Cancelar</button>
       <button type="button" class="btn btn-primary" id="save-facial-plan-btn"><span id="sub-facial-save">Salvar</span></button>
     </div>
   </div>
@@ -120,7 +120,7 @@
 <!-- Assign Plan Modal -->
 <div class="modal-overlay" id="assign-plan-modal">
   <div class="modal">
-    <div class="modal-header"><span class="modal-title" id="sub-modal-assign-title">Atribuir plano</span><button type="button" class="modal-close" onclick="closeModal('assign-plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-header"><span class="modal-title" id="sub-modal-assign-title">Atribuir plano</span><button type="button" class="modal-close" id="sub-assign-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label" id="sub-modal-lbl-tenant">Tenant</label><select class="form-control" id="sub-tenant"></select></div>
       <div class="form-group"><label class="form-label" id="sub-modal-lbl-plan">Plano</label><select class="form-control" id="sub-plan"></select></div>
@@ -129,7 +129,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost" id="sub-modal-cancel" onclick="closeModal('assign-plan-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" id="sub-modal-cancel">Cancelar</button>
       <button type="button" class="btn btn-primary" id="save-sub-btn"><span id="sub-modal-assign-btn">Atribuir</span></button>
     </div>
   </div>
@@ -295,6 +295,11 @@
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
   );
+  document.getElementById('sub-btn-assign')?.addEventListener('click', () => openModal('assign-plan-modal'));
+  document.getElementById('sub-facial-modal-close')?.addEventListener('click', () => closeModal('facial-plan-modal'));
+  document.getElementById('sub-facial-cancel')?.addEventListener('click', () => closeModal('facial-plan-modal'));
+  document.getElementById('sub-assign-modal-close')?.addEventListener('click', () => closeModal('assign-plan-modal'));
+  document.getElementById('sub-modal-cancel')?.addEventListener('click', () => closeModal('assign-plan-modal'));
 </script>
 </body>
 </html>

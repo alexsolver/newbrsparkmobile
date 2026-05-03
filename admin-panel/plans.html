@@ -31,7 +31,7 @@
           <a class="btn btn-outline btn-sm" id="pln-link-billing" href="billing.html">Billing e MRR</a>
         </div>
         <div class="data-toolbar-actions">
-          <button class="btn btn-primary" type="button" id="pln-btn-new" onclick="openNewPlanModal()">
+          <button class="btn btn-primary" type="button" id="pln-btn-new">
             <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
             Novo plano
           </button>
@@ -74,7 +74,7 @@
   <div class="modal" style="max-width:760px">
     <div class="modal-header">
       <span class="modal-title" id="pln-modal-title">Novo plano</span>
-      <button class="modal-close" type="button" onclick="closeModal('plan-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button class="modal-close" type="button" id="pln-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body" style="max-height:min(85vh,720px);overflow-y:auto">
       <input type="hidden" id="plan-id" />
@@ -230,7 +230,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" type="button" id="pln-modal-cancel" onclick="closeModal('plan-modal')">Cancelar</button>
+      <button class="btn btn-ghost" type="button" id="pln-modal-cancel">Cancelar</button>
       <button class="btn btn-primary" type="button" id="save-plan-btn"><span id="pln-modal-save">Salvar plano</span></button>
     </div>
   </div>
@@ -242,6 +242,8 @@
   document.querySelectorAll('.modal-overlay').forEach((o) =>
     o.addEventListener('click', (e) => { if (e.target === o) o.classList.remove('open'); })
   );
+  document.getElementById('pln-modal-close')?.addEventListener('click', () => closeModal('plan-modal'));
+  document.getElementById('pln-modal-cancel')?.addEventListener('click', () => closeModal('plan-modal'));
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
@@ -357,6 +359,7 @@
     writePlanFeaturesToDom(defaultPlanFeaturesForNew());
     openModal('plan-modal');
   };
+  document.getElementById('pln-btn-new')?.addEventListener('click', () => void window.openNewPlanModal());
 
   window.duplicatePlan = async (id) => {
     if (!canManagePlans) return;

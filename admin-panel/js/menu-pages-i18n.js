@@ -1853,7 +1853,7 @@ export function applyTenantsPageI18n() {
       if (k) o.textContent = mpT(k);
     }
   }
-  const btnNew = document.querySelector('[onclick="openModal(\'new-tenant-modal\')"]');
+  const btnNew = document.getElementById('ten-btn-new-tenant');
   if (btnNew) {
     const ic = btnNew.querySelector('ion-icon');
     btnNew.textContent = '';
@@ -2454,7 +2454,7 @@ export function applyMetatagsPageI18n() {
     setText(id, keys[i]);
   });
   setText('mt-lbl-type', 'mt_lbl_type');
-  const b = document.querySelector('[onclick="openNewTag()"]');
+  const b = document.getElementById('mt-btn-new');
   if (b) {
     const ic = b.querySelector('ion-icon');
     b.textContent = '';

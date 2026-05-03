@@ -74,7 +74,7 @@
             </div>
           </div>
           <div class="data-toolbar-actions">
-            <button type="button" class="btn btn-primary" onclick="openModal('new-tenant-modal')">
+            <button type="button" class="btn btn-primary" id="ten-btn-new-tenant">
               <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
               Novo tenant
             </button>
@@ -116,7 +116,7 @@
   <div class="modal tenant-branding-modal">
     <div class="modal-header">
       <span class="modal-title">Branding do app móvel</span>
-      <button type="button" class="modal-close" onclick="closeModal('tenant-branding-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="ten-branding-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body tenant-branding-modal__body">
       <input type="hidden" id="tenant-branding-id" />
@@ -334,7 +334,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost" onclick="closeModal('tenant-branding-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" id="ten-branding-modal-cancel">Cancelar</button>
       <button type="button" class="btn btn-primary" id="save-tenant-branding-btn">Salvar branding</button>
     </div>
   </div>
@@ -345,7 +345,7 @@
   <div class="modal">
     <div class="modal-header">
       <span class="modal-title" id="ten-modal-title">Novo Tenant</span>
-      <button type="button" class="modal-close" onclick="closeModal('new-tenant-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="ten-new-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body">
       <div class="form-group"><label class="form-label" id="ten-lbl-company">Nome da Empresa *</label><input class="form-control" id="new-name" placeholder="Ex: Benedito Imóveis" /></div>
@@ -365,7 +365,7 @@
       <div id="new-tenant-inline-error" class="new-tenant-inline-error" role="alert" hidden></div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost" id="ten-modal-cancel" onclick="closeModal('new-tenant-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" id="ten-modal-cancel">Cancelar</button>
       <button type="button" class="btn btn-primary" id="save-tenant-btn" aria-busy="false">
         <span id="ten-modal-save" class="ten-save-btn-inner" style="display:inline-flex;align-items:center;gap:8px">
           <ion-icon id="ten-save-spinner" name="refresh-outline" aria-hidden="true" style="display:none;font-size:18px;vertical-align:-3px"></ion-icon>
@@ -391,6 +391,11 @@
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
   );
+  document.getElementById('ten-btn-new-tenant')?.addEventListener('click', () => openModal('new-tenant-modal'));
+  document.getElementById('ten-branding-modal-close')?.addEventListener('click', () => closeModal('tenant-branding-modal'));
+  document.getElementById('ten-branding-modal-cancel')?.addEventListener('click', () => closeModal('tenant-branding-modal'));
+  document.getElementById('ten-new-modal-close')?.addEventListener('click', () => closeModal('new-tenant-modal'));
+  document.getElementById('ten-modal-cancel')?.addEventListener('click', () => closeModal('new-tenant-modal'));
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
@@ -404,7 +409,7 @@
   const canChangeTenantStatus = panelCaps.has('platform.tenants.write');
   const canEditTenantBranding =
     panelCaps.has('tenant.branding.write.self') || panelCaps.has('tenant.branding.write.any');
-  const newTenantBtn = document.querySelector('.data-toolbar-actions .btn.btn-primary');
+  const newTenantBtn = document.getElementById('ten-btn-new-tenant');
   if (newTenantBtn) newTenantBtn.hidden = !canCreateTenant;
 
   const statusMap = { TRIAL:'badge-amber', ACTIVE:'badge-green', SUSPENDED:'badge-red', CANCELLED:'badge-gray' };

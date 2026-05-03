@@ -6,9 +6,9 @@ import { getCurrentPositionWithGpsPolicy } from './getCurrentPositionWithAccurac
 import { Platform } from 'react-native';
 import * as Network from 'expo-network';
 import * as FileSystem from 'expo-file-system/legacy';
-import { apiFetch } from '../services/auth';
 import type { WorkTimeDeviceInfo, WorkTimeSettingsPayload } from '../services/workTimeService';
 import { ensureWorkTimeOutboxDir, faceImagePathForClientUuid as workTimeFacePath } from '../services/workTimePunchOutbox';
+import { verifyFaceWithApi } from '../services/verifyFaceApi';
 
 export type CollectedPunch = {
   /** Identificador estável da batida (fila offline / dedupe no servidor). */
@@ -43,7 +43,7 @@ export async function isLikelyOnline(): Promise<boolean> {
   try {
     const s = await Network.getNetworkStateAsync();
     if (s?.isConnected === false) return false;
-    if (s?.isInternetReachable === false) return false;
+    /** `isInternetReachable === false` é frequente em LTE/VPN boas — ainda tentamos verify-face. */
     return true;
   } catch {
     return true;
@@ -108,65 +108,73 @@ export async function collectPunchInputs(
       base64: true,
       cameraType: ImagePicker.CameraType.front,
     });
-    if (shot.canceled || !shot.assets[0]?.base64) {
+    const asset = shot.canceled ? null : shot.assets?.[0];
+    if (!asset) {
       collectionNotes.push('Rosto: captura cancelada ou sem imagem.');
     } else {
-      const b64 = shot.assets[0].base64;
-
-      const tryVerifyOnline = async (): Promise<boolean> => {
+      let b64 = String(asset.base64 || '').trim();
+      if (!b64 && asset.uri) {
         try {
-          const vf = await apiFetch('/api/vision/verify-face', {
-            method: 'POST',
-            body: JSON.stringify({
-              imageBase64: b64,
-              facialAuthMode: 'self_verify',
-            }),
-          });
-          const j = await vf.json().catch(() => ({}));
-          if (!vf.ok || j?.error) {
-            collectionNotes.push(
-              typeof j?.error === 'string' ? `Rosto: ${j.error}` : 'Rosto: verificação falhou no servidor.'
-            );
-            return false;
+          const pathOnly = String(asset.uri).split('?')[0];
+          if (pathOnly) {
+            const inf = await FileSystem.getInfoAsync(pathOnly);
+            if (inf.exists) {
+              b64 = await FileSystem.readAsStringAsync(pathOnly, { encoding: 'base64' });
+            }
           }
-          if (!j?.match) {
-            collectionNotes.push(
-              typeof j?.message === 'string' ? `Rosto: ${j.message}` : 'Rosto: não corresponde ao cadastro.'
-            );
-            return false;
-          }
-          const uid = j?.identifiedUserId != null ? String(j.identifiedUserId) : userId || 'self';
-          faceVerificationId = `vision:self_verify:${uid}:${Date.now()}`;
-          faceScore = typeof j.confidence === 'number' ? j.confidence : null;
-          faceEngine = typeof j.engine === 'string' ? j.engine : 'server';
-          return true;
         } catch {
-          return false;
+          /* ignore */
         }
-      };
+      }
+      if (!b64) {
+        collectionNotes.push('Rosto: captura cancelada ou sem imagem.');
+      } else {
+        const runVerify = async (): Promise<'ok' | 'definitive_fail' | 'network_fail'> => {
+          const vr = await verifyFaceWithApi(b64, 'self_verify');
+          if (vr.ok) {
+            const j = vr.data;
+            const uid = j?.identifiedUserId != null ? String(j.identifiedUserId) : userId || 'self';
+            faceVerificationId = `vision:self_verify:${uid}:${Date.now()}`;
+            faceScore = typeof j.confidence === 'number' ? j.confidence : null;
+            faceEngine = typeof j.engine === 'string' ? j.engine : 'server';
+            return 'ok';
+          }
+          if (vr.kind === 'error_msg') {
+            collectionNotes.push(`Rosto: ${vr.message}`);
+            return 'definitive_fail';
+          }
+          if (vr.kind === 'no_match') {
+            collectionNotes.push(
+              vr.message ? `Rosto: ${vr.message}` : 'Rosto: não corresponde ao cadastro.',
+            );
+            return 'definitive_fail';
+          }
+          return 'network_fail';
+        };
 
-      if (online) {
-        const ok = await tryVerifyOnline();
-        if (!ok && !faceVerificationId) {
+        if (online) {
+          const outcome = await runVerify();
+          if (outcome === 'network_fail') {
+            try {
+              await ensureWorkTimeOutboxDir();
+              const path = workTimeFacePath(clientPunchUuid);
+              await FileSystem.writeAsStringAsync(path, b64, { encoding: 'base64' });
+              faceImagePendingUpload = true;
+              collectionNotes.push('Rosto: sem resposta do servidor; validação ficará pendente até haver rede.');
+            } catch {
+              collectionNotes.push('Rosto: não foi possível guardar a foto para envio posterior.');
+            }
+          }
+        } else {
           try {
             await ensureWorkTimeOutboxDir();
             const path = workTimeFacePath(clientPunchUuid);
             await FileSystem.writeAsStringAsync(path, b64, { encoding: 'base64' });
             faceImagePendingUpload = true;
-            collectionNotes.push('Rosto: sem resposta do servidor; validação ficará pendente até haver rede.');
+            collectionNotes.push('Rosto: sem rede; a foto será validada quando o envio for feito.');
           } catch {
             collectionNotes.push('Rosto: não foi possível guardar a foto para envio posterior.');
           }
-        }
-      } else {
-        try {
-          await ensureWorkTimeOutboxDir();
-          const path = workTimeFacePath(clientPunchUuid);
-          await FileSystem.writeAsStringAsync(path, b64, { encoding: 'base64' });
-          faceImagePendingUpload = true;
-          collectionNotes.push('Rosto: sem rede; a foto será validada quando o envio for feito.');
-        } catch {
-          collectionNotes.push('Rosto: não foi possível guardar a foto para envio posterior.');
         }
       }
     }

@@ -2,6 +2,8 @@
  * Fragmentos alinhados ao PDF da Central de Operações (operations.html / printReport).
  */
 
+import { OPS_IMG_ATTR_FB_320_160, OPS_IMG_ATTR_FB_560_320 } from './imgErrorFallbackHtml.js';
+
 /** Atributo HTML seguro para `src` / `href` (mantém query string — URLs assinadas S3/R2). */
 export function escapeHtmlAttr(s) {
   return String(s ?? '')
@@ -586,7 +588,7 @@ export function buildVisionChecklistReportHtml(val, fieldType, escHtml) {
       let inner;
       if (slotHttps) {
         const srcEsc = escapeHtmlAttr(slotHttps);
-        inner = `<img src="${srcEsc}" alt="" style="width:100%;max-height:140px;object-fit:cover;display:block" onerror="this.onerror=null;this.src='https://placehold.co/320x160/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/>`;
+        inner = `<img src="${srcEsc}" alt="" style="width:100%;max-height:140px;object-fit:cover;display:block"${OPS_IMG_ATTR_FB_320_160} decoding="async"/>`;
       } else if (u.startsWith('file://') || u.startsWith('content://')) {
         inner = localMediaUnavailableHtml(escHtml);
       } else {
@@ -616,7 +618,7 @@ export function buildVisionChecklistReportHtml(val, fieldType, escHtml) {
       if (httpsPrimary) {
         const srcEsc = escapeHtmlAttr(httpsPrimary);
         const hrefEsc = escapeHtmlAttr(httpsPrimary);
-        const innerImg = `<img src="${srcEsc}" alt="" style="max-width:100%;max-height:300px;width:100%;height:auto;object-fit:contain;display:block" onerror="this.onerror=null;this.src='https://placehold.co/560x320/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/>`;
+        const innerImg = `<img src="${srcEsc}" alt="" style="max-width:100%;max-height:300px;width:100%;height:auto;object-fit:contain;display:block"${OPS_IMG_ATTR_FB_560_320} decoding="async"/>`;
         html += wrapVisionStampedMedia(innerImg, mainStamp, escHtml, 'vision', mainGeo);
         html += `<div style="font-size:11px;margin-top:6px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:#2563eb;font-weight:600">Abrir mídia</a></div>`;
       } else {
@@ -879,7 +881,7 @@ export function buildImageAnnotationReportHtml(val, escHtml) {
   if (httpsUri) {
     const srcEsc = escapeHtmlAttr(httpsUri);
     inner = `<div class="pdf-image-annot-stack" style="display:grid;width:100%;max-width:100%;align-items:start;justify-items:stretch;line-height:0">
-      <img src="${srcEsc}" alt="" style="grid-area:1/1;width:100%;max-height:320px;height:auto;object-fit:contain;display:block;vertical-align:top" onerror="this.onerror=null;this.src='https://placehold.co/560x320/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/>
+      <img src="${srcEsc}" alt="" style="grid-area:1/1;width:100%;max-height:320px;height:auto;object-fit:contain;display:block;vertical-align:top"${OPS_IMG_ATTR_FB_560_320} decoding="async"/>
       ${svgOverlay}
     </div>`;
   } else {

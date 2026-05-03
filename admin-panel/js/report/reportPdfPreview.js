@@ -33,6 +33,7 @@ import {
   parseCapturedAtFromPhotoUriPdf,
   shouldEmbedHttpUrlAsImage,
 } from './pdfStandardBlocks.js';
+import { OPS_IMG_ATTR_FB_300, OPS_IMG_ATTR_FB_220 } from './imgErrorFallbackHtml.js';
 import {
   formatBiometricAuditDetailHtml,
   formatStructuredValueForReportHtml,
@@ -449,7 +450,7 @@ function formatFileUploadPdfHtml(val, f, responses, row) {
       const idx = attachList.length > 1 ? 'Anexo ' + (i + 1) + ' · ' : '';
       const preview =
         shouldEmbedHttpUrlAsImage(u)
-          ? `<div style="margin-top:8px;max-width:350px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc"><img src="${escAttr(u)}" alt="" class="pdf-photo-img" style="width:100%;max-height:240px;object-fit:contain;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/></div>`
+          ? `<div style="margin-top:8px;max-width:350px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc"><img src="${escAttr(u)}" alt="" class="pdf-photo-img" style="width:100%;max-height:240px;object-fit:contain;display:block"${OPS_IMG_ATTR_FB_220} decoding="async"/></div>`
           : '';
       return (
         preview +
@@ -1910,7 +1911,7 @@ function renderPhotoPdfBlock(val, f, th, t, responses, row, fieldTimeIso) {
           singleVal.startsWith('data:image')
         ) {
           const imgSrc = escapeHtmlAttr(singleVal);
-          imgInnerHtml = `<img src="${imgSrc}" alt="" class="pdf-photo-img" style="max-width:100%;max-height:280px;width:auto;height:auto;object-fit:contain;display:block" onerror="this.src='https://placehold.co/400x300?text=Foto'" />`;
+          imgInnerHtml = `<img src="${imgSrc}" alt="" class="pdf-photo-img" style="max-width:100%;max-height:280px;width:auto;height:auto;object-fit:contain;display:block"${OPS_IMG_ATTR_FB_300} decoding="async" />`;
         } else if (singleVal.startsWith('file://')) {
           imgInnerHtml = `<div style="padding:20px;text-align:center;color:#78350f;font-size:10px;font-weight:700;line-height:1.45">Mídia ainda em arquivo local. Sincronize para incluir a imagem no PDF.</div>`;
         } else if (singleVal) {
@@ -1939,7 +1940,7 @@ function renderPhotoPdfBlock(val, f, th, t, responses, row, fieldTimeIso) {
       ) {
         const imgSrc = escapeHtmlAttr(singleVal);
         const showFooter = !!(stampTypes || singleVal.includes('live'));
-        const imgInner = `<img src="${imgSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block" alt="" onerror="this.src='https://placehold.co/400x300?text=Foto'" />`;
+        const imgInner = `<img src="${imgSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block" alt=""${OPS_IMG_ATTR_FB_300} decoding="async" />`;
         block = `
           <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#EA580C;border:1px solid #c2410c;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
             ${imgInner}

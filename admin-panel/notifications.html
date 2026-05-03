@@ -26,7 +26,7 @@
       <div class="data-toolbar" style="margin-bottom:24px">
         <div class="data-toolbar-main" style="min-width:0"></div>
         <div class="data-toolbar-actions">
-          <button type="button" class="btn btn-primary" id="notif-btn-new" onclick="window.newTemplate()">
+          <button type="button" class="btn btn-primary" id="notif-btn-new">
             <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
             Novo template
           </button>
@@ -68,7 +68,7 @@
 <!-- Template Modal -->
 <div class="modal-overlay" id="template-modal">
   <div class="modal">
-    <div class="modal-header"><span class="modal-title" id="notif-modal-title">Novo Template</span><button type="button" class="modal-close" onclick="closeModal('template-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-header"><span class="modal-title" id="notif-modal-title">Novo Template</span><button type="button" class="modal-close" id="notif-template-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
     <div class="modal-body">
       <input type="hidden" id="tmpl-id" />
       <div class="grid-2">
@@ -87,7 +87,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost" onclick="closeModal('template-modal')"><span id="notif-modal-cancel">Cancelar</span></button>
+      <button type="button" class="btn btn-ghost" id="notif-template-modal-cancel"><span id="notif-modal-cancel">Cancelar</span></button>
       <button type="button" class="btn btn-primary" id="save-tmpl-btn"><span id="notif-modal-save">Salvar template</span></button>
     </div>
   </div>
@@ -155,6 +155,7 @@
     document.getElementById('tmpl-body').value = '';
     openModal('template-modal');
   };
+  document.getElementById('notif-btn-new')?.addEventListener('click', () => window.newTemplate());
 
   window.editTemplate = (id) => {
     const t = notificationsTemplatesCache.find((x) => x.id === id || String(x.id) === String(id));
@@ -246,6 +247,8 @@
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
   );
+  document.getElementById('notif-template-modal-close')?.addEventListener('click', () => closeModal('template-modal'));
+  document.getElementById('notif-template-modal-cancel')?.addEventListener('click', () => closeModal('template-modal'));
 </script>
 </body>
 </html>

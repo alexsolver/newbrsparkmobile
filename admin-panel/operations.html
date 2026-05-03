@@ -627,19 +627,19 @@
       <section class="data-shell fade-in" aria-labelledby="ops-board-title">
         <div class="data-toolbar">
           <div class="data-toolbar-main" style="align-items:flex-end">
-            <select class="filter-input" id="filter-scope" onchange="onOpsScopeFilterChange()" style="min-width:200px" title="O que mostrar no quadro">
+            <select class="filter-input" id="filter-scope" style="min-width:200px" title="O que mostrar no quadro">
               <option value="os" selected>Apenas OS (FT)</option>
               <option value="rt">Apenas RT</option>
               <option value="all">OS e RT (todas)</option>
             </select>
-            <select class="filter-input" id="filter-email" onchange="applyFilters()" style="min-width:180px">
+            <select class="filter-input" id="filter-email" style="min-width:180px">
               <option value="">Todos os técnicos</option>
             </select>
-            <select class="filter-input" id="filter-voice-sync" onchange="applyFilters()" style="min-width:220px" title="Filtrar por pendência de transcrição de nota de voz">
+            <select class="filter-input" id="filter-voice-sync" style="min-width:220px" title="Filtrar por pendência de transcrição de nota de voz">
               <option value="">Todas (voz)</option>
               <option value="pending_voice">Com nota de voz pendente</option>
             </select>
-            <input class="filter-input" type="text" id="filter-search" placeholder="Buscar FT, RT, ID, título…" oninput="applyFilters()" style="min-width:200px;flex:1;max-width:360px" />
+            <input class="filter-input" type="text" id="filter-search" placeholder="Buscar FT, RT, ID, título…" style="min-width:200px;flex:1;max-width:360px" />
             <label class="filter-field" style="margin:0;display:flex;align-items:flex-end;gap:6px;flex-direction:column">
               <span id="ops-limit-label" class="filter-field-label" style="margin:0;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px">Limite na API</span>
               <select class="filter-input" id="ops-limit-select" style="min-width:120px" title="">
@@ -650,14 +650,14 @@
             </label>
           </div>
           <div class="data-toolbar-actions">
-            <button type="button" class="btn btn-ghost btn-sm" id="ops-btn-refresh" onclick="loadBoard()">↻ Atualizar</button>
-            <button type="button" class="btn btn-primary btn-sm" id="ops-btn-dispatch" onclick="openDispatchModal()"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Despachar OS</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="ops-btn-refresh">↻ Atualizar</button>
+            <button type="button" class="btn btn-primary btn-sm" id="ops-btn-dispatch"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Despachar OS</button>
           </div>
         </div>
         <div id="ops-trunc-banner" class="fade-in" role="status" aria-live="polite" style="display:none;margin:0 20px 12px;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid var(--amber, #f59e0b);background:rgba(245,158,11,0.12);font-size:12px;font-weight:600;color:var(--text);line-height:1.45"></div>
         <div id="ops-board-hint" class="fade-in" role="status" aria-live="polite" style="display:none;margin:0 20px 12px;padding:10px 14px;border-radius:var(--radius-sm);border:1px solid #bae6fd;background:rgba(14,165,233,0.08);font-size:12px;font-weight:600;color:var(--text);line-height:1.5">
           <span id="ops-board-hint-text"></span>
-          <button type="button" class="btn btn-ghost btn-sm" id="ops-board-hint-clear" style="margin-left:10px;display:none" onclick="window.clearOpsUiFilters && window.clearOpsUiFilters()"></button>
+          <button type="button" class="btn btn-ghost btn-sm" id="ops-board-hint-clear" style="margin-left:10px;display:none"></button>
         </div>
 
         <div class="data-table-head">
@@ -674,15 +674,15 @@
             <span class="kanban-count" id="cnt-pending">—</span>
           </div>
           <div class="kanban-col-controls">
-            <input type="text" id="ops-f-pending" placeholder="Filtrar pendentes..." onkeyup="updateColFilter('pending', this.value)" />
+            <input type="text" id="ops-f-pending" placeholder="Filtrar pendentes..." />
             <div class="kanban-col-sort-row">
-              <select id="ops-sort-key-pending" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('pending', this.value)">
+              <select id="ops-sort-key-pending" class="kanban-col-sort-key" title="Ordenar por">
                 <option value="created" data-ops-sort-key="created">Data de criação</option>
                 <option value="due" data-ops-sort-key="due">Data de vencimento (agenda)</option>
                 <option value="sync" data-ops-sort-key="sync">Último sincronismo</option>
                 <option value="completed" data-ops-sort-key="completed">Data de conclusão</option>
               </select>
-              <button type="button" onclick="toggleColSort('pending')" id="sort-btn-pending" title="Alterar ordenação">⬇ Novas</button>
+              <button type="button" id="sort-btn-pending" data-ops-toggle-col-sort="pending" title="Alterar ordenação">⬇ Novas</button>
             </div>
           </div>
           <div class="kanban-col-body" id="col-pending"></div>
@@ -694,15 +694,15 @@
             <span class="kanban-count" id="cnt-progress">—</span>
           </div>
           <div class="kanban-col-controls">
-            <input type="text" id="ops-f-progress" placeholder="Filtrar em campo..." onkeyup="updateColFilter('progress', this.value)" />
+            <input type="text" id="ops-f-progress" placeholder="Filtrar em campo..." />
             <div class="kanban-col-sort-row">
-              <select id="ops-sort-key-progress" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('progress', this.value)">
+              <select id="ops-sort-key-progress" class="kanban-col-sort-key" title="Ordenar por">
                 <option value="created" data-ops-sort-key="created">Data de criação</option>
                 <option value="due" data-ops-sort-key="due">Data de vencimento (agenda)</option>
                 <option value="sync" data-ops-sort-key="sync">Último sincronismo</option>
                 <option value="completed" data-ops-sort-key="completed">Data de conclusão</option>
               </select>
-              <button type="button" onclick="toggleColSort('progress')" id="sort-btn-progress" title="Alterar ordenação">⬇ Novas</button>
+              <button type="button" id="sort-btn-progress" data-ops-toggle-col-sort="progress" title="Alterar ordenação">⬇ Novas</button>
             </div>
           </div>
           <div class="kanban-col-body" id="col-progress"></div>
@@ -714,15 +714,15 @@
             <span class="kanban-count" id="cnt-completed">—</span>
           </div>
           <div class="kanban-col-controls">
-            <input type="text" id="ops-f-completed" placeholder="Filtrar concluídas..." onkeyup="updateColFilter('completed', this.value)" />
+            <input type="text" id="ops-f-completed" placeholder="Filtrar concluídas..." />
             <div class="kanban-col-sort-row">
-              <select id="ops-sort-key-completed" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('completed', this.value)">
+              <select id="ops-sort-key-completed" class="kanban-col-sort-key" title="Ordenar por">
                 <option value="created" data-ops-sort-key="created">Data de criação</option>
                 <option value="due" data-ops-sort-key="due">Data de vencimento (agenda)</option>
                 <option value="sync" data-ops-sort-key="sync">Último sincronismo</option>
                 <option value="completed" data-ops-sort-key="completed">Data de conclusão</option>
               </select>
-              <button type="button" onclick="toggleColSort('completed')" id="sort-btn-completed" title="Alterar ordenação">⬇ Novas</button>
+              <button type="button" id="sort-btn-completed" data-ops-toggle-col-sort="completed" title="Alterar ordenação">⬇ Novas</button>
             </div>
           </div>
           <div class="kanban-col-body" id="col-completed"></div>
@@ -734,15 +734,15 @@
             <span class="kanban-count" id="cnt-error">—</span>
           </div>
           <div class="kanban-col-controls">
-            <input type="text" id="ops-f-error" placeholder="Filtrar erros..." onkeyup="updateColFilter('error', this.value)" />
+            <input type="text" id="ops-f-error" placeholder="Filtrar erros..." />
             <div class="kanban-col-sort-row">
-              <select id="ops-sort-key-error" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('error', this.value)">
+              <select id="ops-sort-key-error" class="kanban-col-sort-key" title="Ordenar por">
                 <option value="created" data-ops-sort-key="created">Data de criação</option>
                 <option value="due" data-ops-sort-key="due">Data de vencimento (agenda)</option>
                 <option value="sync" data-ops-sort-key="sync">Último sincronismo</option>
                 <option value="completed" data-ops-sort-key="completed">Data de conclusão</option>
               </select>
-              <button type="button" onclick="toggleColSort('error')" id="sort-btn-error" title="Alterar ordenação">⬇ Novas</button>
+              <button type="button" id="sort-btn-error" data-ops-toggle-col-sort="error" title="Alterar ordenação">⬇ Novas</button>
             </div>
           </div>
           <div class="kanban-col-body" id="col-error"></div>
@@ -754,15 +754,15 @@
             <span class="kanban-count" id="cnt-cancelled">—</span>
           </div>
           <div class="kanban-col-controls">
-            <input type="text" id="ops-f-cancelled" placeholder="Filtrar canceladas ou rejeitadas…" onkeyup="updateColFilter('cancelled', this.value)" />
+            <input type="text" id="ops-f-cancelled" placeholder="Filtrar canceladas ou rejeitadas…" />
             <div class="kanban-col-sort-row">
-              <select id="ops-sort-key-cancelled" class="kanban-col-sort-key" title="Ordenar por" onchange="updateColSortKey('cancelled', this.value)">
+              <select id="ops-sort-key-cancelled" class="kanban-col-sort-key" title="Ordenar por">
                 <option value="created" data-ops-sort-key="created">Data de criação</option>
                 <option value="due" data-ops-sort-key="due">Data de vencimento (agenda)</option>
                 <option value="sync" data-ops-sort-key="sync">Último sincronismo</option>
                 <option value="completed" data-ops-sort-key="completed">Data de conclusão</option>
               </select>
-              <button type="button" onclick="toggleColSort('cancelled')" id="sort-btn-cancelled" title="Alterar ordenação">⬇ Novas</button>
+              <button type="button" id="sort-btn-cancelled" data-ops-toggle-col-sort="cancelled" title="Alterar ordenação">⬇ Novas</button>
             </div>
           </div>
           <div class="kanban-col-body" id="col-cancelled"></div>
@@ -786,27 +786,26 @@
           <label for="detail-report-preset" style="font-size:10px;color:var(--text3);white-space:nowrap">Layout PDF</label>
           <select id="detail-report-preset" class="form-control" style="min-width:140px;max-width:220px;padding:4px 8px;font-size:11px"></select>
         </div>
-        <button class="btn btn-ghost btn-sm" id="detail-pdf-btn" onclick="printReport()" title="Exportar PDF / Imprimir"
+        <button type="button" class="btn btn-ghost btn-sm" id="detail-pdf-btn" title="Exportar PDF / Imprimir"
           style="display:none;gap:5px;">
           <ion-icon name="print-outline" style="vertical-align:-2px"></ion-icon> PDF
         </button>
-        <button class="modal-close" onclick="closeDetailModal()"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+        <button type="button" class="modal-close" id="detail-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
       </div>
     </div>
     <!-- Tabs -->
     <div class="report-tabs" id="detail-tabs">
-      <button class="report-tab active" id="tab-info" onclick="switchTab('info')"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Informações</button>
-      <button class="report-tab" id="tab-report" onclick="switchTab('report')"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Relatório</button>
-      <button class="report-tab" id="tab-raw" onclick="switchTab('raw')"><ion-icon name="build-outline" style="vertical-align:-2px"></ion-icon> Dados técnicos</button>
+      <button type="button" class="report-tab active" id="tab-info"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> Informações</button>
+      <button type="button" class="report-tab" id="tab-report"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Relatório</button>
+      <button type="button" class="report-tab" id="tab-raw"><ion-icon name="build-outline" style="vertical-align:-2px"></ion-icon> Dados técnicos</button>
     </div>
     <div class="modal-body" id="detail-modal-body" style="max-height:65vh;overflow-y:auto;"></div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-primary btn-sm" id="detail-reopen-revision-btn" style="display:none;margin-right:auto"
-        onclick="event.preventDefault(); void window.openReopenRevisionFromDetail();">
+      <button type="button" class="btn btn-primary btn-sm" id="detail-reopen-revision-btn" style="display:none;margin-right:auto">
         <ion-icon name="refresh-circle-outline" style="vertical-align:-2px"></ion-icon> Reabrir p/ revisão
       </button>
-      <button class="btn btn-danger btn-sm" id="detail-cancel-btn" onclick="cancelTask()" style="display:none"><ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS</button>
-      <button class="btn btn-ghost btn-sm" onclick="closeDetailModal()">Fechar</button>
+      <button type="button" class="btn btn-danger btn-sm" id="detail-cancel-btn" style="display:none"><ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="detail-footer-close-btn">Fechar</button>
     </div>
   </div>
 </div>
@@ -816,7 +815,7 @@
   <div class="modal" style="max-width:480px;width:100%;">
     <div class="modal-header">
       <span class="modal-title" id="revision-picker-dialog-title"><ion-icon name="layers-outline" style="vertical-align:-2px"></ion-icon> Qual submissão abrir?</span>
-      <button type="button" class="modal-close" onclick="void window.closeRevisionPickerModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="revision-picker-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
       <p id="revision-picker-hint" style="font-size:13px;color:var(--text2);line-height:1.45;margin:0 0 14px;">
@@ -825,8 +824,8 @@
       <div id="revision-picker-options" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
     <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="void window.closeRevisionPickerModal()">Cancelar</button>
-      <button type="button" class="btn btn-primary btn-sm" id="revision-picker-confirm-btn" onclick="void window.confirmRevisionPicker()">Abrir</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="revision-picker-cancel-btn">Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm" id="revision-picker-confirm-btn">Abrir</button>
     </div>
   </div>
 </dialog>
@@ -836,16 +835,16 @@
   <div class="modal modal-lg" style="max-width:760px;width:96vw;">
     <div class="modal-header" style="display:flex;align-items:center;gap:10px;">
       <span class="modal-title" id="revision-snapshot-title">Submissão</span>
-      <button type="button" class="modal-close" onclick="closeRevisionSnapshotModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="revision-snapshot-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="report-tabs" id="revision-snapshot-tabs">
-      <button type="button" class="report-tab active" id="rev-snap-tab-form" onclick="switchRevisionSnapshotTab('form')"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Relatório</button>
-      <button type="button" class="report-tab" id="rev-snap-tab-meta" onclick="switchRevisionSnapshotTab('meta')"><ion-icon name="cloud-upload-outline" style="vertical-align:-2px"></ion-icon> Metadados do envio</button>
-      <button type="button" class="report-tab" id="rev-snap-tab-json" onclick="switchRevisionSnapshotTab('json')"><ion-icon name="code-outline" style="vertical-align:-2px"></ion-icon> Respostas (detalhe)</button>
+      <button type="button" class="report-tab active" id="rev-snap-tab-form"><ion-icon name="document-text-outline" style="vertical-align:-2px"></ion-icon> Relatório</button>
+      <button type="button" class="report-tab" id="rev-snap-tab-meta"><ion-icon name="cloud-upload-outline" style="vertical-align:-2px"></ion-icon> Metadados do envio</button>
+      <button type="button" class="report-tab" id="rev-snap-tab-json"><ion-icon name="code-outline" style="vertical-align:-2px"></ion-icon> Respostas (detalhe)</button>
     </div>
     <div class="modal-body" id="revision-snapshot-body" style="max-height:62vh;overflow-y:auto;"></div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="closeRevisionSnapshotModal()">Fechar</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="revision-snapshot-footer-close">Fechar</button>
     </div>
   </div>
 </div>
@@ -855,7 +854,7 @@
   <div class="modal" style="max-width:500px;width:95%;">
     <div class="modal-header">
       <span class="modal-title" id="reopen-revision-modal-title"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;color:var(--accent)"></ion-icon> Reabrir para revisão</span>
-      <button type="button" class="modal-close" onclick="window.closeReopenRevisionModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="reopen-revision-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
       <p style="font-size:13px;color:var(--text2);line-height:1.45;margin:0 0 12px;">
@@ -863,11 +862,11 @@
       </p>
       <div style="display:flex;flex-direction:column;gap:12px;">
         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
-          <input type="radio" name="reopen-assign" id="reopen-revision-same" value="same" checked onchange="window.toggleReopenRevisionTechUi()" />
+          <input type="radio" name="reopen-assign" id="reopen-revision-same" value="same" checked />
           <span style="font-size:13px;line-height:1.4"><strong id="ops-reopen-lbl-same">Manter o mesmo técnico</strong><br><span id="reopen-revision-current-email" style="color:var(--text3);font-size:12px"></span></span>
         </label>
         <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:8px;">
-          <input type="radio" name="reopen-assign" id="reopen-revision-other" value="other" onchange="window.toggleReopenRevisionTechUi()" />
+          <input type="radio" name="reopen-assign" id="reopen-revision-other" value="other" />
           <span style="font-size:13px;line-height:1.4"><strong id="ops-reopen-lbl-other">Atribuir a outro técnico</strong><br><span id="ops-reopen-other-hint" style="color:var(--text3);font-size:11px">Usuário com login no app móvel</span></span>
         </label>
         <div id="reopen-revision-tech-wrap" style="display:none;padding-left:4px;">
@@ -877,8 +876,8 @@
       </div>
     </div>
     <div class="modal-footer" style="gap:8px;">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeReopenRevisionModal()">Cancelar</button>
-      <button type="button" class="btn btn-primary btn-sm" id="reopen-revision-confirm-btn" onclick="event.preventDefault(); void window.submitReopenRevision();">Reabrir OS</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="reopen-revision-cancel-btn">Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm" id="reopen-revision-confirm-btn">Reabrir OS</button>
     </div>
   </div>
 </div>
@@ -888,18 +887,18 @@
   <div class="modal" style="max-width:520px;width:95%;">
     <div class="modal-header" style="display:flex;align-items:center;gap:10px;">
       <span class="modal-title" id="ops-chat-modal-title"><ion-icon name="chatbubbles-outline" style="vertical-align:-2px;color:var(--accent)"></ion-icon> Chat da FT</span>
-      <button type="button" class="modal-close" onclick="window.closeOpsChatModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="ops-chat-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body" style="max-height:72vh;overflow-y:auto;">
       <p id="ops-chat-modal-sub" style="font-size:12px;color:var(--text2);line-height:1.45;margin:0 0 10px;"></p>
       <div id="ops-chat-thread" style="max-height:42vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 0 8px;"></div>
       <div style="display:flex;gap:8px;margin-top:4px;align-items:stretch;">
         <textarea id="ops-chat-input" rows="3" style="flex:1;font-size:13px;padding:8px;border-radius:8px;border:1px solid var(--border);resize:vertical;min-height:72px;font-family:inherit"></textarea>
-        <button type="button" class="btn btn-primary btn-sm" id="ops-chat-send-btn" onclick="void window.submitOpsChatMessage()" style="align-self:flex-end;white-space:nowrap">Enviar</button>
+        <button type="button" class="btn btn-primary btn-sm" id="ops-chat-send-btn" style="align-self:flex-end;white-space:nowrap">Enviar</button>
       </div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeOpsChatModal()">Fechar</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="ops-chat-footer-close">Fechar</button>
     </div>
   </div>
 </div>
@@ -913,7 +912,7 @@
   <div class="modal" style="max-width:680px; width:95%;">
     <div class="modal-header">
       <span class="modal-title"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Despachar Nova OS</span>
-      <button type="button" class="modal-close" onclick="window.closeDispatchModal()" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="dispatch-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body" style="max-height:82vh; overflow-y:auto;">
 
@@ -922,12 +921,12 @@
       <div class="form-group">
         <label class="form-label" for="d-email">E-mail do Técnico *</label>
         <div class="dispatch-tech-suggest-wrap">
-          <input class="form-control" id="d-email" type="text" inputmode="email" autocomplete="off" placeholder="Nome ou e-mail — sugestões ao digitar" oninput="if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') window.syncDispatchBroadcastOfferExpiresUi();" />
+          <input class="form-control" id="d-email" type="text" inputmode="email" autocomplete="off" placeholder="Nome ou e-mail — sugestões ao digitar" />
           <ul id="d-email-suggestions" class="dispatch-tech-suggest-list" role="listbox" aria-label="Técnicos sugeridos"></ul>
         </div>
         <div id="d-dispatch-candidates-wrap" style="margin-top:10px;">
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
-            <button type="button" id="d-dispatch-add-candidate-btn" class="btn btn-outline btn-sm" onclick="window.addDispatchCandidateFromInput()" style="font-size:11px;">
+            <button type="button" id="d-dispatch-add-candidate-btn" class="btn btn-outline btn-sm" data-ops-dispatch-action="add-candidate" style="font-size:11px;">
               <ion-icon name="person-add-outline" style="vertical-align:-2px"></ion-icon> <span id="d-dispatch-add-candidate-lbl">Adicionar candidato</span>
             </button>
             <span id="d-dispatch-broadcast-hint" style="font-size:10px;color:var(--text3);line-height:1.35;">2+ na lista = «primeiro a aceitar».</span>
@@ -935,7 +934,7 @@
           <div id="d-dispatch-candidate-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:6px;"></div>
           <div id="d-oferta-wrap" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border,#e2e8f0);">
             <label for="d-oferta" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:700;color:var(--text2);margin:0;">
-              <input type="checkbox" id="d-oferta" disabled style="margin-top:3px;flex-shrink:0;" onchange="if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') window.syncDispatchBroadcastOfferExpiresUi();" />
+              <input type="checkbox" id="d-oferta" disabled style="margin-top:3px;flex-shrink:0;" />
               <span style="flex:1;min-width:0;">
                 <span id="d-oferta-lbl">Oferta</span>
                 <div id="d-hint-oferta" style="font-size:10px;color:var(--text3);font-weight:500;margin-top:4px;line-height:1.45;"></div>
@@ -956,7 +955,7 @@
       </div>
       <div class="form-group">
         <label class="form-label" for="d-template">Formulário / Template *</label>
-        <select class="form-control" id="d-template" onchange="window.updateDispatchPlannedEndPreview && window.updateDispatchPlannedEndPreview()">
+        <select class="form-control" id="d-template">
           <option value="">Selecionar formulário...</option>
         </select>
       </div>
@@ -973,12 +972,12 @@
       <div id="ops-dispatch-sec-schedule" style="font-size:10px; font-weight:800; color:var(--text3); text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> Agenda (bloco horário)</div>
       <div class="form-group">
         <label class="form-label" for="d-scheduled-start">Início na agenda *</label>
-        <input class="form-control" id="d-scheduled-start" type="datetime-local" required oninput="window.updateDispatchPlannedEndPreview && window.updateDispatchPlannedEndPreview()" />
+        <input class="form-control" id="d-scheduled-start" type="datetime-local" required />
         <div id="d-hint-scheduled" style="font-size:10px; color:var(--text3); margin-top:4px;">Defina quando a OS aparece na agenda do técnico (largura proporcional à duração prevista do formulário).</div>
       </div>
       <div class="form-group">
         <label class="form-label" for="d-expected-duration-override">Tempo previsto do formulário (min) — opcional</label>
-        <input class="form-control" id="d-expected-duration-override" type="number" min="5" step="5" placeholder="Usar valor do formulário (ou 60 min se vazio)" oninput="window.updateDispatchPlannedEndPreview && window.updateDispatchPlannedEndPreview()" />
+        <input class="form-control" id="d-expected-duration-override" type="number" min="5" step="5" placeholder="Usar valor do formulário (ou 60 min se vazio)" />
         <div id="d-hint-duration" style="font-size:10px; color:var(--text3); margin-top:4px;">Só preenchimento do checklist, sem deslocamento. Múltiplos de 5 min; mínimo 5. Se vazio, usa o definido no builder ou 60 min.</div>
         <div id="d-planned-end-preview" style="font-size:11px; color:var(--text2); margin-top:8px; font-weight:700; line-height:1.45;"></div>
       </div>
@@ -1003,11 +1002,11 @@
 
       <!-- Tab de Modo de Zona -->
       <div style="display:flex; gap:4px; margin-bottom:12px; background:var(--surface2); border-radius:10px; padding:4px;">
-        <button id="geo-tab-radius"  onclick="window.switchGeoTab('radius')"  style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:#0f172a; color:#fff; transition:all .2s;"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Ponto</button>
-        <button id="geo-tab-segment" onclick="window.switchGeoTab('segment')" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="swap-horizontal-outline" style="vertical-align:-2px"></ion-icon> Trecho</button>
-        <button id="geo-tab-route"   onclick="window.switchGeoTab('route')"   style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> Rota</button>
-        <button id="geo-tab-polygon" onclick="window.switchGeoTab('polygon')" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono</button>
-        <button id="geo-tab-none"    onclick="window.switchGeoTab('none')"    style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="ban-outline" style="vertical-align:-2px"></ion-icon> Livre</button>
+        <button type="button" id="geo-tab-radius" data-ops-geo-tab="radius" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:#0f172a; color:#fff; transition:all .2s;"><ion-icon name="location-outline" style="vertical-align:-2px"></ion-icon> Ponto</button>
+        <button type="button" id="geo-tab-segment" data-ops-geo-tab="segment" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="swap-horizontal-outline" style="vertical-align:-2px"></ion-icon> Trecho</button>
+        <button type="button" id="geo-tab-route" data-ops-geo-tab="route" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> Rota</button>
+        <button type="button" id="geo-tab-polygon" data-ops-geo-tab="polygon" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono</button>
+        <button type="button" id="geo-tab-none" data-ops-geo-tab="none" style="flex:1; padding:8px 2px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all .2s;"><ion-icon name="ban-outline" style="vertical-align:-2px"></ion-icon> Livre</button>
       </div>
 
       <!-- Destino explícito quando Rota ou Polígono KML (obrigatório: não usar 1.º vértice do ficheiro) -->
@@ -1018,17 +1017,17 @@
           <label class="form-label" for="d-nav-address">Endereço (busca)</label>
           <div style="display:flex; gap:6px;">
             <input class="form-control" id="d-nav-address" placeholder="Ex.: Rua do cliente, 100" style="flex:1; font-size:11px;" />
-            <button type="button" class="btn btn-outline btn-sm" onclick="window.geocodeNavAddress()" style="white-space:nowrap;font-size:10px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
+            <button type="button" class="btn btn-outline btn-sm" data-ops-dispatch-action="geocode-nav" style="white-space:nowrap;font-size:10px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
           </div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
           <div class="form-group">
             <label class="form-label" style="font-size:10px;" for="d-nav-lat">Latitude destino</label>
-            <input class="form-control" id="d-nav-lat" type="text" inputmode="decimal" placeholder="-23.55" style="font-size:11px;" oninput="window.refreshDispatchNavPreviewIfPossible && window.refreshDispatchNavPreviewIfPossible()" />
+            <input class="form-control" id="d-nav-lat" type="text" inputmode="decimal" placeholder="-23.55" style="font-size:11px;" />
           </div>
           <div class="form-group">
             <label class="form-label" style="font-size:10px;" for="d-nav-lng">Longitude destino</label>
-            <input class="form-control" id="d-nav-lng" type="text" inputmode="decimal" placeholder="-46.63" style="font-size:11px;" oninput="window.refreshDispatchNavPreviewIfPossible && window.refreshDispatchNavPreviewIfPossible()" />
+            <input class="form-control" id="d-nav-lng" type="text" inputmode="decimal" placeholder="-46.63" style="font-size:11px;" />
           </div>
         </div>
       </div>
@@ -1043,27 +1042,27 @@
           <label class="form-label" for="d-address">Endereço (busca por nome)</label>
           <div style="display:flex; gap:6px;">
             <input class="form-control" id="d-address" placeholder="Ex: Rua das Flores, 123, São Paulo" style="flex:1;" />
-            <button class="btn btn-outline btn-sm" onclick="window.geocodeAddress()" style="white-space:nowrap;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
+            <button type="button" class="btn btn-outline btn-sm" data-ops-dispatch-action="geocode-address" style="white-space:nowrap;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
           </div>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
           <div class="form-group">
             <label class="form-label" for="d-lat">Latitude</label>
-            <input class="form-control" id="d-lat" type="number" step="0.000001" placeholder="-23.5505" oninput="window.updateMapFromInputs()" />
+            <input class="form-control" id="d-lat" type="number" step="0.000001" placeholder="-23.5505" />
           </div>
           <div class="form-group">
             <label class="form-label" for="d-lng">Longitude</label>
-            <input class="form-control" id="d-lng" type="number" step="0.000001" placeholder="-46.6333" oninput="window.updateMapFromInputs()" />
+            <input class="form-control" id="d-lng" type="number" step="0.000001" placeholder="-46.6333" />
           </div>
         </div>
         <div class="form-group">
           <label class="form-label" for="d-radius">Raio de Aceitação (metros)</label>
-          <input class="form-control" id="d-radius" type="number" min="10" max="50000" value="200" oninput="window.updateMapFromInputs()" />
+          <input class="form-control" id="d-radius" type="number" min="10" max="50000" value="200" />
           <div id="d-hint-radius" style="font-size:10px; color:var(--text3); margin-top:4px;">Técnico precisa estar dentro deste raio do ponto para ser validado.</div>
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
           <span id="ops-geo-map-preview-lbl" style="font-size:11px; font-weight:700; color:var(--text2);">Mapa de Prévia</span>
-          <button class="btn btn-ghost btn-sm" onclick="window.useMyLocation()" style="font-size:10px;"><ion-icon name="radio-outline" style="vertical-align:-2px"></ion-icon> Usar Minha Localização</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-ops-dispatch-action="use-my-location" style="font-size:10px;"><ion-icon name="radio-outline" style="vertical-align:-2px"></ion-icon> Usar Minha Localização</button>
         </div>
         <div id="dispatch-map" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9;"></div>
       </div>
@@ -1081,7 +1080,7 @@
             <div style="flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-size:12px; color:var(--text3);" id="d-kml-route-label">Nenhum arquivo selecionado...</div>
             <div id="d-kml-route-choose-btn" style="background:#f97316; color:#fff; padding:8px 14px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap;"><ion-icon name="folder-outline" style="vertical-align:-2px"></ion-icon> Escolher KML</div>
           </label>
-          <input type="file" id="d-kml-route-file" accept=".kml,.kmz" style="display:none;" onchange="window.onKmlRouteFileChange(event)" />
+          <input type="file" id="d-kml-route-file" accept=".kml,.kmz" style="display:none;" />
           <div id="d-kml-route-status" style="font-size:10px; color:var(--text3); margin-top:6px;">Suporta arquivos .kml com <strong>LineString</strong> (trajeto) exportados do Google Earth ou Maps.</div>
         </div>
         <!-- Tolerance -->
@@ -1110,17 +1109,17 @@
              <label class="form-label" style="font-size:10px;" for="d-segment-address-a">Endereço (busca por nome)</label>
              <div style="display:flex; gap:6px;">
                <input class="form-control" id="d-segment-address-a" placeholder="Ex: Rua A" style="flex:1; font-size:11px;" />
-               <button class="btn btn-outline btn-sm" onclick="window.geocodeSegmentAddress('A')" style="font-size:10px; white-space:nowrap; padding:4px 8px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
+               <button type="button" class="btn btn-outline btn-sm" data-ops-dispatch-action="geocode-segment" data-segment-endpoint="A" style="font-size:10px; white-space:nowrap; padding:4px 8px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
              </div>
            </div>
            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
              <div class="form-group" style="margin-bottom:0;">
                <label class="form-label" style="font-size:10px;" for="d-segment-lat-a">Latitude</label>
-               <input class="form-control" id="d-segment-lat-a" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
+               <input class="form-control" id="d-segment-lat-a" type="number" step="any" style="font-size:11px;" />
              </div>
              <div class="form-group" style="margin-bottom:0;">
                <label class="form-label" style="font-size:10px;" for="d-segment-lng-a">Longitude</label>
-               <input class="form-control" id="d-segment-lng-a" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
+               <input class="form-control" id="d-segment-lng-a" type="number" step="any" style="font-size:11px;" />
              </div>
            </div>
         </div>
@@ -1132,17 +1131,17 @@
              <label class="form-label" style="font-size:10px;" for="d-segment-address-b">Endereço (busca por nome)</label>
              <div style="display:flex; gap:6px;">
                <input class="form-control" id="d-segment-address-b" placeholder="Ex: Rua B" style="flex:1; font-size:11px;" />
-               <button class="btn btn-outline btn-sm" onclick="window.geocodeSegmentAddress('B')" style="font-size:10px; white-space:nowrap; padding:4px 8px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
+               <button type="button" class="btn btn-outline btn-sm" data-ops-dispatch-action="geocode-segment" data-segment-endpoint="B" style="font-size:10px; white-space:nowrap; padding:4px 8px;"><ion-icon name="search-outline" style="vertical-align:-2px"></ion-icon> Buscar</button>
              </div>
            </div>
            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
              <div class="form-group" style="margin-bottom:0;">
                <label class="form-label" style="font-size:10px;" for="d-segment-lat-b">Latitude</label>
-               <input class="form-control" id="d-segment-lat-b" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
+               <input class="form-control" id="d-segment-lat-b" type="number" step="any" style="font-size:11px;" />
              </div>
              <div class="form-group" style="margin-bottom:0;">
                <label class="form-label" style="font-size:10px;" for="d-segment-lng-b">Longitude</label>
-               <input class="form-control" id="d-segment-lng-b" type="number" step="any" oninput="window.updateSegmentMapFromInputs()" style="font-size:11px;" />
+               <input class="form-control" id="d-segment-lng-b" type="number" step="any" style="font-size:11px;" />
              </div>
            </div>
         </div>
@@ -1153,7 +1152,7 @@
         </div>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
           <span id="ops-geo-seg-map-lbl" style="font-size:11px; font-weight:700; color:var(--text2);">Mapa (Clique 2 vezes)</span>
-          <button class="btn btn-ghost btn-sm" onclick="window.clearSegmentMap()" style="font-size:10px; color:#dc2626;"><ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Limpar Trecho</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-ops-dispatch-action="clear-segment" style="font-size:10px; color:#dc2626;"><ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Limpar Trecho</button>
         </div>
         <div id="dispatch-map-segment" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9;"></div>
       </div>
@@ -1171,17 +1170,17 @@
             <div style="flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-size:12px; color:var(--text3);" id="d-kml-label">Nenhum arquivo selecionado...</div>
             <div id="d-kml-polygon-choose-btn" style="background:#3b82f6; color:#fff; padding:8px 14px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap;"><ion-icon name="folder-outline" style="vertical-align:-2px"></ion-icon> Escolher KML</div>
           </label>
-          <input type="file" id="d-kml-file" accept=".kml,.kmz" style="display:none;" onchange="window.onKmlFileChange(event)" />
+          <input type="file" id="d-kml-file" accept=".kml,.kmz" style="display:none;" />
           <div id="d-kml-status" style="font-size:10px; color:var(--text3); margin-top:6px;">Suporta arquivos .kml com <strong>Polygon</strong> exportados do Google Earth, Google Maps ou QGIS.</div>
         </div>
         <!-- JSON Manual -->
         <div class="form-group">
           <label class="form-label" style="font-size:11px;" for="d-polygon">Ou cole manualmente (JSON)</label>
-          <textarea class="form-control" id="d-polygon" rows="3" placeholder='[[lat,lng],[lat,lng],[lat,lng]]&#10;Ex: [[-23.55,-46.63],[-23.56,-46.63],[-23.56,-46.62]]' oninput="window.refreshDispatchNavPreviewIfPossible && window.refreshDispatchNavPreviewIfPossible()"></textarea>
+          <textarea class="form-control" id="d-polygon" rows="3" placeholder='[[lat,lng],[lat,lng],[lat,lng]]&#10;Ex: [[-23.55,-46.63],[-23.56,-46.63],[-23.56,-46.62]]'></textarea>
         </div>
         <div style="font-size:10px;color:var(--text3);margin:8px 0 4px;line-height:1.4;"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Pré-visualização: área/linha <strong style="color:#2563eb">azul</strong> ou <strong style="color:#ea580c">laranja</strong> = KML; marcador <strong style="color:#059669">D</strong> = destino de navegação (bloco «Destino para navegação»).</div>
         <div id="dispatch-map-polygon" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9;"></div>
-        <button type="button" id="ops-geo-polygon-preview-btn" class="btn btn-outline btn-sm" onclick="window.renderPolygonPreview()" style="margin-top:8px; width:100%; font-size:11px;"><ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Visualizar Polígono no Mapa</button>
+        <button type="button" id="ops-geo-polygon-preview-btn" class="btn btn-outline btn-sm" data-ops-dispatch-action="polygon-preview" style="margin-top:8px; width:100%; font-size:11px;"><ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Visualizar Polígono no Mapa</button>
       </div>
 
       <!-- TAB: Sem Validação -->
@@ -1194,7 +1193,7 @@
 
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeDispatchModal()">Cancelar</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="dispatch-footer-cancel">Cancelar</button>
       <button type="button" class="btn btn-primary btn-sm" id="ops-dispatch-submit" data-ops-action="dispatch-send"><ion-icon name="rocket-outline" style="color:var(--accent);vertical-align:-2px"></ion-icon> Enviar OS</button>
     </div>
   </div>
@@ -1240,6 +1239,15 @@ import {
   refreshOpsTenantChip,
 } from './js/operations-i18n.js';
 import { getAdminUiLocale } from './js/user-pages-i18n.js';
+import {
+  OPS_IMG_ATTR_FB_300,
+  OPS_IMG_ATTR_FB_220,
+  OPS_IMG_ATTR_HIDE,
+  OPS_IMG_ATTR_REVEAL_NEXT,
+  opsImgAttrAvatar,
+  opsBindImgErrorHandlers,
+  initOpsImgErrorObserver,
+} from './js/report/imgErrorFallbackHtml.js';
 
 await initPage();
 
@@ -1645,9 +1653,9 @@ function renderDispatchCandidateChips() {
         '<span>' +
         safe +
         '</span>' +
-        '<button type="button" class="btn btn-ghost btn-sm" style="padding:0 4px;min-height:20px;line-height:1" onclick="window.removeDispatchCandidate(' +
+        '<button type="button" class="btn btn-ghost btn-sm" style="padding:0 4px;min-height:20px;line-height:1" data-ops-remove-dispatch-candidate="' +
         i +
-        ')" aria-label="Remover"><ion-icon name="close-outline" style="font-size:14px;vertical-align:-2px"></ion-icon></button></span>'
+        '" aria-label="Remover"><ion-icon name="close-outline" style="font-size:14px;vertical-align:-2px"></ion-icon></button></span>'
       );
     })
     .join('');
@@ -3277,6 +3285,7 @@ function renderModalBody(t) {
   } else {
       body.innerHTML = buildRawTab(t);
   }
+  opsBindImgErrorHandlers(body);
 }
 
 /** Duração em segundos → texto pt-BR (relatório / PDF). */
@@ -5199,7 +5208,7 @@ function buildInfoTab(t) {
     <div class="report-field" style="grid-column:1/-1;margin-top:10px">
       <div class="report-field-label">Eventos de cerca (telemetria)</div>
       <div class="report-field-value" style="padding-top:6px">
-        <button type="button" class="btn btn-outline btn-sm" data-ops-geofence-audit="${escI(t.id)}" onclick="if (window.loadOpsGeofenceAudit) window.loadOpsGeofenceAudit(this.getAttribute('data-ops-geofence-audit'))">Carregar últimos eventos (entradas/saídas da zona)</button>
+        <button type="button" class="btn btn-outline btn-sm ops-geofence-audit-btn" data-ops-geofence-audit="${escI(t.id)}">Carregar últimos eventos (entradas/saídas da zona)</button>
         <div id="ops-geofence-audit-${String(t.id).replace(/"/g, '')}" style="margin-top:10px;font-size:11px;line-height:1.45;color:var(--text2)"></div>
       </div>
     </div>
@@ -5311,7 +5320,7 @@ function buildReportTab(t) {
     return `<div style="font-size:11px;color:#475569;margin-top:6px;font-style:italic;line-height:1.35">Comentários: ${escHtml(cap)}</div>`;
   }
 
-  /** O painel web não carrega `file://`; sem isto o <img> falha e some em silêncio (onerror). */
+  /** O painel web não carrega `file://`; o bloco substitui a pré-visualização da imagem. */
   const localMediaUnavailableOpsHtml = () =>
     '<div style="padding:12px 14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:12px;color:#9a3412;line-height:1.45;font-weight:600">A imagem ficou só no dispositivo (URI local). Sincronize de novo com internet para enviar a mídia ao servidor — depois o relatório mostra a foto.</div>';
 
@@ -5437,7 +5446,7 @@ function buildReportTab(t) {
     const showFooter = true;
     const srcEsc = escapeHtmlAttr(singleVal);
     const hrefAttr = escapeHtmlAttr(singleVal);
-    const imgInner = `<img src="${srcEsc}" alt="" style="border-radius:0;width:100%;height:auto;min-height:180px;max-height:320px;object-fit:cover;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x300?text=Foto'"/>`;
+    const imgInner = `<img src="${srcEsc}" alt="" style="border-radius:0;width:100%;height:auto;min-height:180px;max-height:320px;object-fit:cover;display:block"${OPS_IMG_ATTR_FB_300} decoding="async"/>`;
     return (
       `<div style="margin-top:8px;max-width:350px;margin-left:0;margin-right:auto;background:#EA580C;border-radius:10px;border:1px solid #c2410c;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,0.06)">` +
       imgInner +
@@ -5493,7 +5502,7 @@ function buildReportTab(t) {
           const fnameEsc = escHtml(fname);
           const showImg = shouldEmbedHttpUrlAsImage(s) && !s.startsWith('file://');
           const imgPart = showImg
-            ? `<div style="margin-bottom:6px"><img src="${escapeHtmlAttr(s)}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/></div>`
+            ? `<div style="margin-bottom:6px"><img src="${escapeHtmlAttr(s)}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block"${OPS_IMG_ATTR_FB_220} decoding="async"/></div>`
             : '';
           return `${imgPart}<div style="margin-bottom:6px"><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700"><ion-icon name="document-attach-outline" style="vertical-align:-2px"></ion-icon> Download ${val.length > 1 ? 'anexo ' + (i + 1) + ' — ' : ''}${fnameEsc}</a>${capHtml}</div>`;
         }
@@ -5506,12 +5515,12 @@ function buildReportTab(t) {
           }
           const srcEsc = escapeHtmlAttr(s);
           const hrefEsc = s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-          return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Foto ${i+1}</a></div>${capHtml}</div>`;
+          return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block"${OPS_IMG_ATTR_FB_220} decoding="async"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Foto ${i+1}</a></div>${capHtml}</div>`;
         }
         if (isUrl && shouldEmbedHttpUrlAsImage(s) && !s.startsWith('file://')) {
           const srcEsc = escapeHtmlAttr(s);
           const hrefEsc = s.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-          return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Abrir ${val.length > 1 ? 'anexo ' + (i + 1) : 'link'}</a></div>${capHtml}</div>`;
+          return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block"${OPS_IMG_ATTR_FB_220} decoding="async"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Abrir ${val.length > 1 ? 'anexo ' + (i + 1) : 'link'}</a></div>${capHtml}</div>`;
         }
         if (isUrl) {
           return `<div style="margin-bottom:4px"><a href="${s}" target="_blank" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Anexo ${i+1}</a>${capHtml}</div>`;
@@ -5546,7 +5555,9 @@ function buildReportTab(t) {
           '<div style="margin-bottom:10px;border-radius:8px;overflow:hidden;border:1px solid #93c5fd;max-width:100%;background:#e2e8f0">' +
           '<img src="' +
           mapSrc.replace(/"/g, '%22') +
-          '" alt="Mapa" style="width:100%;max-height:200px;object-fit:cover;display:block" onerror="this.style.display=\'none\'"/>' +
+          '" alt="Mapa" style="width:100%;max-height:200px;object-fit:cover;display:block"' +
+          OPS_IMG_ATTR_HIDE +
+          ' />' +
           '</div>';
         html += '<div style="font-size:11px;font-weight:700;color:#0f172a;margin-bottom:6px"><ion-icon name="navigate-outline" style="vertical-align:-2px"></ion-icon> GPS do dispositivo</div>';
         html += '<div style="font-size:11px;color:#475569;margin-bottom:2px">' + o.gps.lat.toFixed(6) + ', ' + o.gps.lng.toFixed(6) + acc + '</div>';
@@ -5736,7 +5747,7 @@ function buildReportTab(t) {
       try { fname = decodeURIComponent(fname); } catch (e) {}
       const showImg = shouldEmbedHttpUrlAsImage(str) && !str.startsWith('file://');
       const imgPart = showImg
-        ? `<div style="margin-bottom:6px"><img src="${escapeHtmlAttr(str)}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/></div>`
+        ? `<div style="margin-bottom:6px"><img src="${escapeHtmlAttr(str)}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block"${OPS_IMG_ATTR_FB_220} decoding="async"/></div>`
         : '';
       return `${imgPart}<div><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-weight:700"><ion-icon name="document-attach-outline" style="vertical-align:-2px"></ion-icon> Download — ${escHtml(fname)}</a>${capHtml}</div>`;
     }
@@ -5758,7 +5769,7 @@ function buildReportTab(t) {
       }
       const srcEsc = escapeHtmlAttr(str);
       const hrefEsc = str.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-      return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Abrir foto</a></div>${capHtml}</div>`;
+      return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block"${OPS_IMG_ATTR_FB_220} decoding="async"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener" style="color:var(--accent)"><ion-icon name="image-outline" style="vertical-align:-2px"></ion-icon> Abrir foto</a></div>${capHtml}</div>`;
     }
     // Signature: SIG_V1|meta:{...}|path1|path2|...
     if (str.startsWith('SIG_V1|')) {
@@ -5817,7 +5828,7 @@ function buildReportTab(t) {
       if (shouldEmbedHttpUrlAsImage(str)) {
         const srcEsc = escapeHtmlAttr(str);
         const hrefEsc = str.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-        return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Ver anexo</a></div>${capHtml}</div>`;
+        return `<div style="margin-top:8px"><img src="${srcEsc}" alt="" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #e2e8f0;display:block"${OPS_IMG_ATTR_FB_220} decoding="async"/><div style="font-size:11px;margin-top:4px"><a href="${hrefEsc}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Ver anexo</a></div>${capHtml}</div>`;
       }
       return `<div><a href="${str}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)"><ion-icon name="attach-outline" style="vertical-align:-2px"></ion-icon> Ver Anexo</a>${capHtml}</div>`;
     }
@@ -6237,7 +6248,7 @@ function closeRevisionPickerModal() {
   }
   window._revisionPickerTaskId = null;
 }
-/* Módulo ES: onclick="" só vê globais em window — sem isto Cancelar e o X não fazem nada. */
+/* Expõe no window para código dinâmico e testes. */
 window.closeRevisionPickerModal = closeRevisionPickerModal;
 
 /** Opções do picker criadas via DOM (evita HTML partido se submissionId tiver caracteres especiais). */
@@ -6702,7 +6713,11 @@ window.printReport = async function() {
     }
     return (
       '<div style="border:1px solid #bae6fd;border-radius:10px;overflow:hidden;background:#f0f9ff;max-width:560px">' +
-        '<img src="' + mapSrc + '" alt="Mapa" style="width:100%;height:auto;display:block;min-height:140px;max-height:240px;object-fit:cover;background:#e2e8f0" onerror="var n=this.nextElementSibling;if(n)n.style.display=\'block\';this.style.display=\'none\';" />' +
+        '<img src="' +
+        mapSrc +
+        '" alt="Mapa" style="width:100%;height:auto;display:block;min-height:140px;max-height:240px;object-fit:cover;background:#e2e8f0"' +
+        OPS_IMG_ATTR_REVEAL_NEXT +
+        ' />' +
         '<div class="pdf-loc-fallback" style="display:none;padding:12px;background:#e2e8f0;font-size:10px;color:#64748b;text-align:center">Pré-visualização do mapa indisponível — use os links abaixo.</div>' +
         '<div style="padding:12px 14px">' +
           '<div style="font-size:11px;font-weight:900;color:#0c4a6e;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Alfinete no mapa</div>' +
@@ -7367,7 +7382,7 @@ window.printReport = async function() {
                 const idx = attachList.length > 1 ? 'Anexo ' + (i + 1) + ' · ' : '';
                 const preview =
                   shouldEmbedHttpUrlAsImage(u)
-                    ? `<div style="margin-top:8px;max-width:350px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc"><img src="${escAttr(u)}" alt="" class="pdf-photo-img" style="width:100%;max-height:240px;object-fit:contain;display:block" onerror="this.onerror=null;this.src='https://placehold.co/400x220/f1f5f9/64748b?text=Foto+indispon%C3%ADvel'"/></div>`
+                    ? `<div style="margin-top:8px;max-width:350px;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc"><img src="${escAttr(u)}" alt="" class="pdf-photo-img" style="width:100%;max-height:240px;object-fit:contain;display:block"${OPS_IMG_ATTR_FB_220} decoding="async"/></div>`
                     : '';
                 return (
                   preview +
@@ -7444,7 +7459,9 @@ window.printReport = async function() {
                     imgInnerHtml =
                       '<img src="' +
                       imgSrc +
-                      '" class="pdf-photo-img" style="max-width:100%;max-height:280px;width:auto;height:auto;object-fit:contain;display:block" onerror="this.src=\'https://placehold.co/400x300?text=Foto\'"/>';
+                      '" class="pdf-photo-img" style="max-width:100%;max-height:280px;width:auto;height:auto;object-fit:contain;display:block"' +
+                      OPS_IMG_ATTR_FB_300 +
+                      ' />';
                   } else if (singleVal) {
                     imgInnerHtml =
                       '<div style="padding:16px;text-align:center;color:#64748b;font-size:10px;font-weight:600">Pré-visualização indisponível para este arquivo.</div>';
@@ -7523,7 +7540,7 @@ window.printReport = async function() {
                 const showFooter = !!(gpsComplement || singleVal.includes('live') || stampTypes);
                 const idxLine = photoUris.length > 1 ? ` · Foto ${fotoIndex}` : '';
                 const imgSrc = escUrlAttrPdf(singleVal);
-                const imgInner = `<img src="${imgSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block" onerror="this.src='https://placehold.co/400x300?text=Foto'"/>`;
+                const imgInner = `<img src="${imgSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block"${OPS_IMG_ATTR_FB_300} decoding="async"/>`;
                 return (
                   `
                 <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#EA580C;border-radius:8px;border:1px solid #c2410c;overflow:hidden;display:flex;flex-direction:column;">
@@ -8015,7 +8032,7 @@ window.printReport = async function() {
              <div class="pdf-tech-mail" style="color:#93c5fd">${t.ownerEmail || '—'}</div>
           </div>
           <div class="pdf-tech-avatar" style="border:2px solid #fff">
-             <img src="${avatarUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" onerror="this.style.display='none'; this.parentElement.innerHTML='<span style=&quot;font-size:14px; font-weight:900;&quot;>${(t.ownerEmail||'T')[0].toUpperCase()}</span>'">
+             <img src="${avatarUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;"${opsImgAttrAvatar((t.ownerEmail || 'T')[0].toUpperCase())} decoding="async">
           </div>
        </div>
     </div>`
@@ -8176,6 +8193,7 @@ window.printReport = async function() {
   printEl.innerHTML =
     themeStyle +
     `<div class="pdf-theme-scope" style="font-family:${escAttr(th.fontFamily)};color:${escAttr(th.colorText)};font-size:${12 * th.fontScale}px;line-height:1.45">${orderedParts.join('')}</div>`;
+  opsBindImgErrorHandlers(printEl);
 
   await new Promise(function (resolve) {
     requestAnimationFrame(function () {
@@ -8271,6 +8289,7 @@ function renderRevisionSnapshotBody() {
   } else {
     body.innerHTML = `<div class="report-field-value" style="max-height:55vh;overflow:auto;padding:12px">${formatStructuredValueForReportHtml(data.responses ?? {}, escHtmlModule, 0, { borderColor: 'var(--border)', maxDepth: 14 })}</div>`;
   }
+  opsBindImgErrorHandlers(body);
 }
 
 window.switchRevisionSnapshotTab = function (tab) {
@@ -8408,6 +8427,15 @@ window.cancelTaskFromBoard = async function (taskId) {
     const el = e.target;
     if (!(el instanceof Element)) return;
 
+    const sortBtn = el.closest('button[data-ops-toggle-col-sort]');
+    if (sortBtn && board.contains(sortBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const colId = sortBtn.getAttribute('data-ops-toggle-col-sort');
+      if (colId && typeof window.toggleColSort === 'function') window.toggleColSort(colId);
+      return;
+    }
+
     const copyBtn = el.closest('.ops-copy-track-url');
     if (copyBtn && board.contains(copyBtn)) {
       e.preventDefault();
@@ -8469,6 +8497,16 @@ window.cancelTaskFromBoard = async function (taskId) {
   if (!modal || modal.dataset.opsRevHistDelegBound === '1') return;
   modal.dataset.opsRevHistDelegBound = '1';
   modal.addEventListener('click', (e) => {
+    const gf = e.target instanceof Element ? e.target.closest('.ops-geofence-audit-btn') : null;
+    if (gf && modal.contains(gf)) {
+      const execId = gf.getAttribute('data-ops-geofence-audit');
+      if (execId && typeof window.loadOpsGeofenceAudit === 'function') {
+        e.preventDefault();
+        window.loadOpsGeofenceAudit(execId);
+      }
+      return;
+    }
+
     const el = e.target instanceof Element ? e.target.closest('.ops-rev-action-btn') : null;
     if (!el || !modal.contains(el)) return;
     const action = el.getAttribute('data-ops-rev-action');
@@ -9509,7 +9547,292 @@ async function maybeOpenExecutionFromQuery() {
   }
 }
 
+/** Toolbar, filtros por coluna, reabrir FT e campos do modal de despacho — sem oninput/onchange inline. */
+function initOperationsToolbarKanbanAndDispatchFieldListeners() {
+  const sentinel = document.getElementById('filter-scope');
+  if (!sentinel || sentinel.dataset.opsToolbarFieldsInit === '1') return;
+  sentinel.dataset.opsToolbarFieldsInit = '1';
+
+  const bindOnceInput = (id, handler) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.opsInputBound === '1') return;
+    el.dataset.opsInputBound = '1';
+    el.addEventListener('input', handler);
+  };
+  const bindOnceChange = (id, handler) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.opsChangeBound === '1') return;
+    el.dataset.opsChangeBound = '1';
+    el.addEventListener('change', handler);
+  };
+
+  bindOnceChange('filter-scope', () => {
+    window.onOpsScopeFilterChange();
+  });
+  bindOnceChange('filter-email', () => {
+    window.applyFilters();
+  });
+  bindOnceChange('filter-voice-sync', () => {
+    window.applyFilters();
+  });
+  bindOnceInput('filter-search', () => {
+    window.applyFilters();
+  });
+
+  ['pending', 'progress', 'completed', 'error', 'cancelled'].forEach((colId) => {
+    const inp = document.getElementById(`ops-f-${colId}`);
+    if (inp && inp.dataset.opsInputBound !== '1') {
+      inp.dataset.opsInputBound = '1';
+      inp.addEventListener('input', () => {
+        window.updateColFilter(colId, inp.value);
+      });
+    }
+    const sel = document.getElementById(`ops-sort-key-${colId}`);
+    if (sel && sel.dataset.opsChangeBound !== '1') {
+      sel.dataset.opsChangeBound = '1';
+      sel.addEventListener('change', () => {
+        window.updateColSortKey(colId, sel.value);
+      });
+    }
+  });
+
+  bindOnceChange('reopen-revision-same', () => {
+    window.toggleReopenRevisionTechUi();
+  });
+  bindOnceChange('reopen-revision-other', () => {
+    window.toggleReopenRevisionTechUi();
+  });
+
+  const dEmail = document.getElementById('d-email');
+  if (dEmail && dEmail.dataset.opsDispatchOfferSync !== '1') {
+    dEmail.dataset.opsDispatchOfferSync = '1';
+    dEmail.addEventListener('input', () => {
+      if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') {
+        window.syncDispatchBroadcastOfferExpiresUi();
+      }
+    });
+  }
+
+  bindOnceChange('d-oferta', () => {
+    if (typeof window.syncDispatchBroadcastOfferExpiresUi === 'function') {
+      window.syncDispatchBroadcastOfferExpiresUi();
+    }
+  });
+  bindOnceChange('d-template', () => {
+    if (typeof window.updateDispatchPlannedEndPreview === 'function') {
+      window.updateDispatchPlannedEndPreview();
+    }
+  });
+  bindOnceInput('d-scheduled-start', () => {
+    if (typeof window.updateDispatchPlannedEndPreview === 'function') {
+      window.updateDispatchPlannedEndPreview();
+    }
+  });
+  bindOnceInput('d-expected-duration-override', () => {
+    if (typeof window.updateDispatchPlannedEndPreview === 'function') {
+      window.updateDispatchPlannedEndPreview();
+    }
+  });
+
+  ['d-nav-lat', 'd-nav-lng'].forEach((id) => {
+    bindOnceInput(id, () => {
+      if (typeof window.refreshDispatchNavPreviewIfPossible === 'function') {
+        window.refreshDispatchNavPreviewIfPossible();
+      }
+    });
+  });
+  ['d-lat', 'd-lng', 'd-radius'].forEach((id) => {
+    bindOnceInput(id, () => {
+      if (typeof window.updateMapFromInputs === 'function') {
+        window.updateMapFromInputs();
+      }
+    });
+  });
+  ['d-segment-lat-a', 'd-segment-lng-a', 'd-segment-lat-b', 'd-segment-lng-b'].forEach((id) => {
+    bindOnceInput(id, () => {
+      if (typeof window.updateSegmentMapFromInputs === 'function') {
+        window.updateSegmentMapFromInputs();
+      }
+    });
+  });
+  bindOnceInput('d-polygon', () => {
+    if (typeof window.refreshDispatchNavPreviewIfPossible === 'function') {
+      window.refreshDispatchNavPreviewIfPossible();
+    }
+  });
+
+  const kmlRoute = document.getElementById('d-kml-route-file');
+  if (kmlRoute && kmlRoute.dataset.opsChangeBound !== '1') {
+    kmlRoute.dataset.opsChangeBound = '1';
+    kmlRoute.addEventListener('change', (e) => {
+      if (typeof window.onKmlRouteFileChange === 'function') window.onKmlRouteFileChange(e);
+    });
+  }
+  const kmlPoly = document.getElementById('d-kml-file');
+  if (kmlPoly && kmlPoly.dataset.opsChangeBound !== '1') {
+    kmlPoly.dataset.opsChangeBound = '1';
+    kmlPoly.addEventListener('change', (e) => {
+      if (typeof window.onKmlFileChange === 'function') window.onKmlFileChange(e);
+    });
+  }
+}
+
+// ── Botões estáticos / modais (sem onclick inline) ─────────────
+function initOperationsPageDelegatedUi() {
+  const mark = (n) => {
+    if (n) n.dataset.opsBound = '1';
+  };
+  const bindClick = (id, handler) => {
+    const n = typeof id === 'string' ? document.getElementById(id) : id;
+    if (!n || n.dataset.opsBound === '1') return;
+    mark(n);
+    n.addEventListener('click', (e) => {
+      e.preventDefault();
+      handler();
+    });
+  };
+
+  bindClick('ops-btn-refresh', () => {
+    void window.loadBoard();
+  });
+  bindClick('ops-btn-dispatch', () => {
+    void window.openDispatchModal();
+  });
+  bindClick('ops-board-hint-clear', () => {
+    if (typeof window.clearOpsUiFilters === 'function') window.clearOpsUiFilters();
+  });
+
+  bindClick('detail-modal-close', () => {
+    window.closeDetailModal();
+  });
+  bindClick('detail-footer-close-btn', () => {
+    window.closeDetailModal();
+  });
+  bindClick('detail-pdf-btn', () => {
+    void window.printReport();
+  });
+  bindClick('tab-info', () => {
+    window.switchTab('info');
+  });
+  bindClick('tab-report', () => {
+    window.switchTab('report');
+  });
+  bindClick('tab-raw', () => {
+    window.switchTab('raw');
+  });
+  bindClick('detail-reopen-revision-btn', () => {
+    if (typeof window.openReopenRevisionFromDetail === 'function') void window.openReopenRevisionFromDetail();
+  });
+
+  bindClick('revision-picker-modal-close', () => {
+    window.closeRevisionPickerModal();
+  });
+  bindClick('revision-picker-cancel-btn', () => {
+    window.closeRevisionPickerModal();
+  });
+  bindClick('revision-picker-confirm-btn', () => {
+    void window.confirmRevisionPicker();
+  });
+
+  bindClick('revision-snapshot-modal-close', () => {
+    window.closeRevisionSnapshotModal();
+  });
+  bindClick('revision-snapshot-footer-close', () => {
+    window.closeRevisionSnapshotModal();
+  });
+  bindClick('rev-snap-tab-form', () => {
+    window.switchRevisionSnapshotTab('form');
+  });
+  bindClick('rev-snap-tab-meta', () => {
+    window.switchRevisionSnapshotTab('meta');
+  });
+  bindClick('rev-snap-tab-json', () => {
+    window.switchRevisionSnapshotTab('json');
+  });
+
+  bindClick('reopen-revision-modal-close', () => {
+    window.closeReopenRevisionModal();
+  });
+  bindClick('reopen-revision-cancel-btn', () => {
+    window.closeReopenRevisionModal();
+  });
+  bindClick('reopen-revision-confirm-btn', () => {
+    void window.submitReopenRevision();
+  });
+
+  bindClick('ops-chat-modal-close', () => {
+    window.closeOpsChatModal();
+  });
+  bindClick('ops-chat-footer-close', () => {
+    window.closeOpsChatModal();
+  });
+  bindClick('ops-chat-send-btn', () => {
+    void window.submitOpsChatMessage();
+  });
+
+  bindClick('dispatch-modal-close', () => {
+    window.closeDispatchModal();
+  });
+  bindClick('dispatch-footer-cancel', () => {
+    window.closeDispatchModal();
+  });
+
+  const dispatchModal = document.getElementById('dispatch-modal');
+  if (dispatchModal && dispatchModal.dataset.opsDispatchGeoDelegBound !== '1') {
+    dispatchModal.dataset.opsDispatchGeoDelegBound = '1';
+    dispatchModal.addEventListener('click', (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+
+      const rm = t.closest('[data-ops-remove-dispatch-candidate]');
+      if (rm && dispatchModal.contains(rm)) {
+        e.preventDefault();
+        const idx = parseInt(rm.getAttribute('data-ops-remove-dispatch-candidate') || '', 10);
+        if (Number.isFinite(idx) && typeof window.removeDispatchCandidate === 'function') {
+          window.removeDispatchCandidate(idx);
+        }
+        return;
+      }
+
+      const geoBtn = t.closest('[data-ops-geo-tab]');
+      if (geoBtn && dispatchModal.contains(geoBtn)) {
+        const mode = geoBtn.getAttribute('data-ops-geo-tab');
+        if (mode && typeof window.switchGeoTab === 'function') {
+          e.preventDefault();
+          window.switchGeoTab(mode);
+        }
+        return;
+      }
+
+      const actBtn = t.closest('[data-ops-dispatch-action]');
+      if (actBtn && dispatchModal.contains(actBtn)) {
+        const action = actBtn.getAttribute('data-ops-dispatch-action');
+        e.preventDefault();
+        if (action === 'add-candidate' && typeof window.addDispatchCandidateFromInput === 'function') {
+          window.addDispatchCandidateFromInput();
+        } else if (action === 'geocode-nav' && typeof window.geocodeNavAddress === 'function') {
+          void window.geocodeNavAddress();
+        } else if (action === 'geocode-address' && typeof window.geocodeAddress === 'function') {
+          void window.geocodeAddress();
+        } else if (action === 'use-my-location' && typeof window.useMyLocation === 'function') {
+          window.useMyLocation();
+        } else if (action === 'geocode-segment' && typeof window.geocodeSegmentAddress === 'function') {
+          const end = actBtn.getAttribute('data-segment-endpoint') || 'A';
+          void window.geocodeSegmentAddress(end);
+        } else if (action === 'clear-segment' && typeof window.clearSegmentMap === 'function') {
+          window.clearSegmentMap();
+        } else if (action === 'polygon-preview' && typeof window.renderPolygonPreview === 'function') {
+          window.renderPolygonPreview();
+        }
+      }
+    });
+  }
+}
+
 // ── Auto-refresh (30s) ─────────────────────────────────────────
+initOpsImgErrorObserver();
+initOperationsToolbarKanbanAndDispatchFieldListeners();
+initOperationsPageDelegatedUi();
 initDispatchTechAutocomplete();
 initDispatchSubmitButton();
 void (async () => {

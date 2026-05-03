@@ -723,10 +723,12 @@ import {
   MOCK_PREVIEW_TASK,
   MOCK_PREVIEW_SCHEMA,
 } from './js/report/reportPdfPreview.js';
+import { opsBindImgErrorHandlers, initOpsImgErrorObserver } from './js/report/imgErrorFallbackHtml.js';
 import { applyReportsStaticI18n, reportsT, reportModuleLabel } from './js/reports-i18n.js';
 
 await initPage();
 applyReportsStaticI18n();
+initOpsImgErrorObserver();
 
 function repEscHtml(s) {
   return String(s ?? '')
@@ -1004,6 +1006,7 @@ async function runPreview() {
   const root = document.getElementById('preview-root');
   root.classList.add('pdf-theme-root');
   root.innerHTML = buildReportPreviewHtml(cfg, previewTask, previewSchema);
+  opsBindImgErrorHandlers(root);
 }
 
 function schedulePreview() {

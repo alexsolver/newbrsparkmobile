@@ -103,6 +103,7 @@ import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { ChecklistCalculatedFieldSync } from '../../src/components/ChecklistCalculatedFieldSync';
 import { warnDev } from '../../src/utils/devLog';
 import { agentDebugLog } from '../../src/utils/agentDebugIngest';
+import { verifyFaceWithApi } from '../../src/services/verifyFaceApi';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { fetchExecutionOpsChat, getOpsChatAckStorageKey } from '../../src/services/executionOpsChat';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
@@ -2135,15 +2136,16 @@ async function mergeAddrIntoMediaUriIfStillCurrent(args: {
   applyInput(fieldId, nextVal as string | string[], scope);
   try {
     const bioKey = facialBiometricStorageKey(fieldId);
-    const snap2 = getResponses();
-    const bioRaw = getScopedFieldValue(snap2, scope ?? null, bioKey);
+    /** Ler o ref outra vez: o flush de `verify-face` pode ter corrido enquanto o geocode estava pendente — não regressar `pending` por cima de `at`/motor. */
+    const snapBio = getResponses();
+    const bioRaw = getScopedFieldValue(snapBio, scope ?? null, bioKey);
     const aud = parseFacialBiometricAudit(bioRaw);
     /** Morada assíncrona: gravar em `__biometric` sempre que existir auditoria facial (não só `pending`), senão após validação o PDF perde o endereço quando a URL pública perde a query. */
     if (aud && typeof aud === 'object') {
-      const nextBio = {
-        ...(aud as Record<string, unknown>),
-        captureAddr: line,
-      };
+      const nextBio: Record<string, unknown> = { ...(aud as Record<string, unknown>), captureAddr: line };
+      if (nextBio.at || nextBio.engine != null || typeof nextBio.confidence === 'number') {
+        delete nextBio.pending;
+      }
       applyInput(bioKey, JSON.stringify(nextBio), scope);
     }
   } catch {
@@ -2328,58 +2330,21 @@ type VerifyFaceApiResult =
 
 async function postVerifyFaceForField(fieldData: any, imgBase64: string): Promise<VerifyFaceApiResult> {
   try {
-    const rawResp = await apiFetch('/api/vision/verify-face', {
-      method: 'POST',
-      body: JSON.stringify({
-        imageBase64: imgBase64,
-        facialAuthMode: fieldData?.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
-      }),
-    });
-    let apiResp: any;
-    try {
-      apiResp = await rawResp.json();
-    } catch {
-      // #region agent log
-      agentDebugLog({
-        location: 'checklist/[id].tsx:postVerifyFaceForField',
-        message: 'verify_face_json_parse_fail',
-        data: { httpStatus: rawResp.status, httpOk: rawResp.ok },
-        hypothesisId: 'H2',
-      });
-      // #endregion
-      return { ok: false, kind: 'network' };
+    const mode = fieldData?.facialAuthMode === 'identify' ? 'identify' : 'self_verify';
+    const vr = await verifyFaceWithApi(imgBase64, mode);
+    if (vr.ok) {
+      return { ok: true, data: vr.data };
     }
-    // #region agent log
-    agentDebugLog({
-      location: 'checklist/[id].tsx:postVerifyFaceForField',
-      message: 'verify_face_http_body',
-      data: {
-        httpStatus: rawResp.status,
-        httpOk: rawResp.ok,
-        hasError: Boolean(apiResp?.error),
-        matchTrue: apiResp?.match === true,
-      },
-      hypothesisId: 'H2',
-    });
-    // #endregion
-    if (apiResp?.error) {
-      const msg = sanitizeFacialUserFacingCopy(String(apiResp.error));
+    if (vr.kind === 'error_msg') {
+      const msg = sanitizeFacialUserFacingCopy(vr.message) || vr.message;
       return { ok: false, kind: 'error_msg', message: msg || 'Erro ao validar a biometria facial.' };
     }
-    if (!apiResp?.match) {
-      const nm = sanitizeFacialUserFacingCopy(apiResp?.message);
+    if (vr.kind === 'no_match') {
+      const nm = sanitizeFacialUserFacingCopy(vr.message);
       return { ok: false, kind: 'no_match', message: nm || undefined };
     }
-    return { ok: true, data: apiResp };
+    return { ok: false, kind: 'network' };
   } catch {
-    // #region agent log
-    agentDebugLog({
-      location: 'checklist/[id].tsx:postVerifyFaceForField',
-      message: 'verify_face_fetch_throw',
-      data: {},
-      hypothesisId: 'H2',
-    });
-    // #endregion
     return { ok: false, kind: 'network' };
   }
 }
@@ -4185,7 +4150,8 @@ export default function ChecklistEngine() {
     if (fieldData?.allowMediaDescription) {
       handleInput(mediaCaptionStorageKey(fieldId), '', scope);
     }
-    void mergeAddrIntoMediaUriIfStillCurrent({
+    /** Aguardar morada na URI/`__biometric` antes do flush — se isto for `void`, o geocode pode terminar *depois* do verify e sobrescrever o JSON ainda com `pending: true`, anulando a validação. */
+    await mergeAddrIntoMediaUriIfStillCurrent({
       getResponses: () => responsesRefForFacial.current,
       applyInput: (fid, val, sc) => {
         const hi = handleInputRef.current;
@@ -6700,7 +6666,7 @@ export default function ChecklistEngine() {
     if (!tmpl?.schemaData?.length) return;
     try {
       const netState = await Network.getNetworkStateAsync();
-      if (netState.isConnected === false) {
+      if (netState?.isConnected === false) {
         // #region agent log
         agentDebugLog({
           location: 'checklist/[id].tsx:flushPendingFacialVerifications',
@@ -6711,16 +6677,18 @@ export default function ChecklistEngine() {
         // #endregion
         return;
       }
-    } catch {
+    } catch (e) {
       // #region agent log
       agentDebugLog({
         location: 'checklist/[id].tsx:flushPendingFacialVerifications',
-        message: 'facial_flush_abort_net_check',
-        data: {},
+        message: 'facial_flush_net_check_throw_continue',
+        data: {
+          errName: e instanceof Error ? e.name : typeof e,
+        },
         hypothesisId: 'H4',
       });
       // #endregion
-      return;
+      /** Alinhado a `isLikelyOnline` / recolha de ponto: falha ao ler estado de rede não deve bloquear o flush indefinidamente. */
     }
     // #region agent log
     agentDebugLog({
@@ -6746,7 +6714,10 @@ export default function ChecklistEngine() {
 
         const runForScope = async (scope: SectionRepeatScope | null) => {
           const snap = responsesRefForFacial.current;
-          const bioRaw = getScopedFieldValue(snap, scope, facialBiometricStorageKey(f.id));
+          const bioKey = facialBiometricStorageKey(f.id);
+          const hiFlush = handleInputRef.current;
+          if (typeof hiFlush !== 'function') return;
+          const bioRaw = getScopedFieldValue(snap, scope, bioKey);
           const audit = parseFacialBiometricAudit(bioRaw);
           if (!(audit as { pending?: boolean } | null)?.pending) return;
           const uriRaw = getScopedFieldValue(snap, scope, f.id);
@@ -6756,9 +6727,83 @@ export default function ChecklistEngine() {
           let b64: string;
           try {
             const info = await FileSystem.getInfoAsync(path);
-            if (!info.exists) return;
+            if (!info.exists) {
+              // #region agent log
+              agentDebugLog({
+                location: 'checklist/[id].tsx:flushPendingFacialVerifications',
+                message: 'facial_flush_image_missing',
+                data: { fieldId: f.id, pathLen: path.length },
+                hypothesisId: 'H5',
+              });
+              // #endregion
+              const prevCap = (audit as { capturedAt?: string })?.capturedAt;
+              const prevGeo = audit as {
+                captureLat?: string;
+                captureLng?: string;
+                captureAddr?: string;
+              };
+              hiFlush(
+                bioKey,
+                JSON.stringify({
+                  pending: false,
+                  deferredValidationFailed: true,
+                  at: new Date().toISOString(),
+                  ...(typeof prevCap === 'string' && prevCap.trim()
+                    ? { capturedAt: prevCap.trim() }
+                    : {}),
+                  ...(prevGeo.captureLat && prevGeo.captureLng
+                    ? { captureLat: String(prevGeo.captureLat), captureLng: String(prevGeo.captureLng) }
+                    : {}),
+                  ...(prevGeo.captureAddr && String(prevGeo.captureAddr).trim()
+                    ? { captureAddr: String(prevGeo.captureAddr).trim() }
+                    : {}),
+                  facialAuthMode: f.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
+                  message:
+                    'A imagem facial já não está disponível neste dispositivo (ficheiro apagado ou URI inválida). Volte a capturar o rosto.',
+                }),
+                scope,
+              );
+              return;
+            }
             b64 = await FileSystem.readAsStringAsync(path, { encoding: 'base64' });
-          } catch {
+          } catch (err) {
+            // #region agent log
+            agentDebugLog({
+              location: 'checklist/[id].tsx:flushPendingFacialVerifications',
+              message: 'facial_flush_image_read_err',
+              data: {
+                fieldId: f.id,
+                errName: err instanceof Error ? err.name : typeof err,
+              },
+              hypothesisId: 'H5',
+            });
+            // #endregion
+            const prevCapEr = (audit as { capturedAt?: string })?.capturedAt;
+            const prevGeoEr = audit as {
+              captureLat?: string;
+              captureLng?: string;
+              captureAddr?: string;
+            };
+            hiFlush(
+              bioKey,
+              JSON.stringify({
+                pending: false,
+                deferredValidationFailed: true,
+                at: new Date().toISOString(),
+                ...(typeof prevCapEr === 'string' && prevCapEr.trim()
+                  ? { capturedAt: prevCapEr.trim() }
+                  : {}),
+                ...(prevGeoEr.captureLat && prevGeoEr.captureLng
+                  ? { captureLat: String(prevGeoEr.captureLat), captureLng: String(prevGeoEr.captureLng) }
+                  : {}),
+                ...(prevGeoEr.captureAddr && String(prevGeoEr.captureAddr).trim()
+                  ? { captureAddr: String(prevGeoEr.captureAddr).trim() }
+                  : {}),
+                facialAuthMode: f.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
+                message: 'Não foi possível ler a foto facial para validar. Volte a capturar.',
+              }),
+              scope,
+            );
             return;
           }
           const fk = visionAnalyzeBusyKey(f.id, scope);
@@ -6769,9 +6814,6 @@ export default function ChecklistEngine() {
           } finally {
             setFacialVerifyBusyId((cur) => (cur === fk ? null : cur));
           }
-          const bioKey = facialBiometricStorageKey(f.id);
-          const hiFlush = handleInputRef.current;
-          if (typeof hiFlush !== 'function') return;
           if (result.ok) {
             const apiResp = result.data as any;
             const prevCap = (audit as { capturedAt?: string })?.capturedAt;

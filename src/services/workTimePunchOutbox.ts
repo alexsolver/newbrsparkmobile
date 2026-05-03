@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { apiFetch } from './auth';
+import { verifyFaceWithApi } from './verifyFaceApi';
 import {
   isConnectivityFailure,
   postWorkTimePunch,
@@ -11,6 +12,7 @@ import {
   type WorkTimePunchType,
 } from './workTimeService';
 import { emitWorkTimeJourneyChanged } from '../lib/workTimeJourneyEvents';
+import { agentDebugLog } from '../utils/agentDebugIngest';
 
 const OUTBOX_KEY = '@brspark_work_time_punch_outbox';
 const SUBDIR = 'work-time-outbox/';
@@ -136,14 +138,8 @@ export async function pushWorkTimePunchOutbox(): Promise<void> {
     if (q.length === 0) return;
 
     const remaining: WorkTimeOutboxPunch[] = [];
-    let abortedByNetwork = false;
 
     for (const item of q) {
-      if (abortedByNetwork) {
-        remaining.push(item);
-        continue;
-      }
-
       try {
         let faceVerificationId = item.faceVerificationId;
         let faceScore = item.faceScore;
@@ -160,24 +156,30 @@ export async function pushWorkTimePunchOutbox(): Promise<void> {
             continue;
           }
           const imageBase64 = await FileSystem.readAsStringAsync(path, { encoding: 'base64' });
-          const vf = await apiFetch('/api/vision/verify-face', {
-            method: 'POST',
-            body: JSON.stringify({
-              imageBase64,
-              facialAuthMode: 'self_verify',
-            }),
-          });
-          const j = await vf.json().catch(() => ({}));
-          if (!vf.ok || j?.error) {
-            const msg = typeof j?.error === 'string' ? j.error : 'Verificação facial indisponível.';
+          const vr = await verifyFaceWithApi(imageBase64, 'self_verify');
+          if (!vr.ok) {
+            if (vr.kind === 'network') {
+              // #region agent log
+              agentDebugLog({
+                location: 'workTimePunchOutbox.ts:face_verify',
+                message: 'outbox_verify_network_retry',
+                data: {},
+                hypothesisId: 'OBQ',
+              });
+              // #endregion
+              remaining.push(item);
+              continue;
+            }
+            const msg =
+              vr.kind === 'error_msg'
+                ? vr.message
+                : typeof vr.message === 'string'
+                  ? vr.message
+                  : 'Rosto não corresponde ao cadastro.';
             remaining.push({ ...item, lastError: msg });
             continue;
           }
-          if (!j?.match) {
-            const msg = typeof j?.message === 'string' ? j.message : 'Rosto não corresponde ao cadastro.';
-            remaining.push({ ...item, lastError: msg });
-            continue;
-          }
+          const j = vr.data;
           const uid = j?.identifiedUserId != null ? String(j.identifiedUserId) : 'self';
           faceVerificationId = `vision:self_verify:${uid}:${Date.now()}`;
           faceScore = typeof j.confidence === 'number' ? j.confidence : null;
@@ -212,7 +214,14 @@ export async function pushWorkTimePunchOutbox(): Promise<void> {
         await deleteFaceFileIfAny(item);
       } catch (e) {
         if (isConnectivityFailure(e)) {
-          abortedByNetwork = true;
+          // #region agent log
+          agentDebugLog({
+            location: 'workTimePunchOutbox.ts:post_catch',
+            message: 'outbox_post_network_retry',
+            data: {},
+            hypothesisId: 'OBQ',
+          });
+          // #endregion
           remaining.push(item);
           continue;
         }

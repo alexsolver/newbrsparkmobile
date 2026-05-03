@@ -56,7 +56,7 @@
             </label>
           </div>
           <div class="data-toolbar-actions">
-            <button type="button" class="btn btn-primary" onclick="openNewTag()">
+            <button type="button" class="btn btn-primary" id="mt-btn-new">
               <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
               Nova metatag
             </button>
@@ -82,7 +82,7 @@
   <div class="modal modal-lg">
     <div class="modal-header">
       <span class="modal-title" id="tag-modal-title">Nova Metatag</span>
-      <button type="button" class="modal-close" onclick="closeModal('tag-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="mt-modal-tag-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body">
       <input type="hidden" id="tag-id" />
@@ -130,7 +130,7 @@
       <div class="form-group"><label class="form-label">Ordem de exibição</label><input class="form-control" id="tag-sort" type="number" value="0" /></div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost" onclick="closeModal('tag-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" id="mt-modal-tag-cancel">Cancelar</button>
       <button type="button" class="btn btn-primary" id="save-tag-btn">Salvar metatag</button>
     </div>
   </div>
@@ -142,6 +142,8 @@
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
   );
+  document.getElementById('mt-modal-tag-close')?.addEventListener('click', () => closeModal('tag-modal'));
+  document.getElementById('mt-modal-tag-cancel')?.addEventListener('click', () => closeModal('tag-modal'));
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
@@ -729,6 +731,7 @@
     updateIconPreview('help-outline');
     openModal('tag-modal');
   };
+  document.getElementById('mt-btn-new')?.addEventListener('click', () => window.openNewTag());
 
   window.editTag = (id) => {
     const t = metatagsRowsCache.find((x) => x.id === id || String(x.id) === String(id));

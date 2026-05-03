@@ -125,7 +125,7 @@
       <div class="data-toolbar">
         <div class="data-toolbar-main"></div>
         <div class="data-toolbar-actions">
-          <button type="button" class="btn btn-primary" id="cmp-btn-new" onclick="openEditor(null, null)">
+          <button type="button" class="btn btn-primary" id="cmp-btn-new">
             <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
             Nova versão
           </button>
@@ -153,7 +153,7 @@
 <div class="editor-overlay" id="editor-overlay">
   <div style="max-width:820px;margin:0 auto">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-      <button type="button" class="btn btn-ghost" id="cmp-editor-back" onclick="closeEditor()">← Voltar</button>
+      <button type="button" class="btn btn-ghost" id="cmp-editor-back">← Voltar</button>
       <h2 style="flex:1;font-size:18px;font-weight:900" id="cmp-editor-title">Nova versão</h2>
       <button type="button" class="btn btn-ghost btn-sm" id="cmp-btn-draft">Salvar rascunho</button>
       <button type="button" class="btn btn-primary" id="cmp-btn-publish">Publicar</button>
@@ -706,6 +706,8 @@
     document.getElementById('editor-type').disabled = false;
     document.getElementById('editor-overlay').classList.remove('open');
   };
+  document.getElementById('cmp-btn-new')?.addEventListener('click', () => window.openEditor(null, null));
+  document.getElementById('cmp-editor-back')?.addEventListener('click', () => window.closeEditor());
 
   // ── Save ─────────────────────────────────────────────────────────────────────
   async function saveDoc(shouldPublish) {

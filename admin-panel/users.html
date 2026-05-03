@@ -164,7 +164,7 @@
               <ion-icon name="people-circle-outline" style="font-size:18px;vertical-align:-3px" aria-hidden="true"></ion-icon>
               <span id="ul-prestadores-hub-txt">Prestadores</span>
             </a>
-            <button type="button" class="btn btn-primary" onclick="openModal('new-user-modal')">
+            <button type="button" class="btn btn-primary" id="ul-btn-new-user">
               <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
               <span id="ul-new-user-btn-txt">Novo usuário</span>
             </button>
@@ -253,7 +253,7 @@
 <!-- New User Modal -->
 <div class="modal-overlay" id="new-user-modal">
   <div class="modal">
-    <div class="modal-header"><span class="modal-title" id="new-user-modal-title">Novo Usuário</span><button class="modal-close" onclick="closeModal('new-user-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-header"><span class="modal-title" id="new-user-modal-title">Novo Usuário</span><button type="button" class="modal-close" id="ul-new-user-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
     <div class="modal-body">
       <div class="grid-2">
         <div class="form-group"><label class="form-label" id="ul-new-lbl-name">Nome *</label><input class="form-control" id="new-name" placeholder="João Silva" /></div>
@@ -289,7 +289,7 @@
       <div class="form-group"><label class="form-label" id="ul-new-lbl-pwd">Senha Temporária *</label><input class="form-control" id="new-password" type="password" placeholder="Mín. 8 caracteres, maiúscula, minúscula e número" /></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" data-ul-cancel onclick="closeModal('new-user-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" data-ul-cancel id="ul-new-user-modal-cancel">Cancelar</button>
       <button class="btn btn-primary" id="save-user-btn">Criar Usuário</button>
     </div>
   </div>
@@ -298,13 +298,13 @@
 <!-- Reset Password Modal -->
 <div class="modal-overlay" id="reset-pwd-modal">
   <div class="modal" style="max-width:400px">
-    <div class="modal-header"><span class="modal-title" id="reset-pwd-modal-title">Resetar Senha</span><button class="modal-close" onclick="closeModal('reset-pwd-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
+    <div class="modal-header"><span class="modal-title" id="reset-pwd-modal-title">Resetar Senha</span><button type="button" class="modal-close" id="ul-reset-pwd-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button></div>
     <div class="modal-body">
       <input type="hidden" id="reset-user-id" />
       <div class="form-group"><label class="form-label" id="ul-reset-pwd-lbl">Nova Senha *</label><input class="form-control" id="reset-password" type="password" placeholder="Mín. 8 caracteres, maiúscula, minúscula e número" /></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" data-ul-cancel onclick="closeModal('reset-pwd-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" data-ul-cancel id="ul-reset-pwd-modal-cancel">Cancelar</button>
       <button class="btn btn-danger" id="confirm-reset-btn">Resetar Senha</button>
     </div>
   </div>
@@ -315,7 +315,7 @@
   <div class="modal" style="max-width:440px">
     <div class="modal-header">
       <span class="modal-title" id="reset-email-modal-title">Resetar senha por e-mail</span>
-      <button class="modal-close" type="button" onclick="closeModal('reset-email-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button class="modal-close" type="button" id="ul-reset-email-modal-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body">
       <p id="reset-email-modal-hint" style="font-size:12px;color:var(--text3);line-height:1.45;margin-bottom:14px"></p>
@@ -335,7 +335,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost" data-ul-cancel onclick="closeModal('reset-email-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" data-ul-cancel id="ul-reset-email-modal-cancel">Cancelar</button>
       <button type="button" class="btn btn-danger" id="confirm-reset-email-btn">Redefinir senha</button>
     </div>
   </div>
@@ -347,6 +347,13 @@
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
   );
+  document.getElementById('ul-btn-new-user')?.addEventListener('click', () => openModal('new-user-modal'));
+  document.getElementById('ul-new-user-modal-close')?.addEventListener('click', () => closeModal('new-user-modal'));
+  document.getElementById('ul-new-user-modal-cancel')?.addEventListener('click', () => closeModal('new-user-modal'));
+  document.getElementById('ul-reset-pwd-modal-close')?.addEventListener('click', () => closeModal('reset-pwd-modal'));
+  document.getElementById('ul-reset-pwd-modal-cancel')?.addEventListener('click', () => closeModal('reset-pwd-modal'));
+  document.getElementById('ul-reset-email-modal-close')?.addEventListener('click', () => closeModal('reset-email-modal'));
+  document.getElementById('ul-reset-email-modal-cancel')?.addEventListener('click', () => closeModal('reset-email-modal'));
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';
@@ -387,7 +394,7 @@
   }
   const tenantFilterField = document.getElementById('filter-tenant')?.closest('.filter-field');
   if (tenantFilterField) tenantFilterField.hidden = !isPlatformAdmin;
-  const newUserBtn = document.querySelector('.data-toolbar-actions .btn.btn-primary');
+  const newUserBtn = document.getElementById('ul-btn-new-user');
   if (newUserBtn) newUserBtn.hidden = !canManageTenantUsers;
 
   /** Só tenants empresa aceitam associação de utilizadores pelo painel (criação / convites empresa). */
