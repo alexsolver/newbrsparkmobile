@@ -68,15 +68,24 @@ export function agentDebugLog(entry: {
   hypothesisId?: string;
   runId?: string;
 }): void {
+  const payload = {
+    sessionId: SESSION_ID,
+    timestamp: Date.now(),
+    ...entry,
+  };
+  /** Em `__DEV__` o ingest pode ser inalcançável (build release / API pública) — Metro mostra a mesma carga útil. */
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    try {
+      console.warn('[BRSPARK_FACIAL]', JSON.stringify(payload));
+    } catch {
+      /* ignore */
+    }
+  }
   const url = getAgentDebugIngestUrl();
   if (!url) return;
   fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': SESSION_ID },
-    body: JSON.stringify({
-      sessionId: SESSION_ID,
-      timestamp: Date.now(),
-      ...entry,
-    }),
+    body: JSON.stringify(payload),
   }).catch(() => {});
 }

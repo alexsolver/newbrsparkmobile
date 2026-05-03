@@ -2001,6 +2001,11 @@ function facialBiometricStorageKey(fieldId: string) {
   return `${fieldId}__biometric`;
 }
 
+/** Chaves `{campo}__biometric` — não são meta `__*`; devem poder atualizar com OS em pausa (flush da validação adiada). */
+function isFacialBiometricResponseKey(fieldId: string): boolean {
+  return typeof fieldId === 'string' && fieldId.endsWith('__biometric') && !fieldId.startsWith('__');
+}
+
 function parseFacialBiometricAudit(raw: unknown): {
   at?: string;
   /** Momento do obturador (ISO); persiste quando a URL pública já não traz `?capturedAt=`. */
@@ -4016,6 +4021,21 @@ export default function ChecklistEngine() {
     const fieldData = template.schemaData.find((f: any) => f.id === fieldId);
     const bioKey = facialBiometricStorageKey(fieldId);
     const strictOnline = fieldData ? schemaFieldRequiresOnlineValidation(fieldData) : false;
+    /** `ImagePicker` por vezes não devolve `base64` mesmo com `base64: true` (SO/HEIC/tamanho) — ler do ficheiro da URI. */
+    let resolvedFaceB64 = String(imgBase64 || '').trim();
+    if (!resolvedFaceB64 && imgUri) {
+      try {
+        const pathOnly = String(imgUri).split('?')[0];
+        if (pathOnly.length > 0) {
+          const inf = await FileSystem.getInfoAsync(pathOnly);
+          if (inf.exists) {
+            resolvedFaceB64 = await FileSystem.readAsStringAsync(pathOnly, { encoding: 'base64' });
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
 
     const writeSuccessAudit = (apiResp: any) => {
       try {
@@ -4072,7 +4092,7 @@ export default function ChecklistEngine() {
     if (strictOnline) {
       setFacialVerifyBusyId(facialBusyKey);
       try {
-        const result = await postVerifyFaceForField(fieldData, imgBase64);
+        const result = await postVerifyFaceForField(fieldData, resolvedFaceB64);
         if (result.ok) {
           writeSuccessAudit(result.data as any);
         } else if (result.kind === 'error_msg') {
@@ -4116,7 +4136,7 @@ export default function ChecklistEngine() {
       if (!usePending) {
         setFacialVerifyBusyId(facialBusyKey);
         try {
-          const result = await postVerifyFaceForField(fieldData, imgBase64);
+          const result = await postVerifyFaceForField(fieldData, resolvedFaceB64);
           if (result.ok) {
             writeSuccessAudit(result.data as any);
           } else if (result.kind === 'error_msg') {
@@ -6008,8 +6028,9 @@ export default function ChecklistEngine() {
     const isTransitField =
       fieldDef &&
       (fieldDef.type === 'transit_start' || fieldDef.type === 'transit_end');
-    if (serverPausedExecution && !isTransitField) return;
-    if (responses.__form_paused_since && !isTransitField) return;
+    const facialBioBypassPause = isFacialBiometricResponseKey(fieldId);
+    if (serverPausedExecution && !isTransitField && !facialBioBypassPause) return;
+    if (responses.__form_paused_since && !isTransitField && !facialBioBypassPause) return;
 
     if (isTransitField && fieldDef) {
       const prevVal = scope
@@ -6721,17 +6742,7 @@ export default function ChecklistEngine() {
           continue;
         }
         if (f.type !== 'facial_recognition') continue;
-        if (schemaFieldRequiresOnlineValidation(f)) {
-          // #region agent log
-          agentDebugLog({
-            location: 'checklist/[id].tsx:flushPendingFacialVerifications',
-            message: 'facial_flush_skip_online_required',
-            data: { fieldId: f.id },
-            hypothesisId: 'H3',
-          });
-          // #endregion
-          continue;
-        }
+        /** Não saltar por `requireOnlineValidation`: se existir `pending` no JSON (ex.: dados legados), o flush é o único meio de limpar; sem `pending`, `runForScope` sai logo. */
 
         const runForScope = async (scope: SectionRepeatScope | null) => {
           const snap = responsesRefForFacial.current;

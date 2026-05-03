@@ -99,7 +99,7 @@
             </div>
           </div>
           <div class="data-toolbar-actions">
-            <button type="button" class="btn btn-primary" onclick="openModal('new-country-modal')">
+            <button type="button" class="btn btn-primary" id="loc-btn-open-new-country-modal">
               <ion-icon name="add-outline" style="font-size:18px;vertical-align:-3px"></ion-icon>
               <span id="loc-btn-add-country-text">Adicionar país</span>
             </button>
@@ -139,7 +139,7 @@
   <div class="modal" style="max-width:480px">
     <div class="modal-header">
       <span class="modal-title">Adicionar país ou região</span>
-      <button type="button" class="modal-close" onclick="closeModal('new-country-modal')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+      <button type="button" class="modal-close" id="loc-modal-new-country-close" aria-label="Fechar"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
     </div>
     <div class="modal-body">
       <div class="grid-2">
@@ -193,7 +193,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button type="button" class="btn btn-ghost" onclick="closeModal('new-country-modal')">Cancelar</button>
+      <button type="button" class="btn btn-ghost" id="loc-modal-new-country-cancel">Cancelar</button>
       <button type="button" class="btn btn-primary" id="save-country-btn">Adicionar país</button>
     </div>
   </div>
@@ -205,6 +205,9 @@
   document.querySelectorAll('.modal-overlay').forEach(o =>
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
   );
+  document.getElementById('loc-btn-open-new-country-modal')?.addEventListener('click', () => openModal('new-country-modal'));
+  document.getElementById('loc-modal-new-country-close')?.addEventListener('click', () => closeModal('new-country-modal'));
+  document.getElementById('loc-modal-new-country-cancel')?.addEventListener('click', () => closeModal('new-country-modal'));
 </script>
 <script type="module">
   import { initPage } from './js/sidebar.js';

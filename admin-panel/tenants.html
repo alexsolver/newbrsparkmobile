@@ -602,14 +602,14 @@
       const actions = [];
       if (canEditTenantBranding) {
         actions.push(
-          `<button type="button" class="btn btn-ghost btn-sm" data-branding-id="${escAttr(t.id)}" onclick='openBrandingModal(${JSON.stringify(t.id)})'>Branding</button>`,
+          `<button type="button" class="btn btn-ghost btn-sm ten-btn-branding" data-branding-id="${escAttr(t.id)}">Branding</button>`,
         );
       }
       if (canChangeTenantStatus) {
         actions.push(
           isActive
-            ? `<button type="button" class="btn btn-danger btn-sm" onclick='toggleStatus(${JSON.stringify(t.id)}, "SUSPENDED")'>${escHtml(mpT('ten_row_suspend'))}</button>`
-            : `<button type="button" class="btn btn-success btn-sm" onclick='toggleStatus(${JSON.stringify(t.id)}, "ACTIVE")'>${escHtml(mpT('ten_row_activate'))}</button>`,
+            ? `<button type="button" class="btn btn-danger btn-sm ten-btn-status" data-tenant-id="${escAttr(t.id)}" data-tenant-status="SUSPENDED">${escHtml(mpT('ten_row_suspend'))}</button>`
+            : `<button type="button" class="btn btn-success btn-sm ten-btn-status" data-tenant-id="${escAttr(t.id)}" data-tenant-status="ACTIVE">${escHtml(mpT('ten_row_activate'))}</button>`,
         );
       }
       return `<tr>
@@ -639,6 +639,29 @@
     await CONFIG.patch(`/tenants/${id}/status`, { status });
     loadTenants();
   };
+
+  function wireTenantsTbodyDelegation() {
+    const tb = document.getElementById('tenants-tbody');
+    if (!tb || tb.dataset.tenDelegBound === '1') return;
+    tb.dataset.tenDelegBound = '1';
+    tb.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const br = t.closest('.ten-btn-branding');
+      if (br && tb.contains(br)) {
+        const id = br.getAttribute('data-branding-id');
+        if (id != null && id !== '') void window.openBrandingModal(id);
+        return;
+      }
+      const st = t.closest('.ten-btn-status');
+      if (st && tb.contains(st)) {
+        const id = st.getAttribute('data-tenant-id');
+        const status = st.getAttribute('data-tenant-status');
+        if (id && status) void window.toggleStatus(id, status);
+      }
+    });
+  }
+  wireTenantsTbodyDelegation();
 
   function brandingPreviewParseHex6(hex) {
     const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || '').trim());

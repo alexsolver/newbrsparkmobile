@@ -250,6 +250,20 @@ function sortEventsByCollectionTime(events) {
 let allEvents = [];
 let liveIntervalId = null;
 
+(() => {
+  const list = document.getElementById('events-list');
+  if (!list || list.dataset.telEventDelegBound === '1') return;
+  list.dataset.telEventDelegBound = '1';
+  list.addEventListener('click', (e) => {
+    const li = e.target instanceof Element ? e.target.closest('li.event-item[data-tel-event-idx]') : null;
+    if (!li || !list.contains(li)) return;
+    const raw = li.getAttribute('data-tel-event-idx');
+    const idx = raw != null ? parseInt(raw, 10) : NaN;
+    if (!Number.isFinite(idx) || idx < 0) return;
+    window.selectEvent(idx);
+  });
+})();
+
 function initMap() {
   if (map) return;
   map = L.map('telemetry-map').setView([-23.5505, -46.6333], 10);
@@ -353,7 +367,7 @@ function renderList(events) {
     const netLabel = escTelemetryHtml(ev.networkType || 'APP');
     
     return `
-      <li class="event-item" id="ev-idx-${i}" onclick="selectEvent(${i})">
+      <li class="event-item" id="ev-idx-${i}" data-tel-event-idx="${i}">
         <div class="event-header">
           <span class="event-type ${typeCls}">${typeLabel}</span>
           <span class="event-time">${time} ${mockIcon}</span>

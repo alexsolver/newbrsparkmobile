@@ -38,7 +38,7 @@
               <option value="300">5 min</option>
             </select>
           </label>
-          <button type="button" class="btn btn-outline btn-sm" id="dash-refresh-btn" onclick="loadDashboard()" title="Recarregar dados do painel">
+          <button type="button" class="btn btn-outline btn-sm" id="dash-refresh-btn" title="Recarregar dados do painel">
             <ion-icon name="refresh-outline" style="font-size:17px;vertical-align:-3px" aria-hidden="true"></ion-icon>
             <span class="dash-refresh-label">Atualizar</span>
           </button>
@@ -55,8 +55,8 @@
               <span id="dash-panel-activity-title">Atividade recente</span>
             </span>
             <span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <button type="button" class="btn btn-ghost btn-sm" id="dash-audit-all-btn" onclick="window.location.href='audit.html'">Ver tudo</button>
-              <button type="button" class="btn btn-ghost btn-sm" id="dash-audit-system-btn" onclick="window.location.href='audit.html?category=SYSTEM'">Só sistema</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="dash-audit-all-btn">Ver tudo</button>
+              <button type="button" class="btn btn-ghost btn-sm" id="dash-audit-system-btn">Só sistema</button>
             </span>
           </div>
           <div class="data-shell-body" id="activity-list" style="padding-top:12px;padding-bottom:12px">
@@ -71,7 +71,7 @@
             <ion-icon name="business-outline" style="font-size:18px;color:var(--text3);opacity:0.9" aria-hidden="true"></ion-icon>
             <span id="dash-tenants-section-title">Tenants recentes</span>
           </h2>
-          <button type="button" class="btn btn-ghost btn-sm" id="dash-tenants-manage-btn" onclick="window.location.href='tenants.html'">Gerenciar</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="dash-tenants-manage-btn">Gerenciar</button>
         </div>
         <div class="table-wrap">
           <table class="table-data">
@@ -298,6 +298,17 @@
       armDashAutoTimer();
     }
   };
+
+  document.getElementById('dash-refresh-btn')?.addEventListener('click', () => void loadDashboard());
+  document.getElementById('dash-audit-all-btn')?.addEventListener('click', () => {
+    window.location.href = 'audit.html';
+  });
+  document.getElementById('dash-audit-system-btn')?.addEventListener('click', () => {
+    window.location.href = 'audit.html?category=SYSTEM';
+  });
+  document.getElementById('dash-tenants-manage-btn')?.addEventListener('click', () => {
+    window.location.href = 'tenants.html';
+  });
 
   loadDashboard();
 </script>

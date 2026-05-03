@@ -295,7 +295,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between">
           <span class="badge badge-gray">${p.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo' : '○ Inativo'}</span>
           ${canManageBilling
-            ? `<button class="btn btn-ghost btn-sm" onclick='openEditPlan(${JSON.stringify(p.id)})'>Editar</button>`
+            ? `<button type="button" class="btn btn-ghost btn-sm bill-pln-edit" data-plan-id="${escHtml(String(p.id))}">Editar</button>`
             : `<span style="color:var(--text3);font-size:12px">—</span>`}
         </div>
       </div>`;
@@ -334,8 +334,8 @@
           <td style="color:var(--text3);font-size:11px">${escHtml(fmt(s.currentEnd))}</td>
           <td style="text-align:right;white-space:nowrap">
             ${canManageBilling
-              ? `<button class="btn btn-ghost btn-sm" onclick='openChangePlan(${JSON.stringify(s.id)})'>Alterar plano</button>
-            ${s.status !== 'CANCELLED' ? `<button class="btn btn-danger btn-sm" onclick='cancelSub(${JSON.stringify(s.id)})'>Cancelar</button>` : ''}`
+              ? `<button type="button" class="btn btn-ghost btn-sm bill-sub-change" data-sub-id="${escHtml(String(s.id))}">Alterar plano</button>
+            ${s.status !== 'CANCELLED' ? `<button type="button" class="btn btn-danger btn-sm bill-sub-cancel" data-sub-id="${escHtml(String(s.id))}">Cancelar</button>` : ''}`
               : `<span style="color:var(--text3);font-size:12px">—</span>`}
           </td>
         </tr>`).join('')
@@ -461,6 +461,42 @@
   };
 
   document.getElementById('sub-filter').addEventListener('change', loadSubscriptions);
+
+  function wireBillingPlansGridDelegation() {
+    const grid = document.getElementById('plans-grid');
+    if (!grid || grid.dataset.billPlnDelegBound === '1') return;
+    grid.dataset.billPlnDelegBound = '1';
+    grid.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const b = t.closest('.bill-pln-edit');
+      if (!b || !grid.contains(b)) return;
+      const id = b.getAttribute('data-plan-id');
+      if (id != null && id !== '') window.openEditPlan(id);
+    });
+  }
+  function wireBillingSubsTbodyDelegation() {
+    const tb = document.getElementById('subs-tbody');
+    if (!tb || tb.dataset.billSubDelegBound === '1') return;
+    tb.dataset.billSubDelegBound = '1';
+    tb.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const ch = t.closest('.bill-sub-change');
+      if (ch && tb.contains(ch)) {
+        const id = ch.getAttribute('data-sub-id');
+        if (id != null && id !== '') window.openChangePlan(id);
+        return;
+      }
+      const ca = t.closest('.bill-sub-cancel');
+      if (ca && tb.contains(ca)) {
+        const id = ca.getAttribute('data-sub-id');
+        if (id != null && id !== '') void window.cancelSub(id);
+      }
+    });
+  }
+  wireBillingPlansGridDelegation();
+  wireBillingSubsTbodyDelegation();
 
   loadPlans();
   loadSubscriptions();

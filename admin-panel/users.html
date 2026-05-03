@@ -1111,7 +1111,7 @@
     for (let i = start; i <= end; i++) nums.push(i);
 
     const btn = (label, p, dis, active) =>
-      `<button type="button" class="pagination-btn${active ? ' pagination-btn--active' : ''}" ${dis ? 'disabled' : ''} onclick="loadUsers(${p})" aria-label="${escAttr(label)}">${label}</button>`;
+      `<button type="button" class="pagination-btn${active ? ' pagination-btn--active' : ''}" ${dis ? 'disabled' : ''} data-ul-page="${p}" aria-label="${escAttr(label)}">${label}</button>`;
 
     const pageBtns = nums
       .map((i) => btn(String(i), i, false, i === page))
@@ -1568,17 +1568,17 @@
         <td class="col-hide-wide" style="vertical-align:top">${comprefaceListCell(u.comprefaceRecognitionSync)}</td>
         <td class="text-right table-actions">
           <div class="row-actions">
-            <a class="icon-action" href="user-edit.html?id=${encodeURIComponent(u.id)}" title="${escAttr(t('ul_editUser'))}" onclick="storeUserEditNav(${idx})"><ion-icon name="create-outline"></ion-icon></a>
+            <a class="icon-action" href="user-edit.html?id=${encodeURIComponent(u.id)}" title="${escAttr(t('ul_editUser'))}" data-ul-nav-idx="${idx}"><ion-icon name="create-outline"></ion-icon></a>
             <div class="ue-dropdown-wrap">
               <button type="button" class="icon-action" data-ul-actions-toggle aria-haspopup="true" aria-expanded="false" aria-label="${escAttr(t('moreActions'))}"><ion-icon name="ellipsis-horizontal"></ion-icon></button>
               <div class="ue-dropdown" data-ul-actions-menu hidden role="menu">
-                <a class="ue-dropdown__item ue-dropdown__item--link" role="menuitem" href="user-edit.html?id=${encodeURIComponent(u.id)}&readonly=1" onclick="storeUserEditNav(${idx})">${escAttr(t('ul_viewUser'))}</a>
-                <a class="ue-dropdown__item ue-dropdown__item--link" role="menuitem" href="user-edit.html?id=${encodeURIComponent(u.id)}" target="_blank" rel="noopener" onclick="storeUserEditNav(${idx})">${escAttr(t('openNewTab'))}</a>
-                ${canImpersonatePanelTarget(u) ? `<button type="button" class="ue-dropdown__item" role="menuitem" onclick='ulStartImpersonate(${JSON.stringify(u.id)})'>${escAttr(t('ul_impersonateBtn'))}</button>` : ''}
-                <button type="button" class="ue-dropdown__item" role="menuitem" onclick='openReset(${JSON.stringify(u.id)})'>${escAttr(t('ul_resetPwdBtn'))}</button>
+                <a class="ue-dropdown__item ue-dropdown__item--link" role="menuitem" href="user-edit.html?id=${encodeURIComponent(u.id)}&readonly=1" data-ul-nav-idx="${idx}">${escAttr(t('ul_viewUser'))}</a>
+                <a class="ue-dropdown__item ue-dropdown__item--link" role="menuitem" href="user-edit.html?id=${encodeURIComponent(u.id)}" target="_blank" rel="noopener" data-ul-nav-idx="${idx}">${escAttr(t('openNewTab'))}</a>
+                ${canImpersonatePanelTarget(u) ? `<button type="button" class="ue-dropdown__item ul-dd-impersonate" role="menuitem" data-ul-impersonate-id="${escAttr(u.id)}">${escAttr(t('ul_impersonateBtn'))}</button>` : ''}
+                <button type="button" class="ue-dropdown__item ul-dd-reset" role="menuitem" data-ul-reset-id="${escAttr(u.id)}">${escAttr(t('ul_resetPwdBtn'))}</button>
                 <hr class="ue-dropdown__sep" />
-                ${canManageTenantUsers ? `<button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick='ulConfirmDeleteUser(${JSON.stringify(u.id)}, ${JSON.stringify(String(u.name || mailShown || u.id))})'>${escAttr(t('ul_deleteUser'))}</button>` : ''}
-                <button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick='toggleUser(${JSON.stringify(u.id)})'>${escAttr(u.isActive ? t('ul_deactivate') : t('ul_activate'))}</button>
+                ${canManageTenantUsers ? `<button type="button" class="ue-dropdown__item ue-dropdown__item--danger ul-dd-delete" role="menuitem" data-ul-delete-id="${escAttr(u.id)}" data-ul-delete-name="${escAttr(String(u.name || mailShown || u.id))}">${escAttr(t('ul_deleteUser'))}</button>` : ''}
+                <button type="button" class="ue-dropdown__item ue-dropdown__item--danger ul-dd-toggle" role="menuitem" data-ul-toggle-id="${escAttr(u.id)}">${escAttr(u.isActive ? t('ul_deactivate') : t('ul_activate'))}</button>
               </div>
             </div>
           </div>
@@ -1645,6 +1645,69 @@
       if (btn) btn.setAttribute('aria-expanded', 'false');
     });
   }
+
+  function wireUsersPaginationDelegation() {
+    const pag = document.getElementById('pagination');
+    if (!pag || pag.dataset.ulPagDelegBound === '1') return;
+    pag.dataset.ulPagDelegBound = '1';
+    pag.addEventListener('click', (e) => {
+      const b = e.target.closest('button.pagination-btn[data-ul-page]');
+      if (!b || !pag.contains(b) || b.disabled) return;
+      const p = parseInt(String(b.getAttribute('data-ul-page') || ''), 10);
+      if (Number.isFinite(p) && p > 0) loadUsers(p);
+    });
+  }
+
+  function wireUsersTableRowActionsDelegation() {
+    const table = document.getElementById('users-table');
+    if (!table || table.dataset.ulRowDelegBound === '1') return;
+    table.dataset.ulRowDelegBound = '1';
+    table.addEventListener('click', (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      const navLink = t.closest('a[data-ul-nav-idx]');
+      if (navLink && table.contains(navLink)) {
+        const ix = parseInt(String(navLink.getAttribute('data-ul-nav-idx') || ''), 10);
+        if (Number.isFinite(ix)) window.storeUserEditNav(ix);
+        return;
+      }
+      const imp = t.closest('.ul-dd-impersonate');
+      if (imp && table.contains(imp)) {
+        e.preventDefault();
+        const id = imp.getAttribute('data-ul-impersonate-id');
+        if (id) void window.ulStartImpersonate(id);
+        closeAllUlRowActionMenus();
+        return;
+      }
+      const rst = t.closest('.ul-dd-reset');
+      if (rst && table.contains(rst)) {
+        e.preventDefault();
+        const id = rst.getAttribute('data-ul-reset-id');
+        if (id) window.openReset(id);
+        closeAllUlRowActionMenus();
+        return;
+      }
+      const del = t.closest('.ul-dd-delete');
+      if (del && table.contains(del)) {
+        e.preventDefault();
+        const id = del.getAttribute('data-ul-delete-id');
+        const nm = del.getAttribute('data-ul-delete-name') || '';
+        if (id) void window.ulConfirmDeleteUser(id, nm);
+        return;
+      }
+      const tog = t.closest('.ul-dd-toggle');
+      if (tog && table.contains(tog)) {
+        e.preventDefault();
+        const id = tog.getAttribute('data-ul-toggle-id');
+        if (id) void window.toggleUser(id);
+        closeAllUlRowActionMenus();
+      }
+    });
+  }
+
+  wireUsersPaginationDelegation();
+  wireUsersTableRowActionsDelegation();
+
   document.addEventListener('click', (e) => {
     const toggle = e.target.closest('[data-ul-actions-toggle]');
     if (toggle && document.getElementById('users-table')?.contains(toggle)) {

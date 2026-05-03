@@ -706,13 +706,12 @@ window.loadTenants = async () => {
         sectorRaw != null && String(sectorRaw).trim() !== ''
           ? escHtml(String(sectorRaw))
           : '<span style="color:var(--text3)">—</span>';
-      const drawerArgs = `${JSON.stringify(String(t.id))},${JSON.stringify(displayName)},${JSON.stringify(displayEmail)}`;
       return `<tr>
         <td><div class="t-name">${escHtml(displayName)}</div><div class="t-email">${escHtml(displayEmail)}</div></td>
         <td>${sectorCell}</td>
         <td>${badge}</td>
         <td><span style="font-size:12px;font-weight:700">${legal}</span></td>
-        <td><button type="button" class="btn btn-ghost btn-sm" onclick='openDrawer(${drawerArgs})'>
+        <td><button type="button" class="btn btn-ghost btn-sm dc-open-tenant-drawer" data-tenant-id="${escHtml(String(t.id))}" data-tenant-name="${escHtml(displayName)}" data-tenant-email="${escHtml(displayEmail)}">
           <ion-icon name="settings-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon>Configurar
         </button></td>
       </tr>`;
@@ -840,6 +839,21 @@ function showToast(msg, isErr = false) {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
+(() => {
+  const tbody = document.getElementById('tenant-tbody');
+  if (!tbody || tbody.dataset.dcDrawerDelegBound === '1') return;
+  tbody.dataset.dcDrawerDelegBound = '1';
+  tbody.addEventListener('click', (e) => {
+    const btn = e.target instanceof Element ? e.target.closest('button.dc-open-tenant-drawer') : null;
+    if (!btn || !tbody.contains(btn)) return;
+    e.preventDefault();
+    const id = btn.getAttribute('data-tenant-id');
+    if (id == null || id === '') return;
+    const name = btn.getAttribute('data-tenant-name') || '';
+    const email = btn.getAttribute('data-tenant-email') || '';
+    void window.openDrawer(id, name, email);
+  });
+})();
 loadGlobalPolicy();
 </script>
 </body>

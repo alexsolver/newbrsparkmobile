@@ -131,9 +131,9 @@
           ${t.subject ? `<div class="flag-desc" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">${escHtml(mpT('notif_subject_prefix'))} ${escHtml(t.subject)}</div>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:12px">
-          <button type="button" class="btn btn-ghost btn-sm" onclick='editTemplate(${JSON.stringify(t.id)})'>${escHtml(mpT('notif_btn_edit'))}</button>
+          <button type="button" class="btn btn-ghost btn-sm notif-btn-edit" data-notif-template-id="${escHtml(String(t.id))}">${escHtml(mpT('notif_btn_edit'))}</button>
           <label class="toggle">
-            <input type="checkbox" ${t.isActive ? 'checked' : ''} onclick='toggleTemplate(${JSON.stringify(t.id)}, this.checked)' />
+            <input type="checkbox" class="notif-tmpl-active" ${t.isActive ? 'checked' : ''} data-notif-template-id="${escHtml(String(t.id))}" />
             <span class="toggle-track"></span>
           </label>
         </div>
@@ -172,6 +172,26 @@
   window.toggleTemplate = async (id, isActive) => {
     await CONFIG.put(`/notifications/templates/${id}`, { isActive });
   };
+
+  (function wireNotifTemplatesDelegation() {
+    const root = document.getElementById('template-list');
+    if (!root || root.dataset.notifDelegBound === '1') return;
+    root.dataset.notifDelegBound = '1';
+    root.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const editB = t.closest('.notif-btn-edit');
+      if (!editB || !root.contains(editB)) return;
+      const id = editB.getAttribute('data-notif-template-id');
+      if (id != null && id !== '') window.editTemplate(id);
+    });
+    root.addEventListener('change', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof HTMLInputElement) || !t.classList.contains('notif-tmpl-active')) return;
+      const id = t.getAttribute('data-notif-template-id');
+      if (id != null && id !== '') void window.toggleTemplate(id, t.checked);
+    });
+  })();
 
   async function loadLogs() {
     const data = await CONFIG.get('/notifications/logs');

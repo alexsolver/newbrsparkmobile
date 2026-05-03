@@ -2794,22 +2794,25 @@ function buildCard(task, colClass) {
   const safeTaskIdAttr = String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   const taskCardDomId = String(task.id).replace(/[^a-zA-Z0-9_-]/g, '_');
   const trackingTok = task.metadata?.trackingToken ? String(task.metadata.trackingToken) : '';
-  const trackPublicUrlJs = trackingTok
-    ? JSON.stringify(`${window.location.origin}/track.html?t=${encodeURIComponent(trackingTok)}`)
-    : '""';
+  const safeTrackCopyUrlAttr = trackingTok
+    ? String(`${window.location.origin}/track.html?t=${encodeURIComponent(trackingTok)}`)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+    : '';
   const canCancelPendingCard = colClass === 'col-pending' && stCard === 'PENDING';
   const canReopenCompletedCard =
     !isRt && colClass === 'col-completed' && ['COMPLETED', 'SYNCED'].includes(stCard);
   const canResendCancelledCard =
     !isRt && colClass === 'col-cancelled' && ['REJECTED', 'CANCELLED'].includes(stCard);
   const reopenForRevisionBtn = canReopenCompletedCard
-    ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${safeTaskIdAttr}" onclick="event.stopPropagation(); event.preventDefault(); void window.openReopenRevisionModal(this.getAttribute('data-reopen-task-id'));"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> ${opsT('ops_card_reopen_revision')}</button>`
+    ? `<button type="button" class="btn-reopen-revision" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${safeTaskIdAttr}"><ion-icon name="refresh-circle-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> ${opsT('ops_card_reopen_revision')}</button>`
     : '';
   const resendFromCancelledBtn = canResendCancelledCard
-    ? `<button type="button" class="btn-resend-cancelled" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${safeTaskIdAttr}" onclick="event.stopPropagation(); event.preventDefault(); void window.openReopenRevisionModal(this.getAttribute('data-reopen-task-id'));"><ion-icon name="paper-plane-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> ${opsT('ops_card_resend')}</button>`
+    ? `<button type="button" class="btn-resend-cancelled" style="width:100%;margin-top:8px;padding:8px 10px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:10px;font-weight:800;cursor:pointer;box-shadow:0 2px 6px rgba(37,99,235,0.35)" data-reopen-task-id="${safeTaskIdAttr}"><ion-icon name="paper-plane-outline" style="vertical-align:-2px;font-size:14px"></ion-icon> ${opsT('ops_card_resend')}</button>`
     : '';
   const cancelPendingBtn = canCancelPendingCard
-    ? `<button type="button" class="btn-cancel-pending-os" title="${String(opsT('ops_detail_cancel_os')).replace(/"/g, '&quot;')}" style="padding:8px 12px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;cursor:pointer;font-size:11px;font-weight:800" data-cancel-task-id="${safeTaskIdAttr}" onclick="event.stopPropagation(); event.preventDefault(); void window.cancelTaskFromBoard(this.getAttribute('data-cancel-task-id'));"><ion-icon name="trash-outline" style="font-size:16px;vertical-align:-2px"></ion-icon> ${opsT('ops_detail_cancel_os')}</button>`
+    ? `<button type="button" class="btn-cancel-pending-os" title="${String(opsT('ops_detail_cancel_os')).replace(/"/g, '&quot;')}" style="padding:8px 12px;border-radius:10px;border:1px solid #fecaca;background:#fef2f2;color:#b91c1c;cursor:pointer;font-size:11px;font-weight:800" data-cancel-task-id="${safeTaskIdAttr}"><ion-icon name="trash-outline" style="font-size:16px;vertical-align:-2px"></ion-icon> ${opsT('ops_detail_cancel_os')}</button>`
     : '';
 
   const locationBlock = (() => {
@@ -2823,7 +2826,7 @@ function buildCard(task, colClass) {
   })();
 
   return `
-    <div class="task-card ${colClass}" onclick='void openDetail(${JSON.stringify(task.id)})' id="card-${taskCardDomId}">
+    <div class="task-card ${colClass}" data-ops-open-detail="${safeTaskIdAttr}" id="card-${taskCardDomId}">
       <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
         ${ftRtBadgeHtml}
         <div class="task-card-email" style="margin-bottom:0">
@@ -2849,8 +2852,7 @@ function buildCard(task, colClass) {
       <div class="task-card-meta" style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px; flex-direction:column; align-items:stretch; gap:6px;">
         <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:2px; flex-wrap:wrap; gap:6px">
           <button type="button" title="${String(opsT('ops_card_chat_title')).replace(/"/g, '&quot;')}" aria-label="${String(opsT('ops_card_chat_title')).replace(/"/g, '&quot;')}"
-            data-ops-chat-task="${String(task.id).replace(/"/g, '&quot;')}"
-            onclick="event.stopPropagation(); event.preventDefault(); void window.openOpsChatModal(this.getAttribute('data-ops-chat-task'));"
+            data-ops-chat-task="${safeTaskIdAttr}"
             style="display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:11px;font-weight:800">
             <ion-icon name="chatbubbles-outline" style="font-size:18px;vertical-align:-2px;color:#2563eb"></ion-icon>
             <span style="letter-spacing:0.02em">Chat</span>
@@ -2864,12 +2866,12 @@ function buildCard(task, colClass) {
           </span>
         </div>
         ${trackingTok ? `
-        <div style="background:#FFF7ED; border:1px dashed #FDBA74; border-radius:4px; padding:4px 6px; display:flex; gap:4px; align-items:center" onclick="event.stopPropagation()">
+        <div data-ops-track-panel="1" style="background:#FFF7ED; border:1px dashed #FDBA74; border-radius:4px; padding:4px 6px; display:flex; gap:4px; align-items:center">
           <ion-icon name="location-outline" style="color:#EA580C; font-size:12px"></ion-icon>
           <a href="/track.html?t=${encodeURIComponent(trackingTok)}" target="_blank" rel="noopener noreferrer" style="color:#EA580C; font-size:9px; font-weight:700; flex:1; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
             Acompanhar
           </a>
-          <button type="button" style="background:none; border:none; color:#2563EB; font-size:9px; font-weight:700; cursor:pointer; padding:0" onclick='void navigator.clipboard.writeText(${trackPublicUrlJs}); alert("Link copiado!"); event.stopPropagation();'>
+          <button type="button" class="ops-copy-track-url" data-ops-copy-url="${safeTrackCopyUrlAttr}" style="background:none; border:none; color:#2563EB; font-size:9px; font-weight:700; cursor:pointer; padding:0">
             📋 Copiar
           </button>
         </div>` : ''}
@@ -4971,7 +4973,13 @@ function buildRevisionHistoryHtml(t) {
   const loaded = t._revisionHistoryLoaded === true;
   const revs = Array.isArray(t.revisionHistory) ? t.revisionHistory : [];
   const esc = (s) => String(s ?? '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const escAttr = (s) =>
+    String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;');
   const fd = (d) => d ? new Date(d).toLocaleString('pt-BR') : '—';
+  const taskIdAttr = escAttr(t.id);
 
   if (!loaded) {
     return `
@@ -5002,8 +5010,8 @@ function buildRevisionHistoryHtml(t) {
       <td style="padding:6px 8px;font-size:12px">${fd(r.completedAt)}</td>
       <td style="padding:6px 8px;font-size:11px;font-family:monospace;word-break:break-all">${r.submissionId ? esc(r.submissionId) : '—'}</td>
       <td style="padding:6px 8px;white-space:nowrap">
-        <button type="button" class="btn btn-sm btn-ghost" style="font-size:11px;padding:4px 8px"
-          onclick='window.openRevisionSnapshotModal(${JSON.stringify(t.id)}, ${r.revision})'>Ver respostas</button>
+        <button type="button" class="btn btn-sm btn-ghost ops-rev-action-btn" style="font-size:11px;padding:4px 8px"
+          data-ops-rev-action="snapshot" data-ops-rev-task-id="${taskIdAttr}" data-ops-revision="${Number(r.revision) || 0}">Ver respostas</button>
       </td>
     </tr>`
     )
@@ -5013,10 +5021,10 @@ function buildRevisionHistoryHtml(t) {
       <div class="report-field-label" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px">
         <span>Histórico de submissões (${revs.length}) · #1 = conclusão inicial</span>
         <span style="display:flex;flex-wrap:wrap;gap:6px">
-          <button type="button" class="btn btn-sm btn-ghost" style="font-size:11px"
-            onclick='window.downloadRevisionsCsv(${JSON.stringify(t.id)}, false)'>Exportar CSV</button>
-          <button type="button" class="btn btn-sm btn-ghost" style="font-size:11px"
-            onclick='window.downloadRevisionsCsv(${JSON.stringify(t.id)}, true)'>CSV com respostas</button>
+          <button type="button" class="btn btn-sm btn-ghost ops-rev-action-btn" style="font-size:11px"
+            data-ops-rev-action="csv" data-ops-rev-task-id="${taskIdAttr}" data-ops-rev-csv-include-responses="0">Exportar CSV</button>
+          <button type="button" class="btn btn-sm btn-ghost ops-rev-action-btn" style="font-size:11px"
+            data-ops-rev-action="csv" data-ops-rev-task-id="${taskIdAttr}" data-ops-rev-csv-include-responses="1">CSV com respostas</button>
         </span>
       </div>
       <div style="overflow-x:auto;margin-top:6px;border:1px solid var(--border);border-radius:8px">
@@ -8390,6 +8398,92 @@ window.cancelTaskFromBoard = async function (taskId) {
     alert(opsT('ops_card_cancel_err') + ' ' + (e.message || ''));
   }
 };
+
+/** Cartões Kanban: abrir detalhe, chat, copiar link de tracking, reabrir/cancelar — sem handlers inline. */
+(() => {
+  const board = document.getElementById('kanban-board');
+  if (!board || board.dataset.opsKanbanDelegBound === '1') return;
+  board.dataset.opsKanbanDelegBound = '1';
+  board.addEventListener('click', (e) => {
+    const el = e.target;
+    if (!(el instanceof Element)) return;
+
+    const copyBtn = el.closest('.ops-copy-track-url');
+    if (copyBtn && board.contains(copyBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const url = copyBtn.getAttribute('data-ops-copy-url');
+      if (url) {
+        void navigator.clipboard.writeText(url).then(
+          () => {
+            alert('Link copiado!');
+          },
+          () => {
+            alert('Não foi possível copiar o link.');
+          },
+        );
+      }
+      return;
+    }
+
+    const chatBtn = el.closest('[data-ops-chat-task]');
+    if (chatBtn && board.contains(chatBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const tid = chatBtn.getAttribute('data-ops-chat-task');
+      if (tid) void window.openOpsChatModal(tid);
+      return;
+    }
+
+    const reopenBtn = el.closest('.btn-reopen-revision, .btn-resend-cancelled');
+    if (reopenBtn && board.contains(reopenBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const tid = reopenBtn.getAttribute('data-reopen-task-id');
+      if (tid) void window.openReopenRevisionModal(tid);
+      return;
+    }
+
+    const cancelBtn = el.closest('.btn-cancel-pending-os');
+    if (cancelBtn && board.contains(cancelBtn)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const tid = cancelBtn.getAttribute('data-cancel-task-id');
+      if (tid) void window.cancelTaskFromBoard(tid);
+      return;
+    }
+
+    if (el.closest('button, a, input, textarea, select, label')) return;
+    if (el.closest('[data-ops-track-panel]')) return;
+
+    const card = el.closest('.task-card[data-ops-open-detail]');
+    if (!card || !board.contains(card)) return;
+    const id = card.getAttribute('data-ops-open-detail');
+    if (id != null && id !== '') void window.openDetail(id);
+  });
+})();
+
+/** Histórico de revisões no modal de detalhe: snapshot e CSV sem onclick inline. */
+(() => {
+  const modal = document.getElementById('detail-modal');
+  if (!modal || modal.dataset.opsRevHistDelegBound === '1') return;
+  modal.dataset.opsRevHistDelegBound = '1';
+  modal.addEventListener('click', (e) => {
+    const el = e.target instanceof Element ? e.target.closest('.ops-rev-action-btn') : null;
+    if (!el || !modal.contains(el)) return;
+    const action = el.getAttribute('data-ops-rev-action');
+    const tid = el.getAttribute('data-ops-rev-task-id');
+    if (!tid || !action) return;
+    e.preventDefault();
+    if (action === 'snapshot') {
+      const rev = Number(el.getAttribute('data-ops-revision')) || 0;
+      void window.openRevisionSnapshotModal(tid, rev);
+    } else if (action === 'csv') {
+      const inc = el.getAttribute('data-ops-rev-csv-include-responses') === '1';
+      void window.downloadRevisionsCsv(tid, inc);
+    }
+  });
+})();
 
 window.cancelTask = async function(bypassConfirm = false) {
   if (!currentDetailId) return;

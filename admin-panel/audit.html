@@ -38,7 +38,7 @@
             </label>
           </div>
           <div class="data-toolbar-actions">
-            <button type="button" class="btn btn-outline btn-sm" id="au-refresh-btn" onclick="loadLogs()">
+            <button type="button" class="btn btn-outline btn-sm" id="au-refresh-btn">
               <ion-icon name="refresh-outline" style="font-size:17px;vertical-align:-3px" aria-hidden="true"></ion-icon>
               <span class="au-refresh-label">Atualizar</span>
             </button>
@@ -188,6 +188,7 @@
 
   loadLogs();
   document.getElementById('filter-cat').addEventListener('change', loadLogs);
+  document.getElementById('au-refresh-btn')?.addEventListener('click', () => void loadLogs());
 
   document.getElementById('au-export-btn').onclick = async () => {
     const cat = document.getElementById('filter-cat').value;

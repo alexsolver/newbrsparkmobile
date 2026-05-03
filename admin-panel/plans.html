@@ -300,8 +300,8 @@
         <td>${p.isActive === false ? `<span class="badge badge-gray">${esc(mpT('pln_badge_no'))}</span>` : `<span class="badge badge-green">${esc(mpT('pln_badge_yes'))}</span>`}</td>
         <td style="text-align:right;white-space:nowrap">
           ${canManagePlans
-            ? `<button type="button" class="btn btn-ghost btn-sm" onclick='openEditPlan(${JSON.stringify(p.id)})'>${esc(mpT('pln_btn_edit'))}</button>
-          <button type="button" class="btn btn-ghost btn-sm" onclick='duplicatePlan(${JSON.stringify(p.id)})'>${esc(mpT('pln_btn_dup'))}</button>`
+            ? `<button type="button" class="btn btn-ghost btn-sm pln-btn-edit" data-plan-id="${esc(String(p.id))}">${esc(mpT('pln_btn_edit'))}</button>
+          <button type="button" class="btn btn-ghost btn-sm pln-btn-dup" data-plan-id="${esc(String(p.id))}">${esc(mpT('pln_btn_dup'))}</button>`
             : `<span style="color:var(--text3);font-size:12px">—</span>`}
         </td>
       </tr>`,
@@ -442,6 +442,28 @@
       await loadPlans();
     } else alert(mpT('pln_alert_save_err', { detail: res?.error || mpT('pln_save_fail') }));
   });
+
+  function wirePlansTableDelegation() {
+    const tb = document.getElementById('plans-tbody');
+    if (!tb || tb.dataset.plnDelegBound === '1') return;
+    tb.dataset.plnDelegBound = '1';
+    tb.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const editB = t.closest('.pln-btn-edit');
+      if (editB && tb.contains(editB)) {
+        const id = editB.getAttribute('data-plan-id');
+        if (id != null && id !== '') window.openEditPlan(id);
+        return;
+      }
+      const dupB = t.closest('.pln-btn-dup');
+      if (dupB && tb.contains(dupB)) {
+        const id = dupB.getAttribute('data-plan-id');
+        if (id != null && id !== '') void window.duplicatePlan(id);
+      }
+    });
+  }
+  wirePlansTableDelegation();
 
   await loadPlans();
 </script>
