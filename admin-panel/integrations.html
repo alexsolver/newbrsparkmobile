@@ -38,7 +38,7 @@
         <span id="mpc-bc-here">Integrações</span>
       </nav>
     </div>
-    <div class="page-body">
+    <div class="page-body" id="integrations-page-root">
 
       <header class="page-hero fade-in">
         <h1 class="page-hero-title" id="mpc-hero-title">Integrações</h1>
@@ -71,9 +71,9 @@
             <input class="form-control" id="model-openai" placeholder="Modelo padrão (ex: gpt-4o)" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveInt('openai','AI_LLM','OpenAI',['key-openai','model-openai'],['apiKey','baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-openai" style="display:none" onclick="testInt('openai')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-openai" style="display:none" onclick="deleteIntByName('OpenAI')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="openai"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-openai" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-openai" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -91,9 +91,9 @@
             <input class="form-control" id="model-googleai" placeholder="Modelo padrão opcional (ex: gemini-2.5-flash)" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="void window.saveGoogleAiStudio()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-googleai" style="display:none" onclick="testInt('googleai')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-googleai" style="display:none" onclick="void window.deleteGoogleAiStudioInt()">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="googleai"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-googleai" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-googleai" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -110,9 +110,9 @@
             <input class="form-control" id="url-deepseek" placeholder="Base URL (ex: https://api.deepseek.com/v1)" value="https://api.deepseek.com/v1" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveInt('deepseek','AI_LLM','DeepSeek',['key-deepseek','url-deepseek'],['apiKey','baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-deepseek" style="display:none" onclick="testInt('deepseek')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-deepseek" style="display:none" onclick="deleteIntByName('DeepSeek')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="deepseek"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-deepseek" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-deepseek" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -135,9 +135,9 @@
             <input class="form-control" id="key-gmail" type="password" placeholder="Senha de App Google (16 chars)" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveInt('gmail','EMAIL','Gmail',['user-gmail','key-gmail'],['baseUrl','apiKey'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-gmail" style="display:none" onclick="testInt('gmail')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-gmail" style="display:none" onclick="deleteIntByName('Gmail')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="gmail"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-gmail" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-gmail" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -155,9 +155,9 @@
             <input class="form-control" id="tenant-office365" placeholder="Tenant ID (opcional)" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveInt('office365','EMAIL','Office 365',['user-office365','key-office365','tenant-office365'],['baseUrl','apiKey','description'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-office365" style="display:none" onclick="testInt('office365')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-office365" style="display:none" onclick="deleteIntByName('Office 365')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="office365"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-office365" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-office365" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -176,9 +176,9 @@
             <input class="form-control" id="key-smtp" type="password" placeholder="Senha / API Key" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveSmtp()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-smtp" style="display:none" onclick="testInt('smtp')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-smtp" style="display:none" onclick="deleteIntByName('SMTP Genérico')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="smtp"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-smtp" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-smtp" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -204,9 +204,9 @@
             <input class="form-control" id="name-mailersend" placeholder="Nome do remetente (opcional, ex: BrSpark)" autocomplete="off" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="void window.saveMailerSend()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-mailersend" style="display:none" onclick="testInt('mailersend')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-mailersend" style="display:none" onclick="deleteIntByName('MailerSend')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="mailersend"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-mailersend" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-mailersend" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -237,9 +237,9 @@
             <input class="form-control" id="url-microsoft-graph" placeholder="Raiz Graph (padrão: https://graph.microsoft.com/v1.0)" value="https://graph.microsoft.com/v1.0" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="void window.saveMicrosoftGraph()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-microsoft-graph" style="display:none" onclick="testInt('microsoft-graph')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-microsoft-graph" style="display:none" onclick="deleteIntByName('Microsoft Graph')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="microsoft-graph"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-microsoft-graph" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-microsoft-graph" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -258,9 +258,9 @@
             <input class="form-control" id="client-nylas" placeholder="Client ID da aplicação (opcional — fluxo OAuth hospedado)" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveNylas()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-nylas" style="display:none" onclick="testInt('nylas')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-nylas" style="display:none" onclick="deleteIntByName('Nylas')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="nylas"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-nylas" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-nylas" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -283,9 +283,9 @@
             <input class="form-control" id="url-cosmos" placeholder="Base URL" value="https://api.cosmos.bluesoft.com.br" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveInt('cosmos','ERP','Bluesoft Cosmos',['key-cosmos','url-cosmos'],['apiKey','baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-cosmos" style="display:none" onclick="testInt('cosmos')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-cosmos" style="display:none" onclick="deleteIntByName('Bluesoft Cosmos')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="cosmos"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-cosmos" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-cosmos" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -302,9 +302,9 @@
             <input class="form-control" id="url-upcitemdb" placeholder="Base URL" value="https://api.upcitemdb.com/prod/trial" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveInt('upcitemdb','ERP','UPCItemDB',['key-upcitemdb','url-upcitemdb'],['apiKey','baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-upcitemdb" style="display:none" onclick="testInt('upcitemdb')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-upcitemdb" style="display:none" onclick="deleteIntByName('UPCItemDB')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="upcitemdb"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-upcitemdb" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-upcitemdb" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -326,9 +326,9 @@
             <input class="form-control" id="whsec-stripe" type="password" placeholder="Assinatura webhooks (whsec_…) — opcional" autocomplete="off" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="void window.saveStripe()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-stripe" style="display:none" onclick="testInt('stripe')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-stripe" style="display:none" onclick="deleteIntByName('Stripe')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="stripe"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-stripe" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-stripe" style="display:none">Remover</button>
           </div>
         </div>
       </div>
@@ -355,9 +355,9 @@
             <input class="form-control" id="wh-didit" type="password" placeholder="Chave de assinatura de webhooks (no consola) — opcional" autocomplete="off" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="void window.saveDidit()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-didit" style="display:none" onclick="testInt('didit')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-didit" style="display:none" onclick="deleteIntByName('Didit')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="didit"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-didit" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-didit" style="display:none">Remover</button>
           </div>
         </div>
       </div>
@@ -381,9 +381,9 @@
             <input class="form-control" id="folder-dropbox" placeholder="Pasta raiz (ex: /BrSpark)" value="/BrSpark" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveDropbox()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-dropbox" style="display:none" onclick="testInt('dropbox')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-dropbox" style="display:none" onclick="deleteIntByName('Dropbox')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="dropbox"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-dropbox" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-dropbox" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -402,9 +402,9 @@
             <input class="form-control" id="bucket-r2" placeholder="Nome do Bucket" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveR2()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-cloudflare-r2" style="display:none" onclick="testInt('cloudflare-r2')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-cloudflare-r2" style="display:none" onclick="deleteIntByName('Cloudflare R2')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="cloudflare-r2"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-cloudflare-r2" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-cloudflare-r2" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -423,9 +423,9 @@
             <input class="form-control" id="region-s3" placeholder="Região (ex: us-east-1)" value="us-east-1" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveS3()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-amazon-s3" style="display:none" onclick="testInt('amazon-s3')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-amazon-s3" style="display:none" onclick="deleteIntByName('Amazon S3')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="amazon-s3"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-amazon-s3" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-amazon-s3" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -447,9 +447,9 @@
             <input class="form-control" id="url-osrm" placeholder="http://osrm.lansolver.com:5000" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveInt('osrm','MAPS','OSRM',['url-osrm'],['baseUrl'])"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-osrm" style="display:none" onclick="testInt('osrm')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-osrm" style="display:none" onclick="deleteIntByName('OSRM')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="osrm"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-osrm" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-osrm" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -470,9 +470,9 @@
             <input class="form-control" id="key-google-maps-platform" type="password" placeholder="API key (Google Cloud — Maps Platform)" autocomplete="off" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="void window.saveGoogleMapsPlatform()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-google-maps-platform" style="display:none" onclick="testInt('google-maps-platform')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-google-maps-platform" style="display:none" onclick="deleteIntByName('Google Maps Platform')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="google-maps-platform"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-google-maps-platform" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-google-maps-platform" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -496,9 +496,9 @@
             <input class="form-control" id="secret-aws-rekog" type="password" placeholder="Secret Access Key" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveVisionInt('AWS Rekognition', 'aws-rekog')"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-aws-rekog" style="display:none" onclick="testInt('aws-rekog')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-aws-rekog" style="display:none" onclick="deleteIntByName('AWS Rekognition')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="aws-rekog"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-aws-rekog" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-aws-rekog" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -518,9 +518,9 @@
             <input class="form-control" id="key-compreface-verification" type="password" placeholder="Verification API Key (opcional — app Face Verification)" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveVisionInt('Exadel CompreFace', 'compreface')"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-compreface" style="display:none" onclick="testInt('compreface')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-compreface" style="display:none" onclick="deleteIntByName('Exadel CompreFace')">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="compreface"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-compreface" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-compreface" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -538,9 +538,9 @@
             <input class="form-control" id="timeout-vision-checklist" placeholder="Timeout ms (opcional, padrão 120000)" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveVisionChecklistInt()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-vision-checklist" style="display:none" onclick="testInt('vision-checklist')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-vision-checklist" style="display:none" onclick="deleteVisionChecklistInt()">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="vision-checklist"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-vision-checklist" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-vision-checklist" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -558,9 +558,9 @@
             <input class="form-control" id="timeout-vision-moondream" placeholder="Timeout ms (opcional, padrão 120000)" />
           </div>
           <div class="int-actions">
-            <button class="btn btn-primary btn-sm" onclick="saveMoondreamVisionInt()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
-            <button class="btn btn-success btn-sm" id="test-vision-moondream" style="display:none" onclick="testInt('vision-moondream')"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
-            <button class="btn btn-danger btn-sm" id="del-vision-moondream" style="display:none" onclick="deleteMoondreamVisionInt()">Remover</button>
+            <button type="button" class="btn btn-primary btn-sm" data-integ-save="vision-moondream"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
+            <button class="btn btn-success btn-sm" id="test-vision-moondream" style="display:none"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Testar</button>
+            <button class="btn btn-danger btn-sm" id="del-vision-moondream" style="display:none">Remover</button>
           </div>
         </div>
 
@@ -1369,6 +1369,76 @@
     } else alert(integT('integ_alert_save_err', { detail: res?.error || integT('integ_save_fallback') }));
   };
 
+  const SLUG_TO_INT_NAME = Object.fromEntries(
+    Object.entries(CARD_MAP).map(([name, { slug }]) => [slug, name]),
+  );
+
+  const INT_SAVE_DISPATCH = {
+    openai: () => window.saveInt('openai', 'AI_LLM', 'OpenAI', ['key-openai', 'model-openai'], ['apiKey', 'baseUrl']),
+    googleai: () => window.saveGoogleAiStudio(),
+    deepseek: () => window.saveInt('deepseek', 'AI_LLM', 'DeepSeek', ['key-deepseek', 'url-deepseek'], ['apiKey', 'baseUrl']),
+    gmail: () => window.saveInt('gmail', 'EMAIL', 'Gmail', ['user-gmail', 'key-gmail'], ['baseUrl', 'apiKey']),
+    office365: () => window.saveInt('office365', 'EMAIL', 'Office 365', ['user-office365', 'key-office365', 'tenant-office365'], ['baseUrl', 'apiKey', 'description']),
+    smtp: () => window.saveSmtp(),
+    mailersend: () => window.saveMailerSend(),
+    'microsoft-graph': () => window.saveMicrosoftGraph(),
+    nylas: () => window.saveNylas(),
+    cosmos: () => window.saveInt('cosmos', 'ERP', 'Bluesoft Cosmos', ['key-cosmos', 'url-cosmos'], ['apiKey', 'baseUrl']),
+    upcitemdb: () => window.saveInt('upcitemdb', 'ERP', 'UPCItemDB', ['key-upcitemdb', 'url-upcitemdb'], ['apiKey', 'baseUrl']),
+    stripe: () => window.saveStripe(),
+    didit: () => window.saveDidit(),
+    dropbox: () => window.saveDropbox(),
+    'cloudflare-r2': () => window.saveR2(),
+    'amazon-s3': () => window.saveS3(),
+    osrm: () => window.saveInt('osrm', 'MAPS', 'OSRM', ['url-osrm'], ['baseUrl']),
+    'google-maps-platform': () => window.saveGoogleMapsPlatform(),
+    'aws-rekog': () => window.saveVisionInt('AWS Rekognition', 'aws-rekog'),
+    compreface: () => window.saveVisionInt('Exadel CompreFace', 'compreface'),
+    'vision-checklist': () => window.saveVisionChecklistInt(),
+    'vision-moondream': () => window.saveMoondreamVisionInt(),
+  };
+
+  let integrationsClickDelegationBound = false;
+  function initIntegrationsButtonDelegation() {
+    const root = document.getElementById('integrations-page-root');
+    if (!root || integrationsClickDelegationBound) return;
+    integrationsClickDelegationBound = true;
+    root.addEventListener('click', (e) => {
+      const saveEl = e.target.closest('[data-integ-save]');
+      if (saveEl && root.contains(saveEl)) {
+        const key = saveEl.getAttribute('data-integ-save');
+        const run = key && INT_SAVE_DISPATCH[key];
+        if (run) void run();
+        return;
+      }
+      const testEl = e.target.closest('[id^="test-"]');
+      if (testEl && root.contains(testEl) && testEl.id.startsWith('test-')) {
+        const slug = testEl.id.slice('test-'.length);
+        if (slug) void window.testInt(slug);
+        return;
+      }
+      const delEl = e.target.closest('[id^="del-"]');
+      if (delEl && root.contains(delEl) && delEl.id.startsWith('del-')) {
+        const slug = delEl.id.slice('del-'.length);
+        if (slug === 'googleai') {
+          void window.deleteGoogleAiStudioInt();
+          return;
+        }
+        if (slug === 'vision-checklist') {
+          void window.deleteVisionChecklistInt();
+          return;
+        }
+        if (slug === 'vision-moondream') {
+          void window.deleteMoondreamVisionInt();
+          return;
+        }
+        const intName = SLUG_TO_INT_NAME[slug];
+        if (intName) void window.deleteIntByName(intName);
+      }
+    });
+  }
+
+  initIntegrationsButtonDelegation();
   loadIntegrations();
 </script>
 </body>

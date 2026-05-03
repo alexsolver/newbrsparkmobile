@@ -8939,33 +8939,41 @@ window.onKmlRouteFileChange = function(event) {
   document.getElementById('d-kml-route-label').textContent = file.name;
   document.getElementById('d-kml-route-status').innerHTML = '⏳ Lendo arquivo...';
   const reader = new FileReader();
-  reader.onload = function(ev) {
-    try {
-      const parsed = window.parseKML(ev.target.result);
-      if (!parsed || parsed.coords.length < 2) {
-        document.getElementById('d-kml-route-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Nenhuma geometria encontrada no KML.';
-        return;
-      }
-      if (parsed.type !== 'route') {
+  reader.addEventListener(
+    'load',
+    function (ev) {
+      try {
+        const parsed = window.parseKML(ev.target.result);
+        if (!parsed || parsed.coords.length < 2) {
+          document.getElementById('d-kml-route-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Nenhuma geometria encontrada no KML.';
+          return;
+        }
+        if (parsed.type !== 'route') {
+          document.getElementById('d-kml-route-status').innerHTML =
+            '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Este KML contém um Polígono, não uma Rota (LineString). Use a aba <ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono.';
+          return;
+        }
+        document.getElementById('d-route').value = JSON.stringify(parsed.coords);
+        window._kmlZoneType = 'route';
         document.getElementById('d-kml-route-status').innerHTML =
-          '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Este KML contém um Polígono, não uma Rota (LineString). Use a aba <ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono.';
-        return;
+          '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> <ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> Rota importada — <strong>' + parsed.coords.length + ' pontos</strong>.';
+        if (!window._dispatchMapRoute) window.initRouteMap();
+        setTimeout(function() { window.renderRoutePreview(); }, 300);
+      } catch(err) {
+        document.getElementById('d-kml-route-status').innerHTML =
+          '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Erro: ' +
+          escOpsChatHtml(String(err && err.message != null ? err.message : ''));
       }
-      document.getElementById('d-route').value = JSON.stringify(parsed.coords);
-      window._kmlZoneType = 'route';
-      document.getElementById('d-kml-route-status').innerHTML =
-        '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> <ion-icon name="git-branch-outline" style="vertical-align:-2px"></ion-icon> Rota importada — <strong>' + parsed.coords.length + ' pontos</strong>.';
-      if (!window._dispatchMapRoute) window.initRouteMap();
-      setTimeout(function() { window.renderRoutePreview(); }, 300);
-    } catch(err) {
-      document.getElementById('d-kml-route-status').innerHTML =
-        '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Erro: ' +
-        escOpsChatHtml(String(err && err.message != null ? err.message : ''));
-    }
-  };
-  reader.onerror = function() {
-    document.getElementById('d-kml-route-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Falha ao ler o arquivo.';
-  };
+    },
+    { once: true },
+  );
+  reader.addEventListener(
+    'error',
+    function () {
+      document.getElementById('d-kml-route-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Falha ao ler o arquivo.';
+    },
+    { once: true },
+  );
   reader.readAsText(file);
 };
 
@@ -9098,30 +9106,38 @@ window.onKmlFileChange = function(event) {
   document.getElementById('d-kml-label').textContent = file.name;
   document.getElementById('d-kml-status').innerHTML = '⏳ Lendo arquivo...';
   const reader = new FileReader();
-  reader.onload = function(ev) {
-    try {
-      const parsed = window.parseKML(ev.target.result);
-      if (!parsed || parsed.coords.length < 2) {
-        document.getElementById('d-kml-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Nenhuma geometria encontrada no KML.';
-        return;
+  reader.addEventListener(
+    'load',
+    function (ev) {
+      try {
+        const parsed = window.parseKML(ev.target.result);
+        if (!parsed || parsed.coords.length < 2) {
+          document.getElementById('d-kml-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Nenhuma geometria encontrada no KML.';
+          return;
+        }
+        document.getElementById('d-polygon').value = JSON.stringify(parsed.coords);
+        // Store zone type to be sent on dispatch
+        window._kmlZoneType = parsed.type; // 'polygon' or 'route'
+        const typeLabel = parsed.type === 'route' ? '<ion-icon name="ellipse" style="color:var(--amber);vertical-align:-2px;font-size:10px"></ion-icon> Rota' : '<ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono';
+        document.getElementById('d-kml-status').innerHTML =
+          '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> ' + typeLabel + ' importado — <strong>' + parsed.coords.length + ' pontos</strong>.';
+        if (!window._dispatchMapPoly) window.initPolygonMap();
+        setTimeout(function() { window.renderPolygonPreview(); }, 300);
+      } catch(err) {
+        document.getElementById('d-kml-status').innerHTML =
+          '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Erro: ' +
+          escOpsChatHtml(String(err && err.message != null ? err.message : ''));
       }
-      document.getElementById('d-polygon').value = JSON.stringify(parsed.coords);
-      // Store zone type to be sent on dispatch
-      window._kmlZoneType = parsed.type; // 'polygon' or 'route'
-      const typeLabel = parsed.type === 'route' ? '<ion-icon name="ellipse" style="color:var(--amber);vertical-align:-2px;font-size:10px"></ion-icon> Rota' : '<ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Polígono';
-      document.getElementById('d-kml-status').innerHTML =
-        '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> ' + typeLabel + ' importado — <strong>' + parsed.coords.length + ' pontos</strong>.';
-      if (!window._dispatchMapPoly) window.initPolygonMap();
-      setTimeout(function() { window.renderPolygonPreview(); }, 300);
-    } catch(err) {
-      document.getElementById('d-kml-status').innerHTML =
-        '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Erro: ' +
-        escOpsChatHtml(String(err && err.message != null ? err.message : ''));
-    }
-  };
-  reader.onerror = function() {
-    document.getElementById('d-kml-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Falha ao ler o arquivo.';
-  };
+    },
+    { once: true },
+  );
+  reader.addEventListener(
+    'error',
+    function () {
+      document.getElementById('d-kml-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Falha ao ler o arquivo.';
+    },
+    { once: true },
+  );
   reader.readAsText(file);
 };
 

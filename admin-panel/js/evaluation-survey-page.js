@@ -34,15 +34,23 @@ function applyBranding(data) {
     if (u && isHttpUrl(u)) {
       const img = document.createElement('img');
       img.alt = '';
-      img.src = u;
       img.loading = 'lazy';
       img.decoding = 'async';
-      img.onerror = () => {
-        logoWrap.style.display = 'none';
-      };
-      img.onload = () => {
-        logoWrap.style.display = 'block';
-      };
+      img.addEventListener(
+        'error',
+        () => {
+          logoWrap.style.display = 'none';
+        },
+        { once: true },
+      );
+      img.addEventListener(
+        'load',
+        () => {
+          logoWrap.style.display = 'block';
+        },
+        { once: true },
+      );
+      img.src = u;
       logoWrap.appendChild(img);
       logoWrap.style.display = 'block';
     }
@@ -80,10 +88,10 @@ function renderQuestion(q) {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = String(v);
-      b.onclick = () => {
+      b.addEventListener('click', () => {
         state.answers[id] = { value: v };
         row.querySelectorAll('button').forEach((x, i) => x.classList.toggle('on', i + 1 === v));
-      };
+      });
       row.appendChild(b);
     }
     wrap.appendChild(row);
@@ -94,10 +102,10 @@ function renderQuestion(q) {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = String(v);
-      b.onclick = () => {
+      b.addEventListener('click', () => {
         state.answers[id] = { value: v };
         row.querySelectorAll('button').forEach((x) => x.classList.toggle('on', Number(x.textContent) === v));
-      };
+      });
       row.appendChild(b);
     }
     wrap.appendChild(row);
@@ -120,27 +128,27 @@ function renderQuestion(q) {
       b.style.background = 'var(--card)';
       b.style.fontWeight = '800';
       b.style.cursor = 'pointer';
-      b.onclick = () => {
+      b.addEventListener('click', () => {
         state.answers[id] = { value: val };
         row.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
         b.classList.add('on');
-      };
+      });
       row.appendChild(b);
     });
     wrap.appendChild(row);
   } else if (q.type === 'TEXT') {
     const ta = document.createElement('textarea');
     ta.placeholder = esvT('esv_ph_text');
-    ta.oninput = () => {
+    ta.addEventListener('input', () => {
       state.answers[id] = { text: ta.value };
-    };
+    });
     wrap.appendChild(ta);
   } else {
     const ta = document.createElement('textarea');
     ta.placeholder = esvT('esv_ph_other');
-    ta.oninput = () => {
+    ta.addEventListener('input', () => {
       state.answers[id] = { text: ta.value };
-    };
+    });
     wrap.appendChild(ta);
   }
   return wrap;
@@ -178,7 +186,7 @@ function renderSurveyUi(data) {
   btn.type = 'button';
   btn.textContent = state.previewMode ? esvT('esv_preview_btn') : esvT('esv_submit');
   btn.disabled = !!state.previewMode;
-  btn.onclick = () => submit(ta.value);
+  btn.addEventListener('click', () => submit(ta.value));
   root.appendChild(btn);
 
   applyBranding(data);

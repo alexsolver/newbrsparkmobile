@@ -1792,20 +1792,20 @@
 
       <div class="data-toolbar fb-toolbar fb-toolbar-below-hero">
         <div class="data-toolbar-main" style="align-items:flex-end;flex-wrap:wrap;gap:10px">
-          <button type="button" class="btn btn-outline btn-sm" onclick="window.openFormsModal()" title="Ver Formulários Salvos" id="forms-modal-btn"><ion-icon name="folder-open-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-open-lbl">Abrir Formulário</span></button>
-          <button type="button" class="btn btn-ghost btn-sm" data-fb-action="new-form" onclick="window.createNewChecklist()" title="Novo Formulário Limpo"><ion-icon name="add-circle-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-new-lbl">Criar Novo</span></button>
-          <button type="button" class="btn btn-ghost btn-sm" data-fb-action="import-json" onclick="window.importJSON()" title="Importar JSON" style="color:var(--text3);"><ion-icon name="cloud-download-outline"></ion-icon></button>
-          <button type="button" class="btn btn-ghost btn-sm" data-fb-action="export-json" onclick="window.exportJSON()" title="Exportar Schema (Download)" style="color:var(--text3);"><ion-icon name="cloud-upload-outline"></ion-icon></button>
-          <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-toggle-btn" onclick="window.toggleAiCopilotPanel()" title="Composer: ajustar formulário, regras e ícones com IA" style="border-color:#6366f1;color:#4f46e5;">
+          <button type="button" class="btn btn-outline btn-sm" data-fb-cmd="openFormsModal" title="Ver Formulários Salvos" id="forms-modal-btn"><ion-icon name="folder-open-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-open-lbl">Abrir Formulário</span></button>
+          <button type="button" class="btn btn-ghost btn-sm" data-fb-cmd="createNewChecklist" title="Novo Formulário Limpo"><ion-icon name="add-circle-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-new-lbl">Criar Novo</span></button>
+          <button type="button" class="btn btn-ghost btn-sm" data-fb-cmd="importJSON" title="Importar JSON" style="color:var(--text3);"><ion-icon name="cloud-download-outline"></ion-icon></button>
+          <button type="button" class="btn btn-ghost btn-sm" data-fb-cmd="exportJSON" title="Exportar Schema (Download)" style="color:var(--text3);"><ion-icon name="cloud-upload-outline"></ion-icon></button>
+          <button type="button" class="btn btn-outline btn-sm" id="ai-copilot-toggle-btn" data-fb-cmd="toggleAiCopilotPanel" title="Composer: ajustar formulário, regras e ícones com IA" style="border-color:#6366f1;color:#4f46e5;">
             <ion-icon name="chatbubbles-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-copilot-lbl">Composer</span>
           </button>
         </div>
         <div class="data-toolbar-actions">
           <span id="fb-unsaved-badge" class="badge badge-amber" style="display:none;font-size:11px;font-weight:700;margin-right:4px;"></span>
           <span id="fb-current-template-version" style="display:none;"></span>
-          <button type="button" class="btn btn-outline btn-sm" onclick="void window.openChecklistVersionHistory()" title="Ver histórico de versões do formulário atual"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> <span>Versões</span></button>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="window.toggleMobilePreview()" style="color:var(--accent); border:1px solid var(--accent)"><ion-icon name="phone-portrait-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-preview-lbl">Preview no App</span></button>
-          <button type="button" class="btn btn-primary btn-sm" id="fb-save-schema-btn" onclick="window.saveChecklist()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-save-lbl">Salvar Schema</span></button>
+          <button type="button" class="btn btn-outline btn-sm" data-fb-cmd="openChecklistVersionHistory" title="Ver histórico de versões do formulário atual"><ion-icon name="time-outline" style="vertical-align:-2px"></ion-icon> <span>Versões</span></button>
+          <button type="button" class="btn btn-ghost btn-sm" data-fb-cmd="toggleMobilePreview" style="color:var(--accent); border:1px solid var(--accent)"><ion-icon name="phone-portrait-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-preview-lbl">Preview no App</span></button>
+          <button type="button" class="btn btn-primary btn-sm" id="fb-save-schema-btn" data-fb-cmd="saveChecklist"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> <span id="fb-btn-save-lbl">Salvar Schema</span></button>
         </div>
       </div>
 
@@ -1823,7 +1823,7 @@
               <input type="hidden" id="tpl-icon" value="">
               <input type="hidden" id="tpl-icon-library" value="Ionicons">
               <button type="button" id="tpl-form-icon-trigger" title="Ícone do formulário — clique para escolher" aria-label="Escolher ícone do formulário"
-                onclick="window.openTemplateFormIconPicker(event)"
+                data-fb-cmd="openTemplateFormIconPicker"
                 style="width:44px;height:44px;flex-shrink:0;border-radius:10px;display:flex;justify-content:center;align-items:center;cursor:pointer;background:var(--color-bg);border:1px dashed var(--color-border);padding:0;transition:border-color 0.2s,background 0.2s;">
                 <ion-icon name="images-outline" style="font-size:22px;color:var(--color-text-light);"></ion-icon>
               </button>
@@ -1837,7 +1837,7 @@
         </div>
 
         <div class="fb-form-active-row" style="display:flex;align-items:flex-start;gap:10px;margin:8px 0 0;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);">
-          <input type="checkbox" id="fb-form-active" checked style="margin-top:2px;flex-shrink:0;width:18px;height:18px;cursor:pointer;" onchange="window.onFbFormActiveToggle && window.onFbFormActiveToggle(this.checked)" />
+          <input type="checkbox" id="fb-form-active" checked style="margin-top:2px;flex-shrink:0;width:18px;height:18px;cursor:pointer;" />
           <div style="min-width:0;">
             <label for="fb-form-active" id="fb-label-form-active" class="prop-label" style="margin:0;font-weight:700;cursor:pointer;">Formulário ativo</label>
             <div id="fb-hint-form-active" style="font-size:11px;color:var(--text3);line-height:1.45;margin-top:4px;">Inativo: não aparece no despacho de OS nem na lista pública de modelos da API (só no builder com «incluir arquivados»).</div>
@@ -1854,7 +1854,7 @@
                 class="btn btn-ghost btn-sm fb-app-layout-open-btn"
                 aria-haspopup="dialog"
                 aria-controls="fb-app-layout-dialog"
-                onclick="window.openAppLayoutModal && window.openAppLayoutModal()"
+                data-fb-cmd="openAppLayoutModal"
               >
                 <ion-icon name="map-outline" style="font-size:16px; color:var(--accent); flex-shrink:0;"></ion-icon>
                 <span class="fb-app-layout-open-btn__line" id="fb-app-layout-summary">Layout - 1ª etapa - clássico</span>
@@ -1863,7 +1863,7 @@
                 type="button"
                 id="fb-btn-geofence-nav"
                 class="btn btn-ghost btn-sm fb-app-nav-chip-btn"
-                onclick="window.configureGlobalSettings && window.configureGlobalSettings()"
+                data-fb-cmd="configureGlobalSettings"
               >
                 <ion-icon name="settings-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
                 <span id="fb-btn-geofence-lbl">Cerca global</span>
@@ -1872,7 +1872,7 @@
                 type="button"
                 class="btn btn-ghost btn-sm fb-app-nav-chip-btn"
                 data-fb-action="form-duration"
-                onclick="window.openExpectedFormDurationModal && window.openExpectedFormDurationModal()"
+                data-fb-cmd="openExpectedFormDurationModal"
               >
                 <ion-icon name="time-outline" style="font-size:15px; vertical-align:-2px; color:var(--text2);"></ion-icon>
                 <span id="fb-btn-duration-lbl">Tempo do formulário</span>
@@ -1996,17 +1996,17 @@
         <div id="field-properties-modal-title" style="font-size:16px; font-weight:800; color:#0f172a; letter-spacing:-0.02em;">Propriedades do campo</div>
         <div id="field-properties-modal-subtitle" style="font-size:12px; color:var(--color-text-light); margin-top:4px; line-height:1.4; word-break:break-word;"></div>
       </div>
-      <button type="button" id="mdl-field-props-close-btn" class="btn btn-ghost" style="flex-shrink:0; padding:8px 12px; font-size:20px; line-height:1; border-radius:10px;" title="Fechar" aria-label="Fechar" onclick="window.closeFieldPropertiesModal()">&times;</button>
+      <button type="button" id="mdl-field-props-close-btn" class="btn btn-ghost" style="flex-shrink:0; padding:8px 12px; font-size:20px; line-height:1; border-radius:10px;" title="Fechar" aria-label="Fechar" data-fb-cmd="closeFieldPropertiesModal">&times;</button>
     </div>
     <div id="field-properties-modal-body" class="panel-body" style="flex:1; overflow-y:auto; overflow-x:hidden; padding:16px 18px 16px; min-height:120px;"></div>
     <div style="flex-shrink:0; padding:12px 18px 16px; border-top:1px solid var(--color-border); background:var(--color-bg); display:flex; justify-content:flex-end; gap:10px;">
-      <button type="button" id="mdl-field-props-ok" class="btn btn-primary" style="min-width:100px; font-weight:700;" onclick="window.closeFieldPropertiesModal()">OK</button>
+      <button type="button" id="mdl-field-props-ok" class="btn btn-primary" style="min-width:100px; font-weight:700;" data-fb-cmd="closeFieldPropertiesModal">OK</button>
     </div>
   </div>
 </div>
 
 <!-- Live Mobile Preview Modal -->
-<div id="mobile-preview-overlay" onclick="if(event.target === this) window.toggleMobilePreview()" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
+<div id="mobile-preview-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.8); z-index:9999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
   <div style="width: 380px; height: 800px; background: white; border-radius: 40px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 12px solid #1e293b; position:relative; overflow:hidden; display:flex; flex-direction:column;">
      <!-- Notch -->
      <div style="position:absolute; top:0; left:50%; transform:translateX(-50%); width: 120px; height: 25px; background: #1e293b; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; z-index:10"></div>
@@ -2014,14 +2014,14 @@
      <!-- Simulator Header -->
      <div style="background: var(--primary); color: white; padding: 40px 20px 20px; text-align:center; font-weight:700; font-size:16px;">
         <div id="mobile-preview-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px; margin:0 auto;">App BrSpark</div>
-        <div style="position:absolute; top: 38px; left: 20px; font-size:24px; cursor:pointer;" onclick="window.toggleMobilePreview()">&times;</div>
+        <div style="position:absolute; top: 38px; left: 20px; font-size:24px; cursor:pointer;" data-fb-cmd="toggleMobilePreview">&times;</div>
      </div>
      <div id="mobile-preview-fill-toolbar" style="display:none; flex-shrink:0; background:#1e293b; color:var(--color-border); padding:10px 12px; font-size:10px; border-bottom:1px solid #334155;">
         <div id="mdl-mobile-sim-nav" style="font-weight:800; margin-bottom:8px; color:var(--color-text-light);">Simular navegação (só preview)</div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-          <button type="button" id="mdl-mobile-btn-list" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:var(--color-surface); border:1px solid #475569;" onclick="window.setMobilePreviewFillSim('full')">Lista</button>
-          <button type="button" id="mdl-mobile-btn-wizard" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:var(--color-surface); border:1px solid #475569;" onclick="window.setMobilePreviewFillSim('wizard')">Um-a-um</button>
-          <button type="button" id="mdl-mobile-btn-hybrid" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:var(--color-surface); border:1px solid #475569;" onclick="window.setMobilePreviewFillSim('hybrid')">Híbrido</button>
+          <button type="button" id="mdl-mobile-btn-list" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:var(--color-surface); border:1px solid #475569;" data-fb-cmd="setMobilePreviewFillSim" data-fb-arg="full">Lista</button>
+          <button type="button" id="mdl-mobile-btn-wizard" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:var(--color-surface); border:1px solid #475569;" data-fb-cmd="setMobilePreviewFillSim" data-fb-arg="wizard">Um-a-um</button>
+          <button type="button" id="mdl-mobile-btn-hybrid" class="btn btn-ghost btn-sm" style="font-size:10px; padding:6px 10px; color:var(--color-surface); border:1px solid #475569;" data-fb-cmd="setMobilePreviewFillSim" data-fb-arg="hybrid">Híbrido</button>
           <span id="mobile-preview-fill-hint" style="margin-left:auto; font-size:10px; color:var(--color-text-light); max-width:140px; text-align:right;"></span>
         </div>
      </div>
@@ -2049,22 +2049,22 @@
 </script>
 
 <!-- Pastas e formulários (gaveta lateral esquerda, estilo semelhante a clientes de e-mail) -->
-<div id="forms-list-modal" style="display:none;" onclick="if(event.target===this && window.closeFormsBrowser)window.closeFormsBrowser()">
-    <div style="background:var(--color-bg); width:min(960px, 98vw); height:100vh; min-height:0; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); box-sizing:border-box; border-right:1px solid var(--color-border);" onclick="event.stopPropagation()">
+<div id="forms-list-modal" style="display:none;">
+    <div style="background:var(--color-bg); width:min(960px, 98vw); height:100vh; min-height:0; display:flex; flex-direction:column; overflow:hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); box-sizing:border-box; border-right:1px solid var(--color-border);">
         <div style="padding:18px 20px; background:white; border-bottom:1px solid var(--color-border); display:flex; justify-content:space-between; align-items:center; gap:12px; flex-shrink:0;">
             <div>
                <h3 id="mdl-forms-title" style="margin:0; font-size:20px; color:#0f172a; font-weight:900;">Meus Formulários</h3>
                <p id="mdl-forms-sub" style="margin:4px 0 0 0; font-size:13px; color:var(--color-text-light);">Navegação em colunas (como o Finder): clique numa pasta para abrir a coluna seguinte.</p>
             </div>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeFormsBrowser && window.closeFormsBrowser()" aria-label="Fechar lista de formulários"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
+            <button type="button" class="btn btn-ghost btn-sm" data-fb-cmd="closeFormsBrowser" aria-label="Fechar lista de formulários"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
         </div>
         <div style="padding:14px 20px; background:white; border-bottom:1px solid var(--color-border); flex-shrink:0;">
             <div style="display:flex; align-items:center; gap:8px;">
                 <ion-icon name="search-outline" style="font-size:20px; color:var(--color-text-light); flex-shrink:0;"></ion-icon>
-                <input type="text" id="form-search" placeholder="Filtrar por nome (pastas e formulários)…" class="prop-input" onkeyup="window.filterFormsList()" style="font-size:15px; padding:12px; flex:1; border:none; outline:none; min-width:0;" >
+                <input type="text" id="form-search" placeholder="Filtrar por nome (pastas e formulários)…" class="prop-input" style="font-size:15px; padding:12px; flex:1; border:none; outline:none; min-width:0;" >
             </div>
             <label id="mdl-forms-filter-archived-lbl" style="display:flex; align-items:center; gap:8px; margin-top:10px; font-size:13px; font-weight:600; color:#334155; cursor:pointer; user-select:none;">
-                <input type="checkbox" id="forms-filter-hide-archived" checked onchange="window.onFormsFilterArchivedChange && window.onFormsFilterArchivedChange()" style="width:18px;height:18px;flex-shrink:0;" />
+                <input type="checkbox" id="forms-filter-hide-archived" checked style="width:18px;height:18px;flex-shrink:0;" />
                 <span id="mdl-forms-filter-archived-text">Apenas não arquivados</span>
             </label>
         </div>
@@ -2072,7 +2072,7 @@
             <div id="forms-browser-toolbar" style="display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--color-border); flex-shrink:0; background:white;">
                 <nav id="forms-folder-breadcrumb" style="font-size:13px; color:#475569; flex:1; min-width:140px;"></nav>
                 <button type="button" class="btn btn-outline" id="btn-new-template-folder" style="font-size:12px; white-space:nowrap;">+ Nova pasta</button>
-                <button type="button" class="btn btn-primary" data-fb-forms-new-here onclick="window.createNewChecklistInBrowseFolder()" style="font-size:12px; white-space:nowrap;">Novo formulário aqui</button>
+                <button type="button" class="btn btn-primary" data-fb-cmd="createNewChecklistInBrowseFolder" style="font-size:12px; white-space:nowrap;">Novo formulário aqui</button>
             </div>
             <p id="forms-tree-tip" style="margin:0; padding:8px 16px; font-size:11px; color:var(--color-text-light); flex-shrink:0; background:white; border-bottom:1px solid var(--color-border); line-height:1.45;">Dica: arraste um modelo para uma pasta em qualquer coluna, ou use «Mover para» na linha do formulário.</p>
             <aside id="forms-folder-tree" class="fb-finder-host" style="flex:1 1 0%; min-height:0; display:flex; flex-direction:column; overflow:hidden; background:#e5e7eb; font-size:13px;">
@@ -2083,22 +2083,22 @@
 </div>
 
 <!-- Nova pasta (substitui window.prompt — alguns browsers bloqueiam prompt no modal) -->
-<div id="new-folder-modal" style="display:none; position:fixed; inset:0; z-index:1000000; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.cancelNewFolderModal()">
-    <div style="background:white; width:min(420px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
+<div id="new-folder-modal" style="display:none; position:fixed; inset:0; z-index:1000000; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);">
+    <div style="background:white; width:min(420px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);">
         <h3 id="mdl-folder-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Nova pasta</h3>
         <p id="mdl-folder-sub" style="margin:0 0 16px 0; font-size:13px; color:var(--color-text-light);">A pasta será criada no nível atual (breadcrumb).</p>
         <label id="mdl-folder-name-lbl" class="prop-label" for="new-folder-name-input">Nome</label>
         <input type="text" id="new-folder-name-input" class="prop-input" placeholder="Ex.: Manutenção 2026" autocomplete="off" style="margin-bottom:16px;" />
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" id="mdl-folder-cancel" class="btn btn-ghost" onclick="window.cancelNewFolderModal()">Cancelar</button>
-            <button type="button" id="mdl-folder-create" class="btn btn-primary" onclick="window.submitNewTemplateFolder()">Criar pasta</button>
+            <button type="button" id="mdl-folder-cancel" class="btn btn-ghost" data-fb-cmd="cancelNewFolderModal">Cancelar</button>
+            <button type="button" id="mdl-folder-create" class="btn btn-primary" data-fb-cmd="submitNewTemplateFolder">Criar pasta</button>
         </div>
     </div>
 </div>
 
 <!-- Cerca global: modal em vez de confirm/prompt (ícones na topbar + browsers que suprimem diálogos) -->
-<div id="global-geofence-modal" style="display:none; position:fixed; inset:0; z-index:1000001; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.closeGlobalGeofenceModal()">
-    <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
+<div id="global-geofence-modal" style="display:none; position:fixed; inset:0; z-index:1000001; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);">
+    <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);">
         <h3 id="mdl-geofence-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Cerca eletrónica global</h3>
         <p id="mdl-geofence-body" style="margin:0 0 16px 0; font-size:13px; color:var(--color-text-light); line-height:1.45;">Se ativar, a app pode exigir que o técnico esteja dentro do raio (metros) do GPS da manutenção para abrir este formulário.</p>
         <label style="display:flex; align-items:center; gap:10px; margin-bottom:16px; font-size:14px; font-weight:600; color:#1e293b; cursor:pointer;">
@@ -2109,23 +2109,23 @@
         <input type="number" id="global-geofence-radius" class="prop-input" min="10" max="50000" step="1" style="margin-bottom:16px;" />
         <p id="mdl-geofence-hint" style="margin:0 0 16px 0; font-size:12px; color:var(--color-text-light);">Pode continuar a usar o bloco "Validar Cerca" em passos isolados. Use <strong>Salvar Schema</strong> para gravar estas configurações.</p>
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" id="mdl-geofence-close" class="btn btn-ghost" onclick="window.closeGlobalGeofenceModal()">Fechar</button>
-            <button type="button" id="mdl-geofence-apply" class="btn btn-primary" onclick="window.applyGlobalGeofenceModal()">Aplicar</button>
+            <button type="button" id="mdl-geofence-close" class="btn btn-ghost" data-fb-cmd="closeGlobalGeofenceModal">Fechar</button>
+            <button type="button" id="mdl-geofence-apply" class="btn btn-primary" data-fb-cmd="applyGlobalGeofenceModal">Aplicar</button>
         </div>
     </div>
 </div>
 
 <!-- Tempo previsto de execução do formulário (despacho) — separado da cerca global -->
-<div id="expected-form-duration-modal" style="display:none; position:fixed; inset:0; z-index:1000001; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.closeExpectedFormDurationModal()">
-    <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
+<div id="expected-form-duration-modal" style="display:none; position:fixed; inset:0; z-index:1000001; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);">
+    <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);">
         <h3 id="mdl-duration-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Tempo previsto de execução do formulário</h3>
         <p id="mdl-duration-body" style="margin:0 0 16px 0; font-size:13px; color:var(--color-text-light); line-height:1.45;">Só o preenchimento do formulário (sem deslocamento). Opcional: se vazio, no despacho usa-se 60 min. Múltiplos de 5 min; mínimo 5.</p>
         <label id="mdl-duration-lbl" class="prop-label" for="expected-form-duration-minutes">Minutos (opcional)</label>
         <input type="number" id="expected-form-duration-minutes" class="prop-input" min="5" step="5" placeholder="Ex.: 90 — deixe vazio para padrão no despacho" style="margin-bottom:16px;" />
         <p id="mdl-duration-hint" style="margin:0 0 16px 0; font-size:12px; color:var(--color-text-light);">Use <strong>Salvar Schema</strong> para gravar esta configuração no modelo.</p>
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" id="mdl-duration-close" class="btn btn-ghost" onclick="window.closeExpectedFormDurationModal()">Fechar</button>
-            <button type="button" id="mdl-duration-apply" class="btn btn-primary" onclick="window.applyExpectedFormDurationModal()">Aplicar</button>
+            <button type="button" id="mdl-duration-close" class="btn btn-ghost" data-fb-cmd="closeExpectedFormDurationModal">Fechar</button>
+            <button type="button" id="mdl-duration-apply" class="btn btn-primary" data-fb-cmd="applyExpectedFormDurationModal">Aplicar</button>
         </div>
     </div>
 </div>
@@ -2134,7 +2134,6 @@
 <div
   id="fb-app-layout-modal"
   style="display:none; position:fixed; inset:0; z-index:1000002; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);"
-  onclick="if(event.target===this && window.closeAppLayoutModal) window.closeAppLayoutModal()"
 >
   <div
     id="fb-app-layout-dialog"
@@ -2142,7 +2141,6 @@
     aria-modal="true"
     aria-labelledby="mdl-app-layout-title"
     style="background:white; width:min(520px,94vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35); max-height:min(88vh,720px); overflow:auto;"
-    onclick="event.stopPropagation()"
   >
     <h3 id="mdl-app-layout-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Layout na app</h3>
     <p id="mdl-app-layout-intro" style="margin:0 0 18px 0; font-size:13px; color:var(--color-text-light); line-height:1.45;">
@@ -2189,27 +2187,27 @@
       </label>
     </div>
     <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:22px;">
-      <button type="button" id="mdl-app-layout-close" class="btn btn-primary" onclick="window.closeAppLayoutModal && window.closeAppLayoutModal()">Pronto</button>
+      <button type="button" id="mdl-app-layout-close" class="btn btn-primary" data-fb-cmd="closeAppLayoutModal">Pronto</button>
     </div>
   </div>
 </div>
 
 <!-- Editar nome e ícone da etapa (seção) — z-index abaixo do icon-picker para a grelha ficar por cima -->
-<div id="section-step-edit-modal" style="display:none; position:fixed; inset:0; z-index:99997; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);" onclick="if(event.target===this)window.closeSectionStepEditModal()">
-    <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);" onclick="event.stopPropagation()">
+<div id="section-step-edit-modal" style="display:none; position:fixed; inset:0; z-index:99997; background:rgba(15,23,42,0.55); justify-content:center; align-items:center; backdrop-filter: blur(3px);">
+    <div style="background:white; width:min(440px,92vw); padding:24px; border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);">
         <h3 id="mdl-section-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:800;">Editar etapa</h3>
         <p id="mdl-section-body" style="margin:0 0 16px 0; font-size:13px; color:var(--color-text-light); line-height:1.45;">Nome e ícone usados no canvas e no app móvel (quando o campo de seção tiver ícone definido).</p>
         <label id="mdl-section-name-lbl" class="prop-label" for="section-step-edit-title">Nome da etapa</label>
-        <input type="text" id="section-step-edit-title" class="prop-input" placeholder="Ex.: Inspeção inicial" autocomplete="off" style="margin-bottom:16px;" onkeydown="if(event.key==='Enter'){event.preventDefault();window.applySectionStepEditModal();}" />
+        <input type="text" id="section-step-edit-title" class="prop-input" placeholder="Ex.: Inspeção inicial" autocomplete="off" style="margin-bottom:16px;" />
         <label class="prop-label">Ícone (app móvel)</label>
         <div id="section-step-edit-icon-preview" style="display:flex; align-items:center; justify-content:center; min-height:72px; margin-bottom:12px; background:var(--color-bg); border:1px dashed var(--color-border); border-radius:12px;"></div>
         <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px;">
-            <button type="button" id="mdl-section-pick-icon" class="btn btn-outline btn-sm" onclick="window.sectionStepEditPickIcon()"><ion-icon name="color-palette-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Escolher ícone</button>
-            <button type="button" id="mdl-section-clear-icon" class="btn btn-ghost btn-sm" onclick="window.sectionStepEditClearIcon()">Ícone predefinido</button>
+            <button type="button" id="mdl-section-pick-icon" class="btn btn-outline btn-sm" data-fb-cmd="sectionStepEditPickIcon"><ion-icon name="color-palette-outline" style="vertical-align:-2px;margin-right:4px;"></ion-icon> Escolher ícone</button>
+            <button type="button" id="mdl-section-clear-icon" class="btn btn-ghost btn-sm" data-fb-cmd="sectionStepEditClearIcon">Ícone predefinido</button>
         </div>
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button type="button" id="mdl-section-cancel" class="btn btn-ghost" onclick="window.closeSectionStepEditModal()">Cancelar</button>
-            <button type="button" id="mdl-section-apply" class="btn btn-primary" onclick="window.applySectionStepEditModal()">Aplicar</button>
+            <button type="button" id="mdl-section-cancel" class="btn btn-ghost" data-fb-cmd="closeSectionStepEditModal">Cancelar</button>
+            <button type="button" id="mdl-section-apply" class="btn btn-primary" data-fb-cmd="applySectionStepEditModal">Aplicar</button>
         </div>
     </div>
 </div>
@@ -2219,30 +2217,30 @@
     <div style="background:white; width:600px; height:80vh; border-radius:12px; display:flex; flex-direction:column; overflow:hidden;">
         <div style="padding:16px; background:var(--primary); color:white; display:flex; justify-content:space-between; align-items:center;">
             <h3 id="mdl-icon-picker-title" style="margin:0; font-size:16px;">Selecione um Ícone</h3>
-            <span style="font-size:24px; cursor:pointer;" onclick="document.getElementById('icon-picker-modal').style.display='none'">&times;</span>
+            <span style="font-size:24px; cursor:pointer;" data-fb-cmd="hideIconPickerModal">&times;</span>
         </div>
         <div style="padding:16px; border-bottom:1px solid var(--color-border); display:flex; gap:12px; align-items:flex-end;">
             <div style="flex:1;">
                <label id="mdl-icon-search-lbl" class="prop-label">Pesquisar Ícone</label>
-               <input type="text" id="icon-search" placeholder="Pesquisa (inglês ou PT: estrela→star, carro→car…)" class="prop-input" onkeyup="window.filterIcons(this.value)" >
+               <input type="text" id="icon-search" placeholder="Pesquisa (inglês ou PT: estrela→star, carro→car…)" class="prop-input" >
             </div>
             <div style="width:180px;">
                <label id="mdl-icon-lib-lbl" class="prop-label">Biblioteca</label>
-               <select id="icon-lib-select" class="prop-input" onchange="window.switchIconLibrary()">
+               <select id="icon-lib-select" class="prop-input">
                    <!-- Loaded by JS -->
                </select>
             </div>
             <div style="width:60px; text-align:center;">
                <label id="mdl-icon-color-lbl" class="prop-label">Cor</label>
-               <input type="color" id="icon-color" value="#1d4ed8" style="width:100%; height:34px; border:none; padding:0; background:transparent; cursor:pointer;" onchange="window.updateIconGridColors()">
+               <input type="color" id="icon-color" value="#1d4ed8" style="width:100%; height:34px; border:none; padding:0; background:transparent; cursor:pointer;">
             </div>
         </div>
         <div id="icon-grid" style="flex:1; padding:16px; overflow-y:auto; display:grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap:12px; align-content:start;">
             <!-- Icons injected by JS -->
         </div>
         <div style="padding:16px; border-top:1px solid var(--color-border); text-align:right;">
-             <button id="mdl-icon-remove" class="btn btn-outline" style="color:#ef4444; border-color:#fca5a5; margin-right:12px;" onclick="window.confirmIconSelection('')">Remover Ícone (Deixar Vazio)</button>
-             <button id="mdl-icon-cancel" class="btn btn-ghost" onclick="document.getElementById('icon-picker-modal').style.display='none'">Cancelar</button>
+             <button id="mdl-icon-remove" class="btn btn-outline" style="color:#ef4444; border-color:#fca5a5; margin-right:12px;" data-fb-cmd="confirmIconSelectionEmpty">Remover Ícone (Deixar Vazio)</button>
+             <button id="mdl-icon-cancel" class="btn btn-ghost" data-fb-cmd="hideIconPickerModal">Cancelar</button>
         </div>
     </div>
 </div>
@@ -2258,14 +2256,14 @@
                <h3 style="margin:0; font-size:16px; font-weight:800; display:flex; align-items:center; gap:10px; color:var(--text); line-height:1.3;"><ion-icon name="git-network-outline" style="vertical-align:-2px;font-size:22px;color:var(--accent);flex-shrink:0"></ion-icon><span id="mdl-logic-title">Regras e lógica do campo</span></h3>
                <div id="logic-modal-subtitle" style="font-size:12px; color:var(--text2); margin-top:8px; line-height:1.45;">Configurando gatilhos para o campo…</div>
             </div>
-            <button type="button" id="mdl-logic-close" class="btn btn-ghost btn-sm" onclick="window.hideLogicModal()" style="padding:6px;min-width:auto;flex-shrink:0;color:var(--text3);" aria-label="Fechar"><ion-icon name="close-outline" style="font-size:24px;vertical-align:middle"></ion-icon></button>
+            <button type="button" id="mdl-logic-close" class="btn btn-ghost btn-sm" data-fb-cmd="hideLogicModal" style="padding:6px;min-width:auto;flex-shrink:0;color:var(--text3);" aria-label="Fechar"><ion-icon name="close-outline" style="font-size:24px;vertical-align:middle"></ion-icon></button>
         </div>
         
         <!-- Rules Body -->
         <div style="flex:1; background:var(--color-bg); padding:24px; overflow-y:auto; display:flex; flex-direction:column; gap:20px;">
            <div style="display:flex; justify-content:space-between; align-items:center;">
                <h4 id="mdl-logic-h4" style="margin:0; color:var(--text); font-weight:800;">Condição (SE) e ações (ENTÃO)</h4>
-               <button id="mdl-logic-add" class="btn btn-primary btn-sm" onclick="window.addLogicRule()">+ Adicionar Regra (SE)</button>
+               <button id="mdl-logic-add" class="btn btn-primary btn-sm" data-fb-cmd="addLogicRule">+ Adicionar Regra (SE)</button>
            </div>
            
            <div id="logic-rules-container" style="display:flex; flex-direction:column; gap:16px;">
@@ -2279,8 +2277,8 @@
         </div>
         
         <div style="padding:20px; background:var(--surface); border-top:1px solid var(--color-border); display:flex; justify-content:flex-end; gap:12px;">
-             <button id="mdl-logic-cancel" class="btn btn-ghost" onclick="window.hideLogicModal()">Cancelar</button>
-             <button id="mdl-logic-save" class="btn btn-primary" onclick="window.saveFieldLogic()"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar Regras do Campo</button>
+             <button id="mdl-logic-cancel" class="btn btn-ghost" data-fb-cmd="hideLogicModal">Cancelar</button>
+             <button id="mdl-logic-save" class="btn btn-primary" data-fb-cmd="saveFieldLogic"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar Regras do Campo</button>
         </div>
     </div>
 </div>
@@ -2295,9 +2293,9 @@
       <div id="copilot-focus-chip" class="copilot-canvas-focus-chip ai-copilot-focus-chip-head" style="display:none;" aria-label="Campo em foco para o Composer"></div>
     </div>
     <div class="ai-copilot-head-actions">
-      <button type="button" class="btn btn-ghost btn-sm" id="ai-copilot-undo-btn" onclick="window.brsparkCopilotUndo()" disabled title="Desfazer última alteração do Composer no canvas"><ion-icon name="arrow-undo-outline" style="font-size:20px"></ion-icon></button>
-      <button type="button" class="btn btn-ghost btn-sm" id="ai-copilot-clear-btn" onclick="window.brsparkCopilotClear()" title="Limpar conversa"><ion-icon name="trash-outline" style="font-size:20px"></ion-icon></button>
-      <button type="button" id="ai-copilot-close-btn" class="btn btn-ghost btn-sm" onclick="window.toggleAiCopilotPanel()" aria-label="Fechar Composer"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
+      <button type="button" class="btn btn-ghost btn-sm" id="ai-copilot-undo-btn" data-fb-cmd="brsparkCopilotUndo" disabled title="Desfazer última alteração do Composer no canvas"><ion-icon name="arrow-undo-outline" style="font-size:20px"></ion-icon></button>
+      <button type="button" class="btn btn-ghost btn-sm" id="ai-copilot-clear-btn" data-fb-cmd="brsparkCopilotClear" title="Limpar conversa"><ion-icon name="trash-outline" style="font-size:20px"></ion-icon></button>
+      <button type="button" id="ai-copilot-close-btn" class="btn btn-ghost btn-sm" data-fb-cmd="toggleAiCopilotPanel" aria-label="Fechar Composer"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
     </div>
   </div>
   <div class="ai-copilot-body">
@@ -2321,15 +2319,15 @@
             type="button"
             class="ai-copilot-attach-fab"
             id="ai-copilot-attach-fab"
-            onclick="void window.brsparkCopilotPickExcelFile()"
+            data-fb-cmd="brsparkCopilotPickExcelFile"
             title="Anexar ficheiros"
             aria-label="Anexar ficheiros"
           >
             <ion-icon name="attach-outline" style="font-size:22px"></ion-icon>
           </button>
           <div class="ai-copilot-input-wrap">
-            <textarea id="ai-copilot-input" rows="2" placeholder="Escreva a mensagem ou cole links https://… (Enter envia, Shift+Enter nova linha)" style="font-size:14px;" onkeydown="window.brsparkCopilotInputKeydown(event)"></textarea>
-            <button type="button" class="ai-copilot-send-fab" id="ai-copilot-send-fab" onclick="window.brsparkCopilotSend()" title="Enviar" aria-label="Enviar mensagem"><ion-icon name="arrow-up"></ion-icon></button>
+            <textarea id="ai-copilot-input" rows="2" placeholder="Escreva a mensagem ou cole links https://… (Enter envia, Shift+Enter nova linha)" style="font-size:14px;"></textarea>
+            <button type="button" class="ai-copilot-send-fab" id="ai-copilot-send-fab" data-fb-cmd="brsparkCopilotSend" title="Enviar" aria-label="Enviar mensagem"><ion-icon name="arrow-up"></ion-icon></button>
           </div>
         </div>
       </div>
@@ -2362,17 +2360,17 @@
       </select>
       <label for="copilot-ts-detail">O que observa (obrigatório)</label>
       <textarea id="copilot-ts-detail" rows="3" maxlength="4000" placeholder="Descreva o sintoma…"></textarea>
-      <button type="button" class="btn btn-primary btn-sm" id="copilot-ts-send-btn" onclick="window.brsparkCopilotSendTroubleshootBundle()">Pedir diagnóstico ao Composer</button>
+      <button type="button" class="btn btn-primary btn-sm" id="copilot-ts-send-btn" data-fb-cmd="brsparkCopilotSendTroubleshootBundle">Pedir diagnóstico ao Composer</button>
     </div>
     <label><input type="checkbox" id="copilot-follow-canvas" checked tabindex="-1" /> <span id="mdl-copilot-follow-txt">Canvas</span></label>
-    <button type="button" id="copilot-pin-selection-btn" onclick="window.brsparkCopilotSyncFocusFromCanvasSelection()" tabindex="-1">Fixar seleção</button>
-    <button type="button" id="copilot-clear-focus-btn" onclick="window.brsparkCopilotClearFocusedField()" tabindex="-1">Limpar foco</button>
+    <button type="button" id="copilot-pin-selection-btn" data-fb-cmd="brsparkCopilotSyncFocusFromCanvasSelection" tabindex="-1">Fixar seleção</button>
+    <button type="button" id="copilot-clear-focus-btn" data-fb-cmd="brsparkCopilotClearFocusedField" tabindex="-1">Limpar foco</button>
     <textarea id="copilot-ctx-objective" tabindex="-1" aria-hidden="true"></textarea>
     <textarea id="copilot-ctx-ref-urls" tabindex="-1" aria-hidden="true" spellcheck="false" autocomplete="off"></textarea>
     <textarea id="copilot-excel-hint" tabindex="-1" aria-hidden="true"></textarea>
-    <input type="file" id="copilot-excel-file" multiple accept=".xlsx,.xlsm,.docx,.pdf,.png,.jpg,.jpeg,.webp,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,image/png,image/jpeg,image/webp" tabindex="-1" onchange="void window.brsparkCopilotAnalyzeExcelFile(this)" />
-    <button type="button" id="copilot-excel-pick-btn" onclick="void window.brsparkCopilotPickExcelFile()" tabindex="-1">Ficheiros</button>
-    <button type="button" id="copilot-excel-clear-btn" onclick="window.brsparkCopilotClearSpreadsheet()" tabindex="-1">Remover arquivos</button>
+    <input type="file" id="copilot-excel-file" multiple accept=".xlsx,.xlsm,.docx,.pdf,.png,.jpg,.jpeg,.webp,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,image/png,image/jpeg,image/webp" tabindex="-1" />
+    <button type="button" id="copilot-excel-pick-btn" data-fb-cmd="brsparkCopilotPickExcelFile" tabindex="-1">Ficheiros</button>
+    <button type="button" id="copilot-excel-clear-btn" data-fb-cmd="brsparkCopilotClearSpreadsheet" tabindex="-1">Remover arquivos</button>
   </div>
   <!-- Campos ocultos para chamadas programáticas (ex.: rota só de lógica) -->
   <textarea id="ai-copilot-logic-goal" style="display:none;" aria-hidden="true"></textarea>
@@ -2380,8 +2378,8 @@
 </div>
 
 <!-- Revisão de campos (Composer) — antes de aplicar no canvas -->
-<div id="copilot-schema-preview-modal" role="dialog" aria-modal="true" aria-labelledby="copilot-schema-preview-title" aria-hidden="true" onclick="if(event.target===this)window.brsparkCopilotCloseSchemaPreview(false)">
-  <div class="copilot-preview-dialog" onclick="event.stopPropagation()">
+<div id="copilot-schema-preview-modal" role="dialog" aria-modal="true" aria-labelledby="copilot-schema-preview-title" aria-hidden="true">
+  <div class="copilot-preview-dialog">
     <div class="copilot-preview-head">
       <h3 id="copilot-schema-preview-title"><ion-icon name="list-circle-outline" style="color:#6366f1"></ion-icon> <span id="copilot-schema-preview-heading">Revisar campos sugeridos</span></h3>
       <p id="copilot-preview-intro">Marque <strong>Incluir</strong> para cada linha. Ajuste o <strong>tipo</strong>, a <strong>descrição</strong>, instruções por campo (só para a IA ao reprocessar) e <strong>obrigatório</strong>. O resumo do pedido no chat entra por defeito uma vez em <strong>Comentários gerais</strong> (não é repetido em cada linha). Use <strong>Comentários gerais</strong> e <strong>Reprocessar com instruções</strong> para pedir à IA um novo rascunho antes de aplicar no canvas. Etapas (<code>section_break</code>) não podem ser excluídas — o tipo de etapa não é alterável aqui.</p>
@@ -2407,10 +2405,10 @@
       <textarea id="copilot-schema-preview-general-note" placeholder="Ex.: reduzir campos da etapa «Avaliação nutricional»; todos os textos em tom formal; adicionar campo de consentimento LGPD…"></textarea>
     </div>
     <div class="copilot-preview-foot">
-      <button type="button" id="copilot-preview-mark-optional" class="btn btn-ghost btn-sm" onclick="window.brsparkCopilotPreviewMarkAllOptional()">Tornar todos opcionais</button>
-      <button type="button" id="copilot-preview-cancel" class="btn btn-ghost" onclick="window.brsparkCopilotCloseSchemaPreview(false)">Cancelar</button>
-      <button type="button" id="copilot-preview-reprocess" class="btn btn-outline" onclick="void window.brsparkCopilotReprocessSchemaPreview()"><ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Reprocessar com instruções</button>
-      <button type="button" id="copilot-preview-apply" class="btn btn-primary" onclick="window.brsparkCopilotCloseSchemaPreview(true)"><ion-icon name="checkmark-done-outline" style="vertical-align:-2px"></ion-icon> Aplicar no canvas</button>
+      <button type="button" id="copilot-preview-mark-optional" class="btn btn-ghost btn-sm" data-fb-cmd="brsparkCopilotPreviewMarkAllOptional">Tornar todos opcionais</button>
+      <button type="button" id="copilot-preview-cancel" class="btn btn-ghost" data-fb-cmd="brsparkCopilotCloseSchemaPreview" data-fb-arg="false">Cancelar</button>
+      <button type="button" id="copilot-preview-reprocess" class="btn btn-outline" data-fb-cmd="brsparkCopilotReprocessSchemaPreview"><ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Reprocessar com instruções</button>
+      <button type="button" id="copilot-preview-apply" class="btn btn-primary" data-fb-cmd="brsparkCopilotCloseSchemaPreview" data-fb-arg="true"><ion-icon name="checkmark-done-outline" style="vertical-align:-2px"></ion-icon> Aplicar no canvas</button>
     </div>
   </div>
 </div>
@@ -2430,14 +2428,14 @@
     </div>
 </div>
 
-<div id="template-history-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.78); z-index:999999; justify-content:center; align-items:center; backdrop-filter: blur(4px);" onclick="if(event.target===this)window.closeChecklistVersionHistory()">
-    <div style="background:white; width:min(820px,94vw); max-height:min(86vh,860px); border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.45); display:flex; flex-direction:column; overflow:hidden;" onclick="event.stopPropagation()">
+<div id="template-history-modal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.78); z-index:999999; justify-content:center; align-items:center; backdrop-filter: blur(4px);">
+    <div style="background:white; width:min(820px,94vw); max-height:min(86vh,860px); border-radius:16px; box-shadow:0 25px 50px -12px rgba(0,0,0,0.45); display:flex; flex-direction:column; overflow:hidden;">
         <div style="padding:18px 20px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
             <div>
                 <h3 id="template-history-title" style="margin:0; font-size:18px; color:#0f172a; font-weight:800;">Histórico de versões</h3>
                 <p style="margin:6px 0 0; font-size:12px; color:#64748b; line-height:1.45;">Cada salvamento cria uma revisão do formulário. Você pode restaurar uma versão anterior sem perder o estado atual.</p>
             </div>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="window.closeChecklistVersionHistory()">Fechar</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-fb-cmd="closeChecklistVersionHistory">Fechar</button>
         </div>
         <div id="template-history-list" style="padding:18px 20px; overflow:auto; display:flex; flex-direction:column; gap:12px; background:#f8fafc;"></div>
     </div>
@@ -2459,20 +2457,29 @@
   import { getVisionAiExampleCatalog } from './js/visionAiAnalysisPromptExamplesData.js';
   import { getVisionDetectionExampleCatalog } from './js/visionDetectionPromptExamplesData.js';
   import { getAdminUiLocale } from './js/user-pages-i18n.js';
+  import { initFbMarkupDelegation } from './js/fb-markup-delegation.js';
   await ensureAdminApiDetected();
   window.__BRSPARK_API_BASE__ = resolveApiBase();
   await new Promise((resolve, reject) => {
     const s1 = document.createElement('script');
     s1.src = 'js/schemaLocale.js?v=' + Date.now();
-    s1.onload = () => {
-      const s = document.createElement('script');
-      s.src = 'js/checklists-builder.js?v=' + Date.now();
-      s.onload = resolve;
-      s.onerror = () =>
-        reject(new Error('Falha ao carregar o script do Form Builder (checklists-builder.js).'));
-      document.body.appendChild(s);
-    };
-    s1.onerror = () => reject(new Error('Falha ao carregar schemaLocale.js.'));
+    s1.addEventListener(
+      'load',
+      () => {
+        const s = document.createElement('script');
+        s.src = 'js/checklists-builder.js?v=' + Date.now();
+        s.addEventListener('load', resolve, { once: true });
+        s.addEventListener(
+          'error',
+          () =>
+            reject(new Error('Falha ao carregar o script do Form Builder (checklists-builder.js).')),
+          { once: true },
+        );
+        document.body.appendChild(s);
+      },
+      { once: true },
+    );
+    s1.addEventListener('error', () => reject(new Error('Falha ao carregar schemaLocale.js.')), { once: true });
     document.body.appendChild(s1);
   });
   window.fbT = fbT;
@@ -2491,6 +2498,7 @@
   if (typeof window.initBuilderDirtyTracking === 'function') window.initBuilderDirtyTracking();
   if (typeof window.fbInitFormMetaDetails === 'function') window.fbInitFormMetaDetails();
   if (typeof window.fbPrefetchWhisperLangOptions === 'function') window.fbPrefetchWhisperLangOptions();
+  initFbMarkupDelegation();
 </script>
 </body>
 </html>

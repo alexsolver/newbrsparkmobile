@@ -1,6 +1,5 @@
 'use strict';
 
-const fs = require('fs');
 const {
   stripDataUrlBase64,
   recognizeWithIntegration,
@@ -11,6 +10,7 @@ const {
 } = require('./comprefaceClient');
 const { loadUserFacialReferenceBuffers } = require('./userFacialEnrollmentBuffers');
 const { mapVerificationFailureToUserMessage } = require('./comprefaceVerificationUserMessages');
+const { userMayOperateUnderTenant } = require('./appLoginEffectiveTenant');
 
 const _envSim = process.env.COMPREFACE_MIN_SIMILARITY;
 const MIN_SIMILARITY = Math.min(
@@ -18,43 +18,18 @@ const MIN_SIMILARITY = Math.min(
   Math.max(0.5, _envSim != null && _envSim !== '' ? Number(_envSim) : 0.88)
 );
 
+/** Quantas referências 1:1 pedir em paralelo ao FaceMatch (1–4). `1` por omissão (sequencial) — menos carga no serviço e latência mais previsível no login/ponto. */
+function envVerificationRefConcurrency() {
+  const n = Number(process.env.COMPREFACE_VERIFICATION_REF_CONCURRENCY);
+  const d = Number.isFinite(n) && n > 0 ? Math.floor(n) : 1;
+  return Math.min(4, Math.max(1, d));
+}
+
 const FACIAL_GALLERY_SYNC_HINT =
   'No painel: Usuários → edite o usuário → Reconhecimento facial → sincronize as fotos de referência (avatar e fotos base na galeria do servidor).';
 
 const NO_FACE_IN_IMAGE_PT_BR =
   'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; fotografias de telas, reflexos ou imagens em papel não serão validadas.';
-
-// #region agent log
-/** Debug session d37eda — NDJSON local + /tmp no servidor; fetch para ingest Cursor (só em dev). */
-function _agentDebugFacialD37(payload) {
-  const line =
-    JSON.stringify({
-      sessionId: 'd37eda',
-      timestamp: Date.now(),
-      ...payload,
-    }) + '\n';
-  const paths = [
-    '/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/.cursor/debug-d37eda.log',
-    '/tmp/brspark-debug-d37eda.ndjson',
-  ];
-  for (const p of paths) {
-    try {
-      fs.appendFileSync(p, line);
-    } catch (_) {
-      /* ignore */
-    }
-  }
-  try {
-    fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd37eda' },
-      body: JSON.stringify({ sessionId: 'd37eda', timestamp: Date.now(), ...payload }),
-    }).catch(() => {});
-  } catch (_) {
-    /* ignore */
-  }
-}
-// #endregion
 
 function auditNoFaceInImage(mode, engine) {
   return {
@@ -75,13 +50,17 @@ function auditNoFaceInImage(mode, engine) {
  * o candidato que corresponde ao utilizador da sessão (e tenant) acima do limiar.
  * @returns {{ subject: string, similarity: number } | null}
  */
-function pickSelfVerifySubjectFromRecognition(recognizeJson, { tenantId, sessionUserId, minSim }) {
+function pickSelfVerifySubjectFromRecognition(
+  recognizeJson,
+  { tenantId, sessionUserId, minSim, sessionUserHomeTenantId }
+) {
   const results = recognizeJson && Array.isArray(recognizeJson.result) ? recognizeJson.result : [];
   if (!results.length) return null;
   const face = results[0];
   const subjects = face && Array.isArray(face.subjects) ? face.subjects : [];
   const tid = String(tenantId || '').trim();
   const sid = String(sessionUserId || '').trim();
+  const homeTid = String(sessionUserHomeTenantId || '').trim();
   if (!sid) return null;
   for (const sub of subjects) {
     if (!sub || sub.subject == null || sub.similarity == null) continue;
@@ -90,7 +69,10 @@ function pickSelfVerifySubjectFromRecognition(recognizeJson, { tenantId, session
     const parsed = parseComprefaceSubjectName(String(sub.subject));
     if (!parsed) continue;
     if (String(parsed.userId) !== sid) continue;
-    if (tid && String(parsed.tenantId) !== tid) continue;
+    const pTid = String(parsed.tenantId || '').trim();
+    if (tid && pTid !== tid) {
+      if (!homeTid || pTid !== homeTid) continue;
+    }
     return { subject: String(sub.subject), similarity };
   }
   return null;
@@ -103,13 +85,17 @@ function pickSelfVerifySubjectFromRecognition(recognizeJson, { tenantId, session
  * top global (outra pessoa), sob pena de mensagem falsa «não corresponde ao utilizador da OS».
  * @returns {{ subject: string, similarity: number } | null}
  */
-function pickSelfVerifyBestSubjectFromRecognition(recognizeJson, { tenantId, sessionUserId }) {
+function pickSelfVerifyBestSubjectFromRecognition(
+  recognizeJson,
+  { tenantId, sessionUserId, sessionUserHomeTenantId }
+) {
   const results = recognizeJson && Array.isArray(recognizeJson.result) ? recognizeJson.result : [];
   if (!results.length) return null;
   const face = results[0];
   const subjects = face && Array.isArray(face.subjects) ? face.subjects : [];
   const tid = String(tenantId || '').trim();
   const sid = String(sessionUserId || '').trim();
+  const homeTid = String(sessionUserHomeTenantId || '').trim();
   if (!sid) return null;
   let best = null;
   for (const sub of subjects) {
@@ -119,7 +105,10 @@ function pickSelfVerifyBestSubjectFromRecognition(recognizeJson, { tenantId, ses
     const parsed = parseComprefaceSubjectName(String(sub.subject));
     if (!parsed) continue;
     if (String(parsed.userId) !== sid) continue;
-    if (tid && String(parsed.tenantId) !== tid) continue;
+    const pTid = String(parsed.tenantId || '').trim();
+    if (tid && pTid !== tid) {
+      if (!homeTid || pTid !== homeTid) continue;
+    }
     if (!best || similarity > best.similarity) {
       best = { subject: String(sub.subject), similarity };
     }
@@ -128,8 +117,10 @@ function pickSelfVerifyBestSubjectFromRecognition(recognizeJson, { tenantId, ses
 }
 
 /**
- * Em `identify`, percorre subjects (ordenados por similaridade) e escolhe o primeiro
- * que corresponde a um utilizador ativo do tenant da sessão, acima do limiar.
+ * Em `identify`, percorre subjects (ordenados por similaridade).
+ * `syncUserToCompreface` grava subjects como `User.tenantId:userId` (org «casa»), enquanto o JWT usa o
+ * tenant operacional (dedicado). Aceita candidato se o utilizador existe, o prefixo do subject bate com
+ * `User.tenantId`, e (`subjTenant === tid` OU vínculo operacional via `userMayOperateUnderTenant`).
  * @returns {Promise<{ subject: string, similarity: number } | null>}
  */
 async function pickIdentifySubjectFromRecognition(recognizeJson, prisma, { tenantId, minSim }) {
@@ -143,15 +134,34 @@ async function pickIdentifySubjectFromRecognition(recognizeJson, prisma, { tenan
     if (!sub || sub.subject == null || sub.similarity == null) continue;
     const similarity = Number(sub.similarity);
     if (!Number.isFinite(similarity) || similarity < minSim) continue;
-    const parsed = parseComprefaceSubjectName(String(sub.subject));
-    if (!parsed) continue;
-    if (String(parsed.tenantId) !== tid) continue;
-    /** Mesma regra que `self_verify` pós-CompreFace: `tid` é o contexto JWT; `User.tenantId` pode ser a org «casa». */
-    const identified = await prisma.user.findFirst({
-      where: { id: parsed.userId, isActive: true },
-      select: { id: true },
+    const rawSubject = String(sub.subject || '').trim();
+    let subjTenant;
+    let subjUserId;
+    const parsed = parseComprefaceSubjectName(rawSubject);
+    if (parsed) {
+      subjTenant = String(parsed.tenantId || '').trim();
+      subjUserId = String(parsed.userId || '').trim();
+    } else {
+      /** Subject legado sem prefixo `tenantId:userId` — assumir que o nome do subject é o id do utilizador. */
+      if (!rawSubject) continue;
+      const rowGuess = await prisma.user.findFirst({
+        where: { id: rawSubject, isActive: true },
+        select: { id: true, tenantId: true },
+      });
+      if (!rowGuess) continue;
+      subjUserId = rowGuess.id;
+      subjTenant = String(rowGuess.tenantId || '').trim();
+    }
+    if (!subjUserId) continue;
+
+    const row = await prisma.user.findFirst({
+      where: { id: subjUserId, isActive: true },
+      select: { id: true, tenantId: true },
     });
-    if (identified) {
+    if (!row) continue;
+    if (String(row.tenantId || '').trim() !== subjTenant) continue;
+
+    if (subjTenant === tid || (await userMayOperateUnderTenant(prisma, row.id, tid))) {
       return { subject: String(sub.subject), similarity };
     }
   }
@@ -216,10 +226,6 @@ function pickVisionIntegration(integrations, provider) {
 async function verifyFacialImageBuffer(prisma, opts) {
   const { tenantId, sessionUserId, mode, imageBuffer } = opts;
   const buf = imageBuffer;
-  let dbgVerifyBranch = 'init';
-  let dbgRefCount = -1;
-  let dbgVerBest = null;
-  let dbgVerErrSlice = '';
   if (!buf || buf.length < 64) {
     return {
       ok: false,
@@ -232,20 +238,6 @@ async function verifyFacialImageBuffer(prisma, opts) {
       },
     };
   }
-
-  // #region agent log
-  _agentDebugFacialD37({
-    hypothesisId: 'H0',
-    location: 'facialRecognitionEngine.js:verifyFacialImageBuffer',
-    message: 'entry',
-    data: {
-      mode,
-      bufLen: buf.length,
-      tenantPrefix: tenantId ? String(tenantId).slice(0, 8) : null,
-      sessionPrefix: sessionUserId ? String(sessionUserId).slice(0, 8) : null,
-    },
-  });
-  // #endregion
 
   const provider = await resolveFacialVisionProviderForTenant(tenantId, prisma);
   const integrations = await prisma.integration.findMany({ where: { type: 'AI_LLM' } });
@@ -271,23 +263,6 @@ async function verifyFacialImageBuffer(prisma, opts) {
 
   const meta = parseMeta(visionInt.metadata);
   const engine = meta?.engine || 'unknown';
-
-  // #region agent log
-  _agentDebugFacialD37({
-    hypothesisId: 'H1',
-    location: 'facialRecognitionEngine.js:visionInt',
-    message: 'integration_selected',
-    data: {
-      provider,
-      engine,
-      visionIntId: visionInt.id,
-      hasRecKey: !!(visionInt.apiKey && String(visionInt.apiKey).trim()),
-      verKeyLen: visionInt.comprefaceVerificationKey
-        ? String(visionInt.comprefaceVerificationKey).trim().length
-        : 0,
-    },
-  });
-  // #endregion
 
   if (engine === 'aws_rekognition') {
     return {
@@ -325,44 +300,38 @@ async function verifyFacialImageBuffer(prisma, opts) {
   const useRecognitionOnlySelfVerify =
     String(process.env.COMPREFACE_SELF_VERIFY_USE_RECOGNITION_ONLY || '').trim() === '1';
   if (!useRecognitionOnlySelfVerify && mode === 'self_verify' && tenantId && sessionUserId) {
-    try {
-    dbgVerifyBranch = 'self_verify_enter';
     const verKey = visionInt.comprefaceVerificationKey && String(visionInt.comprefaceVerificationKey).trim();
     if (verKey) {
-      dbgVerifyBranch = 'has_ver_key';
       let refs = [];
       try {
         refs = await loadUserFacialReferenceBuffers(prisma, sessionUserId);
       } catch (e) {
         console.warn('[facialRecognitionEngine] loadUserFacialReferenceBuffers', e.message || e);
-        dbgVerifyBranch = 'refs_load_error';
-        dbgVerErrSlice = String(e && e.message ? e.message : e).slice(0, 160);
       }
-      dbgRefCount = refs.length;
       if (refs.length > 0) {
-        dbgVerifyBranch = 'refs_ok_compare';
-        const pairOut = await Promise.all(
-          refs.map(async ({ buf: refBuf }) => {
-            if (!refBuf || refBuf.length < 64) return { sim: -1, err: null };
-            try {
-              const sim = await verifyFacePairWithIntegration(visionInt, buf, refBuf, verKey);
-              return {
-                sim: Number.isFinite(sim) ? Number(sim) : -1,
-                err: null,
-              };
-            } catch (e) {
-              return { sim: -1, err: e };
-            }
-          }),
-        );
+        /** Lotes pequenos em paralelo + saída ao atingir o limiar: mais rápido quando a referência correta não é a primeira.
+         * Concorrência global = lote × (1 ou 2 pedidos Verification por par); use `COMPREFACE_VERIFICATION_REF_CONCURRENCY=1` para sequencial. */
+        const refConcurrency = envVerificationRefConcurrency();
+        const validRefs = refs.filter((r) => r.buf && r.buf.length >= 64);
         let best = -1;
         let lastErr = null;
-        for (const r of pairOut) {
-          if (r.sim > best) best = r.sim;
-          if (r.err) lastErr = r.err;
+        for (let i = 0; i < validRefs.length; i += refConcurrency) {
+          const chunk = validRefs.slice(i, i + refConcurrency);
+          const settled = await Promise.allSettled(
+            chunk.map(({ buf: refBuf }) =>
+              verifyFacePairWithIntegration(visionInt, buf, refBuf, verKey)
+            )
+          );
+          for (const r of settled) {
+            if (r.status === 'fulfilled') {
+              const sim = r.value;
+              if (Number.isFinite(sim) && sim > best) best = sim;
+            } else {
+              lastErr = r.reason;
+            }
+          }
+          if (best >= MIN_SIMILARITY) break;
         }
-        dbgVerBest = best < 0 ? null : Number(best);
-        if (lastErr) dbgVerErrSlice = String(lastErr.message || lastErr).slice(0, 160);
         if (best >= MIN_SIMILARITY) {
           /** `tenantId` aqui é o contexto operacional (dedicado / JWT). `User.tenantId` é a org «casa» — não filtrar por ele ou prestadores em cliente falham apesar do motor aceitar. */
           let identified = await prisma.user.findFirst({
@@ -375,20 +344,6 @@ async function verifyFacialImageBuffer(prisma, opts) {
               where: { id: sessionUserId },
               select: { id: true, isActive: true },
             });
-            // #region agent log
-            _agentDebugFacialD37({
-              hypothesisId: 'H5',
-              location: 'facialRecognitionEngine.js:verify_ok_prisma_miss',
-              message: 'verification_passed_but_user_query_empty',
-              data: {
-                best,
-                sessionPrefix: String(sessionUserId).slice(0, 8),
-                tenantPrefix: String(tenantId).slice(0, 8),
-                hasRowAnyActive: !!anyUserRow,
-                rowIsActive: anyUserRow ? anyUserRow.isActive : null,
-              },
-            });
-            // #endregion
           }
           if (identified) {
             return {
@@ -411,7 +366,6 @@ async function verifyFacialImageBuffer(prisma, opts) {
             };
           }
           /* Evita cair silenciosamente no Recognition: a face já bateu as referências (best >= limiar). */
-          dbgVerifyBranch = 'verify_score_ok_prisma_blocked';
           return {
             ok: false,
             audit: {
@@ -458,46 +412,8 @@ async function verifyFacialImageBuffer(prisma, opts) {
             };
           }
         }
-      } else {
-        dbgVerifyBranch = 'refs_empty';
       }
-    } else {
-      dbgVerifyBranch = 'no_ver_key';
     }
-    } finally {
-      // #region agent log
-      _agentDebugFacialD37({
-        hypothesisId: 'H1-H4',
-        location: 'facialRecognitionEngine.js:after_verify_branch',
-        message: 'verification_section_summary',
-        data: {
-          dbgVerifyBranch,
-          dbgRefCount,
-          dbgVerBest,
-          dbgVerErrSlice: dbgVerErrSlice || null,
-          minSim: MIN_SIMILARITY,
-          useRecognitionOnlySelfVerify,
-        },
-      });
-      // #endregion
-    }
-  } else {
-    dbgVerifyBranch = useRecognitionOnlySelfVerify ? 'env_recognition_only' : 'not_self_verify_mode';
-    // #region agent log
-    _agentDebugFacialD37({
-      hypothesisId: 'H1-H4',
-      location: 'facialRecognitionEngine.js:verify_branch_skipped',
-      message: 'verification_section_summary',
-      data: {
-        dbgVerifyBranch,
-        dbgRefCount,
-        dbgVerBest,
-        dbgVerErrSlice: dbgVerErrSlice || null,
-        minSim: MIN_SIMILARITY,
-        useRecognitionOnlySelfVerify,
-      },
-    });
-    // #endregion
   }
 
   const predictionCountSelf = Math.min(
@@ -510,7 +426,7 @@ async function verifyFacialImageBuffer(prisma, opts) {
       8,
       Number(process.env.COMPREFACE_IDENTIFY_PREDICTION_COUNT) ||
         Number(process.env.COMPREFACE_SELF_VERIFY_PREDICTION_COUNT) ||
-        8
+        12
     )
   );
   const predictionCount =
@@ -547,29 +463,27 @@ async function verifyFacialImageBuffer(prisma, opts) {
   }
 
   const globalTop = pickTopRecognitionMatch(recog.data);
-  // #region agent log
-  _agentDebugFacialD37({
-    hypothesisId: 'H6',
-    location: 'facialRecognitionEngine.js:post_recognize',
-    message: 'recognition_raw_top',
-    data: {
-      predictionCount,
-      globalTopSim: globalTop?.similarity ?? null,
-      globalTopSubPrefix: globalTop?.subject != null ? String(globalTop.subject).slice(0, 28) : null,
-    },
-  });
-  // #endregion
+  let sessionUserHomeTenantId = null;
+  if (mode === 'self_verify' && sessionUserId) {
+    const uHome = await prisma.user.findUnique({
+      where: { id: sessionUserId },
+      select: { tenantId: true },
+    });
+    sessionUserHomeTenantId = uHome?.tenantId ? String(uHome.tenantId) : null;
+  }
   let top = null;
   if (mode === 'self_verify' && tenantId && sessionUserId) {
     top = pickSelfVerifySubjectFromRecognition(recog.data, {
       tenantId,
       sessionUserId,
       minSim: MIN_SIMILARITY,
+      sessionUserHomeTenantId,
     });
     if (!top) {
       const bestSelf = pickSelfVerifyBestSubjectFromRecognition(recog.data, {
         tenantId,
         sessionUserId,
+        sessionUserHomeTenantId,
       });
       if (bestSelf && bestSelf.similarity < MIN_SIMILARITY) {
         return {
@@ -591,24 +505,10 @@ async function verifyFacialImageBuffer(prisma, opts) {
       minSim: MIN_SIMILARITY,
     });
   }
-  /* Em `self_verify`, nunca usar `globalTop` quando o candidato da sessão falhou: o top global
-   * é frequentemente *outro* utilizador com score alto, o que gerava erro intermitente e mensagem enganadora. */
-  if (!top && mode !== 'self_verify') top = globalTop;
-
-  // #region agent log
-  _agentDebugFacialD37({
-    hypothesisId: 'H6',
-    location: 'facialRecognitionEngine.js:after_pick_top',
-    message: 'final_top_state',
-    data: {
-      mode,
-      hasTop: !!top,
-      topSim: top?.similarity ?? null,
-      topSubPrefix: top?.subject != null ? String(top.subject).slice(0, 28) : null,
-      sessionPrefix: sessionUserId ? String(sessionUserId).slice(0, 8) : null,
-    },
-  });
-  // #endregion
+  /* Em `self_verify`, nunca usar `globalTop` quando o candidato da sessão falhou.
+   * Em `identify`, também não: o top global pode ser outra pessoa / registo órfão no FaceMatch e
+   * levar a «Utilizador reconhecido não encontrado ou inativo» apesar do rosto parecer reconhecido. */
+  if (!top && mode !== 'self_verify' && mode !== 'identify') top = globalTop;
 
   if (!top) {
     const missingVerKey =

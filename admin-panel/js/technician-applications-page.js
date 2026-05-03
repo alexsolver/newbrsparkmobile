@@ -67,14 +67,17 @@ function bindRevisionTemplateUi() {
     .join('');
   tplEl.innerHTML = opts;
 
-  tplEl.onchange = () => {
-    const id = String(tplEl.value || '');
-    if (!id) return;
-    const hit = revisionTemplates().find((t) => t.id === id);
-    if (!hit) return;
-    msgEl.value = hit.text;
-    msgEl.focus();
-  };
+  if (!tplEl._tpRevTplUiBound) {
+    tplEl._tpRevTplUiBound = true;
+    tplEl.addEventListener('change', () => {
+      const id = String(tplEl.value || '');
+      if (!id) return;
+      const hit = revisionTemplates().find((t) => t.id === id);
+      if (!hit) return;
+      msgEl.value = hit.text;
+      msgEl.focus();
+    });
+  }
 }
 
 function listSearchQueryValue() {
@@ -209,10 +212,10 @@ async function loadList() {
     })
     .join('');
   tb.querySelectorAll('[data-open]').forEach((btn) => {
-    btn.onclick = () => showDetail(btn.getAttribute('data-open'));
+    btn.addEventListener('click', () => showDetail(btn.getAttribute('data-open')));
   });
   tb.querySelectorAll('[data-invite-email]').forEach((btn) => {
-    btn.onclick = async () => {
+    btn.addEventListener('click', async () => {
       const email = btn.getAttribute('data-invite-email') || '';
       const tAttr = btn.getAttribute('data-invite-tenant') || '';
       document.getElementById('invite-email').value = email;
@@ -223,7 +226,7 @@ async function loadList() {
         if (opt) sel.value = tAttr;
       }
       openModal('modal-invite');
-    };
+    });
   });
   syncTechAppsListUrl();
 }
@@ -317,7 +320,7 @@ async function loadDetail(id) {
   const wireReject = () => {
     const rej = document.getElementById('act-reject');
     if (!rej) return;
-    rej.onclick = async () => {
+    rej.addEventListener('click', async () => {
       const reason = prompt(tpT('tp_prompt_reject'));
       if (!reason || !reason.trim()) return;
       const out = await CONFIG.post(`/technician-registration/${encodeURIComponent(id)}/reject`, {
@@ -328,12 +331,12 @@ async function loadDetail(id) {
         return;
       }
       showList();
-    };
+    });
   };
   const wireApprove = (early) => {
     const approveBtn = document.getElementById('act-approve');
     if (!approveBtn) return;
-    approveBtn.onclick = async () => {
+    approveBtn.addEventListener('click', async () => {
       if (!confirm(early ? tpT('tp_cf_approve_early') : tpT('tp_cf_approve'))) return;
       const revisionBtn = document.getElementById('act-revision');
       const rejectBtn = document.getElementById('act-reject');
@@ -361,7 +364,7 @@ async function loadDetail(id) {
         if (revisionBtn) revisionBtn.disabled = false;
         if (rejectBtn) rejectBtn.disabled = false;
       }
-    };
+    });
   };
   if (res.status === 'SUBMITTED' && canManageTechApplications) {
     actions.innerHTML = `
@@ -369,11 +372,11 @@ async function loadDetail(id) {
       <button type="button" class="btn btn-outline" id="act-revision">${escapeHtml(tpT('tp_act_revision'))}</button>
       <button type="button" class="btn btn-danger" id="act-reject">${escapeHtml(tpT('tp_act_reject'))}</button>`;
     wireApprove(false);
-    document.getElementById('act-revision').onclick = () => {
+    document.getElementById('act-revision').addEventListener('click', () => {
       revisionTargetId = id;
       resetRevisionModalFields();
       openModal('modal-revision');
-    };
+    });
     wireReject();
   } else if (['INVITED', 'DRAFT', 'NEEDS_REVISION'].includes(res.status) && canManageTechApplications) {
     actions.innerHTML = `
@@ -415,7 +418,7 @@ export async function bootTechnicianApplicationsPage() {
   readTechAppsStatusFromUrl();
   readTechAppsQFromUrl();
 
-  document.getElementById('filter-status').onchange = () => loadList();
+  document.getElementById('filter-status').addEventListener('change', () => loadList());
   const fq = document.getElementById('filter-search');
   if (fq) {
     fq.addEventListener('input', () => {
@@ -423,22 +426,22 @@ export async function bootTechnicianApplicationsPage() {
       searchDebounce = setTimeout(() => loadList(), 320);
     });
   }
-  document.getElementById('btn-invite').onclick = async () => {
+  document.getElementById('btn-invite').addEventListener('click', async () => {
     if (!canManageTechApplications) return;
     document.getElementById('invite-email').value = '';
     await loadTenantsForInvite();
     openModal('modal-invite');
-  };
+  });
   document.querySelectorAll('[data-close-invite]').forEach((b) => {
-    b.onclick = () => closeModal('modal-invite');
+    b.addEventListener('click', () => closeModal('modal-invite'));
   });
   document.querySelectorAll('[data-close-rev]').forEach((b) => {
-    b.onclick = () => {
+    b.addEventListener('click', () => {
       closeModal('modal-revision');
       resetRevisionModalFields();
-    };
+    });
   });
-  document.getElementById('invite-submit').onclick = async () => {
+  document.getElementById('invite-submit').addEventListener('click', async () => {
     if (!canManageTechApplications) return;
     const email = document.getElementById('invite-email').value.trim();
     if (!email) {
@@ -475,8 +478,8 @@ export async function bootTechnicianApplicationsPage() {
     const msg = `${tpT('tp_invite_ok_intro')}\n\n${tpT('tp_invite_ok_token')}\n${out.inviteToken}\n\n${tpT('tp_invite_ok_link')}\n/auth/tech-registration?token=${out.inviteToken}\n\n${hint}${emailLine}`;
     alert(msg);
     loadList();
-  };
-  document.getElementById('revision-submit').onclick = async () => {
+  });
+  document.getElementById('revision-submit').addEventListener('click', async () => {
     if (!canManageTechApplications) return;
     const msg = document.getElementById('revision-msg').value.trim();
     if (!msg) {
@@ -495,8 +498,8 @@ export async function bootTechnicianApplicationsPage() {
     closeModal('modal-revision');
     resetRevisionModalFields();
     loadDetail(rid);
-  };
-  document.getElementById('btn-close-detail').onclick = () => showList();
+  });
+  document.getElementById('btn-close-detail').addEventListener('click', () => showList());
 
   const params = new URLSearchParams(window.location.search);
   const qid = params.get('id');

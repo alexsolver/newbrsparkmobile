@@ -109,7 +109,7 @@
           <span class="badge badge-blue" id="dc-policy-source-badge">Política global</span>
         </div>
         <div class="data-toolbar-actions">
-          <button type="button" class="btn btn-primary" onclick="saveGlobalPolicy()">
+          <button type="button" class="btn btn-primary" id="dc-toolbar-save">
             <ion-icon name="save-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon>
             <span id="dc-btn-save-txt">Salvar</span>
           </button>
@@ -117,17 +117,17 @@
       </div>
 
       <!-- TABS -->
-      <div class="dc-tabs">
-        <button type="button" class="dc-tab active" onclick="switchTab('global', this)">
+      <div class="dc-tabs" id="dc-tabs">
+        <button type="button" class="dc-tab active" data-dc-tab="global">
           <ion-icon name="globe-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon><span id="dc-tab-global-txt">Política global</span>
         </button>
-        <button type="button" class="dc-tab" onclick="switchTab('tenants', this)">
+        <button type="button" class="dc-tab" data-dc-tab="tenants">
           <ion-icon name="business-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon><span id="dc-tab-tenants-txt">Overrides por Tenant</span>
         </button>
-        <button type="button" class="dc-tab" onclick="switchTab('retention', this)">
+        <button type="button" class="dc-tab" data-dc-tab="retention">
           <ion-icon name="layers-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon><span id="dc-tab-retention-txt">Retenção de Dados</span>
         </button>
-        <button type="button" class="dc-tab" onclick="switchTab('integrity', this)">
+        <button type="button" class="dc-tab" data-dc-tab="integrity">
           <ion-icon name="shield-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon>Integridade
         </button>
       </div>
@@ -289,7 +289,7 @@
         <div class="dc-panel">
           <div class="dc-panel-title">
             <ion-icon name="business-outline"></ion-icon> Tenants
-            <button class="btn btn-ghost btn-sm" onclick="loadTenants()" style="margin-left:auto;font-size:11px">
+            <button type="button" class="btn btn-ghost btn-sm" id="dc-tenants-refresh" style="margin-left:auto;font-size:11px">
               <ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Atualizar
             </button>
           </div>
@@ -409,7 +409,7 @@
         <div class="dc-panel">
           <div class="dc-panel-title">
             <ion-icon name="analytics-outline"></ion-icon> Flags de Fraude — Últimas 24h
-            <button class="btn btn-ghost btn-sm" onclick="loadFraudFlags()" style="margin-left:auto;font-size:11px">
+            <button type="button" class="btn btn-ghost btn-sm" id="dc-fraud-refresh" style="margin-left:auto;font-size:11px">
               <ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Atualizar
             </button>
           </div>
@@ -431,7 +431,7 @@
         <div class="dc-drawer-title" id="dr-name">Configurar Tenant</div>
         <div class="dc-drawer-sub" id="dr-email"></div>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="closeDrawer()">
+      <button type="button" class="btn btn-ghost btn-sm" id="dc-drawer-close">
         <ion-icon name="close-outline" style="font-size:20px;vertical-align:-2px"></ion-icon>
       </button>
     </div>
@@ -497,10 +497,10 @@
     </div>
 
     <div style="display:flex;gap:8px;margin-top:24px;">
-      <button class="btn btn-primary" style="flex:1;" onclick="saveTenantPolicy()">
+      <button type="button" class="btn btn-primary" id="dc-drawer-save" style="flex:1;">
         <ion-icon name="save-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon> Salvar Override
       </button>
-      <button class="btn btn-danger btn-sm" id="dr-reset-btn" onclick="resetTenantPolicy()" style="display:none">
+      <button type="button" class="btn btn-danger btn-sm" id="dr-reset-btn" style="display:none">
         <ion-icon name="refresh-outline" style="vertical-align:-2px;margin-right:4px"></ion-icon> Resetar
       </button>
     </div>
@@ -854,6 +854,20 @@ function showToast(msg, isErr = false) {
     void window.openDrawer(id, name, email);
   });
 })();
+
+document.getElementById('dc-toolbar-save')?.addEventListener('click', () => void window.saveGlobalPolicy());
+document.getElementById('dc-tabs')?.addEventListener('click', (e) => {
+  const btn = e.target instanceof Element ? e.target.closest('button[data-dc-tab]') : null;
+  if (!btn || !e.currentTarget.contains(btn)) return;
+  const tab = btn.getAttribute('data-dc-tab');
+  if (tab) window.switchTab(tab, btn);
+});
+document.getElementById('dc-tenants-refresh')?.addEventListener('click', () => void window.loadTenants());
+document.getElementById('dc-fraud-refresh')?.addEventListener('click', () => void window.loadFraudFlags());
+document.getElementById('dc-drawer-close')?.addEventListener('click', () => window.closeDrawer());
+document.getElementById('dc-drawer-save')?.addEventListener('click', () => void window.saveTenantPolicy());
+document.getElementById('dr-reset-btn')?.addEventListener('click', () => void window.resetTenantPolicy());
+
 loadGlobalPolicy();
 </script>
 </body>

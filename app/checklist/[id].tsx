@@ -102,7 +102,6 @@ import {
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { ChecklistCalculatedFieldSync } from '../../src/components/ChecklistCalculatedFieldSync';
 import { warnDev } from '../../src/utils/devLog';
-import { agentDebugLog } from '../../src/utils/agentDebugIngest';
 import { verifyFaceWithApi } from '../../src/services/verifyFaceApi';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { fetchExecutionOpsChat, getOpsChatAckStorageKey } from '../../src/services/executionOpsChat';
@@ -4090,14 +4089,6 @@ export default function ChecklistEngine() {
         usePending = true;
         netConnected = 'unknown';
       }
-      // #region agent log
-      agentDebugLog({
-        location: 'checklist/[id].tsx:processFacialImage',
-        message: 'facial_non_strict_net',
-        data: { fieldId, usePendingAfterNet: usePending, netConnected },
-        hypothesisId: 'H1',
-      });
-      // #endregion
       if (!usePending) {
         setFacialVerifyBusyId(facialBusyKey);
         try {
@@ -4117,28 +4108,12 @@ export default function ChecklistEngine() {
             );
             return false;
           } else {
-            // #region agent log
-            agentDebugLog({
-              location: 'checklist/[id].tsx:processFacialImage',
-              message: 'facial_non_strict_verify_network',
-              data: { fieldId, resultKind: result.kind },
-              hypothesisId: 'H2',
-            });
-            // #endregion
             usePending = true;
           }
         } finally {
           clearFacialBusy();
         }
       }
-      // #region agent log
-      agentDebugLog({
-        location: 'checklist/[id].tsx:processFacialImage',
-        message: 'facial_non_strict_final',
-        data: { fieldId, usePending, strictOnline },
-        hypothesisId: 'H1',
-      });
-      // #endregion
       if (usePending) writePendingAudit();
     }
 
@@ -6667,37 +6642,11 @@ export default function ChecklistEngine() {
     try {
       const netState = await Network.getNetworkStateAsync();
       if (netState?.isConnected === false) {
-        // #region agent log
-        agentDebugLog({
-          location: 'checklist/[id].tsx:flushPendingFacialVerifications',
-          message: 'facial_flush_abort_offline',
-          data: {},
-          hypothesisId: 'H4',
-        });
-        // #endregion
         return;
       }
-    } catch (e) {
-      // #region agent log
-      agentDebugLog({
-        location: 'checklist/[id].tsx:flushPendingFacialVerifications',
-        message: 'facial_flush_net_check_throw_continue',
-        data: {
-          errName: e instanceof Error ? e.name : typeof e,
-        },
-        hypothesisId: 'H4',
-      });
-      // #endregion
+    } catch {
       /** Alinhado a `isLikelyOnline` / recolha de ponto: falha ao ler estado de rede não deve bloquear o flush indefinidamente. */
     }
-    // #region agent log
-    agentDebugLog({
-      location: 'checklist/[id].tsx:flushPendingFacialVerifications',
-      message: 'facial_flush_enter',
-      data: { online: true },
-      hypothesisId: 'H4',
-    });
-    // #endregion
     /** Leituras sempre via `responsesRefForFacial.current` — um snapshot único ficava obsoleto após `hiFlush` / `processFacialImage` (estado ainda não fundido no objeto antigo). */
     facialFlushBusyRef.current = true;
     try {
@@ -6728,14 +6677,6 @@ export default function ChecklistEngine() {
           try {
             const info = await FileSystem.getInfoAsync(path);
             if (!info.exists) {
-              // #region agent log
-              agentDebugLog({
-                location: 'checklist/[id].tsx:flushPendingFacialVerifications',
-                message: 'facial_flush_image_missing',
-                data: { fieldId: f.id, pathLen: path.length },
-                hypothesisId: 'H5',
-              });
-              // #endregion
               const prevCap = (audit as { capturedAt?: string })?.capturedAt;
               const prevGeo = audit as {
                 captureLat?: string;
@@ -6767,17 +6708,6 @@ export default function ChecklistEngine() {
             }
             b64 = await FileSystem.readAsStringAsync(path, { encoding: 'base64' });
           } catch (err) {
-            // #region agent log
-            agentDebugLog({
-              location: 'checklist/[id].tsx:flushPendingFacialVerifications',
-              message: 'facial_flush_image_read_err',
-              data: {
-                fieldId: f.id,
-                errName: err instanceof Error ? err.name : typeof err,
-              },
-              hypothesisId: 'H5',
-            });
-            // #endregion
             const prevCapEr = (audit as { capturedAt?: string })?.capturedAt;
             const prevGeoEr = audit as {
               captureLat?: string;
@@ -6902,18 +6832,6 @@ export default function ChecklistEngine() {
               }),
               scope
             );
-          } else {
-            // #region agent log
-            agentDebugLog({
-              location: 'checklist/[id].tsx:flushPendingFacialVerifications',
-              message:
-                result.kind === 'network'
-                  ? 'facial_flush_verify_network_stays_pending'
-                  : 'facial_flush_verify_unhandled',
-              data: { fieldId: f.id, kind: result.kind },
-              hypothesisId: 'H4',
-            });
-            // #endregion
           }
         };
 
@@ -7127,7 +7045,9 @@ export default function ChecklistEngine() {
               base64: true,
               cameraType:
                 type === 'facial_recognition'
-                  ? ImagePicker.CameraType.front
+                  ? fieldForCapture?.facialAuthMode === 'identify'
+                    ? ImagePicker.CameraType.back
+                    : ImagePicker.CameraType.front
                   : ImagePicker.CameraType.back,
             };
             const res = await ImagePicker.launchCameraAsync(cameraOpts);

@@ -442,29 +442,29 @@
 <!-- Top Nav Buttons -->
 <div id="top-nav" style="justify-content: flex-end; align-items: center;">
   <div id="lang-switch" role="group" aria-label="Idioma">
-    <button type="button" class="lang-chip" data-locale="pt-BR" onclick="setTrackLocale('pt-BR')">PT</button>
-    <button type="button" class="lang-chip" data-locale="en" onclick="setTrackLocale('en')">EN</button>
-    <button type="button" class="lang-chip" data-locale="es" onclick="setTrackLocale('es')">ES</button>
-    <button type="button" class="lang-chip" data-locale="fr" onclick="setTrackLocale('fr')">FR</button>
+    <button type="button" class="lang-chip" data-locale="pt-BR">PT</button>
+    <button type="button" class="lang-chip" data-locale="en">EN</button>
+    <button type="button" class="lang-chip" data-locale="es">ES</button>
+    <button type="button" class="lang-chip" data-locale="fr">FR</button>
   </div>
-  <button id="btn-help" type="button" class="nav-btn" onclick="openTrackingChat()"></button>
+  <button id="btn-help" type="button" class="nav-btn"></button>
 </div>
 
 <!-- Chat overlay -->
 <div id="chat-overlay" class="hidden" aria-hidden="true">
-  <div class="chat-backdrop" onclick="closeTrackingChat()" role="presentation"></div>
+  <div class="chat-backdrop" role="presentation"></div>
   <div id="chat-panel" role="dialog" aria-labelledby="chat-title">
     <div class="chat-head">
       <span id="chat-title" class="chat-head-title"></span>
       <div class="chat-head-actions">
-        <button type="button" class="chat-lang-btn" id="chat-lang-btn" onclick="openTrackingChatLocaleModal()" aria-label="">
+        <button type="button" class="chat-lang-btn" id="chat-lang-btn" aria-label="">
           <ion-icon name="language-outline" style="font-size:22px;color:var(--brand);"></ion-icon>
         </button>
-        <button type="button" class="chat-close" id="chat-close-btn" onclick="closeTrackingChat()" aria-label="">×</button>
+        <button type="button" class="chat-close" id="chat-close-btn" aria-label="">×</button>
       </div>
     </div>
     <div id="chat-messages"></div>
-    <form id="chat-form" action="javascript:void(0)" onsubmit="event.preventDefault(); return false;">
+    <form id="chat-form" action="javascript:void(0)">
       <textarea id="chat-input" name="body" maxlength="900" rows="1" placeholder="" autocomplete="off"></textarea>
       <button type="button" id="chat-send"></button>
     </form>
@@ -475,21 +475,20 @@
   id="chat-locale-overlay"
   class="hidden"
   aria-hidden="true"
-  onclick="if(event.target===this)closeTrackingChatLocaleModal()"
 >
-  <div class="chat-locale-card" role="dialog" aria-labelledby="chat-locale-title" onclick="event.stopPropagation()">
+  <div class="chat-locale-card" role="dialog" aria-labelledby="chat-locale-title">
     <div style="display:flex;align-items:center;margin-bottom:10px;">
       <span id="chat-locale-title" style="flex:1;font-size:17px;font-weight:800;color:var(--text);"></span>
-      <button type="button" class="chat-close" onclick="closeTrackingChatLocaleModal()" aria-label="">×</button>
+      <button type="button" class="chat-close" id="chat-locale-close-btn" aria-label="">×</button>
     </div>
     <p id="chat-locale-hint" style="font-size:13px;color:var(--text3);margin:0 0 12px;line-height:1.45;"></p>
-    <div class="chat-locale-row" onclick="applyTrackingChatPageLocale(null)">
+    <div class="chat-locale-row" data-track-chat-locale="auto" role="button" tabindex="0">
       <ion-icon name="globe-outline" style="font-size:20px;margin-right:10px;color:var(--brand);"></ion-icon>
       <span id="chat-locale-opt-auto"></span>
     </div>
-    <div class="chat-locale-row" onclick="applyTrackingChatPageLocale('pt-BR')"><span id="chat-locale-opt-pt"></span></div>
-    <div class="chat-locale-row" onclick="applyTrackingChatPageLocale('en-US')"><span id="chat-locale-opt-en"></span></div>
-    <div class="chat-locale-row" onclick="applyTrackingChatPageLocale('es-ES')"><span id="chat-locale-opt-es"></span></div>
+    <div class="chat-locale-row" data-track-chat-locale="pt-BR" role="button" tabindex="0"><span id="chat-locale-opt-pt"></span></div>
+    <div class="chat-locale-row" data-track-chat-locale="en-US" role="button" tabindex="0"><span id="chat-locale-opt-en"></span></div>
+    <div class="chat-locale-row" data-track-chat-locale="es-ES" role="button" tabindex="0"><span id="chat-locale-opt-es"></span></div>
   </div>
 </div>
 
@@ -544,7 +543,7 @@
       <a id="btn-mini-call" href="#" style="display:none; background:#dcfce7; width:44px; height:44px; border-radius:22px; align-items:center; justify-content:center; text-decoration:none;">
         <ion-icon name="call-outline" style="font-size:20px; color:var(--green);"></ion-icon>
       </a>
-      <button id="btn-mini-share" onclick="shareLink()" style="background:var(--bg); border:none; width:44px; height:44px; border-radius:22px; display:flex; align-items:center; justify-content:center; cursor:pointer; -webkit-tap-highlight-color:transparent;">
+      <button type="button" id="btn-mini-share" style="background:var(--bg); border:none; width:44px; height:44px; border-radius:22px; display:flex; align-items:center; justify-content:center; cursor:pointer; -webkit-tap-highlight-color:transparent;">
         <ion-icon name="share-social-outline" style="font-size:20px; color:var(--text2);"></ion-icon>
       </button>
     </div>
@@ -559,7 +558,7 @@
 
 
 
-  <button id="arrived-close" onclick="dismissArrived()"></button>
+  <button type="button" id="arrived-close"></button>
 </div>
 
 <!-- Leaflet JS -->
@@ -1043,6 +1042,8 @@
     setTxt('chat-title', T('chatTitle'));
     const chatCloseBtn = document.getElementById('chat-close-btn');
     if (chatCloseBtn) chatCloseBtn.setAttribute('aria-label', T('chatClose'));
+    const chatLocaleCloseBtn = document.getElementById('chat-locale-close-btn');
+    if (chatLocaleCloseBtn) chatLocaleCloseBtn.setAttribute('aria-label', T('chatClose'));
     const chatInp = document.getElementById('chat-input');
     if (chatInp) chatInp.placeholder = T('chatPlaceholder');
     setTxt('chat-send', T('chatSend'));
@@ -1137,6 +1138,59 @@
         return false;
       });
     }
+  })();
+
+  (function wireTrackMarkupHandlers() {
+    document.getElementById('lang-switch')?.addEventListener('click', function (e) {
+      const btn = e.target instanceof Element ? e.target.closest('.lang-chip') : null;
+      if (!btn || !this.contains(btn)) return;
+      const loc = btn.getAttribute('data-locale');
+      if (loc) setTrackLocale(loc);
+    });
+    document.getElementById('btn-help')?.addEventListener('click', function () {
+      openTrackingChat();
+    });
+    document.querySelector('#chat-overlay .chat-backdrop')?.addEventListener('click', function () {
+      closeTrackingChat();
+    });
+    document.getElementById('chat-lang-btn')?.addEventListener('click', function () {
+      openTrackingChatLocaleModal();
+    });
+    document.getElementById('chat-close-btn')?.addEventListener('click', function () {
+      closeTrackingChat();
+    });
+    var locOv = document.getElementById('chat-locale-overlay');
+    if (locOv) {
+      locOv.addEventListener('click', function (e) {
+        if (e.target === locOv) {
+          closeTrackingChatLocaleModal();
+          return;
+        }
+        const row = e.target instanceof Element ? e.target.closest('.chat-locale-row') : null;
+        if (!row || !locOv.contains(row)) return;
+        const raw = row.getAttribute('data-track-chat-locale');
+        const code = raw === 'auto' || raw === '' || raw == null ? null : raw;
+        applyTrackingChatPageLocale(code);
+      });
+      locOv.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const row = e.target instanceof Element ? e.target.closest('.chat-locale-row') : null;
+        if (!row || !locOv.contains(row)) return;
+        e.preventDefault();
+        const raw = row.getAttribute('data-track-chat-locale');
+        const code = raw === 'auto' || raw === '' || raw == null ? null : raw;
+        applyTrackingChatPageLocale(code);
+      });
+    }
+    document.getElementById('chat-locale-close-btn')?.addEventListener('click', function () {
+      closeTrackingChatLocaleModal();
+    });
+    document.getElementById('btn-mini-share')?.addEventListener('click', function () {
+      void shareLink();
+    });
+    document.getElementById('arrived-close')?.addEventListener('click', function () {
+      dismissArrived();
+    });
   })();
 
   // ── State ─────────────────────────────────────────────────

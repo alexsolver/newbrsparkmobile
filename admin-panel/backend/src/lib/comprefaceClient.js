@@ -67,6 +67,16 @@ function stripDataUrlBase64(b64) {
   return m ? m[1] : str;
 }
 
+function envVerificationSingleDirection() {
+  const v = String(process.env.COMPREFACE_VERIFICATION_SINGLE_DIRECTION || '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
+function envVerificationTimeoutMs() {
+  const n = Number(process.env.COMPREFACE_VERIFICATION_TIMEOUT_MS);
+  return Math.min(120000, Math.max(15000, Number.isFinite(n) && n > 0 ? n : 60000));
+}
+
 /**
  * @param {object} integration — registro Prisma Exadel FaceMatch
  * @param {Buffer} imageBuffer
@@ -347,6 +357,9 @@ async function verifyFacePairWithIntegration(
   const probePart = bufferToImageBlobPart(probeBuffer, 'probe');
   const refPart = bufferToImageBlobPart(referenceBuffer, 'reference');
 
+  const verifyTimeoutMs = envVerificationTimeoutMs();
+  const singleDirection = envVerificationSingleDirection();
+
   async function postVerifyPair(blobSrc, nameSrc, blobTgt, nameTgt, base) {
     const url = `${base}/api/v1/verification/verify`;
     const fd = new FormData();
@@ -356,7 +369,7 @@ async function verifyFacePairWithIntegration(
       method: 'POST',
       headers: { 'x-api-key': apiKey },
       body: fd,
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(verifyTimeoutMs),
       redirect: 'manual',
     });
     const text = await r.text().catch(() => '');
@@ -383,53 +396,41 @@ async function verifyFacePairWithIntegration(
     const base = String(root).replace(/\/+$/, '');
     try {
       if (idDocumentPairing) {
+        const [a, b] = await Promise.allSettled([
+          postVerifyPair(
+            probePart.blob,
+            probePart.filename,
+            refPart.blob,
+            refPart.filename,
+            base
+          ),
+          postVerifyPair(
+            refPart.blob,
+            refPart.filename,
+            probePart.blob,
+            probePart.filename,
+            base
+          ),
+        ]);
         const scores = [];
         let partialErr = null;
-        try {
-          scores.push(
-            await postVerifyPair(
-              probePart.blob,
-              probePart.filename,
-              refPart.blob,
-              refPart.filename,
-              base
-            )
-          );
-        } catch (ea) {
-          partialErr = ea;
-        }
-        try {
-          scores.push(
-            await postVerifyPair(
-              refPart.blob,
-              refPart.filename,
-              probePart.blob,
-              probePart.filename,
-              base
-            )
-          );
-        } catch (eb) {
-          if (!partialErr) partialErr = eb;
-        }
+        if (a.status === 'fulfilled') scores.push(a.value);
+        else partialErr = a.reason;
+        if (b.status === 'fulfilled') scores.push(b.value);
+        else if (!partialErr) partialErr = b.reason;
         if (scores.length > 0) {
           return Math.max.apply(null, scores);
         }
         throw partialErr || new Error('Falha na verificação facial.');
       }
-      const s1 = await postVerifyPair(
-        probePart.blob,
-        probePart.filename,
-        refPart.blob,
-        refPart.filename,
-        base
-      );
-      const s2 = await postVerifyPair(
-        refPart.blob,
-        refPart.filename,
-        probePart.blob,
-        probePart.filename,
-        base
-      );
+      /** `COMPREFACE_VERIFICATION_SINGLE_DIRECTION=1`: uma ida à API por par (mais rápido; menos conservador). */
+      if (singleDirection) {
+        return postVerifyPair(probePart.blob, probePart.filename, refPart.blob, refPart.filename, base);
+      }
+      const [s1, s2] = await Promise.all([
+        postVerifyPair(probePart.blob, probePart.filename, refPart.blob, refPart.filename, base),
+        postVerifyPair(refPart.blob, refPart.filename, probePart.blob, probePart.filename, base),
+      ]);
       return Math.min(s1, s2);
     } catch (e) {
       lastErr = e;

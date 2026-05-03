@@ -878,12 +878,16 @@ export function initAdminChatPage() {
     if (state.pendingImageFile) {
       const reader = new FileReader();
       const base64 = await new Promise((resolve, reject) => {
-        reader.onload = () => {
-          const r = String(reader.result || '');
-          const i = r.indexOf(',');
-          resolve(i >= 0 ? r.slice(i + 1) : r);
-        };
-        reader.onerror = () => reject(new Error('read'));
+        reader.addEventListener(
+          'load',
+          () => {
+            const r = String(reader.result || '');
+            const i = r.indexOf(',');
+            resolve(i >= 0 ? r.slice(i + 1) : r);
+          },
+          { once: true },
+        );
+        reader.addEventListener('error', () => reject(new Error('read')), { once: true });
         reader.readAsDataURL(state.pendingImageFile);
       });
       const ext = (state.pendingImageFile.type || 'image/jpeg').split('/')[1] || 'jpg';

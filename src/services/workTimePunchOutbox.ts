@@ -12,7 +12,6 @@ import {
   type WorkTimePunchType,
 } from './workTimeService';
 import { emitWorkTimeJourneyChanged } from '../lib/workTimeJourneyEvents';
-import { agentDebugLog } from '../utils/agentDebugIngest';
 
 const OUTBOX_KEY = '@brspark_work_time_punch_outbox';
 const SUBDIR = 'work-time-outbox/';
@@ -159,14 +158,6 @@ export async function pushWorkTimePunchOutbox(): Promise<void> {
           const vr = await verifyFaceWithApi(imageBase64, 'self_verify');
           if (!vr.ok) {
             if (vr.kind === 'network') {
-              // #region agent log
-              agentDebugLog({
-                location: 'workTimePunchOutbox.ts:face_verify',
-                message: 'outbox_verify_network_retry',
-                data: {},
-                hypothesisId: 'OBQ',
-              });
-              // #endregion
               remaining.push(item);
               continue;
             }
@@ -214,14 +205,6 @@ export async function pushWorkTimePunchOutbox(): Promise<void> {
         await deleteFaceFileIfAny(item);
       } catch (e) {
         if (isConnectivityFailure(e)) {
-          // #region agent log
-          agentDebugLog({
-            location: 'workTimePunchOutbox.ts:post_catch',
-            message: 'outbox_post_network_retry',
-            data: {},
-            hypothesisId: 'OBQ',
-          });
-          // #endregion
           remaining.push(item);
           continue;
         }

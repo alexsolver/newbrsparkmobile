@@ -13,6 +13,9 @@ const canCrossTenantEvaluations =
 const canManageEvaluationTemplates =
   panelCaps.has('tenant.operations.write.self') || panelCaps.has('tenant.operations.write.any');
 
+/** Cancela listeners load/error do preview do logo do template ao mudar URL ou limpar. */
+let tplSurveyLogoPreviewAbort = null;
+
 function esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -212,14 +215,16 @@ function updateTplLogoPreview() {
   const img = document.getElementById('tpl-survey-logo-preview-img');
   if (!input || !wrap || !img) return;
   const u = input.value.trim();
+  if (tplSurveyLogoPreviewAbort) {
+    tplSurveyLogoPreviewAbort.abort();
+    tplSurveyLogoPreviewAbort = null;
+  }
   if (u && tplLogoUrlLooksPublic(u)) {
+    tplSurveyLogoPreviewAbort = new AbortController();
+    const { signal } = tplSurveyLogoPreviewAbort;
+    img.addEventListener('load', () => { wrap.style.display = 'block'; }, { once: true, signal });
+    img.addEventListener('error', () => { wrap.style.display = 'none'; }, { once: true, signal });
     img.src = u;
-    img.onload = () => {
-      wrap.style.display = 'block';
-    };
-    img.onerror = () => {
-      wrap.style.display = 'none';
-    };
   } else {
     wrap.style.display = 'none';
     img.removeAttribute('src');

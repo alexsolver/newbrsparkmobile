@@ -340,7 +340,7 @@
           <div class="country-code">${escHtml(c.code)} · ${escHtml(c.timezone)}</div>
         </div>
         <label class="toggle-switch" title="${escHtml(c.enabled ? mpT('loc_toggle_on') : mpT('loc_toggle_off'))}" style="margin-left:auto">
-          <input type="checkbox" ${c.enabled ? 'checked' : ''} onchange='toggleRegion(${JSON.stringify(String(c.code))}, this.checked)' />
+          <input type="checkbox" ${c.enabled ? 'checked' : ''} data-loc-region-code="${escHtml(String(c.code))}" />
           <div class="toggle-track"></div>
         </label>
       </div>
@@ -391,6 +391,20 @@
   });
 
   document.getElementById('search-input').addEventListener('input', loadData);
+
+  (function wireCountryGridRegionToggles() {
+    const grid = document.getElementById('country-grid');
+    if (!grid || grid.dataset.locRegionToggleDeleg === '1') return;
+    grid.dataset.locRegionToggleDeleg = '1';
+    grid.addEventListener('change', (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLInputElement) || t.type !== 'checkbox') return;
+      const code = t.getAttribute('data-loc-region-code');
+      if (code == null || code === '') return;
+      void window.toggleRegion(code, t.checked);
+    });
+  })();
+
   loadData();
 </script>
 </body>

@@ -310,7 +310,7 @@ function buildVoiceWhisperLanguageSelectHtml(field) {
   }
   return `<select id="fb-voice-whisper-lang" class="prop-input" style="font-size:12px;" aria-label="${escapeHtmlAttr(
     fbStr('fb_prop_voice_lang_lbl', null, 'Idioma (Whisper)'),
-  )}" onchange="window.handleFieldUpdate('voiceTranscribeLanguage', this.value)">${optionsHtml}</select>`;
+  )}" data-fb-fk="voiceTranscribeLanguage" data-fb-vm="val">${optionsHtml}</select>`;
 }
 
 window.fbPrefetchWhisperLangOptions = function () {
@@ -484,12 +484,16 @@ window.unarchiveChecklist = async function(id) {
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
-    r.onload = () => {
-      const s = String(r.result || '');
-      const i = s.indexOf(',');
-      resolve(i >= 0 ? s.slice(i + 1) : s);
-    };
-    r.onerror = () => reject(new Error('Leitura do arquivo falhou'));
+    r.addEventListener(
+      'load',
+      () => {
+        const s = String(r.result || '');
+        const i = s.indexOf(',');
+        resolve(i >= 0 ? s.slice(i + 1) : s);
+      },
+      { once: true },
+    );
+    r.addEventListener('error', () => reject(new Error('Leitura do arquivo falhou')), { once: true });
     r.readAsDataURL(file);
   });
 }
@@ -1275,15 +1279,15 @@ function appendIconPickerCell(ic, libForRender, libOverrideOnConfirm, showLibBad
         ? `<span style="font-size:7px; color:#94a3b8; text-align:center; line-height:1.1; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${libForRender}</span>`
         : '';
     div.innerHTML = `${visual}<span style="font-size:9px; color:#64748b; text-align:center; max-width:100%; overflow:hidden; text-overflow:ellipsis;">${ic.substring(0, 20)}</span>${badge}`;
-    div.onclick = () => window.confirmIconSelection(ic, libOverrideOnConfirm);
-    div.onmouseover = () => {
+    div.addEventListener('click', () => window.confirmIconSelection(ic, libOverrideOnConfirm));
+    div.addEventListener('mouseenter', () => {
         div.style.borderColor = 'var(--primary)';
         div.style.backgroundColor = '#eff6ff';
-    };
-    div.onmouseout = () => {
+    });
+    div.addEventListener('mouseleave', () => {
         div.style.borderColor = '#e2e8f0';
         div.style.backgroundColor = '#f8fafc';
-    };
+    });
     grid.appendChild(div);
 }
 
@@ -3111,11 +3115,11 @@ function buildCanvasFieldElement(f) {
       });
     }
 
-    div.onclick = (e) => {
+    div.addEventListener('click', (e) => {
         if (window.__brsparkCanvasDragging) return;
         if (e.target.closest('.canvas-item-delete')) return;
         selectField(f.id);
-    };
+    });
 
     return div;
 }
@@ -3916,7 +3920,7 @@ function renderProperties() {
         extraProps += `
         <div class="prop-group" style="background:#ecfdf5; border:1px solid #6ee7b7; padding:12px; border-radius:8px; margin-top:16px;">
             <label class="prop-label" style="color:#047857;"><ion-icon name="cash-outline" style="vertical-align:-2px;"></ion-icon> Moeda (símbolo no app)</label>
-            <select class="prop-input" onchange="window.handleFieldUpdate('currencyCode', this.value)" style="font-size:13px;">
+            <select class="prop-input" data-fb-fk="currencyCode" data-fb-vm="val" style="font-size:13px;">
                 <option value="BRL"${cur === 'BRL' ? ' selected' : ''}>BRL — Real (R$)</option>
                 <option value="USD"${cur === 'USD' ? ' selected' : ''}>USD — Dólar ($)</option>
                 <option value="EUR"${cur === 'EUR' ? ' selected' : ''}>EUR — Euro (€)</option>
@@ -3933,7 +3937,7 @@ function renderProperties() {
         extraProps += `
         <div class="prop-group" style="background:var(--surface2); border:1px solid var(--border); padding:12px; border-radius:8px; margin-top:16px;">
             <label class="prop-label" style="color:var(--text2);"><ion-icon name="color-wand" style="vertical-align:-2px;color:var(--accent)"></ion-icon> ${tmTitle}</label>
-            <input class="prop-input" type="text" placeholder="${tmPh}" value="${escapeHtmlAttr(f.textMask || '')}" onchange="window.handleFieldUpdate('textMask', this.value)" />
+            <input class="prop-input" type="text" placeholder="${tmPh}" value="${escapeHtmlAttr(f.textMask || '')}" data-fb-fk="textMask" data-fb-vm="val" />
             <div style="font-size:10px; color:var(--text3); margin-top:4px; line-height:1.35">${tmHint}</div>
         </div>`;
     }
@@ -3963,7 +3967,7 @@ function renderProperties() {
             <!-- Tipo de Zona -->
             <div>
                 <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_zone_type_lbl', null, 'Tipo de zona'))}</label>
-                <select class="prop-input" onchange="window.handleFieldUpdate('geofenceType', this.value); if(typeof renderProperties==='function') renderProperties();" style="font-size:12px;">
+                <select class="prop-input" data-fb-fk="geofenceType" data-fb-vm="val" data-fb-rp="1" style="font-size:12px;">
                     <option value="radius" ${(f.geofenceType||'radius') === 'radius' ? 'selected' : ''}>📍 ${escapeHtmlLogic(fbStr('fb_prop_geofence_opt_radius', null, 'Destino da OS (ponto + raio Haversine)'))}</option>
                     <option value="polygon" ${f.geofenceType === 'polygon' ? 'selected' : ''}>🔷 ${escapeHtmlLogic(fbStr('fb_prop_geofence_opt_polygon', null, 'Geometria da OS (rota, área, polígono / KML no despacho)'))}</option>
                 </select>
@@ -3975,7 +3979,7 @@ function renderProperties() {
             ${(f.geofenceType || 'radius') === 'radius' ? `
             <div id="geofence-dest-block">
                 <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_dest_radius_lbl', null, 'Raio de aceitação (metros)'))}</label>
-                <input class="prop-input" type="number" min="10" max="10000" value="${f.geofenceRadius || 150}" onkeyup="window.handleFieldUpdate('geofenceRadius', this.value)" />
+                <input class="prop-input" type="number" min="10" max="10000" value="${f.geofenceRadius || 150}" data-fb-fk="geofenceRadius" data-fb-live="1" />
                 <div style="font-size:10px; color:#059669; margin-top:3px;">
                     ${escapeHtmlLogic(fbStr('fb_prop_geofence_dest_radius_help', null, 'Padrão se a OS não fixar raio no despacho; caso contrário prevalece o da OS.'))}
                 </div>
@@ -3983,12 +3987,12 @@ function renderProperties() {
             ` : `
             <div id="geofence-geom-block">
                 <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_geom_tol_lbl', null, 'Corredor da rota / polilinha (metros)'))}</label>
-                <input class="prop-input" type="number" min="10" max="10000" value="${f.geofenceGeometryToleranceM != null ? f.geofenceGeometryToleranceM : 150}" onkeyup="window.handleFieldUpdate('geofenceGeometryToleranceM', this.value)" />
+                <input class="prop-input" type="number" min="10" max="10000" value="${f.geofenceGeometryToleranceM != null ? f.geofenceGeometryToleranceM : 150}" data-fb-fk="geofenceGeometryToleranceM" data-fb-live="1" />
                 <div style="font-size:10px; color:#059669; margin-top:3px;">
                     ${escapeHtmlLogic(fbStr('fb_prop_geofence_geom_tol_help', null, 'Rota, patrulhamento ou KML em linha: distância máxima do GPS ao traçado (evitar desvio do caminho). Predefinição se a OS não fixar tolerância no despacho.'))}
                 </div>
                 <label class="prop-label" style="color:#047857; font-size:10px; margin-top:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_seg_buf_lbl', null, 'Tolerância nos extremos A↔B (metros)'))}</label>
-                <input class="prop-input" type="number" min="10" max="10000" value="${f.geofenceSegmentBufferM != null ? f.geofenceSegmentBufferM : 150}" onkeyup="window.handleFieldUpdate('geofenceSegmentBufferM', this.value)" />
+                <input class="prop-input" type="number" min="10" max="10000" value="${f.geofenceSegmentBufferM != null ? f.geofenceSegmentBufferM : 150}" data-fb-fk="geofenceSegmentBufferM" data-fb-live="1" />
                 <div style="font-size:10px; color:#059669; margin-top:3px;">
                     ${escapeHtmlLogic(fbStr('fb_prop_geofence_seg_buf_help', null, 'Só quando o despacho usa zona «trecho» (dois pontos A e B): distância máxima até A ou até B. Não substitui o corredor da rota acima — seguir linha/polilinha é sempre o campo de cima.'))}
                 </div>
@@ -3998,21 +4002,21 @@ function renderProperties() {
             <!-- Modo de Falha -->
             <div>
                 <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_mode_lbl', null, 'Modo de falha'))}</label>
-                <select class="prop-input" onchange="window.handleFieldUpdate('geofenceFailMode', this.value)" style="font-size:12px;">
+                <select class="prop-input" data-fb-fk="geofenceFailMode" data-fb-vm="val" style="font-size:12px;">
                     <option value="block" ${(f.geofenceFailMode||'block') === 'block' ? 'selected' : ''}>🚫 ${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_block', null, 'Bloquear — impede avanço do formulário'))}</option>
                     <option value="allow_warn" ${(f.geofenceFailMode === 'warn' || f.geofenceFailMode === 'allow_warn') ? 'selected' : ''}>⚠️ ${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_allow_warn', null, 'Registar e permitir — alerta se fora da zona'))}</option>
                     <option value="record_only" ${f.geofenceFailMode === 'record_only' ? 'selected' : ''}>📋 ${escapeHtmlLogic(fbStr('fb_prop_geofence_fail_record_only', null, 'Só registo — fora/dentro sem bloquear'))}</option>
                 </select>
             </div>
             <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-top:8px;">
-                <input type="checkbox" ${f.geofenceUnblockOnReentry === true ? 'checked' : ''} onchange="window.handleFieldUpdate('geofenceUnblockOnReentry', this.checked)" style="accent-color:#059669;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <input type="checkbox" ${f.geofenceUnblockOnReentry === true ? 'checked' : ''} data-fb-fk="geofenceUnblockOnReentry" data-fb-vm="chk" style="accent-color:#059669;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
                 <span style="font-size:11px;font-weight:600;color:#065f46;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_geofence_unblock_reentry', null, 'Com bloqueio: libertar automaticamente ao voltar à zona permitida'))}</span>
             </label>
 
             <!-- Mensagem customizada -->
             <div>
                 <label class="prop-label" style="color:#047857; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_geofence_error_msg_lbl', null, 'Mensagem de erro customizada (opcional)'))}</label>
-                <input class="prop-input" type="text" placeholder="${geoErrPh}" value="${escapeHtmlAttr(f.geofenceErrorMsg || '')}" oninput="window.handleFieldUpdate('geofenceErrorMsg', this.value)" />
+                <input class="prop-input" type="text" placeholder="${geoErrPh}" value="${escapeHtmlAttr(f.geofenceErrorMsg || '')}" data-fb-fk="geofenceErrorMsg" data-fb-live="1" />
             </div>
         </div>`;
     } else if (f.type === 'transit_start') {
@@ -4050,7 +4054,7 @@ function renderProperties() {
                 <ion-icon name="phone-portrait-outline" style="font-size:16px"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_transit_screen_title', null, 'Tela durante o deslocamento'))}
             </div>
             <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
-                <input type="checkbox" ${keepAwake ? 'checked' : ''} onchange="window.handleFieldUpdate('transitKeepScreenAwake', this.checked); if(typeof renderProperties==='function') renderProperties();" style="accent-color:#2563eb;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <input type="checkbox" ${keepAwake ? 'checked' : ''} data-fb-fk="transitKeepScreenAwake" data-fb-vm="chk" data-fb-rp="1" style="accent-color:#2563eb;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
                 <span style="font-size:12px;font-weight:700;color:#1e3a8a;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_keep_awake_lbl', null, 'Manter a tela sempre acesa até finalizar o deslocamento'))}</span>
             </label>
             <div style="font-size:10px;color:#1e40af;line-height:1.45;">
@@ -4062,16 +4066,16 @@ function renderProperties() {
             <div style="font-size:12px;font-weight:800;color:#9a3412;">${escapeHtmlLogic(fbStr('fb_prop_transit_purpose_title', null, 'Finalidade deste início de deslocamento'))}</div>
             ${firstHint}
             <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
-                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isService ? 'checked' : ''} onchange="window.handleFieldUpdate('transitPurpose', 'service'); if(typeof renderProperties==='function') renderProperties();" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isService ? 'checked' : ''} data-fb-fk="transitPurpose" data-fb-vm="lit" data-fb-fv="service" data-fb-rp="1" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
                 <span style="font-size:12px;font-weight:700;color:#9a3412;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_dest_os_lbl', null, 'Destino: local de atendimento da OS (ETA, mapa, acompanhamento)'))}</span>
             </label>
             <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
-                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isReimb ? 'checked' : ''} onchange="window.handleFieldUpdate('transitPurpose', 'reimbursement'); if(typeof renderProperties==='function') renderProperties();" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isReimb ? 'checked' : ''} data-fb-fk="transitPurpose" data-fb-vm="lit" data-fb-fv="reimbursement" data-fb-rp="1" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
                 <span style="font-size:12px;font-weight:700;color:#9a3412;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_reimbursement_lbl', null, 'Apenas registro de deslocamento durante a atividade'))}</span>
             </label>
             <div style="font-size:10px;color:#c2410c;line-height:1.45;">${escapeHtmlLogic(fbStr('fb_prop_transit_reimbursement_help', null, 'Regista só a trilha GPS no app. Sem ETA, sem chat com o cliente e sem página de acompanhamento — use um segundo par início/fim depois do deslocamento operacional.'))}</div>
             <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-top:8px;">
-                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isPatrol ? 'checked' : ''} onchange="window.handleFieldUpdate('transitPurpose', 'patrol'); if(typeof renderProperties==='function') renderProperties();" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isPatrol ? 'checked' : ''} data-fb-fk="transitPurpose" data-fb-vm="lit" data-fb-fv="patrol" data-fb-rp="1" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
                 <span style="font-size:12px;font-weight:700;color:#9a3412;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_patrol_lbl', null, 'Patrulhamento (trajeto KML / geometria da OS no mapa)'))}</span>
             </label>
             <div style="font-size:10px;color:#c2410c;line-height:1.45;">${escapeHtmlLogic(fbStr('fb_prop_transit_patrol_help', null, 'O mapa de deslocamento usa a polilinha ou zona enviada no despacho (ex.: KML). Indicado para seguir o percurso planeado sem assumir o destino como «serviço no cliente».'))}</div>
@@ -4107,7 +4111,7 @@ function renderProperties() {
             <div style="font-size:11px; font-weight:800; color:#9f1239; margin-bottom:4px">🧑‍💻 ${escapeHtmlLogic(fbStr('fb_prop_facial_title', null, 'Biometria e IA obrigatórias'))}</div>
             <div style="font-size:10px; color:#9f1239; line-height:1.2; margin-bottom:12px;">${escapeHtmlLogic(fbStr('fb_prop_facial_intro', null, 'A foto tirada será comparada com a foto de perfil do técnico usando o motor de IA selecionado nas integrações do sistema.'))}</div>
             <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:14px; background:#fffbeb; border:1px solid #fde047; padding:12px; border-radius:8px;">
-                <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2);flex-shrink:0;margin-top:2px" />
+                <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} data-fb-fk="requireOnlineValidation" data-fb-vm="chk" style="transform:scale(1.2);flex-shrink:0;margin-top:2px" />
                 <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
                     <label for="prop-online" style="font-size:12px; font-weight:800; color:#a16207; cursor:pointer;"><ion-icon name="shield-checkmark" style="vertical-align:-2px"></ion-icon> ${onlineValTitle}</label>
                     <div style="font-size:10px; color:#a16207; margin-top:4px; line-height:1.35;">${faceOnlineHint}</div>
@@ -4118,7 +4122,7 @@ function renderProperties() {
             </div>
 
             <label class="prop-label" style="color:#e11d48; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_facial_mode_lbl', null, 'Modo de validação biométrica'))}</label>
-            <select class="prop-input" onchange="window.handleFieldUpdate('facialAuthMode', this.value)" style="font-size:12px; border-color:#fda4af; margin-bottom:8px;">
+            <select class="prop-input" data-fb-fk="facialAuthMode" data-fb-vm="val" style="font-size:12px; border-color:#fda4af; margin-bottom:8px;">
                 <option value="self_verify" ${(f.facialAuthMode || 'self_verify') === 'self_verify' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_facial_mode_self', null, 'Provar identidade do usuário logado (ponto / OS)'))}</option>
                 <option value="identify" ${f.facialAuthMode === 'identify' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_facial_mode_identify', null, 'Identificar qualquer usuário matriculado (mesmo tenant)'))}</option>
             </select>
@@ -4246,7 +4250,7 @@ function renderProperties() {
             const accent = red ? '#dc2626' : '#0284c7';
             return `
             <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid ${border};background:${bg}">
-              <input type="checkbox" ${ratingEnabled ? 'checked' : ''} onchange="window.handleFieldUpdate('visionRating0To10Enabled', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:${accent};width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+              <input type="checkbox" ${ratingEnabled ? 'checked' : ''} data-fb-fk="visionRating0To10Enabled" data-fb-vm="chk" data-fb-rp="1" style="accent-color:${accent};width:16px;height:16px;flex-shrink:0;margin-top:2px" />
               <span style="font-size:12px;font-weight:700;color:${spanColor};line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_rating_chk_lbl', null, 'Classificação 0–10 (preenchida pela API após a análise)'))}</span>
             </label>
             <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">${fbStr(
@@ -4260,7 +4264,7 @@ function renderProperties() {
         const visionShowAiTextColor = useGeminiVision ? (isVisionComparison ? '#701a75' : '#450a0a') : '#0c4a6e';
         const showAiResponseHtml = `
             <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;background:#fff">
-              <input type="checkbox" ${showAiResp ? 'checked' : ''} onchange="window.handleFieldUpdate('visionShowAiResponseInForm', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:${visionShowAiAccent};width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+              <input type="checkbox" ${showAiResp ? 'checked' : ''} data-fb-fk="visionShowAiResponseInForm" data-fb-vm="chk" data-fb-rp="1" style="accent-color:${visionShowAiAccent};width:16px;height:16px;flex-shrink:0;margin-top:2px" />
               <span style="font-size:12px;font-weight:700;color:${visionShowAiTextColor};line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_show_ai_chk_lbl', null, 'Mostrar detalhes da resposta da IA no app'))}</span>
             </label>
             <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_show_ai_hint', null, 'Desmarque para ocultar no formulário do técnico o texto da resposta, confiança, racional e bloco de classificação 0–10 (a mídia e o estado «concluído» mantêm-se). Relatórios e resumo de assinatura podem continuar a mostrar os dados.'))}</div>`;
@@ -4284,7 +4288,7 @@ function renderProperties() {
                 };background:${curGridNorm === o.v ? (useGeminiVision ? (isVisionComparison ? '#faf5ff' : '#fff1f2') : '#f0f9ff') : '#fff'}">
                   <input type="radio" name="visionAnalysisGrid_${escapeHtmlAttr(f.id)}" value="${o.v}" ${
                             curGridNorm === o.v ? 'checked' : ''
-                        } onchange="window.handleFieldUpdate('visionAnalysisGrid', this.value); if(typeof renderProperties==='function')renderProperties();" style="accent-color:${gridAccent};flex-shrink:0" />
+                        } data-fb-fk="visionAnalysisGrid" data-fb-vm="val" data-fb-rp="1" style="accent-color:${gridAccent};flex-shrink:0" />
                   ${miniVisionAnalysisGridPreview(o.c, o.r)}
                   <span style="font-size:12px;font-weight:700;color:${gridLabelStrong}">${escapeHtmlLogic(o.label)}</span>
                 </label>`,
@@ -4299,7 +4303,6 @@ function renderProperties() {
                 fbStr('fb_vision_prompt_ex_btn_title', null, 'Modelos de prompt para serviços de campo (Visão de IA — análise)'),
             )}"><ion-icon name="sparkles-outline" style="vertical-align:-2px"></ion-icon> ${escapeHtmlLogic(fbStr('fb_vision_prompt_ex_btn', null, 'Exemplos'))}</button>
           </div>`;
-        const visionPromptBlurHandler = 'window.updateVisionStructuredPrompt(this.value)';
         const visionPromptHintBlock = isVisionComparison
             ? fbStr(
                   'fb_prop_vision_comparison_structured_prompt_hint',
@@ -4328,7 +4331,7 @@ function renderProperties() {
         const refUrlRaw = String(f.visionComparisonReferenceDataUrl || '').trim();
         const referencePickHtml = isVisionComparison
             ? `<label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_lbl', null, 'Imagem de referência'))}</label>
-            <input type="file" accept="image/jpeg,image/png,image/webp" style="font-size:11px;margin-bottom:8px;width:100%;box-sizing:border-box;" onchange="window.handleVisionComparisonReferencePick(event)" />
+            <input type="file" accept="image/jpeg,image/png,image/webp" style="font-size:11px;margin-bottom:8px;width:100%;box-sizing:border-box;" data-fb-sp="visionRef" />
             <div style="font-size:9px;color:#64748b;margin-bottom:10px;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_hint', null, 'JPEG, PNG ou WebP (recomendado até ~2,5 MB).'))}</div>
             ${
                 refUrlRaw
@@ -4339,7 +4342,7 @@ function renderProperties() {
         const showRefToTechnician = f.visionComparisonShowReferenceInForm !== false;
         const referenceVisibilityHtml = isVisionComparison
             ? `<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid #f0abfc;background:#fdf4ff">
-              <input type="checkbox" ${showRefToTechnician ? 'checked' : ''} onchange="window.handleFieldUpdate('visionComparisonShowReferenceInForm', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:#a21caf;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+              <input type="checkbox" ${showRefToTechnician ? 'checked' : ''} data-fb-fk="visionComparisonShowReferenceInForm" data-fb-vm="chk" data-fb-rp="1" style="accent-color:#a21caf;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
               <span style="font-size:12px;font-weight:700;color:#701a75;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_comparison_show_ref_chk_lbl', null, 'Mostrar foto de referência ao técnico no app'))}</span>
             </label>
             <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_comparison_show_ref_hint', null, 'Se desmarcar, o prestador não vê a miniatura da referência no formulário; a imagem continua a ser usada no servidor para comparar com a captura.'))}</div>`
@@ -4347,7 +4350,7 @@ function renderProperties() {
         const capturePickHtml = isVisionComparison
             ? `<div style="font-size:12px;font-weight:700;color:${vLabel};margin-bottom:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_comparison_capture_fixed', null, 'Captura no app: somente foto (câmera).'))}</div>`
             : `<label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_capture_lbl', null, 'Tipo de captura pela câmera'))}</label>
-            <select class="prop-input" style="font-size:12px; margin-bottom:10px;" onchange="window.handleFieldUpdate('visionCaptureMode', this.value)">
+            <select class="prop-input" style="font-size:12px; margin-bottom:10px;" data-fb-fk="visionCaptureMode" data-fb-vm="val">
                 <option value="photo_only" ${capMode === 'photo_only' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_vision_capture_photo_only', null, 'Somente foto'))}</option>
                 <option value="video_only" ${capMode === 'video_only' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_vision_capture_video_only', null, 'Somente vídeo'))}</option>
                 <option value="photo_and_video" ${capMode === 'photo_and_video' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_vision_capture_photo_video', null, 'Foto e vídeo'))}</option>
@@ -4378,7 +4381,7 @@ function renderProperties() {
                     null,
                     'Contexto: inspeção visual de uma etapa executada em campo (foto ou vídeo único).\n\nTarefa:\n1) Atribua uma nota inteira de 0 a 10 à aderência da evidência visual aos critérios desta etapa da OS.\n2) Baseie-se apenas no visível: presença do item ou serviço esperado, estado aparente, organização e gravidade de eventuais não conformidades.\n\nCampo value (obrigatório):\n- Envie somente os dígitos de um inteiro entre 0 e 10, como string (ex.: "7").\n- Ou envie exatamente unknown se a mídia for insuficiente, o alvo não estiver identificável ou houver ambiguidade relevante.\n\nRubrica orientativa:\n- 0–2: inaceitável ou evidência irrelevante; não conformidade grave ou evidente.\n- 3–4: vários problemas visíveis ou qualidade fraca da evidência.\n- 5–6: aceitável com ressalvas; melhorias necessárias.\n- 7–8: bom estado geral; apenas falhas leves.\n- 9–10: excelente; critérios da etapa inequivocamente atendidos.\n\nNo rationale, em 2–4 frases curtas em pt-BR, diga o que foi observado e o que mais pesou na nota.',
                 ),
-            )}" style="height:160px; font-size:12px; font-family:system-ui,sans-serif; line-height:1.45;" onblur="${visionPromptBlurHandler}">${escapeHtmlLogic(
+            )}" style="height:160px; font-size:12px; font-family:system-ui,sans-serif; line-height:1.45;" data-fb-blur-sp="visionStructuredPrompt">${escapeHtmlLogic(
                 promptDisplay,
             )}</textarea>
             <div style="font-size:9px; color:#64748b; margin-top:6px;">${visionPromptHintBlock}</div>
@@ -4436,9 +4439,9 @@ function renderProperties() {
             <div style="font-size:11px; font-weight:800; color:#9a3412; margin-bottom:6px"><ion-icon name="brush-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_image_annot_title', null, 'Foto com anotações'))}</div>
             <div style="font-size:10px; color:#7c2d12; line-height:1.35; margin-bottom:10px;">${escapeHtmlLogic(fbStr('fb_prop_image_annot_help', null, 'No app, o técnico escolhe câmera ou galeria e pode desenhar por cima da imagem. O valor guardado é JSON (URI local + traços normalizados).'))}</div>
             <label class="prop-label" style="color:#c2410c; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_image_annot_pen_lbl', null, 'Cor do traço'))}</label>
-            <input class="prop-input" type="color" value="${pen}" onchange="window.handleFieldUpdate('annotationPenColor', this.value)" style="max-width:120px;height:36px;padding:2px;" />
+            <input class="prop-input" type="color" value="${pen}" data-fb-fk="annotationPenColor" data-fb-vm="val" style="max-width:120px;height:36px;padding:2px;" />
             <label class="prop-label" style="color:#c2410c; font-size:10px; margin-top:10px;">${escapeHtmlLogic(fbStr('fb_prop_image_annot_width_lbl', null, 'Espessura (1–24)'))}</label>
-            <input class="prop-input" type="number" min="1" max="24" value="${escapeHtmlLogic(sw)}" onchange="window.handleFieldUpdate('annotationStrokeWidth', parseInt(this.value,10)||4)" />
+            <input class="prop-input" type="number" min="1" max="24" value="${escapeHtmlLogic(sw)}" data-fb-fk="annotationStrokeWidth" data-fb-vm="int4" />
         </div>`;
     } else if (f.type === 'lookup_select') {
         const src = f.lookupSource === 'inline_json' ? 'inline_json' : f.lookupSource === 'api' ? 'api' : 'preset';
@@ -4449,14 +4452,14 @@ function renderProperties() {
         <div class="prop-group" style="background:#eff6ff; border:1px solid #93c5fd; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:11px; font-weight:800; color:#1e40af; margin-bottom:6px"><ion-icon name="cloud-download-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_lookup_title', null, 'Lista dinâmica'))}</div>
             <label class="prop-label" style="color:#1d4ed8; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_lookup_source_lbl', null, 'Origem'))}</label>
-            <select class="prop-input" onchange="window.handleFieldUpdate('lookupSource', this.value); if(typeof renderProperties==='function')renderProperties();" style="font-size:12px; margin-bottom:10px;">
+            <select class="prop-input" data-fb-fk="lookupSource" data-fb-vm="val" data-fb-rp="1" style="font-size:12px; margin-bottom:10px;">
                 <option value="preset" ${src === 'preset' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_lookup_src_preset', null, 'Preset no servidor (GET com sessão)'))}</option>
                 <option value="api" ${src === 'api' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_lookup_src_api', null, 'Endpoint da API (GET com sessão)'))}</option>
                 <option value="inline_json" ${src === 'inline_json' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_lookup_src_inline', null, 'JSON no modelo (sem rede)'))}</option>
             </select>
             <div style="display:${src === 'preset' ? 'block' : 'none'}">
                 <label class="prop-label" style="color:#1d4ed8; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_lookup_preset_lbl', null, 'Preset'))}</label>
-                <select class="prop-input" onchange="window.handleFieldUpdate('lookupPreset', this.value)" style="font-size:12px;">
+                <select class="prop-input" data-fb-fk="lookupPreset" data-fb-vm="val" style="font-size:12px;">
                     <option value="equipamentos_demo" ${preset === 'equipamentos_demo' ? 'selected' : ''}>equipamentos_demo</option>
                     <option value="tecnicos_demo" ${preset === 'tecnicos_demo' ? 'selected' : ''}>tecnicos_demo</option>
                     <option value="prioridades_demo" ${preset === 'prioridades_demo' ? 'selected' : ''}>prioridades_demo</option>
@@ -4464,12 +4467,12 @@ function renderProperties() {
             </div>
             <div style="display:${src === 'api' ? 'block' : 'none'}; margin-top:8px;">
                 <label class="prop-label" style="color:#1d4ed8; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_lookup_api_path_lbl', null, 'Caminho da API'))}</label>
-                <input class="prop-input" placeholder="/api/minha-rota/opcoes" value="${apiPathEsc}" onblur="window.handleFieldUpdate('lookupApiPath', this.value)" />
+                <input class="prop-input" placeholder="/api/minha-rota/opcoes" value="${apiPathEsc}" data-fb-blur-fk="lookupApiPath" />
                 <div style="font-size:10px; color:#1e40af; margin-top:6px; line-height:1.35;">${escapeHtmlLogic(fbStr('fb_prop_lookup_api_path_help', null, 'Use caminho relativo da API do backend (ex.: /api/checklists/lookup-options/equipamentos_demo). Resposta esperada: { options:[{value,label}] } ou array direto.'))}</div>
             </div>
             <div style="display:${src === 'inline_json' ? 'block' : 'none'}; margin-top:8px;">
                 <label class="prop-label" style="color:#1d4ed8; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_lookup_json_lbl', null, 'JSON (array de pares value / label)'))}</label>
-                <textarea class="prop-input" style="height:100px;font-family:monospace;font-size:11px;" onblur="window.handleFieldUpdate('lookupInlineJson', this.value)">${inlineEsc}</textarea>
+                <textarea class="prop-input" style="height:100px;font-family:monospace;font-size:11px;" data-fb-blur-fk="lookupInlineJson">${inlineEsc}</textarea>
             </div>
         </div>`;
     } else if (f.type === 'repeatable_matrix') {
@@ -4509,16 +4512,16 @@ function renderProperties() {
                 <summary style="cursor:pointer; font-size:11px; font-weight:700; color:#047857;">${jsonAdv}</summary>
                 <div style="font-size:10px; color:#065f46; line-height:1.35; margin:8px 0;">${jsonAdvHint}</div>
                 <label class="prop-label" style="color:#0f766e; font-size:10px;">${jsonLbl}</label>
-                <textarea id="prop-matrix-cols-json" class="prop-input" style="height:120px;font-family:monospace;font-size:11px;" onblur="window.applyRepeatableMatrixColumnsJson(this.value)">${colsEsc}</textarea>
+                <textarea id="prop-matrix-cols-json" class="prop-input" style="height:120px;font-family:monospace;font-size:11px;" data-fb-blur-sp="matrixColsJson">${colsEsc}</textarea>
             </details>
             <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
                 <div style="flex:1; min-width:100px;">
                     <label class="prop-label" style="font-size:10px; color:#047857;">${escapeHtmlLogic(fbStr('fb_prop_matrix_min_rows', null, 'Mín. linhas'))}</label>
-                    <input class="prop-input" type="number" min="0" value="${minR}" onchange="window.handleFieldUpdate('matrixMinRows', this.value)" />
+                    <input class="prop-input" type="number" min="0" value="${minR}" data-fb-fk="matrixMinRows" data-fb-vm="val" />
                 </div>
                 <div style="flex:1; min-width:100px;">
                     <label class="prop-label" style="font-size:10px; color:#047857;">${escapeHtmlLogic(fbStr('fb_prop_matrix_max_rows', null, 'Máx. linhas'))}</label>
-                    <input class="prop-input" type="number" min="1" value="${maxR}" onchange="window.handleFieldUpdate('matrixMaxRows', this.value)" />
+                    <input class="prop-input" type="number" min="1" value="${maxR}" data-fb-fk="matrixMaxRows" data-fb-vm="val" />
                 </div>
             </div>
         </div>`;
@@ -4535,18 +4538,18 @@ function renderProperties() {
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:16px;">
             <div style="font-size:11px; font-weight:800; color:#6b21a8; margin-bottom:6px"><ion-icon name="analytics-outline"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_opinion_title', null, 'Escala NPS / Likert'))}</div>
             <label class="prop-label" style="color:#7c3aed; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_opinion_mode_lbl', null, 'Modo'))}</label>
-            <select class="prop-input" onchange="window.handleFieldUpdate('opinionScaleMode', this.value)" style="font-size:12px; margin-bottom:10px;">
+            <select class="prop-input" data-fb-fk="opinionScaleMode" data-fb-vm="val" style="font-size:12px; margin-bottom:10px;">
                 <option value="nps" ${mode === 'nps' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_opinion_mode_nps', null, 'NPS (0 a 10)'))}</option>
                 <option value="likert" ${mode === 'likert' ? 'selected' : ''}>${escapeHtmlLogic(fbStr('fb_prop_opinion_mode_likert', null, 'Likert (5 níveis)'))}</option>
             </select>
             <label class="prop-label" style="color:#7c3aed; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_opinion_likert_lbl', null, 'Rótulos Likert (um por linha, até 5)'))}</label>
-            <textarea class="prop-input" style="height:100px;font-size:12px;" onblur="window.handleFieldUpdate('likertLabels', this.value)">${likEsc}</textarea>
+            <textarea class="prop-input" style="height:100px;font-size:12px;" data-fb-blur-fk="likertLabels">${likEsc}</textarea>
         </div>`;
     } else if (f.type === 'dropdown' || f.type === 'multiselect') {
         extraProps = `
         <div class="prop-group" style="background:#eef2ff; border:1px solid #6366f1; padding:12px; border-radius:8px; margin-top:16px;">
             <label class="prop-label" style="color:#4f46e5;"><ion-icon name="list"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_list_options_lbl', null, 'Opções da lista (separe por vírgula)'))}</label>
-            <textarea class="prop-input" style="height:60px; font-size:12px;" onkeyup="window.handleFieldUpdate('options', this.value)">${f.options || ''}</textarea>
+            <textarea class="prop-input" style="height:60px; font-size:12px;" data-fb-fk="options" data-fb-live="1">${f.options || ''}</textarea>
         </div>`;
     } else if (f.type === 'calculated') {
         const calcDisp = String(f.calcDisplayFormat || 'auto');
@@ -4602,18 +4605,18 @@ function renderProperties() {
         <div class="prop-group" style="background:#f5f3ff; border:1px solid #8b5cf6; padding:12px; border-radius:8px; margin-top:16px;">
             <label class="prop-label" style="color:#7c3aed;"><ion-icon name="calculator"></ion-icon> ${escapeHtmlLogic(fbStr('fb_prop_calc_title', null, 'Expressão matemática do sistema'))}</label>
             <label class="prop-label" style="color:#6d28d9; font-size:10px; margin-bottom:4px;">${lblField}</label>
-            <select class="prop-input" style="font-size:12px; margin-bottom:10px;" onchange="window.onCalcFormulaInsertPick(this)">
+            <select class="prop-input" style="font-size:12px; margin-bottom:10px;" data-fb-sp="calcPick">
                 <option value="">${phField}</option>
                 ${fieldOptsHtml}
             </select>
             <label class="prop-label" style="color:#6d28d9; font-size:10px; margin-bottom:4px;">${lblOps}</label>
-            <select class="prop-input" style="font-size:12px; margin-bottom:10px;" onchange="window.onCalcFormulaInsertPick(this)">
+            <select class="prop-input" style="font-size:12px; margin-bottom:10px;" data-fb-sp="calcPick">
                 ${opOptsHtml}
             </select>
-            <input id="prop-calc-formula-input" class="prop-input" type="text" placeholder="${calcPh}" value="${escapeHtmlAttr(f.calcFormula || '')}" oninput="window.handleFieldUpdate('calcFormula', this.value)" />
+            <input id="prop-calc-formula-input" class="prop-input" type="text" placeholder="${calcPh}" value="${escapeHtmlAttr(f.calcFormula || '')}" data-fb-fk="calcFormula" data-fb-live="1" />
             <div style="font-size:10px; color:#7c3aed; margin-top:4px; line-height:1.2;">${escapeHtmlLogic(fbStr('fb_prop_calc_help', null, 'Variáveis: use o ID sublinhado de outros blocos (ex.: field_111 * field_222) ou use "Math.sqrt(field_111)" para fórmulas puras.'))}</div>
             <label class="prop-label" style="color:#6d28d9; font-size:10px; margin-top:10px; margin-bottom:4px;">${lblDisp}</label>
-            <select class="prop-input" style="font-size:12px;" onchange="window.handleFieldUpdate('calcDisplayFormat', this.value)">
+            <select class="prop-input" style="font-size:12px;" data-fb-fk="calcDisplayFormat" data-fb-vm="val">
                 <option value="auto" ${calcDisp === 'auto' ? 'selected' : ''}>${optAuto}</option>
                 <option value="number" ${calcDisp === 'number' ? 'selected' : ''}>${optNum}</option>
                 <option value="currency" ${calcDisp === 'currency' ? 'selected' : ''}>${optCur}</option>
@@ -4630,7 +4633,7 @@ function renderProperties() {
                 const typ = escapeHtmlLogic(o.type || '');
                 const oid = escapeHtmlAttr(o.id);
                 return `<label style="display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;border:1px solid #e2e8f0;margin-bottom:4px;background:#fff;">
-                  <input type="checkbox" ${ck} onchange="window.toggleSignatureSummarySource('${oid}', this.checked)" style="margin-top:2px;flex-shrink:0;accent-color:var(--primary);" />
+                  <input type="checkbox" ${ck} data-fb-sigsum="${oid}" style="margin-top:2px;flex-shrink:0;accent-color:var(--primary);" />
                   <span style="font-size:12px;line-height:1.35;"><span style="font-weight:700;color:#0f172a;">${lab}</span> <span style="color:#94a3b8;font-size:10px;">(${typ} · ${escapeHtmlLogic(o.id)})</span></span>
                 </label>`;
             })
@@ -4696,7 +4699,7 @@ function renderProperties() {
                     ? fbStr('fb_prop_label_section_title', null, 'Nome da etapa ou seção (como aparece no app móvel)')
                     : fbStr('fb_prop_label_question_panel', null, 'Rótulo da pergunta no painel (técnico vê no app)')
             )}</label>
-            <input id="prop-label-input" class="prop-input" type="text" value="${escapeHtmlAttr(glab(f))}" onkeyup="window.handleFieldUpdate('label', this.value)" />
+            <input id="prop-label-input" class="prop-input" type="text" value="${escapeHtmlAttr(glab(f))}" data-fb-fk="label" data-fb-live="1" />
         </div>
         <div class="prop-group">
             <label class="prop-label">${escapeHtmlLogic(fbStr('fb_prop_internal_id', null, 'ID interno do campo (slug)'))}</label>
@@ -4712,7 +4715,7 @@ function renderProperties() {
             <label class="prop-label">${escapeHtmlLogic(fbStr('fb_prop_section_app_view_title', null, 'Como o técnico vê esta etapa (app)'))}</label>
             <div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
                 <label class="app-fill-mode-card" style="cursor:pointer; border:2px solid var(--border, #e2e8f0); border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; background:#fff;">
-                    <input type="radio" name="propSectionFillMode" value="list" ${pick === 'list' ? 'checked' : ''} style="margin-top:3px; accent-color:var(--primary);" onchange="if(this.checked) window.handleFieldUpdate('sectionFillMode', 'list')" />
+                    <input type="radio" name="propSectionFillMode" value="list" ${pick === 'list' ? 'checked' : ''} style="margin-top:3px; accent-color:var(--primary);" data-fb-fk="sectionFillMode" data-fb-vm="lit" data-fb-fv="list" />
                     <span>
                         <span style="display:block; font-weight:800; font-size:12px; color:var(--text1, #0f172a);"><ion-icon name="list-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> ${escapeHtmlLogic(
                             fbStr('fb_prop_section_fill_list_title', null, 'Lista com scroll')
@@ -4723,7 +4726,7 @@ function renderProperties() {
                     </span>
                 </label>
                 <label class="app-fill-mode-card" style="cursor:pointer; border:2px solid var(--border, #e2e8f0); border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; background:#fff;">
-                    <input type="radio" name="propSectionFillMode" value="wizard" ${pick === 'wizard' ? 'checked' : ''} style="margin-top:3px; accent-color:var(--primary);" onchange="if(this.checked) window.handleFieldUpdate('sectionFillMode', 'wizard')" />
+                    <input type="radio" name="propSectionFillMode" value="wizard" ${pick === 'wizard' ? 'checked' : ''} style="margin-top:3px; accent-color:var(--primary);" data-fb-fk="sectionFillMode" data-fb-vm="lit" data-fb-fv="wizard" />
                     <span>
                         <span style="display:block; font-weight:800; font-size:12px; color:var(--text1, #0f172a);"><ion-icon name="git-commit-outline" style="font-size:14px; vertical-align:-2px;"></ion-icon> ${escapeHtmlLogic(
                             fbStr('fb_prop_section_fill_wizard_title', null, 'Um campo de cada vez')
@@ -4746,7 +4749,7 @@ function renderProperties() {
         </div>
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                <input type="checkbox" id="prop-section-repeat" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
+                <input type="checkbox" id="prop-section-repeat" ${f.multiple ? 'checked' : ''} data-fb-fk="multiple" data-fb-vm="chk" />
                 <label for="prop-section-repeat" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">${escapeHtmlLogic(
                     fbStr('fb_prop_section_repeat_chk', null, 'Repetir esta seção (lista)')
                 )}</label>
@@ -4761,13 +4764,13 @@ function renderProperties() {
                     <label class="prop-label" style="font-size:10px; color:#581c87;">${escapeHtmlLogic(
                         fbStr('fb_prop_min_instances_sec', null, 'Mín. instâncias (vazio = 0)')
                     )}</label>
-                    <input class="prop-input" type="number" min="0" placeholder="${phInst1}" value="${f.minItems !== undefined && f.minItems !== null && f.minItems !== '' ? String(f.minItems) : ''}" onchange="window.handleFieldUpdate('minItems', this.value)" />
+                    <input class="prop-input" type="number" min="0" placeholder="${phInst1}" value="${f.minItems !== undefined && f.minItems !== null && f.minItems !== '' ? String(f.minItems) : ''}" data-fb-fk="minItems" data-fb-vm="val" />
                 </div>
                 <div style="flex:1; min-width:110px;">
                     <label class="prop-label" style="font-size:10px; color:#581c87;">${escapeHtmlLogic(
                         fbStr('fb_prop_max_instances_sec', null, 'Máx. instâncias (vazio = ilimitado)')
                     )}</label>
-                    <input class="prop-input" type="number" min="1" placeholder="${phInst5}" value="${f.maxItems !== undefined && f.maxItems !== null && f.maxItems !== '' ? String(f.maxItems) : ''}" onchange="window.handleFieldUpdate('maxItems', this.value)" />
+                    <input class="prop-input" type="number" min="1" placeholder="${phInst5}" value="${f.maxItems !== undefined && f.maxItems !== null && f.maxItems !== '' ? String(f.maxItems) : ''}" data-fb-fk="maxItems" data-fb-vm="val" />
                 </div>
             </div>
         </div>`;
@@ -4799,7 +4802,7 @@ function renderProperties() {
                 <label title="${escapeHtmlAttr(fbStr('fb_prop_instructions_show_title', null, 'Mostrar instruções no celular do técnico'))}" style="display:inline-flex; align-items:center; cursor:pointer; user-select:none;">
                     <input type="checkbox" id="prop-show-field-instructions" aria-label="${escapeHtmlAttr(
                         fbStr('fb_prop_instructions_show_aria', null, 'Mostrar instruções no app móvel')
-                    )}" ${f.showFieldInstructions === true ? 'checked' : ''} onchange="window.handleFieldUpdate('showFieldInstructions', this.checked)" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer; flex-shrink:0;" />
+                    )}" ${f.showFieldInstructions === true ? 'checked' : ''} data-fb-fk="showFieldInstructions" data-fb-vm="chk" style="width:15px; height:15px; accent-color:var(--primary); cursor:pointer; flex-shrink:0;" />
                 </label>
                 ` : ''}
             </div>
@@ -4817,7 +4820,7 @@ function renderProperties() {
             )}</label>
             <input class="prop-input" type="text" value="${f.defaultValue || ''}" placeholder="${escapeHtmlAttr(
                 fbStr('fb_prop_default_value_ph', null, 'Use tags como {{user.name}}, {{date}}')
-            )}" onkeyup="window.handleFieldUpdate('defaultValue', this.value)" />
+            )}" data-fb-fk="defaultValue" data-fb-live="1" />
         </div>
         ` : ''}
 
@@ -4835,7 +4838,7 @@ function renderProperties() {
                         'No app, este bloco mostra um <strong>botão</strong> que faz o mesmo que o botão principal do rodapé (avançar, voltar ao menu de etapas ou <strong>concluir a OS</strong>). O texto do botão é o <strong>rótulo</strong> acima; se estiver vazio, o app usa o texto padrão do rodapé. Pode colocar o campo no preâmbulo ou dentro de qualquer etapa.'
                     )}</div>`
                   : `<div class="prop-group" style="display:flex; align-items:center; gap:8px;">
-            <input type="checkbox" id="prop-req" ${reqChecked} onchange="window.handleFieldUpdate('required', this.checked)" />
+            <input type="checkbox" id="prop-req" ${reqChecked} data-fb-fk="required" data-fb-vm="chk" />
             <label for="prop-req" style="font-size:13px; font-weight:600; cursor:pointer;">${escapeHtmlLogic(
                 fbStr('fb_prop_required_q', null, 'Resposta obrigatória?')
             )}</label>
@@ -4846,7 +4849,7 @@ function renderProperties() {
         !['hidden', 'calculated', 'transit_start', 'transit_end', 'materials_consumption', 'materials_receipt', 'technician_finance_expense', 'technician_finance_revenue', 'signature', 'signature_summary', 'vision_checklist', 'vision_ai_analysis', 'vision_ai_comparison', 'leitura', 'form_complete_button', 'voice_note', 'image_annotation', 'lookup_select', 'repeatable_matrix', 'opinion_scale'].includes(f.type) ? `
         <div class="prop-group" style="background:#faf5ff; border:1px solid #d8b4fe; padding:12px; border-radius:8px; margin-top:12px;">
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} onchange="window.handleFieldUpdate('multiple', this.checked)" />
+                <input type="checkbox" id="prop-multiple" ${f.multiple ? 'checked' : ''} data-fb-fk="multiple" data-fb-vm="chk" />
                 <label for="prop-multiple" style="font-size:13px; font-weight:700; cursor:pointer; color:#581c87;">${escapeHtmlLogic(
                     fbStr('fb_prop_repeat_field_title', null, 'Várias respostas (lista)')
                 )}</label>
@@ -4861,13 +4864,13 @@ function renderProperties() {
                     <label class="prop-label" style="font-size:10px; color:#581c87;">${escapeHtmlLogic(
                         fbStr('fb_prop_min_items_field', null, 'Mín. itens (vazio = padrão)')
                     )}</label>
-                    <input class="prop-input" type="number" min="0" placeholder="${phInst2}" value="${f.minItems !== undefined && f.minItems !== null && f.minItems !== '' ? String(f.minItems) : ''}" onchange="window.handleFieldUpdate('minItems', this.value)" />
+                    <input class="prop-input" type="number" min="0" placeholder="${phInst2}" value="${f.minItems !== undefined && f.minItems !== null && f.minItems !== '' ? String(f.minItems) : ''}" data-fb-fk="minItems" data-fb-vm="val" />
                 </div>
                 <div style="flex:1; min-width:110px;">
                     <label class="prop-label" style="font-size:10px; color:#581c87;">${escapeHtmlLogic(
                         fbStr('fb_prop_max_items_field', null, 'Máx. itens (vazio = ilimitado)')
                     )}</label>
-                    <input class="prop-input" type="number" min="1" placeholder="${phInst5}" value="${f.maxItems !== undefined && f.maxItems !== null && f.maxItems !== '' ? String(f.maxItems) : ''}" onchange="window.handleFieldUpdate('maxItems', this.value)" />
+                    <input class="prop-input" type="number" min="1" placeholder="${phInst5}" value="${f.maxItems !== undefined && f.maxItems !== null && f.maxItems !== '' ? String(f.maxItems) : ''}" data-fb-fk="maxItems" data-fb-vm="val" />
                 </div>
             </div>
         </div>
@@ -4875,7 +4878,7 @@ function renderProperties() {
 
         ${['photo', 'photo_stamped', 'facial_recognition', 'vision_checklist', 'vision_ai_analysis', 'vision_ai_comparison', 'file_upload', 'image_annotation'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:12px; background:#ecfdf5; border:1px solid #a7f3d0; padding:12px; border-radius:8px;">
-            <input type="checkbox" id="prop-allow-media-desc" ${f.allowMediaDescription ? 'checked' : ''} onchange="window.handleFieldUpdate('allowMediaDescription', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+            <input type="checkbox" id="prop-allow-media-desc" ${f.allowMediaDescription ? 'checked' : ''} data-fb-fk="allowMediaDescription" data-fb-vm="chk" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
             <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
                 <label for="prop-allow-media-desc" style="font-size:13px; font-weight:700; color:#047857; cursor:pointer;">${escapeHtmlLogic(
                     fbStr('fb_prop_media_comment_title', null, 'Comentário opcional por foto / arquivo')
@@ -4893,7 +4896,7 @@ function renderProperties() {
 
         ${f.type !== 'section_break' && f.type !== 'hidden' && f.type !== 'leitura' && f.type !== 'form_complete_button' ? `
         <div class="prop-group" style="display:flex; align-items:flex-start; gap:10px; margin-top:4px; background:#f0f9ff; border:1px solid #bae6fd; padding:12px; border-radius:8px;">
-            <input type="checkbox" id="prop-allow-comment" ${f.allowTechnicianComment ? 'checked' : ''} onchange="window.handleFieldUpdate('allowTechnicianComment', this.checked)" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
+            <input type="checkbox" id="prop-allow-comment" ${f.allowTechnicianComment ? 'checked' : ''} data-fb-fk="allowTechnicianComment" data-fb-vm="chk" style="transform:scale(1.2);margin-top:2px;flex-shrink:0" />
             <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
                 <label for="prop-allow-comment" style="font-size:13px; font-weight:700; color:#0369a1; cursor:pointer;">${escapeHtmlLogic(
                     fbStr('fb_prop_tech_comment_title', null, 'Comentário do técnico (opcional no app)')
@@ -4911,7 +4914,7 @@ function renderProperties() {
 
         ${['geofence_check', 'location_pick', 'photo', 'photo_stamped', 'vision_checklist', 'vision_ai_analysis', 'vision_ai_comparison', 'voice_note', 'signature', 'signature_summary', 'barcode_scan', 'lookup_select'].includes(f.type) ? `
         <div class="prop-group" style="display:flex; align-items:center; gap:10px; margin-top:12px; background:#fefce8; border:1px solid #fef08a; padding:12px; border-radius:8px;">
-            <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} onchange="window.handleFieldUpdate('requireOnlineValidation', this.checked)" style="transform:scale(1.2)" />
+            <input type="checkbox" id="prop-online" ${f.requireOnlineValidation ? 'checked' : ''} data-fb-fk="requireOnlineValidation" data-fb-vm="chk" style="transform:scale(1.2)" />
             <div style="display:flex; flex-direction:column;">
                 <label for="prop-online" style="font-size:12px; font-weight:800; color:#ca8a04; cursor:pointer;"><ion-icon name="shield-checkmark" style="vertical-align:-2px"></ion-icon> ${escapeHtmlLogic(
                     fbStr('fb_prop_online_validation_title', null, 'Exigir validação apenas online?')
@@ -4939,9 +4942,146 @@ function renderProperties() {
     }, 0);
 }
 
+/** Delegação de `change`/`input` no corpo do modal de propriedades (evita handlers inline no HTML gerado). */
+function dispatchFieldPropsBodyDelegatedChange(ev) {
+    const rawTarget = ev.target;
+    if (!(rawTarget instanceof HTMLElement)) return;
+    const host = ev.currentTarget;
+    if (!host.contains(rawTarget)) return;
+    const sp = rawTarget.getAttribute('data-fb-sp');
+    if (sp === 'visionRef') {
+        if (rawTarget instanceof HTMLInputElement && rawTarget.type === 'file') {
+            void window.handleVisionComparisonReferencePick(ev);
+        }
+        return;
+    }
+    if (sp === 'calcPick') {
+        if (rawTarget instanceof HTMLSelectElement) window.onCalcFormulaInsertPick(rawTarget);
+        return;
+    }
+    if (sp === 'matrixSync') {
+        window.syncRepeatableMatrixColumnsFromUi();
+        return;
+    }
+    const sigOid = rawTarget.getAttribute('data-fb-sigsum');
+    if (sigOid != null && sigOid !== '') {
+        if (rawTarget instanceof HTMLInputElement && rawTarget.type === 'checkbox') {
+            window.toggleSignatureSummarySource(sigOid, rawTarget.checked);
+        }
+        return;
+    }
+    const fk = rawTarget.getAttribute('data-fb-fk');
+    if (!fk) return;
+    const vm = rawTarget.getAttribute('data-fb-vm') || 'val';
+    let val;
+    if (vm === 'chk') val = rawTarget instanceof HTMLInputElement ? rawTarget.checked : false;
+    else if (vm === 'int4')
+        val = rawTarget instanceof HTMLInputElement ? parseInt(rawTarget.value, 10) || 4 : 4;
+    else if (vm === 'lit') {
+        if (rawTarget instanceof HTMLInputElement && rawTarget.type === 'radio' && !rawTarget.checked) return;
+        val = rawTarget.getAttribute('data-fb-fv') || '';
+    } else
+        val =
+            rawTarget instanceof HTMLInputElement || rawTarget instanceof HTMLSelectElement
+                ? rawTarget.value
+                : '';
+    window.handleFieldUpdate(fk, val);
+    if (rawTarget.getAttribute('data-fb-rp') === '1' && typeof renderProperties === 'function') renderProperties();
+}
+
+function dispatchFieldPropsBodyDelegatedInput(ev) {
+    const rawTarget = ev.target;
+    if (!(rawTarget instanceof HTMLElement)) return;
+    if (rawTarget.getAttribute('data-fb-sp') === 'matrixSync') {
+        window.syncRepeatableMatrixColumnsFromUi();
+        return;
+    }
+    if (rawTarget.getAttribute('data-fb-live') === '1') {
+        const fk = rawTarget.getAttribute('data-fb-fk');
+        if (
+            fk &&
+            (rawTarget instanceof HTMLInputElement || rawTarget instanceof HTMLTextAreaElement)
+        ) {
+            window.handleFieldUpdate(fk, rawTarget.value);
+        }
+    }
+}
+
+/** Atualizações ao sair do foco (substitui `onblur` inline no HTML gerado). */
+function dispatchFieldPropsBodyDelegatedFocusOut(ev) {
+    const rawTarget = ev.target;
+    if (!(rawTarget instanceof HTMLElement)) return;
+    const host = ev.currentTarget;
+    if (!host.contains(rawTarget)) return;
+    const blurSp = rawTarget.getAttribute('data-fb-blur-sp');
+    if (blurSp === 'visionStructuredPrompt') {
+        if (rawTarget instanceof HTMLTextAreaElement) window.updateVisionStructuredPrompt(rawTarget.value);
+        return;
+    }
+    if (blurSp === 'matrixColsJson') {
+        if (rawTarget instanceof HTMLTextAreaElement) window.applyRepeatableMatrixColumnsJson(rawTarget.value);
+        return;
+    }
+    const bfk = rawTarget.getAttribute('data-fb-blur-fk');
+    if (bfk && (rawTarget instanceof HTMLInputElement || rawTarget instanceof HTMLTextAreaElement)) {
+        window.handleFieldUpdate(bfk, rawTarget.value);
+    }
+}
+
+function dispatchLogicModalDelegatedChange(ev) {
+    const t = ev.target;
+    if (!(t instanceof HTMLElement)) return;
+    const lm = ev.currentTarget;
+    if (!lm.contains(t)) return;
+    const la = t.getAttribute('data-cbk-la-a');
+    const lr = t.getAttribute('data-cbk-lr-r');
+    if (lr == null || lr === '') return;
+    const r = parseInt(lr, 10);
+    if (!Number.isFinite(r)) return;
+    if (la != null && la !== '') {
+        const a = parseInt(la, 10);
+        if (!Number.isFinite(a)) return;
+        const fld = t.getAttribute('data-cbk-la-f');
+        if (!fld) return;
+        const vm = t.getAttribute('data-cbk-la-vm') || 'val';
+        const v =
+            vm === 'chk'
+                ? t instanceof HTMLInputElement
+                    ? t.checked
+                    : false
+                : t instanceof HTMLInputElement || t instanceof HTMLSelectElement
+                  ? t.value
+                  : '';
+        window.updateLogicAction(r, a, fld, v);
+        return;
+    }
+    const lrf = t.getAttribute('data-cbk-lr-f');
+    if (!lrf) return;
+    const rv =
+        t instanceof HTMLInputElement && t.type === 'checkbox'
+            ? t.checked
+            : t instanceof HTMLInputElement || t instanceof HTMLSelectElement
+              ? t.value
+              : '';
+    window.updateLogicRule(r, lrf, rv);
+}
+
+function ensureLogicModalDelegatedChangeBound() {
+    const lm = document.getElementById('logic-modal');
+    if (!lm || lm.dataset.fbLogicDeleg === '1') return;
+    lm.dataset.fbLogicDeleg = '1';
+    lm.addEventListener('change', dispatchLogicModalDelegatedChange);
+}
+
 /** Botões que deixaram de usar `onclick` inline no painel de propriedades (CSP / consistência). */
 function bindFieldPropertiesNonInlineHandlers(root) {
     if (!root) return;
+    if (!root._fbPropsChangeDelegBound) {
+        root._fbPropsChangeDelegBound = true;
+        root.addEventListener('change', dispatchFieldPropsBodyDelegatedChange);
+        root.addEventListener('input', dispatchFieldPropsBodyDelegatedInput);
+        root.addEventListener('focusout', dispatchFieldPropsBodyDelegatedFocusOut);
+    }
     root.querySelectorAll('.cbk-prop-vision-ex-btn').forEach((btn) => {
         btn.addEventListener('click', () => window.openVisionAiStructuredPromptExamplesModal());
     });
@@ -5019,16 +5159,20 @@ window.handleVisionComparisonReferencePick = function (ev) {
             return;
         }
         const reader = new FileReader();
-        reader.onload = function () {
-            const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-            if (!dataUrl || dataUrl.length > 9 * 1024 * 1024) {
-                fbAlert('fb_prop_vision_ref_too_large', null, 'Imagem demasiado grande após leitura.');
-                return;
-            }
-            window.handleFieldUpdate('visionComparisonReferenceDataUrl', dataUrl);
-            if (typeof renderProperties === 'function') renderProperties();
-            if (typeof renderCanvas === 'function') renderCanvas();
-        };
+        reader.addEventListener(
+            'load',
+            function () {
+                const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+                if (!dataUrl || dataUrl.length > 9 * 1024 * 1024) {
+                    fbAlert('fb_prop_vision_ref_too_large', null, 'Imagem demasiado grande após leitura.');
+                    return;
+                }
+                window.handleFieldUpdate('visionComparisonReferenceDataUrl', dataUrl);
+                if (typeof renderProperties === 'function') renderProperties();
+                if (typeof renderCanvas === 'function') renderCanvas();
+            },
+            { once: true },
+        );
         reader.readAsDataURL(file);
     } catch (e) {
         console.warn('[handleVisionComparisonReferencePick]', e);
@@ -5155,7 +5299,7 @@ function openVisionPromptExamplesModal(opts) {
     closeBtn.className = 'btn btn-ghost btn-sm';
     closeBtn.style.cssText = 'flex-shrink:0;font-weight:700;color:#64748b';
     closeBtn.textContent = fbStr('fb_vision_prompt_ex_close', null, 'Fechar');
-    closeBtn.onclick = closeModal;
+    closeBtn.addEventListener('click', closeModal);
 
     head.appendChild(headText);
     head.appendChild(closeBtn);
@@ -5208,7 +5352,7 @@ function openVisionPromptExamplesModal(opts) {
         }
         emptyMsg.style.display = n ? 'none' : 'block';
     }
-    sel.onchange = applyVisionExFilter;
+    sel.addEventListener('change', applyVisionExFilter);
 
     const applyLbl = fbStr('fb_vision_prompt_ex_apply', null, 'Aplicar ao campo');
     for (let i = 0; i < cat.items.length; i++) {
@@ -5232,10 +5376,10 @@ function openVisionPromptExamplesModal(opts) {
         applyBtn.style.cssText = 'flex-shrink:0;font-weight:700';
         applyBtn.textContent = applyLbl;
         const bodySnap = ex.body;
-        applyBtn.onclick = function () {
+        applyBtn.addEventListener('click', function () {
             opts.applyPrompt(bodySnap);
             closeModal();
-        };
+        });
 
         titleRow.appendChild(t);
         titleRow.appendChild(applyBtn);
@@ -5388,8 +5532,8 @@ function buildMatrixColumnsEditorRowsHtml(f) {
             let ct = String(col.cellType || 'text').toLowerCase();
             if (ct !== 'number' && ct !== 'yes_no') ct = 'text';
             return `<div class="prop-matrix-col-row" data-col-id="${escapeHtmlAttr(cid)}" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff;border:1px solid #a7f3d0;border-radius:8px;padding:8px;">
-                <input type="text" class="prop-input prop-matrix-col-label" style="flex:1;min-width:140px;font-size:12px;" placeholder="${ph}" value="${escapeHtmlAttr(lab)}" oninput="window.syncRepeatableMatrixColumnsFromUi()" />
-                <select class="prop-input prop-matrix-col-type" style="width:min(170px,100%);font-size:12px;" onchange="window.syncRepeatableMatrixColumnsFromUi()">
+                <input type="text" class="prop-input prop-matrix-col-label" style="flex:1;min-width:140px;font-size:12px;" placeholder="${ph}" value="${escapeHtmlAttr(lab)}" data-fb-sp="matrixSync" />
+                <select class="prop-input prop-matrix-col-type" style="width:min(170px,100%);font-size:12px;" data-fb-sp="matrixSync">
                     <option value="text"${ct === 'text' ? ' selected' : ''}>${optText}</option>
                     <option value="number"${ct === 'number' ? ' selected' : ''}>${optNum}</option>
                     <option value="yes_no"${ct === 'yes_no' ? ' selected' : ''}>${optYn}</option>
@@ -5851,64 +5995,68 @@ window.importJSON = function() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'application/json';
-    input.onchange = e => {
+    input.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if(!file) return;
         const reader = new FileReader();
-        reader.readAsText(file, "UTF-8");
-        reader.onload = function(evt) {
-            try {
-                const parsed = JSON.parse(evt.target.result);
-                if(parsed.schema) {
-                    flushQuillToBoundField();
-                    fields = ensureSchemaInstructionFlags(parsed.schema);
-                    ensureCanvasSchemaHasSection();
-                    fixTransitDisplacementViolations(fields);
-                    globalFormSettings = Object.assign(
-                        {
-                            requireGlobalGeofence: false,
-                            globalGeofenceRadius: 200,
-                            rules: [],
-                            appFillMode: 'full',
-                            appSectionStart: 'direct',
-                            appHubSectionOrder: 'free',
-                            expectedFormDurationMinutes: undefined,
-                        },
-                        parsed.settings || {}
-                    );
-                    if (!globalFormSettings.rules) globalFormSettings.rules = [];
-                    globalFormSettings.appFillMode = normalizeAppFillMode(globalFormSettings.appFillMode);
-                    globalFormSettings.appSectionStart = normalizeAppSectionStart(globalFormSettings.appSectionStart);
-                    globalFormSettings.appHubSectionOrder = normalizeAppHubSectionOrder(
-                        globalFormSettings.appHubSectionOrder
-                    );
-                    window.syncAppSectionNavRadios && window.syncAppSectionNavRadios();
-                    selectedFieldId = null;
-                    renderCanvas();
-                    renderProperties();
-                    if (typeof window.syncBuilderPersistBaseline === 'function') {
-                        window.syncBuilderPersistBaseline();
+        reader.addEventListener(
+            'load',
+            function (evt) {
+                try {
+                    const parsed = JSON.parse(evt.target.result);
+                    if(parsed.schema) {
+                        flushQuillToBoundField();
+                        fields = ensureSchemaInstructionFlags(parsed.schema);
+                        ensureCanvasSchemaHasSection();
+                        fixTransitDisplacementViolations(fields);
+                        globalFormSettings = Object.assign(
+                            {
+                                requireGlobalGeofence: false,
+                                globalGeofenceRadius: 200,
+                                rules: [],
+                                appFillMode: 'full',
+                                appSectionStart: 'direct',
+                                appHubSectionOrder: 'free',
+                                expectedFormDurationMinutes: undefined,
+                            },
+                            parsed.settings || {}
+                        );
+                        if (!globalFormSettings.rules) globalFormSettings.rules = [];
+                        globalFormSettings.appFillMode = normalizeAppFillMode(globalFormSettings.appFillMode);
+                        globalFormSettings.appSectionStart = normalizeAppSectionStart(globalFormSettings.appSectionStart);
+                        globalFormSettings.appHubSectionOrder = normalizeAppHubSectionOrder(
+                            globalFormSettings.appHubSectionOrder
+                        );
+                        window.syncAppSectionNavRadios && window.syncAppSectionNavRadios();
+                        selectedFieldId = null;
+                        renderCanvas();
+                        renderProperties();
+                        if (typeof window.syncBuilderPersistBaseline === 'function') {
+                            window.syncBuilderPersistBaseline();
+                        }
+                        if (typeof window.fbScheduleSchemaLocaleAutoTranslate === 'function') {
+                            window.fbScheduleSchemaLocaleAutoTranslate();
+                        }
+                        fbAlert(
+                            'fb_alert_import_ok',
+                            null,
+                            'Formulário importado com sucesso. Clique em «Salvar formulário» para persistir no catálogo local e na API.'
+                        );
+                    } else {
+                        fbAlert('fb_alert_import_bad', null, 'O arquivo não é compatível com o BrSpark Builder.');
                     }
-                    if (typeof window.fbScheduleSchemaLocaleAutoTranslate === 'function') {
-                        window.fbScheduleSchemaLocaleAutoTranslate();
-                    }
+                } catch(err) {
                     fbAlert(
-                        'fb_alert_import_ok',
-                        null,
-                        'Formulário importado com sucesso. Clique em «Salvar formulário» para persistir no catálogo local e na API.'
+                        'fb_alert_import_corrupt',
+                        { detail: err && err.message ? err.message : String(err) },
+                        'Arquivo corrompido: ' + (err && err.message ? err.message : err)
                     );
-                } else {
-                    fbAlert('fb_alert_import_bad', null, 'O arquivo não é compatível com o BrSpark Builder.');
                 }
-            } catch(err) {
-                fbAlert(
-                    'fb_alert_import_corrupt',
-                    { detail: err && err.message ? err.message : String(err) },
-                    'Arquivo corrompido: ' + (err && err.message ? err.message : err)
-                );
-            }
-        }
-    };
+            },
+            { once: true },
+        );
+        reader.readAsText(file, "UTF-8");
+    });
     input.click();
 };
 
@@ -6628,18 +6776,18 @@ function renderFolderTreeSidebar() {
 
     const attachFolderDropHandlers = (row, isSelected, targetFolderId) => {
         row.setAttribute('data-folder-drop-target', targetFolderId == null ? 'root' : String(targetFolderId));
-        row.ondragover = function (e) {
+        row.addEventListener('dragover', function (e) {
             e.preventDefault();
             row.style.borderColor = 'var(--accent)';
             row.style.background = 'rgba(59,130,246,0.14)';
             row.style.transform = 'translateX(2px)';
-        };
-        row.ondragleave = function () {
+        });
+        row.addEventListener('dragleave', function () {
             row.style.borderColor = isSelected ? 'var(--accent)' : '#e2e8f0';
             row.style.background = isSelected ? 'rgba(59,130,246,0.18)' : '#fafafa';
             row.style.transform = 'translateX(0)';
-        };
-        row.ondrop = function (e) {
+        });
+        row.addEventListener('drop', function (e) {
             e.preventDefault();
             row.style.borderColor = isSelected ? 'var(--accent)' : '#e2e8f0';
             row.style.background = isSelected ? 'rgba(59,130,246,0.18)' : '#fafafa';
@@ -6649,7 +6797,7 @@ function renderFolderTreeSidebar() {
                 (window.__formsDragTemplateId ? String(window.__formsDragTemplateId) : '');
             if (draggedId) void window.moveChecklistToFolder(draggedId, targetFolderId);
             window.__formsDragTemplateId = null;
-        };
+        });
     };
 
     const mkTreeFolderRow = (folder, depth, hasContent) => {
@@ -6681,13 +6829,13 @@ function renderFolderTreeSidebar() {
             'border:none;background:transparent;padding:0;width:18px;height:22px;flex-shrink:0;cursor:' +
             (hasContent ? 'pointer' : 'default') +
             ';display:flex;align-items:center;justify-content:center;';
-        chevBtn.onclick = function (e) {
+        chevBtn.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
             if (!hasContent) return;
             setFormsTreeFolderExpanded(folder.id, !isFormsTreeFolderExpanded(folder.id));
             window.renderFormsGridFromLocal(window._formsDbCache || {});
-        };
+        });
 
         const icon = document.createElement('span');
         icon.innerHTML =
@@ -6717,11 +6865,11 @@ function renderFolderTreeSidebar() {
             b.innerHTML = '<ion-icon name="' + iconName + '" style="font-size:14px"></ion-icon>';
             b.style.cssText =
                 'border:none;background:transparent;border-radius:4px;width:24px;height:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--color-text);padding:0;';
-            b.onclick = function (e) {
+            b.addEventListener('click', function (e) {
                 e.preventDefault();
                 e.stopPropagation();
                 onClick();
-            };
+            });
             return b;
         };
         act.appendChild(
@@ -6735,11 +6883,11 @@ function renderFolderTreeSidebar() {
             })
         );
 
-        row.onclick = function (e) {
+        row.addEventListener('click', function (e) {
             if (e.target && e.target.closest && e.target.closest('button')) return;
             window.enterBrowseFolder(folder.id);
             if (hasContent) setFormsTreeFolderExpanded(folder.id, true);
-        };
+        });
 
         row.appendChild(chevBtn);
         row.appendChild(icon);
@@ -6774,13 +6922,13 @@ function renderFolderTreeSidebar() {
         wrap.setAttribute('data-title', searchTitle);
         wrap.setAttribute('data-archived', archived ? '1' : '0');
         wrap.draggable = true;
-        wrap.ondragstart = function (e) {
+        wrap.addEventListener('dragstart', function (e) {
             window.__formsDragTemplateId = fid;
             try {
                 e.dataTransfer.setData('text/plain', fid);
                 e.dataTransfer.effectAllowed = 'move';
             } catch (_) {}
-        };
+        });
 
         wrap.style.cssText =
             'display:flex;flex-direction:column;gap:0;padding:0;margin:0;border-bottom:1px solid #e8e8e8;background:white;font-size:12px;color:var(--color-text);';
@@ -6821,11 +6969,11 @@ function renderFolderTreeSidebar() {
         titleClick.title = (form.title || 'Sem título') + ' · id ' + fid;
         titleClick.style.cssText =
             'cursor:pointer;font-weight:700;font-size:12px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-        titleClick.onclick = function (e) {
+        titleClick.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
             window.selectFormFromModal(fid);
-        };
+        });
 
         const metaRow = document.createElement('div');
         metaRow.style.cssText =
@@ -6899,22 +7047,22 @@ function renderFolderTreeSidebar() {
         bh.title = 'Ver histórico de versões';
         bh.innerHTML = '<ion-icon name="time-outline" style="font-size:16px"></ion-icon>';
         bh.style.cssText = btnBase;
-        bh.onclick = function (e) {
+        bh.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
             void window.openChecklistVersionHistory(fid);
-        };
+        });
 
         const bd = document.createElement('button');
         bd.type = 'button';
         bd.title = 'Duplicar formulário';
         bd.innerHTML = '<ion-icon name="copy-outline" style="font-size:16px"></ion-icon>';
         bd.style.cssText = btnBase;
-        bd.onclick = function (e) {
+        bd.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
             window.duplicateChecklist(fid);
-        };
+        });
 
         const ba = document.createElement('button');
         ba.type = 'button';
@@ -6922,12 +7070,12 @@ function renderFolderTreeSidebar() {
         ba.innerHTML =
             '<ion-icon name="' + (archived ? 'refresh-outline' : 'archive-outline') + '" style="font-size:16px"></ion-icon>';
         ba.style.cssText = btnBase;
-        ba.onclick = function (e) {
+        ba.addEventListener('click', function (e) {
             e.preventDefault();
             e.stopPropagation();
             if (archived) void window.unarchiveChecklist(fid);
             else window.deleteChecklist(fid);
-        };
+        });
 
         actions.appendChild(bh);
         actions.appendChild(bd);
@@ -6945,9 +7093,9 @@ function renderFolderTreeSidebar() {
         sum.textContent = 'Mover para outra pasta…';
         sum.style.cssText =
             'cursor:pointer;font-weight:600;color:#64748b;list-style:none;padding:2px 0;font-size:10px;user-select:none;';
-        sum.onclick = function (e) {
+        sum.addEventListener('click', function (e) {
             e.stopPropagation();
-        };
+        });
         const moveInner = document.createElement('div');
         moveInner.style.cssText =
             'display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding:4px 0 2px 0;';
@@ -6960,12 +7108,12 @@ function renderFolderTreeSidebar() {
         sel.id = 'sidebar-move-' + fid.replace(/[^a-zA-Z0-9_-]/g, '_');
         sel.innerHTML = buildMoveFolderOptionsHtml(form.folderId || null);
         sel.style.cssText = 'flex:1;min-width:0;font-size:11px;padding:4px 6px;margin:0;';
-        sel.onclick = function (e) {
+        sel.addEventListener('click', function (e) {
             e.stopPropagation();
-        };
-        sel.onchange = function () {
+        });
+        sel.addEventListener('change', function () {
             void window.onMoveFormFolderChange(fid, sel);
-        };
+        });
         moveInner.appendChild(lbl);
         moveInner.appendChild(sel);
         toolRow.appendChild(sum);
@@ -7427,35 +7575,69 @@ window.deleteChecklist = function(id) {
         console.error('Custom delete modal not found in HTML!');
         return;
     }
-    
-    modal.style.display = 'flex';
-    
-    btnNo.onclick = () => { modal.style.display = 'none'; };
-    btnYes.onclick = async () => {
-        modal.style.display = 'none';
-        
-        try {
-            const token = sessionStorage.getItem('brspark_admin_token') || '';
-            await fetch(`${brsparkApiBase()}/checklists/templates/${id}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-        } catch(e) {
-            console.warn('Erro ao deletar na API.', e);
-        }
-        
-        const db = parseLocalChecklistsDb();
-        if (db[id]) {
-            db[id].isActive = false;
-            db[id].updatedAt = new Date().toISOString();
-        }
-        localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
+    if (!btnYes || !btnNo) {
+        console.error('Custom delete modal buttons not found!');
+        return;
+    }
 
-        if(currentFormId === id) window.createNewChecklist();
-        
-        // Render from memory directly, don't trigger a new fetch right away
-        renderFormsGridFromLocal(db);
-    };
+    if (modal._fbDeleteConfirmAc) {
+        try {
+            modal._fbDeleteConfirmAc.abort();
+        } catch (_) {
+            /* ignore */
+        }
+    }
+    modal._fbDeleteConfirmAc = new AbortController();
+    const delSig = modal._fbDeleteConfirmAc.signal;
+
+    modal.style.display = 'flex';
+
+    btnNo.addEventListener(
+        'click',
+        () => {
+            modal.style.display = 'none';
+            try {
+                modal._fbDeleteConfirmAc.abort();
+            } catch (_) {
+                /* ignore */
+            }
+        },
+        { signal: delSig },
+    );
+    btnYes.addEventListener(
+        'click',
+        async () => {
+            modal.style.display = 'none';
+            try {
+                modal._fbDeleteConfirmAc.abort();
+            } catch (_) {
+                /* ignore */
+            }
+
+            try {
+                const token = sessionStorage.getItem('brspark_admin_token') || '';
+                await fetch(`${brsparkApiBase()}/checklists/templates/${id}`, {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+            } catch (e) {
+                console.warn('Erro ao deletar na API.', e);
+            }
+
+            const db = parseLocalChecklistsDb();
+            if (db[id]) {
+                db[id].isActive = false;
+                db[id].updatedAt = new Date().toISOString();
+            }
+            localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
+
+            if (currentFormId === id) window.createNewChecklist();
+
+            // Render from memory directly, don't trigger a new fetch right away
+            renderFormsGridFromLocal(db);
+        },
+        { signal: delSig },
+    );
 };
 
 window.selectFormFromModal = function(id) {
@@ -8295,7 +8477,7 @@ function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
     const opSelect = `
             ${visionRatingHint}
             ${visionDetectionHint}
-            <select class="prop-input" onchange="window.updateLogicRule(${JSON.stringify(ruleIndex)}, 'operator', this.value)" style="margin-bottom:12px;">
+            <select class="prop-input" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-lr-f="operator" style="margin-bottom:12px;">
                 ${opList
                     .map(([val, i18nKey]) => {
                         const label = logicStr(i18nKey, String(val));
@@ -8315,17 +8497,17 @@ function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
                 : logicStr('fb_logic_ph_sec_single', 'Segundos (ex.: 120)'),
         );
         valInput = `
-            <input type="${useBetween ? 'text' : 'number'}" ${useBetween ? '' : 'min="0" step="1"'} class="prop-input" placeholder="${phSec}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${JSON.stringify(ruleIndex)}, 'value', this.value)" style="margin-bottom:12px;" />`;
+            <input type="${useBetween ? 'text' : 'number'}" ${useBetween ? '' : 'min="0" step="1"'} class="prop-input" placeholder="${phSec}" value="${escapeHtmlLogic(rule.value || '')}" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-lr-f="value" style="margin-bottom:12px;" />`;
     } else if (!isFormClock && !isSection && logicConditionSingleNumberInput(op)) {
         valInput = `
             <input type="number" step="any" class="prop-input" placeholder="${escapeHtmlLogic(
                 logicValuePlaceholder(op),
-            )}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${JSON.stringify(ruleIndex)}, 'value', this.value)" style="margin-bottom:12px;" />`;
+            )}" value="${escapeHtmlLogic(rule.value || '')}" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-lr-f="value" style="margin-bottom:12px;" />`;
     } else if (!isFormClock && !isSection && !logicConditionNeedsNoValueField(op)) {
         valInput = `
             <input type="text" class="prop-input" placeholder="${escapeHtmlLogic(
                 logicValuePlaceholder(op),
-            )}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${JSON.stringify(ruleIndex)}, 'value', this.value)" style="margin-bottom:12px;" />`;
+            )}" value="${escapeHtmlLogic(rule.value || '')}" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-lr-f="value" style="margin-bottom:12px;" />`;
     }
 
     return { opSelect, valInput };
@@ -8491,6 +8673,7 @@ function renderLogicRules() {
     const container = document.getElementById('logic-rules-container');
     const emptyState = document.getElementById('logic-empty-state');
     if (!container || !emptyState) return;
+    ensureLogicModalDelegatedChangeBound();
 
     let logicScrollHost = null;
     let logicPrevScroll = 0;
@@ -8536,7 +8719,7 @@ function renderLogicRules() {
                 <label style="display:block; font-size:10px; font-weight:800; color:#64748b; margin-bottom:4px;">${escapeHtmlLogic(
                     logicStr('fb_logic_monitor_label', 'Campo monitorado (dispara o SE)'),
                 )}</label>
-                <select class="prop-input" onchange="window.updateLogicRule(${JSON.stringify(ruleIndex)}, 'condFieldId', this.value)" style="margin-bottom:0;">
+                <select class="prop-input" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-lr-f="condFieldId" style="margin-bottom:0;">
                     ${condSourceOptions}
                 </select>
             </div>
@@ -8557,7 +8740,7 @@ function renderLogicRules() {
                 actionsHTML += `
                 <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch; background:#ecfdf5; padding:12px; border-radius:6px; margin-bottom:8px; border:1px solid #86efac;">
                     <div style="display:flex; gap:8px; align-items:center; justify-content:space-between;">
-                        <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'type', this.value)">
+                        <select class="prop-input" style="flex:1" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="type">
                             ${buildLogicActionTypeOptionsHtml('API_FETCH')}
                         </select>
                         <button type="button" class="cbk-logic-rm-action" aria-label="Remover ação" data-cbk-logic-rule="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-logic-action="${escapeHtmlAttr(String(actionIndex))}" style="cursor:pointer; color:var(--red); font-size:20px; border:none; background:transparent; padding:0; line-height:1;">&times;</button>
@@ -8565,11 +8748,11 @@ function renderLogicRules() {
                     <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_target', 'Campo destino (recebe o texto extraído)'),
                     )}</label>
-                    <select class="prop-input" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'targetId', this.value)">${fieldOptsFetch}</select>
+                    <select class="prop-input" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="targetId">${fieldOptsFetch}</select>
                     <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_method', 'Método HTTP'),
                     )}</label>
-                    <select class="prop-input" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiMethod', this.value)">
+                    <select class="prop-input" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="apiMethod">
                         <option value="POST" ${(act.apiMethod || 'POST') === 'POST' ? 'selected' : ''}>${escapeHtmlLogic(
                             logicStr('fb_logic_api_method_post', 'POST (JSON com formulário, tarefa e respostas)'),
                         )}</option>
@@ -8580,17 +8763,17 @@ function renderLogicRules() {
                     <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_url', 'URL do endpoint'),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phUrl}" value="${escapeHtmlLogic(act.apiUrl || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiUrl', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phUrl}" value="${escapeHtmlLogic(act.apiUrl || '')}" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="apiUrl" />
                     <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_path', 'Caminho no JSON da resposta (opcional)'),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phPath}" value="${escapeHtmlLogic(act.apiResponsePath || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiResponsePath', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phPath}" value="${escapeHtmlLogic(act.apiResponsePath || '')}" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="apiResponsePath" />
                     <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_errmsg', 'Mensagem se falhar a chamada'),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phErr}" value="${escapeHtmlLogic(act.apiErrorMsg || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiErrorMsg', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phErr}" value="${escapeHtmlLogic(act.apiErrorMsg || '')}" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="apiErrorMsg" />
                     <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
-                        <input type="checkbox" id="api_fetch_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiAllowOffline', this.checked)" />
+                        <input type="checkbox" id="api_fetch_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="apiAllowOffline" data-cbk-la-vm="chk" />
                         <label for="api_fetch_off_${ruleIndex}_${actionIndex}" style="font-size:12px; color:#166534; cursor:pointer;">${escapeHtmlLogic(
                             logicStr('fb_logic_api_fetch_offline', 'Se offline, não buscar nem alterar o campo'),
                         )}</label>
@@ -8603,7 +8786,7 @@ function renderLogicRules() {
                 actionsHTML += `
                 <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch; background:#f0f9ff; padding:12px; border-radius:6px; margin-bottom:8px; border:1px solid #bae6fd;">
                     <div style="display:flex; gap:8px; align-items:center; justify-content:space-between;">
-                        <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'type', this.value)">
+                        <select class="prop-input" style="flex:1" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="type">
                             ${buildLogicActionTypeOptionsHtml('API_VALIDATION')}
                         </select>
                         <button type="button" class="cbk-logic-rm-action" aria-label="Remover ação" data-cbk-logic-rule="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-logic-action="${escapeHtmlAttr(String(actionIndex))}" style="cursor:pointer; color:var(--red); font-size:20px; border:none; background:transparent; padding:0; line-height:1;">&times;</button>
@@ -8614,20 +8797,20 @@ function renderLogicRules() {
                             'URL do endpoint (o app fará POST injetando o payload XML/JSON)',
                         ),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phUrlVal}" value="${escapeHtmlAttr(act.apiUrl || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiUrl', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phUrlVal}" value="${escapeHtmlAttr(act.apiUrl || '')}" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="apiUrl" />
                     <label style="font-size:10px; color:#0284c7; font-weight:bold;">${escapeHtmlLogic(
                         logicStr(
                             'fb_logic_api_lbl_expected',
                             'Condição de retorno de sucesso (string/regex esperada no corpo)',
                         ),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phExp}" value="${escapeHtmlAttr(act.apiExpectedReturn || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiExpectedReturn', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phExp}" value="${escapeHtmlAttr(act.apiExpectedReturn || '')}" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="apiExpectedReturn" />
                     <label style="font-size:10px; color:#0284c7; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_block_msg', 'Mensagem personalizada em caso de bloqueio/erro'),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phBlock}" value="${escapeHtmlAttr(act.apiErrorMsg || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiErrorMsg', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phBlock}" value="${escapeHtmlAttr(act.apiErrorMsg || '')}" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="apiErrorMsg" />
                     <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
-                        <input type="checkbox" id="api_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiAllowOffline', this.checked)" />
+                        <input type="checkbox" id="api_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="apiAllowOffline" data-cbk-la-vm="chk" />
                         <label for="api_off_${ruleIndex}_${actionIndex}" style="font-size:12px; color:#0369a1; cursor:pointer;">${escapeHtmlLogic(
                             logicStr('fb_logic_api_allow_offline', 'Permitir que o técnico pule a regra se estiver offline'),
                         )}</label>
@@ -8640,15 +8823,15 @@ function renderLogicRules() {
                         <div style="color:var(--accent); font-weight:800; font-size:12px; margin-right:8px;">${escapeHtmlLogic(
                             logicStr('fb_logic_then', 'ENTÃO'),
                         )}</div>
-                        <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'type', this.value)">
+                        <select class="prop-input" style="flex:1" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="type">
                             ${buildLogicActionTypeOptionsHtml(act.type || 'SHOW')}
                         </select>
-                        <select class="prop-input" style="flex:1">
+                        <select class="prop-input" style="flex:1" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="targetId">
                             ${fieldOptions}
                         </select>
                         ${
                             act.type === 'SET_VALUE'
-                                ? `<input type="text" class="prop-input" style="flex:1" placeholder="${phNewVal}" value="${escapeHtmlAttr(act.value || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'value', this.value)" />`
+                                ? `<input type="text" class="prop-input" style="flex:1" placeholder="${phNewVal}" value="${escapeHtmlAttr(act.value || '')}" data-cbk-lr-r="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-la-a="${escapeHtmlAttr(String(actionIndex))}" data-cbk-la-f="value" />`
                                 : ''
                         }
                         <button type="button" class="cbk-logic-rm-action" aria-label="Remover ação" data-cbk-logic-rule="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-logic-action="${escapeHtmlAttr(String(actionIndex))}" style="cursor:pointer; color:var(--red); font-size:20px; border:none; background:transparent; padding:0; line-height:1;">&times;</button>
@@ -8701,14 +8884,6 @@ function renderLogicRules() {
           btn.addEventListener('click', () => window.addLogicAction(r));
         });
 
-        // bind dynamically selected inputs
-        const actionRows = div.querySelectorAll('div[style*="background:#f8fafc"]');
-        actionRows.forEach((row, aIndex) => {
-            const selects = row.querySelectorAll('select');
-            if(selects[1]) {
-                selects[1].onchange = (e) => window.updateLogicAction(ruleIndex, aIndex, 'targetId', e.target.value);
-            }
-        });
     });
     fbRestoreScrollAfterRichDomUpdate(logicScrollHost, logicPrevScroll);
 }

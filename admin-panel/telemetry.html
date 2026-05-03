@@ -178,13 +178,13 @@
             </div>
             
             <div style="display:flex; gap:10px; margin-top:12px">
-              <button type="button" class="btn btn-primary" style="flex:1" onclick="loadTelemetry()">
+              <button type="button" class="btn btn-primary" id="tel-btn-load" style="flex:1">
                 <ion-icon name="search-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon><span id="tel-btn-search-txt">Buscar</span>
               </button>
-              <button type="button" class="btn" id="btn-live" style="flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text)" onclick="toggleLive()">
+              <button type="button" class="btn" id="btn-live" style="flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text)">
                 <ion-icon name="radio-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon><span id="tel-btn-live-txt">Ao Vivo</span>
               </button>
-              <button type="button" class="btn" style="flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text)" onclick="exportTelemetry()">
+              <button type="button" class="btn" id="tel-btn-export" style="flex:1; background:var(--surface); border:1px solid var(--border); color:var(--text)">
                 <ion-icon name="download-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon><span id="tel-btn-export-txt">Exportar</span>
               </button>
             </div>
@@ -563,6 +563,10 @@ window.toggleLive = () => {
 };
 
 setTimeout(initMap, 200);
+
+document.getElementById('tel-btn-load')?.addEventListener('click', () => void window.loadTelemetry());
+document.getElementById('btn-live')?.addEventListener('click', () => window.toggleLive());
+document.getElementById('tel-btn-export')?.addEventListener('click', () => window.exportTelemetry());
 
 </script>
 </body>

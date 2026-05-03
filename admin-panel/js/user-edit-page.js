@@ -992,12 +992,16 @@ function rid() {
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
-    r.onload = () => {
-      const s = String(r.result || '');
-      const i = s.indexOf(',');
-      resolve(i >= 0 ? s.slice(i + 1) : s);
-    };
-    r.onerror = () => reject(r.error);
+    r.addEventListener(
+      'load',
+      () => {
+        const s = String(r.result || '');
+        const i = s.indexOf(',');
+        resolve(i >= 0 ? s.slice(i + 1) : s);
+      },
+      { once: true },
+    );
+    r.addEventListener('error', () => reject(r.error || new Error('read')), { once: true });
     r.readAsDataURL(file);
   });
 }
@@ -1888,8 +1892,8 @@ function publicUploadUrl(relativeOrAbsolute) {
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ''));
-    r.onerror = () => reject(new Error('read'));
+    r.addEventListener('load', () => resolve(String(r.result || '')), { once: true });
+    r.addEventListener('error', () => reject(new Error('read')), { once: true });
     r.readAsDataURL(file);
   });
 }

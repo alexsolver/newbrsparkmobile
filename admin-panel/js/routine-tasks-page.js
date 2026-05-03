@@ -190,10 +190,10 @@ function renderTenantSelectForSaas() {
 
   if (!sel._rtOnChange) {
     sel._rtOnChange = true;
-    sel.onchange = () => {
+    sel.addEventListener('change', () => {
       activeTenantId = sel.value || null;
       if (activeTenantId) void refreshAll(readUrlState());
-    };
+    });
   }
 }
 
@@ -362,7 +362,9 @@ function selectAllFilteredBulkUsers() {
 
 function bindRowActions(tbody) {
   tbody.querySelectorAll('.rt-asg-save').forEach((btn) => {
-    btn.onclick = async () => {
+    if (btn.dataset.rtSaveBound === '1') return;
+    btn.dataset.rtSaveBound = '1';
+    btn.addEventListener('click', async () => {
       const tr = btn.closest('tr');
       const id = tr?.getAttribute('data-asg-id');
       if (!id) return;
@@ -398,10 +400,12 @@ function bindRowActions(tbody) {
         btn.removeAttribute('disabled');
         btn.textContent = prevLabel;
       }
-    };
+    });
   });
   tbody.querySelectorAll('.rt-asg-del').forEach((btn) => {
-    btn.onclick = async () => {
+    if (btn.dataset.rtDelBound === '1') return;
+    btn.dataset.rtDelBound = '1';
+    btn.addEventListener('click', async () => {
       const tr = btn.closest('tr');
       const id = tr?.getAttribute('data-asg-id');
       if (!id) return;
@@ -414,7 +418,7 @@ function bindRowActions(tbody) {
       showRtToast(rtT('rt_delete_ok'), true);
       announceAria(rtT('rt_delete_ok'));
       void loadAssignments();
-    };
+    });
   });
 }
 

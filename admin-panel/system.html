@@ -126,12 +126,25 @@
         <span class="flag-icon">${iconHtml}</span>
         <div class="flag-info"><div class="flag-name">${escHtml(f.label)}</div><div class="flag-desc">${escHtml(f.description)}</div></div>
         <label class="toggle">
-          <input type="checkbox" ${f.enabled ? 'checked' : ''} onchange='toggleFlag(${JSON.stringify(String(f.key))}, this.checked)' />
+          <input type="checkbox" ${f.enabled ? 'checked' : ''} data-sys-flag-key="${escHtml(String(f.key))}" />
           <span class="toggle-track"></span>
         </label>
       </div>`;
     }).join('');
   }
+
+  (function wireFlagsListToggles() {
+    const list = document.getElementById('flags-list');
+    if (!list || list.dataset.sysFlagToggleDeleg === '1') return;
+    list.dataset.sysFlagToggleDeleg = '1';
+    list.addEventListener('change', (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLInputElement) || t.type !== 'checkbox') return;
+      const key = t.getAttribute('data-sys-flag-key');
+      if (key == null || key === '') return;
+      void window.toggleFlag(key, t.checked);
+    });
+  })();
 
   loadFlags();
 

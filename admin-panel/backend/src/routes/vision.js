@@ -77,6 +77,7 @@ router.post('/verify-face', authUser, async (req, res) => {
         confidence: a.confidence,
         fraud_flag: false,
         facialAuthMode: 'identify',
+        identifiedUserId: a.identifiedUser.id,
         identifiedUser: a.identifiedUser,
       });
     }
