@@ -1385,10 +1385,10 @@
     setBrandingPreview();
   }
 
-  document.getElementById('tenant-branding-logo-light-upload').onclick = () => uploadBrandingAsset('logo-light');
-  document.getElementById('tenant-branding-logo-dark-upload').onclick = () => uploadBrandingAsset('logo-dark');
-  document.getElementById('tenant-branding-login-page-logo-upload').onclick = () =>
-    uploadBrandingAsset('login-page-logo');
+  document.getElementById('tenant-branding-logo-light-upload').addEventListener('click', () => uploadBrandingAsset('logo-light'));
+  document.getElementById('tenant-branding-logo-dark-upload').addEventListener('click', () => uploadBrandingAsset('logo-dark'));
+  document.getElementById('tenant-branding-login-page-logo-upload').addEventListener('click', () =>
+    uploadBrandingAsset('login-page-logo'));
 
   window.openBrandingModal = async (tenantId) => {
     try {
@@ -1452,7 +1452,7 @@
     void window.openBrandingModal(tenantId);
   });
 
-  document.getElementById('save-tenant-branding-btn').onclick = async () => {
+  document.getElementById('save-tenant-branding-btn').addEventListener('click', async () => {
     const saveBrandingBtn = document.getElementById('save-tenant-branding-btn');
     const valBox = document.getElementById('tenant-branding-validation');
     if (!canEditTenantBranding) {
@@ -1545,7 +1545,7 @@
         saveBrandingBtn.removeAttribute('aria-busy');
       }
     }
-  };
+  });
 
   const saveTenantBtn = document.getElementById('save-tenant-btn');
   const saveTenantText = document.getElementById('ten-modal-save-text');

@@ -172,6 +172,32 @@ function pickTopRecognitionMatch(recognizeJson) {
   return { subject: String(top.subject), similarity };
 }
 
+/**
+ * Candidatos únicos do Recognition sobre **todos** os rostos da imagem, ordenados por similaridade
+ * (maior primeiro). O CompreFace ordena rostos por tamanho; em fotos de grupo o rosto alvo pode não ser o primeiro.
+ * @returns {Array<{ subject: string, similarity: number }>}
+ */
+function flattenRecognitionSubjectCandidates(recognizeJson) {
+  const results = recognizeJson && Array.isArray(recognizeJson.result) ? recognizeJson.result : [];
+  /** @type {Map<string, { subject: string, similarity: number }>} */
+  const bestBySubject = new Map();
+  for (const face of results) {
+    const subjects = face && Array.isArray(face.subjects) ? face.subjects : [];
+    for (const sub of subjects) {
+      if (!sub || sub.subject == null || sub.similarity == null) continue;
+      const similarity = Number(sub.similarity);
+      if (!Number.isFinite(similarity)) continue;
+      const key = String(sub.subject).trim();
+      if (!key) continue;
+      const prev = bestBySubject.get(key);
+      if (!prev || similarity > prev.similarity) {
+        bestBySubject.set(key, { subject: key, similarity });
+      }
+    }
+  }
+  return Array.from(bestBySubject.values()).sort((a, b) => b.similarity - a.similarity);
+}
+
 async function comprefaceFetchJson(method, url, apiKey, { bodyJson, timeoutMs = 30000 } = {}) {
   const headers = { 'x-api-key': apiKey };
   let body;
@@ -475,6 +501,7 @@ module.exports = {
   recognizeWithIntegration,
   isFaceMatchNoFaceInImageError,
   pickTopRecognitionMatch,
+  flattenRecognitionSubjectCandidates,
   ensureSubject,
   deleteFacesForSubject,
   listRecognitionSubjects,

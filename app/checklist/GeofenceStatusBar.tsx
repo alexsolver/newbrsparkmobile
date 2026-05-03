@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Location from 'expo-location';
+import { useTranslation } from 'react-i18next';
 import { evaluateCombinedGlobalFence } from './globalGeofenceCombined';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -72,8 +73,9 @@ function routeProgress(lat: number, lng: number, route: number[][]): number {
 
 // ── Component ─────────────────────────────────────────────────
 export default function GeofenceStatusBar({ task }: Props) {
+  const { t } = useTranslation();
   const [status, setStatus]     = useState<GeoStatus>('unknown');
-  const [detail, setDetail]     = useState('Verificando posição...');
+  const [detail, setDetail]     = useState(() => t('appAlerts.geofenceStatus.checking'));
   const [progress, setProgress] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
 
@@ -81,14 +83,14 @@ export default function GeofenceStatusBar({ task }: Props) {
     try {
       if (!task) {
         setStatus('no_zone');
-        setDetail('Sem zona definida nesta OS.');
+        setDetail(t('appAlerts.geofenceStatus.noZone'));
         return;
       }
 
       const zoneType = task.locationZoneType;
       if (!zoneType || zoneType === 'none' || zoneType === 'route') {
         setStatus('no_zone');
-        setDetail('Sem validação da barra (Gerido por outros cards)');
+        setDetail(t('appAlerts.geofenceStatus.noBarValidation'));
         return;
       }
 
@@ -96,7 +98,7 @@ export default function GeofenceStatusBar({ task }: Props) {
         const gf = task.metadata?.globalGeofence;
         if (!gf) {
           setStatus('unknown');
-          setDetail('Cerca global: dados indisponíveis.');
+          setDetail(t('appAlerts.geofenceStatus.globalFenceDataMissing'));
           setProgress(null);
           return;
         }
@@ -112,7 +114,7 @@ export default function GeofenceStatusBar({ task }: Props) {
       const { status: perm } = await Location.requestForegroundPermissionsAsync();
       if (perm !== 'granted') {
         setStatus('unknown');
-        setDetail('Permissão de GPS negada.');
+        setDetail(t('appAlerts.geofenceStatus.gpsDenied'));
         return;
       }
 
@@ -124,7 +126,7 @@ export default function GeofenceStatusBar({ task }: Props) {
         const destLng = task.locationLng!;
         if (destLat == null || destLng == null || !Number.isFinite(Number(destLat)) || !Number.isFinite(Number(destLng))) {
           setStatus('unknown');
-          setDetail('Coordenadas do local não definidas no despacho.');
+          setDetail(t('appAlerts.geofenceStatus.destCoordsMissing'));
           setProgress(null);
           return;
         }
@@ -134,10 +136,10 @@ export default function GeofenceStatusBar({ task }: Props) {
         if (dist <= radius) {
           const s: GeoStatus = dist >= radius - borderZone ? 'border' : 'inside';
           setStatus(s);
-          setDetail(`DENTRO: da área · ${dist}m do centro`);
+          setDetail(t('appAlerts.geofenceStatus.insideArea', { dist }));
         } else {
           setStatus('outside');
-          setDetail(`FORA: da área · ${dist}m do local (raio: ${radius}m)`);
+          setDetail(t('appAlerts.geofenceStatus.outsideArea', { dist, radius }));
         }
         setProgress(null);
       } else if (zoneType === 'polygon') {
@@ -158,31 +160,31 @@ export default function GeofenceStatusBar({ task }: Props) {
         setDetail(
           polygon.length >= 3
             ? inside
-              ? 'DENTRO: da área de serviço'
-              : 'FORA: do polígono de serviço'
-            : 'Polígono de serviço inválido ou vazio.',
+              ? t('appAlerts.geofenceStatus.insidePolygon')
+              : t('appAlerts.geofenceStatus.outsidePolygon')
+            : t('appAlerts.geofenceStatus.invalidPolygon'),
         );
         setProgress(null);
       }
     } catch {
       setStatus('unknown');
-      setDetail('GPS indisponível no momento.');
+      setDetail(t('appAlerts.geofenceStatus.gpsUnavailable'));
     }
   };
 
   useEffect(() => {
     void check().catch(() => {
       setStatus('unknown');
-      setDetail('GPS indisponível no momento.');
+      setDetail(t('appAlerts.geofenceStatus.gpsUnavailable'));
     });
     const timer = setInterval(() => {
       void check().catch(() => {
         setStatus('unknown');
-        setDetail('GPS indisponível no momento.');
+        setDetail(t('appAlerts.geofenceStatus.gpsUnavailable'));
       });
     }, 15000);
     return () => clearInterval(timer);
-  }, [task]);
+  }, [task, t]);
 
   if (status === 'no_zone') return null;
 

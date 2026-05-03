@@ -173,8 +173,8 @@ async function assertAppLoginAllowedForEffectiveTenant(prisma, user) {
 /**
  * Para `identify` (reconhecimento «buscar»): o subject no FaceMatch usa `User.tenantId` (casa),
  * mas o JWT pode ser a tenant operacional. `resolveAppEffectiveTenantId` cobre o caso dedicado;
- * afiliação ACTIVE na mesma tenant cobre vínculos válidos sem `relationshipType: DEDICATED` no modelo antigo
- * ou dados alinhados só na tabela de afiliações.
+ * afiliação ACTIVE na mesma tenant cobre vínculos válidos; rotina atribuída (`RoutineTaskAssignment`) ou
+ * batida de ponto nessa tenant também contam (prestadores sem linha em `ProviderIdentity`).
  *
  * @param {import('@prisma/client').PrismaClient} prisma
  * @param {string} userId
@@ -194,7 +194,16 @@ async function userMayOperateUnderTenant(prisma, userId, operationalTenantId) {
       providerIdentity: { userId: uid },
     },
   });
-  return n > 0;
+  if (n > 0) return true;
+  const rta = await prisma.routineTaskAssignment.count({
+    where: { tenantId: tid, userId: uid },
+  });
+  if (rta > 0) return true;
+  const anyPunch = await prisma.workTimePunch.findFirst({
+    where: { tenantId: tid, userId: uid },
+    select: { id: true },
+  });
+  return !!anyPunch;
 }
 
 module.exports = {

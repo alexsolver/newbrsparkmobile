@@ -156,17 +156,17 @@ export default function NewCostScreen() {
                <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 }}>
                  <Ionicons name="cube-outline" size={64} color={C.border} />
                  <Text style={{ fontSize: 18, fontWeight: '900', color: C.slate, marginTop: 24, textAlign: 'center' }}>
-                   Nenhum ativo cadastrado
+                   {t('appAlerts.assetGate.noAssetTitle')}
                  </Text>
                  <Text style={{ fontSize: 14, color: C.textLight, textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
-                   Para organizar suas finanças, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.
+                   {t('appAlerts.assetGate.hintFinance')}
                  </Text>
                  <TouchableOpacity 
                    style={{ backgroundColor: C.filledButtonBg, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 14, marginTop: 32 }}
                    onPress={() => router.back()}
                    activeOpacity={0.8}
                  >
-                   <Text style={{ color: C.cardWhite, fontSize: 15, fontWeight: '800' }}>Voltar</Text>
+                   <Text style={{ color: C.cardWhite, fontSize: 15, fontWeight: '800' }}>{t('common.back')}</Text>
                  </TouchableOpacity>
                </View>
             ) : (

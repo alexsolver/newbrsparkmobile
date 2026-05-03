@@ -374,15 +374,6 @@ export default function TechnicianStockScreen() {
 
       {tab === 'items' ? (
         <>
-          <TouchableOpacity
-            style={styles.newBtn}
-            onPress={() => router.push('/stock/mobile/new' as any)}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="add-circle-outline" size={22} color="#fff" />
-            <Text style={styles.newBtnText}>{t('technicianMobile.stockBtnNewMaterial')}</Text>
-          </TouchableOpacity>
-
           {loading ? (
             <View style={styles.center}>
               <ActivityIndicator size="large" color={C.accent || '#0369a1'} />
@@ -585,19 +576,6 @@ const styles = StyleSheet.create({
   tabBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', backgroundColor: 'transparent' },
   tabBtnActive: { backgroundColor: 'rgba(3, 105, 161, 0.08)' },
   tabText: { fontWeight: '800', fontSize: 14 },
-  newBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: '#0369a1',
-  },
-  newBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   list: { padding: 16, paddingBottom: 32 },
   emptyList: { flexGrow: 1, padding: 16 },

@@ -216,7 +216,8 @@ export function ChecklistMaterialsConsumptionField({ value, onChange, readOnly, 
               <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
                 <Text style={styles.modalTitle}>Seu estoque técnico</Text>
                 <Text style={styles.modalHint}>
-                  Cadastro separado dos bens do portfólio. Adicione itens em "Meu estoque" no menu ou em Estoque técnico.
+                  Cadastro separado dos bens do portfólio. Novos itens no estoque técnico vêm dos checklists (campo de
+                  entrada de materiais / integração), quando existir no modelo — não pela tela só de consulta.
                 </Text>
                 <TextInput
                   style={styles.searchInput}
@@ -235,7 +236,8 @@ export function ChecklistMaterialsConsumptionField({ value, onChange, readOnly, 
                   keyboardShouldPersistTaps="handled"
                   ListEmptyComponent={
                     <Text style={styles.emptyPick}>
-                      Ainda sem produtos no estoque técnico. Use o botão + no menu ou a tela de cadastro.
+                      Ainda sem produtos no estoque técnico. Quando a central enviar materiais por checklist (entrada de
+                      materiais), aceite as linhas para criar ou atualizar o saldo; o consumo aqui usa esse inventário.
                     </Text>
                   }
                   renderItem={({ item: it }) => (

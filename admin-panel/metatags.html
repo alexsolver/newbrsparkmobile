@@ -694,13 +694,13 @@
       </div>`).join('') || '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text3)">Nenhum ícone encontrado.</div>';
     
     grid.querySelectorAll('.icon-pick').forEach(el => {
-      el.onclick = () => {
+      el.addEventListener('click', () => {
         const iconName = el.dataset.name;
         document.getElementById('tag-icon').value = iconName;
         updateIconPreview(iconName);
-      };
-      el.onmouseenter = () => el.style.background = 'var(--surface3)';
-      el.onmouseleave = () => el.style.background = 'transparent';
+      });
+      el.addEventListener('mouseenter', () => { el.style.background = 'var(--surface3)'; });
+      el.addEventListener('mouseleave', () => { el.style.background = 'transparent'; });
     });
   }
 
@@ -713,9 +713,9 @@
     preview.style.color = color;
   }
 
-  document.getElementById('tag-icon').oninput = (e) => updateIconPreview(e.target.value);
-  document.getElementById('tag-color').oninput = (e) => updateIconPreview(document.getElementById('tag-icon').value);
-  document.getElementById('icon-search').oninput = (e) => renderCommonIcons(e.target.value);
+  document.getElementById('tag-icon').addEventListener('input', (e) => updateIconPreview(e.target.value));
+  document.getElementById('tag-color').addEventListener('input', () => updateIconPreview(document.getElementById('tag-icon').value));
+  document.getElementById('icon-search').addEventListener('input', (e) => renderCommonIcons(e.target.value));
 
   renderCommonIcons();
 

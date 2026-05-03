@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import {
   loadTechnicianExpenseCategoryCatalog,
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export function TechnicianExpenseCategoryChips({ value, onChange, disabled }: Props) {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<TechnicianExpenseCategoryRow[]>(() =>
     loadTechnicianExpenseCategoryCatalog()
   );
@@ -26,7 +28,7 @@ export function TechnicianExpenseCategoryChips({ value, onChange, disabled }: Pr
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.lbl}>Categoria</Text>
+      <Text style={styles.lbl}>{t('technicianMobile.financeCategorySection')}</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -57,14 +59,14 @@ export function TechnicianExpenseCategoryChips({ value, onChange, disabled }: Pr
                 />
               ) : null}
               <Text style={[styles.chipTxt, sel && { color: col, fontWeight: '800' }]} numberOfLines={2}>
-                {c.label}
+                {t(`technicianMobile.expenseCategories.${c.id}`, { defaultValue: c.label })}
               </Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
       {value === 'outros' ? (
-        <Text style={styles.hint}>Em "Outros", informe o detalhe na descrição.</Text>
+        <Text style={styles.hint}>{t('technicianFinance.otherCategoryHint')}</Text>
       ) : null}
     </View>
   );

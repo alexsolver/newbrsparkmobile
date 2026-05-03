@@ -356,17 +356,30 @@
       return map[code] || '<ion-icon name="globe-outline" style="vertical-align:-2px"></ion-icon>';
     }
 
-    sourceFilter.onchange = loadEntries;
-    tenantSelector.onchange = loadEntries;
-    document.getElementById('search-input').oninput = renderEntries;
-    document.getElementById('save-all-btn').onclick = saveAll;
-    document.getElementById('ai-translate-btn').onclick = translateAll;
+    sourceFilter.addEventListener('change', loadEntries);
+    tenantSelector.addEventListener('change', loadEntries);
+    document.getElementById('search-input').addEventListener('input', renderEntries);
+    document.getElementById('save-all-btn').addEventListener('click', saveAll);
+    document.getElementById('ai-translate-btn').addEventListener('click', translateAll);
     wireLocalesGridSaveDelegation();
     wireI18nTableTranslateDelegation();
     loadEntries();
 
     // ── AI Translation ──────────────────────────────────────────────────────────
     let aiCancelled = false;
+    const aiCancelBtnEl = document.getElementById('ai-cancel-btn');
+    if (aiCancelBtnEl && !aiCancelBtnEl.dataset.i18nAiBound) {
+      aiCancelBtnEl.dataset.i18nAiBound = '1';
+      aiCancelBtnEl.addEventListener('click', () => {
+        const modalEl = document.getElementById('ai-modal');
+        if (aiCancelBtnEl.dataset.i18nAiPhase === 'dismiss') {
+          if (modalEl) modalEl.style.display = 'none';
+          aiCancelBtnEl.textContent = 'Cancelar';
+          return;
+        }
+        aiCancelled = true;
+      });
+    }
 
     async function myMemoryTranslate(text, fromLang, toLang) {
       if (!text || !text.trim()) return '';
@@ -428,7 +441,8 @@
       modal.style.display = 'flex';
       bar.style.width = '0%';
       log.innerHTML = '';
-      cancel.onclick = () => { aiCancelled = true; };
+      cancel.dataset.i18nAiPhase = 'run';
+      cancel.textContent = 'Cancelar';
 
       let done = 0;
       for (const { key, ptEl, enEl, esEl } of toTranslate) {
@@ -467,7 +481,7 @@
       }
 
       cancel.textContent = 'Fechar';
-      cancel.onclick = () => { modal.style.display = 'none'; cancel.textContent = 'Cancelar'; };
+      cancel.dataset.i18nAiPhase = 'dismiss';
       if (!aiCancelled) {
         txt.textContent = '';
         const okIc = document.createElement('ion-icon');

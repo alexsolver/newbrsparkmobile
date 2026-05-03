@@ -591,7 +591,7 @@ export default function ChatScreen() {
         <Ionicons name="search-outline" size={18} color={C.textLight} />
         <TextInput
           style={styles.searchInput}
-          placeholder={t('chat.searchPlaceholder')}
+          placeholder={t(isClientApp ? 'chat.searchPlaceholderClient' : 'chat.searchPlaceholder')}
           placeholderTextColor={C.textLight}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -791,7 +791,7 @@ export default function ChatScreen() {
             <View style={styles.modalCard}>
             
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nova Conversa</Text>
+              <Text style={styles.modalTitle}>{t('chat.newConversationTitle')}</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                  <Ionicons name="close" size={26} color={C.textSecondary} />
               </TouchableOpacity>
@@ -801,11 +801,11 @@ export default function ChatScreen() {
             <View style={styles.tabRow}>
               {canCreateChatGroup ? (
                 <TouchableOpacity style={[styles.tab, modalTab === 'GROUP' && styles.tabActive]} onPress={() => setModalTab('GROUP')}>
-                  <Text style={[styles.tabText, modalTab === 'GROUP' && styles.tabTextActive]}>Criar Grupo</Text>
+                  <Text style={[styles.tabText, modalTab === 'GROUP' && styles.tabTextActive]}>{t('chat.modalTabCreateGroup')}</Text>
                 </TouchableOpacity>
               ) : null}
               <TouchableOpacity style={[styles.tab, modalTab === 'ADD' && styles.tabActive]} onPress={() => setModalTab('ADD')}>
-                <Text style={[styles.tabText, modalTab === 'ADD' && styles.tabTextActive]}>Adicionar</Text>
+                <Text style={[styles.tabText, modalTab === 'ADD' && styles.tabTextActive]}>{t('chat.modalTabAdd')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -819,16 +819,16 @@ export default function ChatScreen() {
               {/* ABA CRIAR GRUPO */}
               {modalTab === 'GROUP' && canCreateChatGroup && (
                 <View style={{ paddingTop: 10 }}>
-                  <Text style={styles.inputLabel}>Nome do Grupo</Text>
+                  <Text style={styles.inputLabel}>{t('chat.groupNameLabel')}</Text>
                   <TextInput
                     style={styles.textInput}
-                    placeholder="Ex: Equipe de Manutenção"
+                    placeholder={t('chat.groupNamePlaceholder')}
                     value={groupName}
                     onChangeText={setGroupName}
                     returnKeyType="done" />
-                  <Text style={[styles.inputLabel, { marginTop: 16 }]}>Selecione Membros</Text>
+                  <Text style={[styles.inputLabel, { marginTop: 16 }]}>{t('chat.selectMembersLabel')}</Text>
                   {contacts.length === 0 ? (
-                    <Text style={styles.emptyContacts}>Nenhum contato disponível.</Text>
+                    <Text style={styles.emptyContacts}>{t('chat.noContactsAvailable')}</Text>
                   ) : (
                     contacts.map(c => {
                       const isSelected = selectedContacts.includes(c.email);
@@ -853,7 +853,7 @@ export default function ChatScreen() {
                     })
                   )}
                   <TouchableOpacity style={styles.primaryBtn} onPress={handleCreateGroup}>
-                    <Text style={styles.primaryBtnText}>Criar Grupo ({selectedContacts.length})</Text>
+                    <Text style={styles.primaryBtnText}>{t('chat.createGroupWithCount', { count: selectedContacts.length })}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -861,23 +861,25 @@ export default function ChatScreen() {
               {/* ABA ADICIONAR EMAIL */}
               {modalTab === 'ADD' && (
                 <View style={{ paddingTop: 10 }}>
-                  <Text style={styles.inputLabel}>E-mail do Usuário</Text>
+                  <Text style={styles.inputLabel}>{t('chat.userEmailLabel')}</Text>
                   <TextInput
                     style={styles.textInput}
-                    placeholder="joao@empresa.com"
+                    placeholder={t('chat.userEmailPlaceholder')}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     value={newEmail}
                     onChangeText={setNewEmail}
                     returnKeyType="done" />
                   <Text style={styles.helperText}>
-                    {isBrSparkSaasUser
-                      ? 'Conta BrSpark (equipe): pode convidar qualquer e-mail de utilizador activo na plataforma. O pedido aparece no app do destinatário; após aceitar, o chat fica disponível.'
-                      : 'Uma solicitação será enviada para o aplicativo deste usuário na mesma organização. Assim que aprovado, vocês podem conversar; gestores também podem incluí-lo ao criar um grupo.'}
+                    {isBrSparkSaasUser ? t('chat.inviteHelperSaas') : t('chat.inviteHelperTenant')}
                   </Text>
                   
                   <TouchableOpacity style={[styles.primaryBtn, sendingRequest && { opacity: 0.5 }]} disabled={sendingRequest} onPress={handleSendRequest}>
-                    {sendingRequest ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Enviar Convite</Text>}
+                    {sendingRequest ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.primaryBtnText}>{t('chat.sendInvite')}</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               )}

@@ -1437,7 +1437,10 @@ async function refreshReportPresetsDropdown() {
       if (id) localStorage.setItem('brspark_report_preset_id', id);
       else localStorage.removeItem('brspark_report_preset_id');
     };
-    sel.onchange = apply;
+    if (!sel.dataset.opsReportPresetChangeBound) {
+      sel.dataset.opsReportPresetChangeBound = '1';
+      sel.addEventListener('change', apply);
+    }
     apply();
   } catch (e) {
     console.warn('[report presets]', e);
@@ -6226,7 +6229,7 @@ function applyDetailModalHeader(t) {
   const canCancel = !['COMPLETED', 'SYNCED', 'CANCELLED', 'REJECTED'].includes(t.status);
   const cancelBtn = document.getElementById('detail-cancel-btn');
   cancelBtn.style.display = canCancel ? '' : 'none';
-  cancelBtn.onclick = () => window.cancelTask();
+  cancelBtn.dataset.opsCancelPhase = 'idle';
   cancelBtn.innerHTML = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS';
   cancelBtn.disabled = false;
   const hasReport = t.status === 'COMPLETED' || t.status === 'SYNCED';
@@ -8529,7 +8532,7 @@ window.cancelTask = async function(bypassConfirm = false) {
   if (!bypassConfirm) {
      const btn = document.getElementById('detail-cancel-btn');
      btn.innerHTML = '<ion-icon name="warning-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon> Tem certeza? (clique de novo)';
-     btn.onclick = () => cancelTask(true);
+     btn.dataset.opsCancelPhase = 'confirm';
      return;
   }
 
@@ -8553,10 +8556,20 @@ window.cancelTask = async function(bypassConfirm = false) {
     if(btn) {
        btn.disabled = false;
        btn.innerHTML = '<ion-icon name="trash-outline" style="vertical-align:-2px"></ion-icon> Cancelar OS';
-       btn.onclick = () => window.cancelTask(false);
+       btn.dataset.opsCancelPhase = 'idle';
     }
   }
 };
+
+(function bindOpsDetailCancelOnce() {
+  const btn = document.getElementById('detail-cancel-btn');
+  if (!btn || btn.dataset.opsCancelDeleg === '1') return;
+  btn.dataset.opsCancelDeleg = '1';
+  btn.addEventListener('click', () => {
+    if ((btn.dataset.opsCancelPhase || '') === 'confirm') void window.cancelTask(true);
+    else void window.cancelTask(false);
+  });
+})();
 
 // ── Dispatch Modal ────────────────────────────────────────────
 window.openDispatchModal = async function() {

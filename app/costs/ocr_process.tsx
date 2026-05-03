@@ -8,12 +8,14 @@ import { useTheme } from '../../src/theme/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { getRootAssets } from '../../src/database';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
 
 type Step = 'launching' | 'scanning' | 'ocr_done' | 'pick_asset';
 
 export default function OcrProcessScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors: C } = useTheme();
@@ -149,7 +151,9 @@ export default function OcrProcessScreen() {
                 <Ionicons name="chevron-forward" size={20} color={C.textSecondary} />
               </TouchableOpacity>
             )}
-            ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 40, color: C.textSecondary }}>Nenhum ativo cadastrado.</Text>}
+            ListEmptyComponent={
+              <Text style={{ textAlign: 'center', marginTop: 40, color: C.textSecondary }}>{t('appAlerts.assetGate.noAssetListEmpty')}</Text>
+            }
           />
         </View>
       )}

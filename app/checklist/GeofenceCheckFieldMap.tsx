@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, StyleSheet, LayoutChangeEvent, Dimensions } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import GlobalGeofenceMapLayers from './GlobalGeofenceMapLayers';
 import { parsePolygonRaw, type GlobalGeofenceMeta } from './globalGeofenceCombined';
@@ -198,6 +199,7 @@ export default function GeofenceCheckFieldMap({
   liveGps = true,
   primaryColor,
 }: Props) {
+  const { t } = useTranslation();
   const mapRef = useRef<React.ElementRef<typeof MapView> | null>(null);
   const [canvasW, setCanvasW] = useState(() => Math.max(260, Dimensions.get('window').width - 88));
   const [mapReady, setMapReady] = useState(false);
@@ -307,7 +309,7 @@ export default function GeofenceCheckFieldMap({
         <Text style={styles.banner}>Ative a permissão de localização para ver o seu pin no mapa.</Text>
       ) : null}
       {!userPin && liveGps && !permDenied ? (
-        <Text style={styles.hint}>A obter a sua posição para mostrar no mapa…</Text>
+        <Text style={styles.hint}>{t('appAlerts.liveRoute.geofenceCheckGettingPosition')}</Text>
       ) : null}
       <View style={styles.mapShell} collapsable={false} onLayout={onShellLayout}>
         <MapView
@@ -324,11 +326,11 @@ export default function GeofenceCheckFieldMap({
           zoomEnabled={false}
           onMapReady={() => setMapReady(true)}
         >
-          <GlobalGeofenceMapLayers gf={gf} destMarkerTitle="Zona de serviço" />
+          <GlobalGeofenceMapLayers gf={gf} destMarkerTitle={t('appAlerts.liveRoute.geofenceCheckServiceZoneMarker')} />
           {userPin ? (
             <Marker
               coordinate={{ latitude: userPin.lat, longitude: userPin.lng }}
-              title="Sua posição"
+              title={t('appAlerts.liveRoute.mapMarkerYourPosition')}
               tracksViewChanges={false}
             >
               <View style={[styles.userBubble, { borderColor: primaryColor }]}>

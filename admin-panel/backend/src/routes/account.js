@@ -21,6 +21,7 @@ const {
   normalizeFacePhotos,
   decodeFaceEnrollmentBase64,
 } = require('../lib/faceEnrollmentPersist');
+const { removeComprefaceGalleryForUser } = require('../lib/comprefaceGallerySyncTrigger');
 const { readUserAvatarImageBuffer } = require('../lib/userAvatarRead');
 const { verifyTechRegEnrollmentAgainstProfile } = require('../lib/techRegComprefaceVerify');
 const { assertTechnicianSeatForNewUserUnlessSharedAppPool } = require('../lib/planQuotaService');
@@ -2083,6 +2084,21 @@ router.delete('/me', authUser, async (req, res) => {
     const idsToTombstone = await resolveAllUserIdsForAccountDeletion(prisma, userId);
     const canonicalForOtp = await resolveCanonicalEmailNormForUser(prisma, anchor);
     const appAccountIdToRemove = anchor.appAccountId || null;
+
+    const tombstoneRows = await prisma.user.findMany({
+      where: { id: { in: idsToTombstone } },
+      select: { id: true, tenantId: true },
+    });
+    for (const tr of tombstoneRows) {
+      try {
+        await removeComprefaceGalleryForUser(prisma, tr.tenantId, tr.id, {
+          updateUserRow: false,
+          reason: 'Conta eliminada (LGPD).',
+        });
+      } catch (e) {
+        console.warn('[account] DELETE /me FaceMatch purge:', tr.id, e?.message || e);
+      }
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.pushToken.deleteMany({ where: { userId: { in: idsToTombstone } } });

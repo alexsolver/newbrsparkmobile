@@ -15,6 +15,7 @@ import {
   labelForTechnicianExpenseCategory,
   type TechnicianExpenseCategoryRow,
 } from '../utils/technicianExpenseCategoryCatalog';
+import { useTranslation } from 'react-i18next';
 import { ValueInput, parseLocaleAmountString } from './ValueInput';
 
 type DraftLine = {
@@ -107,6 +108,7 @@ export function ChecklistTechnicianFinanceField({
   readOnly,
   mode = 'expense',
 }: Props) {
+  const { t, i18n } = useTranslation();
   const amountDraftByLineRef = useRef<Record<number, string>>({});
   const amountEditingByLineRef = useRef<Record<number, boolean>>({});
 
@@ -178,20 +180,20 @@ export function ChecklistTechnicianFinanceField({
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   };
 
-  const fmtBrl = (n: number) =>
-    n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
+  const fmtBrl = (n: number) => {
+    const loc = String(i18n.language || 'en-US').replace('_', '-');
+    return n.toLocaleString(loc, { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
+  };
 
   const hintText =
-    mode === 'revenue'
-      ? 'Registre receitas associadas a este atendimento. Ficam no financeiro técnico (separado dos bens).'
-      : 'Registre despesas associadas a este atendimento. Ficam no financeiro técnico (separado dos bens).';
+    mode === 'revenue' ? t('technicianFinance.hintRevenue') : t('technicianFinance.hintExpense');
 
   if (readOnly) {
     const display = parseDraftLines(value)
       .map((l) => ({ ...l, kind: defaultKindForMode(mode) }))
       .filter((l) => parseAmountToNumber(l.amountStr) > 0);
     if (display.length === 0) {
-      const emptyMsg = mode === 'revenue' ? 'Nenhuma receita registrada' : 'Nenhuma despesa registrada';
+      const emptyMsg = mode === 'revenue' ? t('technicianFinance.emptyRevenue') : t('technicianFinance.emptyExpense');
       return (
         <View style={styles.emptyBox}>
           <Ionicons name="wallet-outline" size={32} color="#94a3b8" />
@@ -215,7 +217,9 @@ export function ChecklistTechnicianFinanceField({
                   l.kind === 'revenue' ? styles.kindRev : styles.kindExp,
                 ]}
               >
-                <Text style={styles.kindPillText}>{l.kind === 'revenue' ? 'Receita' : 'Despesa'}</Text>
+                <Text style={styles.kindPillText}>
+                  {l.kind === 'revenue' ? t('technicianFinance.kindRevenue') : t('technicianFinance.kindExpense')}
+                </Text>
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={styles.amtText}>{fmtBrl(amt)}</Text>
@@ -250,7 +254,11 @@ export function ChecklistTechnicianFinanceField({
                   defaultKindForMode(mode) === 'revenue' ? styles.kindRev : styles.kindExp,
                 ]}
               >
-                <Text style={styles.kindPillText}>{defaultKindForMode(mode) === 'revenue' ? 'Receita' : 'Despesa'}</Text>
+                <Text style={styles.kindPillText}>
+                  {defaultKindForMode(mode) === 'revenue'
+                    ? t('technicianFinance.kindRevenue')
+                    : t('technicianFinance.kindExpense')}
+                </Text>
               </View>
               <View style={{ flex: 1 }} />
               {lines.length > 1 ? (
@@ -259,7 +267,7 @@ export function ChecklistTechnicianFinanceField({
                 </TouchableOpacity>
               ) : null}
             </View>
-            <Text style={styles.lbl}>Valor (R$)</Text>
+            <Text style={styles.lbl}>{t('technicianFinance.amountLabel')}</Text>
             <ValueInput
               style={styles.input}
               placeholder="0,00"
@@ -276,7 +284,7 @@ export function ChecklistTechnicianFinanceField({
             />
             {l.kind === 'expense' ? (
               <>
-                <Text style={styles.lbl}>Categoria da despesa</Text>
+                <Text style={styles.lbl}>{t('technicianFinance.categoryLabel')}</Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -315,14 +323,14 @@ export function ChecklistTechnicianFinanceField({
                   })}
                 </ScrollView>
                 {l.categoryKey === 'outros' && !l.description.trim() ? (
-                  <Text style={styles.warnTxt}>Em "Outros", preencha a descrição.</Text>
+                  <Text style={styles.warnTxt}>{t('technicianFinance.otherCategoryHint')}</Text>
                 ) : null}
               </>
             ) : null}
-            <Text style={styles.lbl}>Descrição (opcional)</Text>
+            <Text style={styles.lbl}>{t('technicianFinance.descriptionOptional')}</Text>
             <TextInput
               style={[styles.input, styles.inputMultiline]}
-              placeholder="Ex.: pedágio, estacionamento, adiantamento…"
+              placeholder={t('technicianFinance.descPlaceholder')}
               placeholderTextColor="#94a3b8"
               value={l.description}
               onChangeText={(t) => updateLine(idx, { description: t })}
@@ -334,7 +342,7 @@ export function ChecklistTechnicianFinanceField({
       </View>
       <TouchableOpacity style={styles.addBtn} onPress={addLine} activeOpacity={0.85}>
         <Ionicons name="add-circle-outline" size={22} color="#fff" />
-        <Text style={styles.addBtnText}>Adicionar linha</Text>
+        <Text style={styles.addBtnText}>{t('technicianFinance.addLine')}</Text>
       </TouchableOpacity>
     </View>
   );

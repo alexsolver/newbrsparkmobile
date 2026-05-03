@@ -118,6 +118,7 @@ import {
   checklistOutboxIdentityKey,
   clearExecutionStatusOutboxForTask,
 } from '../../src/services/syncService';
+import { ASYNC_ADDRESS_PENDING, isAsyncAddressPending } from '../../src/constants/asyncAddressPending';
 import { enqueueTrackingSync } from '../../src/services/trackingSyncQueue';
 import { metadataIndicatesAdminRevisionCycle } from '../../src/services/syncPolicy';
 import {
@@ -458,16 +459,19 @@ function formatTransitEvidenceLines(
   ev: NonNullable<ReturnType<typeof parseTransitFieldEvidence>>
 ): string[] {
   const lines: string[] = [];
+  const loc = String(i18next.resolvedLanguage || i18next.language || 'en-US').replace('_', '-');
   if (ev.timestamp) {
     const d = new Date(ev.timestamp);
     if (Number.isFinite(d.getTime())) {
       lines.push(
-        `Data e hora: ${d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'medium' })}`
+        i18next.t('appAlerts.checklist.transitEvidenceDateTime', {
+          value: d.toLocaleString(loc, { dateStyle: 'short', timeStyle: 'medium' }),
+        })
       );
     }
   }
   if (ev.address && ev.address.trim()) {
-    lines.push(`Local: ${ev.address.trim()}`);
+    lines.push(i18next.t('appAlerts.checklist.transitEvidenceLocation', { value: ev.address.trim() }));
   }
   const hasCoords =
     ev.lat != null &&
@@ -476,12 +480,19 @@ function formatTransitEvidenceLines(
     Number.isFinite(ev.lat) &&
     Number.isFinite(ev.lng);
   if (hasCoords) {
-    lines.push(`Coordenadas: ${ev.lat!.toFixed(6)}, ${ev.lng!.toFixed(6)}`);
+    lines.push(
+      i18next.t('appAlerts.checklist.transitEvidenceCoordinates', {
+        lat: ev.lat!.toFixed(6),
+        lng: ev.lng!.toFixed(6),
+      })
+    );
   } else if (lines.length > 0) {
-    lines.push('Coordenadas: não disponíveis (GPS indisponível ou sem permissão).');
+    lines.push(i18next.t('appAlerts.checklist.transitEvidenceCoordinatesUnavailable'));
   }
   if (ev.accuracyMeters != null && ev.accuracyMeters > 0 && Number.isFinite(ev.accuracyMeters)) {
-    lines.push(`Precisão estimada: ±${Math.round(ev.accuracyMeters)} m`);
+    lines.push(
+      i18next.t('appAlerts.checklist.transitEvidenceAccuracy', { meters: Math.round(ev.accuracyMeters) })
+    );
   }
   const pm = ev.plannedMetrics;
   if (pm && (pm.distanceMeters != null || pm.durationSeconds != null)) {
@@ -490,9 +501,15 @@ function formatTransitEvidenceLines(
       parts.push(formatDistance(pm.distanceMeters / 1000));
     }
     if (pm.durationSeconds != null && Number.isFinite(pm.durationSeconds) && pm.durationSeconds > 0) {
-      parts.push(`~${Math.round(pm.durationSeconds / 60)} min (estimativa)`);
+      parts.push(
+        i18next.t('appAlerts.checklist.transitEvidencePlanEstimate', {
+          minutes: Math.round(pm.durationSeconds / 60),
+        })
+      );
     }
-    if (parts.length) lines.push(`Rota planejada: ${parts.join(' · ')}`);
+    if (parts.length) {
+      lines.push(i18next.t('appAlerts.checklist.transitEvidencePlannedRoute', { summary: parts.join(' · ') }));
+    }
   }
   const am = ev.actualMetrics;
   if (am && (am.distanceMeters != null || am.durationSeconds != null)) {
@@ -501,14 +518,14 @@ function formatTransitEvidenceLines(
       const h = Math.floor(am.durationSeconds / 3600);
       const m = Math.floor((am.durationSeconds % 3600) / 60);
       const s = Math.floor(am.durationSeconds % 60);
-      parts.push(
-        h > 0 ? `${h}h ${m}min` : m > 0 ? `${m}min ${s}s` : `${s}s`
-      );
+      parts.push(h > 0 ? `${h}h ${m}min` : m > 0 ? `${m}min ${s}s` : `${s}s`);
     }
     if (am.distanceMeters != null && Number.isFinite(am.distanceMeters)) {
       parts.push(formatDistance(am.distanceMeters / 1000));
     }
-    if (parts.length) lines.push(`Trecho real: ${parts.join(' · ')}`);
+    if (parts.length) {
+      lines.push(i18next.t('appAlerts.checklist.transitEvidenceActualRoute', { summary: parts.join(' · ') }));
+    }
   }
   return lines;
 }
@@ -1957,10 +1974,10 @@ function formatFieldValueForSignatureSummary(fieldDef: any | undefined, raw: unk
     const ev = parseTransitFieldEvidence(raw);
     if (!ev) {
       const s = typeof raw === 'string' ? raw.trim() : '';
-      return s ? 'Deslocamento registrado (detalhe indisponível)' : '—';
+      return s ? i18next.t('appAlerts.checklist.transitExportLineNoDetail') : '—';
     }
     const lines = formatTransitEvidenceLines(ev);
-    return lines.length ? lines.join('\n') : 'Deslocamento registrado';
+    return lines.length ? lines.join('\n') : i18next.t('appAlerts.checklist.transitExportLineRegistered');
   }
   if (t === 'barcode_scan') return String(raw).trim() || '—';
   if (t === 'calculated') return String(raw);
@@ -3904,7 +3921,7 @@ export default function ChecklistEngine() {
                 const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
                 const lat = loc.coords.latitude;
                 const lng = loc.coords.longitude;
-                const metaPending = { ...meta, lat, lng, address: 'A obter endereço…' };
+                const metaPending = { ...meta, lat, lng, address: ASYNC_ADDRESS_PENDING };
                 const committedFull =
                   'SIG_V1|' + `meta:${JSON.stringify(metaPending)}` + '|' + strokesJoined;
                 handleInput(sigField, committedFull, sigScope);
@@ -4426,7 +4443,7 @@ export default function ChecklistEngine() {
                 }
               } else {
                 address =
-                  lat !== 0 && lng !== 0 ? 'A obter endereço…' : 'Localização não capturada';
+                  lat !== 0 && lng !== 0 ? ASYNC_ADDRESS_PENDING : 'Localização não capturada';
               }
           } catch(e) {
               address = "Falha ao obter coordenadas do GPS";
@@ -4640,34 +4657,34 @@ export default function ChecklistEngine() {
         await refreshGlobalOperationalTransitLock();
       }
 
-      const timeBr = new Date().toLocaleTimeString('pt-BR');
-      const tailMoradaAsync =
-        address === 'A obter endereço…'
-          ? '\n\nGPS já guardado. O endereço (e, na saída, a estimativa de rota) completa em seguida quando houver rede.'
-          : `\n\n📍 ${address}`;
+      const locTag = String(i18next.resolvedLanguage || i18next.language || 'pt-BR').replace('_', '-');
+      const timeBr = new Date().toLocaleTimeString(locTag, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const tailMoradaAsync = isAsyncAddressPending(address)
+        ? t('appAlerts.checklist.transitExitTailPendingNetwork')
+        : `\n\n📍 ${address}`;
 
       if (label === 'CHEGADA') {
         if (status !== 'granted' || lat === 0) {
           Alert.alert(
-            'Deslocamento finalizado',
-            `O deslocamento foi encerrado e registrado às ${timeBr}, mas sem coordenadas GPS utilizáveis.\n\nMotivo: ${address}`
+            t('appAlerts.checklist.transitFinishedTitle'),
+            t('appAlerts.checklist.transitFinishedNoGpsBody', { time: timeBr, address }),
           );
         } else {
           Alert.alert(
-            'Deslocamento finalizado',
-            `O trecho de deslocamento foi encerrado e o registro foi guardado (início → fim no mapa).\n\nIsto não substitui, por si só, outros passos do formulário que sirvam como prova formal de chegada ao local de serviço, por exemplo, quando existir validação em cerca eletrônica ou campo próprio de confirmação.${tailMoradaAsync}`
+            t('appAlerts.checklist.transitFinishedTitle'),
+            t('appAlerts.checklist.transitFinishedOkBody', { tail: tailMoradaAsync }),
           );
         }
       } else if (label === 'SAIDA') {
         if (status !== 'granted' || lat === 0) {
           Alert.alert(
-            'Deslocamento iniciado',
-            `Saída registrada às ${timeBr}, mas sem rastreamento por GPS.\n\nMotivo: ${address}`
+            t('appAlerts.checklist.transitStartedTitle'),
+            t('appAlerts.checklist.transitExitNoGps', { timeBr, address }),
           );
         } else {
           Alert.alert(
-            'Deslocamento iniciado',
-            `Saída registrada com sucesso às ${timeBr}.${tailMoradaAsync}`
+            t('appAlerts.checklist.transitStartedTitle'),
+            t('appAlerts.checklist.transitExitOk', { timeBr, tail: tailMoradaAsync }),
           );
         }
       } else if (status !== 'granted' || lat === 0) {
@@ -7856,7 +7873,7 @@ export default function ChecklistEngine() {
   }[] = [];
   let _curFields: any[] = [];
   let _globalIndex = 1;
-  let _currentSectionTitle = 'Página 1';
+  let _currentSectionTitle = t('appAlerts.checklist.formPageTitleNumbered', { n: 1 });
   let _currentSectionId = 'page_1';
   let _currentSectionVisible = true;
   let _currentSectionIcon = '';
@@ -7882,7 +7899,8 @@ export default function ChecklistEngine() {
       }
       _curFields = [];
       _openingSectionBreak = f;
-      _currentSectionTitle = schemaLabel(f) || `Página ${rawPages.length + 1}`;
+      _currentSectionTitle =
+        schemaLabel(f) || t('appAlerts.checklist.formPageTitleNumbered', { n: rawPages.length + 1 });
       _currentSectionId = f.id;
       _currentSectionVisible = isFieldVisible(f, true);
       _currentSectionIcon = String(f.icon || '').trim();
@@ -9128,10 +9146,11 @@ export default function ChecklistEngine() {
 
   void ruleTick;
 
+  const defaultFormPageTitle = t('appAlerts.checklist.formPageTitleNumbered', { n: 1 });
   const headerPageTitle =
     effectiveFillMode === 'wizard'
       ? template?.title || 'Checklist'
-      : currentPageData.pageTitle !== 'Página 1'
+      : currentPageData.pageTitle !== defaultFormPageTitle
         ? currentPageData.pageTitle
         : template?.title || 'Checklist';
 
@@ -9328,12 +9347,12 @@ export default function ChecklistEngine() {
                   params: {
                     id: tid,
                     ops: '1',
-                    name: `Gestor · ${label}`,
+                    name: t('chat.opsThreadNavTitle', { label }),
                     color: '#1d4ed8',
                   },
                 } as never);
               }}
-              accessibilityLabel="Mensagens do gestor sobre esta FT"
+              accessibilityLabel={t('chat.opsThreadFabA11y')}
               style={{ position: 'relative', overflow: 'visible' }}
             >
               <View style={{ overflow: 'visible' }}>
@@ -9701,7 +9720,11 @@ export default function ChecklistEngine() {
             ]}
           />
           <Text style={styles.progressText}>
-            Campo {hybridInnerWizardIndex + 1} de {hybridVisibleFields.length} · {basePageData.pageTitle || 'Etapa'}
+            {t('appAlerts.checklist.formFieldProgress', {
+              current: hybridInnerWizardIndex + 1,
+              total: hybridVisibleFields.length,
+              title: basePageData.pageTitle || t('appAlerts.checklist.formStageDefault'),
+            })}
           </Text>
         </View>
       ) : !(useSectionHub && hubPicking) &&
@@ -9715,7 +9738,7 @@ export default function ChecklistEngine() {
             ]}
           />
           <Text style={styles.progressText}>
-            Página {currentPage + 1} de {displayPages.length}
+            {t('appAlerts.checklist.formPageProgress', { current: currentPage + 1, total: displayPages.length })}
           </Text>
         </View>
       ) : !(useSectionHub && hubPicking) &&
@@ -9730,7 +9753,7 @@ export default function ChecklistEngine() {
             ]}
           />
           <Text style={styles.progressText}>
-            Etapa {currentPage + 1} de {displayPages.length}
+            {t('appAlerts.checklist.formStageProgress', { current: currentPage + 1, total: displayPages.length })}
           </Text>
         </View>
       ) : null}
@@ -9750,7 +9773,9 @@ export default function ChecklistEngine() {
         {isReadOnly && (
             <View style={{backgroundColor: '#EFF6FF', padding: 12, borderRadius: 8, flexDirection: 'row', alignItems: 'center', marginBottom: 6}}>
                 <Ionicons name="information-circle" size={24} color="#3B82F6" style={{marginRight: 8}}/>
-                <Text style={{flex: 1, color: '#1E3A8A', fontWeight: '600', fontSize: 13}}>Esta OS já foi concluída e os campos estão bloqueados para alteração.</Text>
+                <Text style={{flex: 1, color: '#1E3A8A', fontWeight: '600', fontSize: 13}}>
+                  {t('appAlerts.checklist.osCompletedReadOnlyBanner')}
+                </Text>
             </View>
         )}
         <View style={{ gap: 16 }}>
@@ -9758,12 +9783,12 @@ export default function ChecklistEngine() {
           <View style={{ gap: 14 }}>
             <View style={{ gap: 6 }}>
               <Text style={{ fontSize: 22, fontWeight: '800', color: C.slate, letterSpacing: -0.3 }}>
-                Etapas do formulário
+                {t('appAlerts.checklist.formStepsTitle')}
               </Text>
               <Text style={{ fontSize: 14, color: C.textLight, lineHeight: 20 }}>
                 {appHubSectionOrder === 'sequential'
-                  ? 'Conclua cada etapa por ordem para desbloquear a seguinte.'
-                  : 'Toque na etapa que quiser preencher, em qualquer ordem.'}
+                  ? t('appAlerts.checklist.formStepsHintSequential')
+                  : t('appAlerts.checklist.formStepsHintAnyOrder')}
               </Text>
             </View>
             {pages.map((pg, idx) => {
@@ -9888,7 +9913,7 @@ export default function ChecklistEngine() {
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={{ fontSize: 16, fontWeight: '800', color: C.slate }} numberOfLines={2}>
-                      {pg.pageTitle || `Etapa ${idx + 1}`}
+                      {pg.pageTitle || t('appAlerts.checklist.formStageFallbackTitle', { n: idx + 1 })}
                     </Text>
                     {stageCompleted || stageInProgressActive ? (
                       <View
@@ -9924,20 +9949,27 @@ export default function ChecklistEngine() {
                             color: stageCompleted ? C.status.success.fg : hubStatusFg,
                           }}
                         >
-                          {stageCompleted ? 'CONCLUÍDO' : 'EM ANDAMENTO'}
+                          {stageCompleted
+                            ? t('appAlerts.checklist.formBadgeCompleted')
+                            : t('appAlerts.checklist.formBadgeInProgress')}
                         </Text>
                       </View>
                     ) : null}
                     <Text style={{ fontSize: 12, color: C.textLight, marginTop: stageCompleted || stageInProgressActive ? 6 : 4 }}>
                       {isRepeatSection
-                        ? `${repeatStats.rawRows.length} instância(s) criada(s)`
-                        : `${(pg.fields || []).filter((x: any) => isFieldVisible(x)).length} campo(s) visível(eis)`}
+                        ? t('appAlerts.checklist.formInstancesCreated', { count: repeatStats.rawRows.length })
+                        : t('appAlerts.checklist.formVisibleFields', {
+                            count: (pg.fields || []).filter((x: any) => isFieldVisible(x)).length,
+                          })}
                     </Text>
                     {isRepeatSection ? (
                       <Text style={{ fontSize: 12, color: C.textLight, marginTop: 2 }}>
                         {repeatStats.maxRows == null
-                          ? `Mínimo ${repeatStats.minRows} · sem limite máximo`
-                          : `Mínimo ${repeatStats.minRows} · máximo ${repeatStats.maxRows}`}
+                          ? t('appAlerts.checklist.formRepeatMinMaxNone', { min: repeatStats.minRows })
+                          : t('appAlerts.checklist.formRepeatMinMax', {
+                              min: repeatStats.minRows,
+                              max: repeatStats.maxRows,
+                            })}
                       </Text>
                     ) : null}
                   </View>
@@ -10083,7 +10115,7 @@ export default function ChecklistEngine() {
                                     color: C.slate,
                                   }}
                                 >
-                                  {pg.pageTitle || `Etapa ${idx + 1}`}
+                                  {pg.pageTitle || t('appAlerts.checklist.formStageFallbackTitle', { n: idx + 1 })}
                                 </Text>
                                 <View
                                   style={{
@@ -10122,7 +10154,7 @@ export default function ChecklistEngine() {
                       }}
                       disabled={submitting}
                       accessibilityRole="button"
-                      accessibilityLabel={String(schemaLabel(field) || '').trim() || 'Concluir'}
+                      accessibilityLabel={String(schemaLabel(field) || '').trim() || t('appAlerts.checklist.formNavCompleteSection')}
                     >
                       {submitting ? (
                         <ActivityIndicator color="#FFF" />
@@ -10136,7 +10168,7 @@ export default function ChecklistEngine() {
                           }}
                         >
                           <Text style={styles.submitText}>
-                            {String(schemaLabel(field) || '').trim() || 'CONCLUIR'}
+                            {String(schemaLabel(field) || '').trim() || t('appAlerts.checklist.formNavConclude')}
                           </Text>
                           {renderFormCompleteButtonGlyph(field, 22, true)}
                         </View>
@@ -10168,15 +10200,17 @@ export default function ChecklistEngine() {
           ? (() => {
           const primaryFooterButtonLabel = () => {
             if (effectiveFillMode === 'wizard') {
-              return wizardIndex < wizardSteps.length - 1 ? 'Próximo >' : 'CONCLUIR';
+              return wizardIndex < wizardSteps.length - 1 ? t('appAlerts.checklist.formNavNext') : t('appAlerts.checklist.formNavConclude');
             }
             if (effectiveFillMode === 'hybrid' && hybridInnerMode === 'wizard') {
-              if (hybridInnerWizardIndex < hybridVisibleFields.length - 1) return 'Próximo >';
-              if (currentPage < displayPages.length - 1) return useSectionHub ? 'Concluir' : 'Avançar >';
-              return 'CONCLUIR';
+              if (hybridInnerWizardIndex < hybridVisibleFields.length - 1) return t('appAlerts.checklist.formNavNext');
+              if (currentPage < displayPages.length - 1)
+                return useSectionHub ? t('appAlerts.checklist.formNavCompleteSection') : t('appAlerts.checklist.formNavAdvance');
+              return t('appAlerts.checklist.formNavConclude');
             }
-            if (currentPage < displayPages.length - 1) return useSectionHub ? 'Concluir' : 'Avançar >';
-            return 'CONCLUIR';
+            if (currentPage < displayPages.length - 1)
+              return useSectionHub ? t('appAlerts.checklist.formNavCompleteSection') : t('appAlerts.checklist.formNavAdvance');
+            return t('appAlerts.checklist.formNavConclude');
           };
           const runPrimaryFooterAction = () => {
             if (isReadOnly || submitting) return;
@@ -10393,7 +10427,9 @@ export default function ChecklistEngine() {
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
                             >
                               <Ionicons name="add-circle-outline" size={22} color={C.primary} />
-                              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>Adicionar linha</Text>
+                              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>
+                                {t('technicianFinance.addLine')}
+                              </Text>
                             </TouchableOpacity>
                           ) : null}
                         </>
@@ -10490,7 +10526,9 @@ export default function ChecklistEngine() {
                               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 }}
                             >
                               <Ionicons name="add-circle-outline" size={22} color={C.primary} />
-                              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>Adicionar valor</Text>
+                              <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>
+                                {t('technicianFinance.addValue')}
+                              </Text>
                             </TouchableOpacity>
                           ) : null}
                         </>
@@ -10599,7 +10637,7 @@ export default function ChecklistEngine() {
                             >
                               <Ionicons name="add-circle-outline" size={22} color={C.primary} />
                               <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>
-                                Adicionar linha
+                                {t('technicianFinance.addLine')}
                               </Text>
                             </TouchableOpacity>
                           ) : null}
@@ -10722,7 +10760,7 @@ export default function ChecklistEngine() {
                             >
                               <Ionicons name="add-circle-outline" size={22} color={C.primary} />
                               <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>
-                                Adicionar linha
+                                {t('technicianFinance.addLine')}
                               </Text>
                             </TouchableOpacity>
                           ) : null}
@@ -12325,8 +12363,14 @@ export default function ChecklistEngine() {
                        })()
                      : null;
                  const buttonColor = hasValue ? '#10b981' : (isBlocked ? '#cbd5e1' : (field.type === 'transit_start' ? C.primary : C.accent));
-                 const labelWhenClicked = field.type === 'transit_start' ? 'DESLOCAMENTO INICIADO' : 'DESLOCAMENTO FINALIZADO';
-                 const labelWhenEmpty = field.type === 'transit_start' ? 'INICIAR DESLOCAMENTO' : 'FINALIZAR DESLOCAMENTO';
+                 const labelWhenClicked =
+                   field.type === 'transit_start'
+                     ? t('appAlerts.checklist.formTransitStartedStamp')
+                     : t('appAlerts.checklist.formTransitEndedStamp');
+                 const labelWhenEmpty =
+                   field.type === 'transit_start'
+                     ? t('appAlerts.checklist.formTransitStart')
+                     : t('appAlerts.checklist.formTransitEnd');
                  
                  const gpsBusyHere = gpsBusyFieldId === field.id;
                  const gpsBusyAny = gpsBusyFieldId != null;
@@ -12470,12 +12514,16 @@ export default function ChecklistEngine() {
                          <Ionicons name={hasValue ? 'checkmark-circle' : (field.type === 'transit_start' ? 'play' : 'stop')} size={20} color="#FFF" />
                        )}
                        <Text style={{color: '#FFF', fontWeight: 'bold', fontSize:15}}>
-                         {gpsBusyHere ? 'A obter localização…' : (hasValue ? labelWhenClicked : labelWhenEmpty)}
+                         {gpsBusyHere
+                           ? t('appAlerts.checklist.transitGpsFetching')
+                           : hasValue
+                             ? labelWhenClicked
+                             : labelWhenEmpty}
                        </Text>
                     </TouchableOpacity>
                     {gpsBusyHere ? (
                       <Text style={{ fontSize: 12, color: '#64748b', marginTop: 8, paddingHorizontal: 4 }}>
-                        O GPS pode demorar em campo ou com sinal fraco. Aguarde.
+                        {t('appAlerts.checklist.transitGpsSlowHint')}
                       </Text>
                     ) : null}
                     {field.type === 'transit_end' &&
@@ -12500,7 +12548,7 @@ export default function ChecklistEngine() {
                         }}
                       >
                         <Text style={{ fontSize: 12, fontWeight: '700', color: '#334155', marginBottom: 6 }}>
-                          Dados coletados
+                          {t('appAlerts.checklist.transitEvidenceCollectedTitle')}
                         </Text>
                         {transitEvidenceLines.length > 0 ? (
                           transitEvidenceLines.map((line, i) => (
@@ -12518,8 +12566,7 @@ export default function ChecklistEngine() {
                           ))
                         ) : (
                           <Text style={{ fontSize: 13, color: '#64748b', lineHeight: 20 }}>
-                            Registro efetuado; não foi possível ler os detalhes salvos (formato antigo ou
-                            incompleto).
+                            {t('appAlerts.checklist.transitEvidenceUnreadable')}
                           </Text>
                         )}
                       </View>
@@ -12584,7 +12631,9 @@ export default function ChecklistEngine() {
                        <Ionicons name="location" size={20} color={C.primary} />
                      )}
                      <Text style={{color: C.primary, fontWeight: '700', fontSize:14}}>
-                       {geoBusyHere ? 'A obter localização…' : 'VALIDAR LOCALIZAÇÃO (GPS)'}
+                       {geoBusyHere
+                         ? t('appAlerts.checklist.transitGpsFetching')
+                         : t('appAlerts.checklist.geofenceValidateGpsButton')}
                      </Text>
                   </TouchableOpacity>
                 </View>
@@ -13154,16 +13203,16 @@ export default function ChecklistEngine() {
         {!isReadOnly ? (
           <View style={styles.timeBadgesRow}>
             <View style={styles.timeBadge}>
-              <Text style={styles.timeBadgeLabel}>Total</Text>
+              <Text style={styles.timeBadgeLabel}>{t('appAlerts.checklist.formTimerTotal')}</Text>
               <Text style={styles.timeBadgeValue}>{formatDurationClock(formElapsedDisp)}</Text>
             </View>
             <View style={styles.timeBadge}>
-              <Text style={styles.timeBadgeLabel}>Foco</Text>
+              <Text style={styles.timeBadgeLabel}>{t('appAlerts.checklist.formTimerFocus')}</Text>
               <Text style={styles.timeBadgeValue}>{formatDurationClock(activeDisp)}</Text>
             </View>
             {showSectionTimerInFooter ? (
               <View style={styles.timeBadge}>
-                <Text style={styles.timeBadgeLabel}>Etapa</Text>
+                <Text style={styles.timeBadgeLabel}>{t('appAlerts.checklist.formTimerStep')}</Text>
                 <Text style={styles.timeBadgeValue}>
                   {sectionElapsedDisp != null ? formatDurationClock(sectionElapsedDisp) : '—'}
                 </Text>
@@ -13173,20 +13222,20 @@ export default function ChecklistEngine() {
         ) : typeof responses.__form_fill_duration_sec === 'number' ? (
           <View style={styles.timeBadgesRow}>
             <View style={styles.timeBadge}>
-              <Text style={styles.timeBadgeLabel}>Total</Text>
+              <Text style={styles.timeBadgeLabel}>{t('appAlerts.checklist.formTimerTotal')}</Text>
               <Text style={styles.timeBadgeValue}>
                 {formatDurationClock(responses.__form_fill_duration_sec)}
               </Text>
             </View>
             <View style={styles.timeBadge}>
-              <Text style={styles.timeBadgeLabel}>Foco</Text>
+              <Text style={styles.timeBadgeLabel}>{t('appAlerts.checklist.formTimerFocus')}</Text>
               <Text style={styles.timeBadgeValue}>
                 {formatDurationClock(Number(responses.__form_active_seconds_final) || 0)}
               </Text>
             </View>
             {showSectionTimerInFooter ? (
               <View style={styles.timeBadge}>
-                <Text style={styles.timeBadgeLabel}>Etapa</Text>
+                <Text style={styles.timeBadgeLabel}>{t('appAlerts.checklist.formTimerStep')}</Text>
                 <Text style={styles.timeBadgeValue}>
                   {sectionElapsedBadge != null ? formatDurationClock(sectionElapsedBadge) : '—'}
                 </Text>
@@ -13201,14 +13250,14 @@ export default function ChecklistEngine() {
             <>
               {wizardIndex > 0 ? (
                 <TouchableOpacity style={styles.navBtnPrev} onPress={handleWizardPrev}>
-                  <Text style={styles.navBtnTextBlack}>{"< Voltar"}</Text>
+                  <Text style={styles.navBtnTextBlack}>{t('appAlerts.checklist.formNavBack')}</Text>
                 </TouchableOpacity>
               ) : (
                 <View style={{ flex: 1 }} />
               )}
               {wizardIndex < wizardSteps.length - 1 ? (
                 <TouchableOpacity style={styles.navBtnNext} onPress={handleWizardNext}>
-                  <Text style={styles.navBtnText}>{"Próximo >"}</Text>
+                  <Text style={styles.navBtnText}>{t('appAlerts.checklist.formNavNext')}</Text>
                 </TouchableOpacity>
               ) : !isReadOnly ? (
                 <TouchableOpacity style={styles.submitBtn} onPress={submitExecution} disabled={submitting}>
@@ -13216,7 +13265,7 @@ export default function ChecklistEngine() {
                     <ActivityIndicator color="#FFF" />
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      <Text style={styles.submitText}>CONCLUIR</Text>
+                      <Text style={styles.submitText}>{t('appAlerts.checklist.formNavConclude')}</Text>
                       <Ionicons name="checkmark-done" size={24} color="#FFF" />
                     </View>
                   )}
@@ -13235,7 +13284,7 @@ export default function ChecklistEngine() {
                   }}
                 >
                   <Text style={{ color: '#64748B', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Fim do Relatório
+                    {t('appAlerts.checklist.formReportEnd')}
                   </Text>
                 </View>
               )}
@@ -13244,21 +13293,23 @@ export default function ChecklistEngine() {
             <>
               {currentPage > 0 || hybridInnerWizardIndex > 0 || (useSectionHub && !hubPicking) ? (
                 <TouchableOpacity style={styles.navBtnPrev} onPress={handleHybridPagePrev}>
-                  <Text style={styles.navBtnTextBlack}>{"< Voltar"}</Text>
+                  <Text style={styles.navBtnTextBlack}>{t('appAlerts.checklist.formNavBack')}</Text>
                 </TouchableOpacity>
               ) : (
                 <View style={{ flex: 1 }} />
               )}
               {hybridInnerWizardIndex < hybridVisibleFields.length - 1 ? (
                 <TouchableOpacity style={styles.navBtnNext} onPress={handleHybridInnerNext}>
-                  <Text style={styles.navBtnText}>{"Próximo >"}</Text>
+                  <Text style={styles.navBtnText}>{t('appAlerts.checklist.formNavNext')}</Text>
                 </TouchableOpacity>
               ) : currentPage < displayPages.length - 1 ? (
                 <TouchableOpacity
                   style={styles.navBtnNext}
                   onPress={useSectionHub ? handleCompleteSectionToHub : handleNextPage}
                 >
-                  <Text style={styles.navBtnText}>{useSectionHub ? 'Concluir' : 'Avançar >'}</Text>
+                  <Text style={styles.navBtnText}>
+                    {useSectionHub ? t('appAlerts.checklist.formNavCompleteSection') : t('appAlerts.checklist.formNavAdvance')}
+                  </Text>
                 </TouchableOpacity>
               ) : !isReadOnly ? (
                 <TouchableOpacity style={styles.submitBtn} onPress={submitExecution} disabled={submitting}>
@@ -13266,7 +13317,7 @@ export default function ChecklistEngine() {
                     <ActivityIndicator color="#FFF" />
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      <Text style={styles.submitText}>CONCLUIR</Text>
+                      <Text style={styles.submitText}>{t('appAlerts.checklist.formNavConclude')}</Text>
                       <Ionicons name="checkmark-done" size={24} color="#FFF" />
                     </View>
                   )}
@@ -13285,7 +13336,7 @@ export default function ChecklistEngine() {
                   }}
                 >
                   <Text style={{ color: '#64748B', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Fim do Relatório
+                    {t('appAlerts.checklist.formReportEnd')}
                   </Text>
                 </View>
               )}
@@ -13294,7 +13345,7 @@ export default function ChecklistEngine() {
             <>
               {currentPage > 0 || (useSectionHub && !hubPicking) ? (
                 <TouchableOpacity style={styles.navBtnPrev} onPress={handleHybridPagePrev}>
-                  <Text style={styles.navBtnTextBlack}>{"< Voltar"}</Text>
+                  <Text style={styles.navBtnTextBlack}>{t('appAlerts.checklist.formNavBack')}</Text>
                 </TouchableOpacity>
               ) : (
                 <View style={{ flex: 1 }} />
@@ -13305,7 +13356,9 @@ export default function ChecklistEngine() {
                   style={styles.navBtnNext}
                   onPress={useSectionHub ? handleCompleteSectionToHub : handleNextPage}
                 >
-                  <Text style={styles.navBtnText}>{useSectionHub ? 'Concluir' : 'Avançar >'}</Text>
+                  <Text style={styles.navBtnText}>
+                    {useSectionHub ? t('appAlerts.checklist.formNavCompleteSection') : t('appAlerts.checklist.formNavAdvance')}
+                  </Text>
                 </TouchableOpacity>
               ) : !isReadOnly ? (
                 <TouchableOpacity style={styles.submitBtn} onPress={submitExecution} disabled={submitting}>
@@ -13313,7 +13366,7 @@ export default function ChecklistEngine() {
                     <ActivityIndicator color="#FFF" />
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      <Text style={styles.submitText}>CONCLUIR</Text>
+                      <Text style={styles.submitText}>{t('appAlerts.checklist.formNavConclude')}</Text>
                       <Ionicons name="checkmark-done" size={24} color="#FFF" />
                     </View>
                   )}
@@ -13332,7 +13385,7 @@ export default function ChecklistEngine() {
                   }}
                 >
                   <Text style={{ color: '#64748B', fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Fim do Relatório
+                    {t('appAlerts.checklist.formReportEnd')}
                   </Text>
                 </View>
               )}

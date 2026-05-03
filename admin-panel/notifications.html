@@ -220,7 +220,7 @@
   loadTemplates();
   loadLogs();
 
-  document.getElementById('save-tmpl-btn').onclick = async () => {
+  document.getElementById('save-tmpl-btn').addEventListener('click', async () => {
     const id = document.getElementById('tmpl-id').value;
     const body = {
       key:     document.getElementById('tmpl-key').value,
@@ -239,7 +239,7 @@
 
     closeModal('template-modal');
     loadTemplates();
-  };
+  });
 </script>
 <script>
   function openModal(id)  { document.getElementById(id).classList.add('open'); }

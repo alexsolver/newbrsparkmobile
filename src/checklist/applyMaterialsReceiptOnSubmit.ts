@@ -45,7 +45,7 @@ async function buildDesiredMapFromReceiptV2(
       const label = String(l.name || '').trim() || 'Item';
       const sk = String(l.sku || '').trim() || '—';
       throw new Error(
-        `Não foi possível associar "${label}" (SKU ${sk}) ao seu estoque técnico. Cadastre o produto com o mesmo SKU em "Meu estoque" ou solicite à central o vínculo (meta técnico na integração).`
+        `Não foi possível associar "${label}" (SKU ${sk}) ao seu estoque técnico. Solicite à central o vínculo (meta técnico na integração) ou um SKU que já exista no seu inventário sincronizado.`
       );
     }
     desired[itemId] = (desired[itemId] || 0) + l.qty;

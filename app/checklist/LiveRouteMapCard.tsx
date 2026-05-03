@@ -40,6 +40,7 @@ import {
 } from '../../src/services/transitEtaPolicy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
@@ -506,15 +507,15 @@ const OSRM_MAP_GEOMETRY_TIMEOUT_MS = 24000;
  */
 let lastOsrmTransitGeometryByKey: { key: string; coords: number[][] } | null = null;
 
-function formatElapsedSinceTransitPt(isoStart: string): string {
+function formatElapsedSinceTransitPt(isoStart: string, tf: TFunction): string {
   const t0 = Date.parse(isoStart);
   if (!Number.isFinite(t0)) return '';
   const sec = Math.max(0, Math.floor((Date.now() - t0) / 1000));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
-  if (h > 0) return `Em deslocamento há ${h} h${m > 0 ? ` ${m} min` : ''}`;
-  if (m > 0) return `Em deslocamento há ${m} min`;
-  return 'Deslocamento acabou de iniciar';
+  if (h > 0) return tf('appAlerts.liveRoute.transitElapsedHoursMinutes', { hours: h, minutes: m });
+  if (m > 0) return tf('appAlerts.liveRoute.transitElapsedMinutes', { count: m });
+  return tf('appAlerts.liveRoute.transitElapsedJustStarted');
 }
 
 // ─── ETA Badge — Premium floating map overlay ─────────────────────────────────────────
@@ -534,6 +535,7 @@ function EtaBadge({
   transitElapsedLabel?: string | null;
   isLandscape: boolean;
 }) {
+  const { t: etaT } = useTranslation();
   const { colors: C } = useTheme();
   const insets = useSafeAreaInsets();
   const pulse = useRef(new Animated.Value(1)).current;
@@ -550,13 +552,13 @@ function EtaBadge({
 
   const hasNum = typeof etaMinutes === 'number' && Number.isFinite(etaMinutes);
   const waiting = !hasNum && !hint && !noDestination;
-  let timeStr = 'Calculando...';
+  let timeStr = etaT('appAlerts.liveRoute.etaCalculating');
   if (hasNum) {
     const hours = Math.floor(etaMinutes as number / 60);
     const mins = (etaMinutes as number) % 60;
     timeStr = hours > 0 ? `${hours}h ${mins > 0 ? `${mins}m` : ''}`.trim() : `${etaMinutes} min`;
   } else if (noDestination) {
-    timeStr = 'ETA indisponível';
+    timeStr = etaT('appAlerts.liveRoute.etaUnavailable');
   } else if (hint) {
     timeStr = hint;
   }
@@ -591,17 +593,17 @@ function EtaBadge({
             ) : null}
             <View style={etaStyles.dot} />
           </View>
-          <Text style={etaStyles.label}>EM ROTA</Text>
+          <Text style={etaStyles.label}>{etaT('appAlerts.liveRoute.etaOnRoute')}</Text>
           <Ionicons name="navigate" size={9} color="rgba(255,255,255,0.7)" style={{ marginLeft: 2 }} />
         </View>
 
         {/* Main time display */}
         <Text style={[etaStyles.time, noDestination && etaStyles.timeCompact]}>{timeStr}</Text>
 
-        {hasNum ? <Text style={etaStyles.sub}>tempo estimado de chegada</Text> : null}
+        {hasNum ? <Text style={etaStyles.sub}>{etaT('appAlerts.liveRoute.etaSub')}</Text> : null}
         {noDestination ? (
           <>
-            <Text style={etaStyles.sub}>Sem local de atendimento definido nesta OS.</Text>
+            <Text style={etaStyles.sub}>{etaT('appAlerts.liveRoute.etaNoServiceCoords')}</Text>
             {transitElapsedLabel ? (
               <Text style={etaStyles.subMuted}>{transitElapsedLabel}</Text>
             ) : null}
@@ -1156,12 +1158,14 @@ export default function LiveRouteMapCard({
   const fetchTrackingChat = useCallback(async () => {
     if (!taskId) return;
     const looksLikeChatNotReady = (msg: string) =>
-      /não iniciado|deslocamento não iniciado|indisponível.*iniciado/i.test(msg);
+      /não iniciado|deslocamento não iniciado|indisponível.*iniciado|not started|trip not started|unavailable.*started/i.test(
+        msg
+      );
     const markHydrated = () => {
       trackingChatHydratedRef.current = true;
     };
     try {
-      let lastMsg = 'Não foi possível carregar o chat.';
+      let lastMsg = tr('appAlerts.liveRoute.chatLoadFailed');
       for (let attempt = 0; attempt < 8; attempt++) {
         const r = await apiFetch(`/api/tracking/task/${encodeURIComponent(taskId)}/chat`);
         const j = (await r.json().catch(() => ({}))) as { messages?: unknown; error?: string };
@@ -1184,10 +1188,10 @@ export default function LiveRouteMapCard({
       setTrackingChatError(lastMsg);
       markHydrated();
     } catch {
-      setTrackingChatError('Sem ligação. Tente de novo.');
+      setTrackingChatError(tr('appAlerts.liveRoute.chatOffline'));
       markHydrated();
     }
-  }, [taskId]);
+  }, [taskId, tr]);
 
   useEffect(() => {
     if (!visible) setTrackingChatOpen(false);
@@ -1680,8 +1684,8 @@ export default function LiveRouteMapCard({
 
   const transitElapsedLabel = useMemo(() => {
     if (!noDestinationForEta || !transitStartedAtIso) return null;
-    return formatElapsedSinceTransitPt(transitStartedAtIso);
-  }, [noDestinationForEta, transitStartedAtIso, elapsedTick]);
+    return formatElapsedSinceTransitPt(transitStartedAtIso, tr);
+  }, [noDestinationForEta, transitStartedAtIso, elapsedTick, tr]);
 
   const isRouteCompleted = update?.event === 'ROUTE_COMPLETED';
   const techHeroPulse = useRef(new Animated.Value(1)).current;
@@ -1792,8 +1796,8 @@ export default function LiveRouteMapCard({
         return;
       }
       Alert.alert(
-        'Rastreamento',
-        'Sem identificador da OS no mapa, o link do cliente não poderá ser atualizado quando houver rede.'
+        tr('appAlerts.liveRoute.trackingPauseAlertTitle'),
+        tr('appAlerts.liveRoute.trackingPublicLinkNeedsTaskId')
       );
       return;
     }
@@ -2232,7 +2236,9 @@ export default function LiveRouteMapCard({
                 );
               }
               const mine = item.role === 'tech';
-              const who = mine ? item.senderLabel || 'Técnico' : 'Cliente';
+              const who = mine
+                ? item.senderLabel || tr('appAlerts.liveRoute.trackingChatRoleTechnician')
+                : tr('appAlerts.liveRoute.trackingChatRoleClient');
               const when = formatTrackingChatTime(item.at);
               return (
                 <View
@@ -2417,13 +2423,13 @@ export default function LiveRouteMapCard({
             style={styles.minimizedCardTapExpand}
             onPress={() => setExpanded(true)}
             activeOpacity={0.75}
-            accessibilityLabel="Abrir mapa de navegação"
+            accessibilityLabel={tr('appAlerts.liveRoute.minimizedMapA11y')}
           >
             <Ionicons name="map" size={24} color="#fff" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.minimizedTitle}>Mapa da Rota Oculto</Text>
+              <Text style={styles.minimizedTitle}>{tr('appAlerts.liveRoute.minimizedMapTitle')}</Text>
               <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.92)' }}>
-                Toque para voltar à navegação.
+                {tr('appAlerts.liveRoute.minimizedMapSubtitle')}
               </Text>
             </View>
             <Ionicons name="expand" size={20} color="#fff" />
@@ -2442,29 +2448,35 @@ export default function LiveRouteMapCard({
     );
   }
 
-  const transitHeaderLong =
-    isComplete
-      ? 'Deslocamento Concluído'
-      : isPaused
-        ? 'Navegação Pausada'
-        : !hasRoute
-          ? distanceToDestinationM != null
-            ? `Deslocamento · ~${distanceToDestinationM} m ao destino`
-            : 'Deslocamento em Andamento'
-          : isDeviation
-            ? `Aviso: ~${update?.distanceFromRoute ?? '—'} m fora do trajeto`
-            : `Em Rota · ${pct}%${zoneType === 'route' && update?.patrolCoveragePercent != null ? ` · Patrulha ~${update.patrolCoveragePercent}%` : ''}`;
+  const patrolPctSuffix =
+    zoneType === 'route' && update?.patrolCoveragePercent != null
+      ? tr('appAlerts.liveRoute.transitHeaderPatrolSuffix', { pct: update.patrolCoveragePercent })
+      : '';
 
-  const transitStatusShort = isComplete
-    ? 'Concluído'
+  const transitHeaderLong = isComplete
+    ? tr('appAlerts.liveRoute.transitHeaderComplete')
     : isPaused
-      ? 'Pausado'
+      ? tr('appAlerts.liveRoute.transitHeaderPaused')
       : !hasRoute
         ? distanceToDestinationM != null
-          ? `~${distanceToDestinationM} m`
-          : 'Em desloc.'
+          ? tr('appAlerts.liveRoute.transitHeaderNoRouteMeters', { meters: distanceToDestinationM })
+          : tr('appAlerts.liveRoute.transitHeaderInProgress')
         : isDeviation
-          ? 'Aviso'
+          ? tr('appAlerts.liveRoute.transitHeaderDeviation', {
+              meters: update?.distanceFromRoute != null ? String(update.distanceFromRoute) : '—',
+            })
+          : tr('appAlerts.liveRoute.transitHeaderOnRouteBase', { pct }) + patrolPctSuffix;
+
+  const transitStatusShort = isComplete
+    ? tr('appAlerts.liveRoute.transitShortComplete')
+    : isPaused
+      ? tr('appAlerts.liveRoute.transitShortPaused')
+      : !hasRoute
+        ? distanceToDestinationM != null
+          ? tr('appAlerts.liveRoute.transitShortNoRouteMeters', { meters: distanceToDestinationM })
+          : tr('appAlerts.liveRoute.transitShortInProgress')
+        : isDeviation
+          ? tr('appAlerts.liveRoute.transitShortDeviation')
           : `${pct}%`;
 
   const showTransitStatusDetail = () => {
@@ -2489,7 +2501,7 @@ export default function LiveRouteMapCard({
             ]}
             onPress={() => setExpanded(false)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityLabel="Minimizar mapa"
+            accessibilityLabel={tr('appAlerts.liveRoute.minimizeMapA11y')}
           >
             <Ionicons name="chevron-down" size={22} color="#475569" />
           </TouchableOpacity>
@@ -2511,7 +2523,11 @@ export default function LiveRouteMapCard({
                 </View>
               ) : null}
             </View>
-            <TouchableOpacity style={styles.minimizeBtn} onPress={() => setExpanded(false)}>
+            <TouchableOpacity
+              style={styles.minimizeBtn}
+              onPress={() => setExpanded(false)}
+              accessibilityLabel={tr('appAlerts.liveRoute.minimizeMapA11y')}
+            >
               <Ionicons name="chevron-down" size={24} color="#64748b" />
             </TouchableOpacity>
           </View>
@@ -2653,43 +2669,32 @@ export default function LiveRouteMapCard({
           <View style={styles.hintPanel} accessibilityViewIsModal>
             <View style={styles.hintHeaderRow}>
               <Ionicons name="information-circle" size={20} color="#2563eb" />
-              <Text style={styles.hintTitle}>Dicas do mapa</Text>
+              <Text style={styles.hintTitle}>{tr('appAlerts.liveRoute.mapHintTitle')}</Text>
               <TouchableOpacity
                 onPress={dismissTransitHints}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel="Fechar dicas"
+                accessibilityLabel={tr('appAlerts.liveRoute.mapHintCloseA11y')}
               >
                 <Ionicons name="close" size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.hintScroll} showsVerticalScrollIndicator={false}>
               <Text style={styles.hintBody}>
-                Por padrão o mapa está em <Text style={styles.hintStrong}>modo navegação</Text> (vista 2D): segue a sua posição
-                ao centro com zoom alto, alinha o <Text style={styles.hintStrong}>rumo em cima</Text> com suavização, usando o rumo
-                do GPS em movimento, a direção da rota quando está junto da linha e a bússola quando vai mais devagar.
+                {tr('appAlerts.liveRoute.mapHintP1')}
                 {'\n\n'}
-                Toque no ícone <Text style={styles.hintStrong}>navegação</Text> (círculo com seta) para{' '}
-                <Text style={styles.hintStrong}>mapa livre</Text>: norte em cima, pode arrastar e rodar o mapa.
-                Toque de novo para voltar a seguir o GPS.
+                {tr('appAlerts.liveRoute.mapHintP2')}
                 {'\n\n'}
-                Use <Text style={styles.hintStrong}>pinçar</Text> para ajustar o zoom em qualquer modo.
+                {tr('appAlerts.liveRoute.mapHintP3')}
                 {'\n\n'}
-                Toque no <Text style={styles.hintStrong}>marcador do destino</Text> (ou nos pontos A/B) para aproximar e ver melhor a rua.
+                {tr('appAlerts.liveRoute.mapHintP4')}
                 {'\n\n'}
-                <Text style={styles.hintStrong}>Rota KML / patrulha:</Text> linha{' '}
-                <Text style={styles.hintStrong}>verde</Text> = trecho já percorrido na referência; linha{' '}
-                <Text style={styles.hintStrong}>laranja</Text> = trajeto planejado que ainda falta; linha{' '}
-                <Text style={styles.hintStrong}>azul</Text> = percurso GPS registrado; a linha de navegação (OSRM)
-                aparece em azul tracejado e mostra só o que falta — o trecho já percorrido ao longo dessa linha some. A cobertura de patrulha estima quanto do
-                trajeto planejado foi percorrido dentro do corredor (tolerância definida no despacho).
+                {tr('appAlerts.liveRoute.mapHintP5')}
                 {'\n\n'}
-                <Text style={styles.hintStrong}>Waze / outra app:</Text> aceite localização "sempre" ou "em segundo plano"
-                quando o sistema pedir, para a trilha GPS continuar. No Android pode aparecer uma notificação
-                "Deslocamento em andamento", é normal enquanto o deslocamento estiver ativo.
+                {tr('appAlerts.liveRoute.mapHintP6')}
               </Text>
             </ScrollView>
             <TouchableOpacity style={styles.hintBtn} onPress={dismissTransitHints} activeOpacity={0.85}>
-              <Text style={styles.hintBtnText}>Entendi</Text>
+              <Text style={styles.hintBtnText}>{tr('appAlerts.liveRoute.mapHintGotIt')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -2784,11 +2789,15 @@ export default function LiveRouteMapCard({
             route &&
             route.length > 0 && (
             <>
-              <Marker coordinate={{ latitude: route[0][0], longitude: route[0][1] }} title="Início" pinColor="#16a34a" />
+              <Marker
+                coordinate={{ latitude: route[0][0], longitude: route[0][1] }}
+                title={tr('appAlerts.checklist.transitMapLegendStart')}
+                pinColor="#16a34a"
+              />
               <Marker
                 coordinate={{ latitude: route[route.length - 1][0], longitude: route[route.length - 1][1] }}
-                title="Destino"
-                description="Toque para aproximar"
+                title={tr('appAlerts.checklist.transitMapMarkerDestination')}
+                description={tr('appAlerts.checklist.transitMapTapToZoomHint')}
                 onPress={() =>
                   focusOnLatLng(route[route.length - 1][0], route[route.length - 1][1], 20)
                 }
@@ -2916,11 +2925,11 @@ export default function LiveRouteMapCard({
           {myPos && (
             <Marker
               coordinate={{ latitude: myPos.lat, longitude: myPos.lng }}
-              title="Sua posição"
+              title={tr('appAlerts.liveRoute.mapMarkerYourPosition')}
               description={
                 followUser
-                  ? 'Modo navegação: o mapa alinha ao rumo; a foto permanece vertical.'
-                  : 'Sua posição no mapa (foto sempre vertical).'
+                  ? tr('appAlerts.liveRoute.navFollowHeadingHint')
+                  : tr('appAlerts.liveRoute.mapPositionPhotoVerticalHint')
               }
               anchor={{ x: 0.5, y: 0.5 }}
               zIndex={2000}
@@ -3012,7 +3021,7 @@ export default function LiveRouteMapCard({
               style={[styles.recenterBtn, followUser && [styles.followActiveBtn, { backgroundColor: C.accent }]]}
               onPress={() => setFollowUser((v) => !v)}
               accessibilityLabel={
-                followUser ? 'Modo mapa livre (norte em cima, arrastar mapa)' : 'Modo navegação (seguir GPS e rumo)'
+                followUser ? tr('appAlerts.liveRoute.followModeFreeA11y') : tr('appAlerts.liveRoute.followModeNavA11y')
               }
             >
               <Ionicons
@@ -3023,7 +3032,7 @@ export default function LiveRouteMapCard({
             </TouchableOpacity>
           )}
           {!embedNativeMap && (
-            <TouchableOpacity style={styles.recenterBtn} onPress={() => void handleRecenter()} accessibilityLabel="Atualizar posição no mapa">
+            <TouchableOpacity style={styles.recenterBtn} onPress={() => void handleRecenter()} accessibilityLabel={tr('appAlerts.liveRoute.recenterMapA11y')}>
               <Ionicons name="locate" size={24} color="#475569" />
             </TouchableOpacity>
           )}
@@ -3044,7 +3053,7 @@ export default function LiveRouteMapCard({
               onLongPress={showTransitStatusDetail}
               activeOpacity={0.88}
               accessibilityRole="button"
-              accessibilityLabel="Minimizar mapa. Toque longo para ver detalhes do deslocamento."
+              accessibilityLabel={tr('appAlerts.liveRoute.landscapeStatusChipA11y')}
             >
               <Ionicons
                 name={isComplete ? 'checkmark-circle' : isPaused ? 'pause-circle' : isDeviation ? 'warning' : 'navigate'}
@@ -3063,7 +3072,7 @@ export default function LiveRouteMapCard({
           >
             <Ionicons name={isPaused ? 'play' : 'pause'} size={16} color={isPaused ? '#fff' : '#475569'} />
             <Text style={[styles.pauseText, isPaused && { color: '#fff' }]} numberOfLines={1}>
-              {isPaused ? 'Retomar Rota' : 'Pausar'}
+              {isPaused ? tr('appAlerts.liveRoute.resumeRoute') : tr('appAlerts.liveRoute.pauseRoute')}
             </Text>
           </TouchableOpacity>
 
@@ -3086,7 +3095,7 @@ export default function LiveRouteMapCard({
                 <Ionicons name="stop-circle" size={18} color="#fff" />
               )}
               <Text style={styles.endTransitText} numberOfLines={1}>
-                {endTransitLoading ? 'A obter localização…' : 'Finalizar'}
+                {endTransitLoading ? tr('appAlerts.liveRoute.gettingLocationShort') : tr('appAlerts.liveRoute.finishTrip')}
               </Text>
             </TouchableOpacity>
           ) : null}
@@ -3109,7 +3118,9 @@ export default function LiveRouteMapCard({
           <View style={[styles.deviationBanner, { top: isLandscape ? insets.top + 10 : 120 }]}>
             <Ionicons name="warning" size={18} color="#78350f" style={{ marginRight: 8 }} />
             <Text style={styles.deviationText}>
-              Aviso: fora do corredor (~{update?.distanceFromRoute ?? '—'} m). Não bloqueia o deslocamento.
+              {tr('appAlerts.liveRoute.deviationBanner', {
+                meters: update?.distanceFromRoute != null ? String(update.distanceFromRoute) : '—',
+              })}
             </Text>
           </View>
         )}

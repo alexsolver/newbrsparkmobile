@@ -1153,13 +1153,13 @@ function renderDocRows(tbodyId, docs, locations, userId) {
     ? list.map((d) => docRowHtml(d, locOpts, kind)).join('')
     : docEmptyStateHtml();
   tb.querySelectorAll('.doc-del').forEach((btn) => {
-    btn.onclick = () => {
+    btn.addEventListener('click', () => {
       btn.closest('tr')?.remove();
       if (!tb.querySelector('tr:not(.doc-empty)')) {
         tb.innerHTML = docEmptyStateHtml();
       }
       markDirty();
-    };
+    });
   });
   syncDocLocsMultiselectSelections(tb);
   refreshDocValidityInTable(tbodyId);
@@ -1383,14 +1383,14 @@ function renderSchSlotLocsChips(slotEl) {
     btn.className = 'ue-skill-chip-remove sch-loc-chip-rm';
     btn.textContent = '×';
     btn.setAttribute('aria-label', t('ue_schLocRemove'));
-    btn.onclick = () => {
+    btn.addEventListener('click', () => {
       if (isUserEditReadonly()) return;
       setSchSlotLocIdsOnEl(
         slotEl,
         getSchSlotLocIdsFromEl(slotEl).filter((x) => x !== id),
       );
       markDirty();
-    };
+    });
     wrap.appendChild(txt);
     wrap.appendChild(btn);
     chips.appendChild(wrap);
@@ -2392,7 +2392,7 @@ function renderFaceGallery() {
     })
     .join('');
   el.querySelectorAll('.face-rm').forEach((btn) => {
-    btn.onclick = () => removeFacePhoto(btn.getAttribute('data-photo-id'));
+    btn.addEventListener('click', () => removeFacePhoto(btn.getAttribute('data-photo-id')));
   });
 }
 
@@ -2484,12 +2484,12 @@ function renderSkillChips(skills) {
     btn.className = 'ue-skill-chip-remove';
     btn.textContent = '×';
     btn.setAttribute('aria-label', t('ue_skillRemove'));
-    btn.onclick = () => {
+    btn.addEventListener('click', () => {
       if (isUserEditReadonly()) return;
       const next = getSkillsFromDom().filter((x) => x !== skill);
       renderSkillChips(next);
       markDirty();
-    };
+    });
     wrap.appendChild(txt);
     wrap.appendChild(btn);
     root.appendChild(wrap);
@@ -2640,27 +2640,42 @@ function openElevateConfirmModal(expectedEmail) {
     if (bEl) bEl.textContent = t('elevateBody');
     inp.value = '';
     ov.classList.add('open');
+    const ac = new AbortController();
+    const { signal } = ac;
     const close = (ok) => {
+      try {
+        ac.abort();
+      } catch {
+        /* ignore */
+      }
       ov.classList.remove('open');
       resolve(ok);
     };
     const onClose = () => close(false);
     document.querySelectorAll('[data-close-elevate]').forEach((b) => {
-      b.onclick = onClose;
+      b.addEventListener('click', onClose, { signal });
     });
     const conf = document.getElementById('elevate-confirm-btn');
     if (conf) {
-      conf.onclick = () => {
-        if (String(inp.value).trim().toLowerCase() !== String(expectedEmail).trim().toLowerCase()) {
-          alert(t('elevateMismatch'));
-          return;
-        }
-        close(true);
-      };
+      conf.addEventListener(
+        'click',
+        () => {
+          if (String(inp.value).trim().toLowerCase() !== String(expectedEmail).trim().toLowerCase()) {
+            alert(t('elevateMismatch'));
+            return;
+          }
+          close(true);
+        },
+        { signal },
+      );
     }
-    ov.onclick = (ev) => {
-      if (ev.target === ov) close(false);
-    };
+    ov.addEventListener(
+      'click',
+      (ev) => {
+        if (ev.target === ov) close(false);
+      },
+      { signal },
+    );
   });
 }
 
@@ -3155,7 +3170,7 @@ export async function bootUserEditPage() {
   }
   const btnDisc = document.getElementById('btn-disconnect');
   if (btnDisc) {
-    btnDisc.onclick = async () => {
+    btnDisc.addEventListener('click', async () => {
       if (!confirm(t('ue_disconnectConfirm'))) return;
       const r = await CONFIG.post(`/users/${encodeURIComponent(id)}/disconnect`, {}).catch(() => null);
       if (r?.ok) {
@@ -3174,7 +3189,7 @@ export async function bootUserEditPage() {
           }
         }
       } else alert(r?.error || t('ue_disconnectGenericErr'));
-    };
+    });
   }
 
   paintEmailVerificationUx(u);
@@ -3397,7 +3412,7 @@ export async function bootUserEditPage() {
   };
   setReReadonly();
   if (btnReOpen) {
-    btnReOpen.onclick = async () => {
+    btnReOpen.addEventListener('click', async () => {
       try {
         const hours = hoursSel ? parseInt(String(hoursSel.value || '72'), 10) || 72 : 72;
         const note = reNoteTa && String(reNoteTa.value || '').trim() ? String(reNoteTa.value).trim() : undefined;
@@ -3419,10 +3434,10 @@ export async function bootUserEditPage() {
         console.error(e);
         alert(String(e && e.message ? e.message : 'Erro'));
       }
-    };
+    });
   }
   if (btnReClear) {
-    btnReClear.onclick = async () => {
+    btnReClear.addEventListener('click', async () => {
       try {
         const res = await CONFIG.post(`/users/${encodeURIComponent(id)}/face-reenrollment-window`, { clear: true });
         if (!res || res.error) {
@@ -3440,15 +3455,15 @@ export async function bootUserEditPage() {
         console.error(e);
         alert(String(e && e.message ? e.message : 'Erro'));
       }
-    };
+    });
   }
 
   const btnFacePick = document.getElementById('btn-face-pick');
   const faceFileInput = document.getElementById('face-file-input');
   const faceUploadStatus = document.getElementById('face-upload-status');
   if (btnFacePick && faceFileInput) {
-    btnFacePick.onclick = () => faceFileInput.click();
-    faceFileInput.onchange = async (ev) => {
+    btnFacePick.addEventListener('click', () => faceFileInput.click());
+    faceFileInput.addEventListener('change', async (ev) => {
       const files = [...(ev.target.files || [])];
       ev.target.value = '';
       let prog = null;
@@ -3504,7 +3519,7 @@ export async function bootUserEditPage() {
         }
       }
       if (faceUploadStatus) faceUploadStatus.textContent = '';
-    };
+    });
   }
 
   const addr = parseJsonSafe(u.addressJson, {});
@@ -3592,7 +3607,7 @@ export async function bootUserEditPage() {
     });
   }
 
-  document.getElementById('btn-add-doc-p').onclick = () => {
+  document.getElementById('btn-add-doc-p').addEventListener('click', () => {
     const tb = document.getElementById('tbody-docs-personal');
     const empty = tb.querySelector('.doc-empty');
     if (empty) empty.remove();
@@ -3600,15 +3615,15 @@ export async function bootUserEditPage() {
     tb.insertAdjacentHTML('beforeend', docRowHtml({ id: rid(), docType: 'CPF' }, locOptsNew, 'personal'));
     syncDocLocsMultiselectSelections(tb.lastElementChild);
     const tr = tb.querySelector('tr:last-child');
-    tr.querySelector('.doc-del').onclick = (e) => {
+    tr.querySelector('.doc-del').addEventListener('click', (e) => {
       e.target.closest('tr')?.remove();
       markDirty();
-    };
+    });
     tr.querySelector('.doc-type')?.addEventListener('change', markDirty);
     refreshDocValidityInTable('tbody-docs-personal');
     markDirty();
-  };
-  document.getElementById('btn-add-doc-pro').onclick = () => {
+  });
+  document.getElementById('btn-add-doc-pro').addEventListener('click', () => {
     const tb = document.getElementById('tbody-docs-pro');
     const empty = tb.querySelector('.doc-empty');
     if (empty) empty.remove();
@@ -3616,14 +3631,14 @@ export async function bootUserEditPage() {
     tb.insertAdjacentHTML('beforeend', docRowHtml({ id: rid(), docType: 'ASO' }, locOptsNewP, 'professional'));
     syncDocLocsMultiselectSelections(tb.lastElementChild);
     const tr = tb.querySelector('tr:last-child');
-    tr.querySelector('.doc-del').onclick = (e) => {
+    tr.querySelector('.doc-del').addEventListener('click', (e) => {
       e.target.closest('tr')?.remove();
       markDirty();
-    };
+    });
     tr.querySelector('.doc-type')?.addEventListener('change', markDirty);
     refreshDocValidityInTable('tbody-docs-pro');
     markDirty();
-  };
+  });
 
   ['f-name', 'f-email', 'f-phone', 'f-avatar', 'f-active', 'f-work-time', 'f-admin-notes', 'f-preferred-locale'].forEach(
     (fid) => {
@@ -3815,15 +3830,15 @@ export async function bootUserEditPage() {
       if (idx > 0) prev.href = `user-edit.html?id=${encodeURIComponent(navCtx.ids[idx - 1])}${roQS}`;
       else prev.href = '#';
       prev.style.opacity = idx > 0 ? '1' : '0.35';
-      prev.onclick = (e) => {
+      prev.addEventListener('click', (e) => {
         if (idx <= 0) e.preventDefault();
-      };
+      });
       if (idx < navCtx.ids.length - 1) next.href = `user-edit.html?id=${encodeURIComponent(navCtx.ids[idx + 1])}${roQS}`;
       else next.href = '#';
       next.style.opacity = idx < navCtx.ids.length - 1 ? '1' : '0.35';
-      next.onclick = (e) => {
+      next.addEventListener('click', (e) => {
         if (idx >= navCtx.ids.length - 1) e.preventDefault();
-      };
+      });
     }
   }
 
@@ -3849,10 +3864,10 @@ export async function bootUserEditPage() {
     });
   }
 
-  document.getElementById('btn-discard').onclick = () => {
+  document.getElementById('btn-discard').addEventListener('click', () => {
     if (!confirm(t('ue_discardConfirm'))) return;
     window.location.reload();
-  };
+  });
 
   async function doSave(stay) {
     if (isUserEditReadonly()) return;
@@ -3900,6 +3915,6 @@ export async function bootUserEditPage() {
     }
   }
 
-  document.getElementById('btn-save').onclick = () => doSave(false);
-  document.getElementById('btn-save-stay').onclick = () => doSave(true);
+  document.getElementById('btn-save').addEventListener('click', () => doSave(false));
+  document.getElementById('btn-save-stay').addEventListener('click', () => doSave(true));
 }

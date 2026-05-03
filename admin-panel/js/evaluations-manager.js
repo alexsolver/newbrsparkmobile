@@ -280,7 +280,7 @@ function addQuestionRow(q) {
       <input type="text" class="form-control q-cat" placeholder="${esc(evT('ev_q_cat_placeholder'))}" value="${esc(q?.categoryKey || '')}" />
     </div>
   `;
-  row.querySelector('.q-del').onclick = () => row.remove();
+  row.querySelector('.q-del').addEventListener('click', () => row.remove());
   wrap.appendChild(row);
 }
 
@@ -500,20 +500,20 @@ async function loadDisputes() {
     .join('');
 
   tb.querySelectorAll('tr[data-dispute-id] .btn-chat-trans').forEach((btn) => {
-    btn.onclick = () => {
+    btn.addEventListener('click', () => {
       const tr = btn.closest('tr');
       const disputeId = tr?.dataset.disputeId;
       if (disputeId) void openChatTranscriptFromDispute(disputeId);
-    };
+    });
   });
 
   tb.querySelectorAll('tr[data-dispute-id] .btn-disp').forEach((btn) => {
-    btn.onclick = () => {
+    btn.addEventListener('click', () => {
       const tr = btn.closest('tr');
       const disputeId = tr?.dataset.disputeId;
       const action = btn.getAttribute('data-a');
       openDisputeModal(disputeId, action);
-    };
+    });
   });
 }
 
@@ -624,15 +624,15 @@ async function loadInstances() {
     })
     .join('');
   tb.querySelectorAll('button[data-regen]').forEach((btn) => {
-    btn.onclick = async () => {
+    btn.addEventListener('click', async () => {
       if (!canManageEvaluationTemplates) return;
       await CONFIG.post('/admin/evaluations/instances/' + btn.getAttribute('data-regen') + '/regenerate-token', {});
       loadInstances();
-    };
+    });
   });
 
   tb.querySelectorAll('.btn-notify-invite').forEach((btn) => {
-    btn.onclick = () => {
+    btn.addEventListener('click', () => {
       if (!canManageEvaluationTemplates) return;
       const rawEm = btn.getAttribute('data-em') || '';
       let em = '';
@@ -647,7 +647,7 @@ async function loadInstances() {
         osLabel: btn.getAttribute('data-os') || '',
         templateName: btn.getAttribute('data-tpl') || '',
       });
-    };
+    });
   });
 }
 
@@ -744,7 +744,7 @@ async function loadTemplatesTable() {
     )
     .join('');
   tb.querySelectorAll('.btn-edit-tpl').forEach((btn) => {
-    btn.onclick = () => openTemplateModal(btn.getAttribute('data-id'));
+    btn.addEventListener('click', () => openTemplateModal(btn.getAttribute('data-id')));
   });
 }
 

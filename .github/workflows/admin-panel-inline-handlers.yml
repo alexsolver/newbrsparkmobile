@@ -1,0 +1,29 @@
+name: Admin panel — sem handlers DOM inline
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'admin-panel/**/*.html'
+      - 'admin-panel/js/**/*.js'
+      - 'admin-panel/backend/**/*.js'
+      - 'admin-panel/scripts/check-no-inline-dom-handlers.sh'
+      - '.github/workflows/admin-panel-inline-handlers.yml'
+  push:
+    branches: [main, master, develop]
+    paths:
+      - 'admin-panel/**/*.html'
+      - 'admin-panel/js/**/*.js'
+      - 'admin-panel/backend/**/*.js'
+      - 'admin-panel/scripts/check-no-inline-dom-handlers.sh'
+      - '.github/workflows/admin-panel-inline-handlers.yml'
+
+jobs:
+  check:
+    name: Verificar admin-panel (CSP / DOM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Executar check-no-inline-dom-handlers.sh
+        run: bash admin-panel/scripts/check-no-inline-dom-handlers.sh

@@ -3,6 +3,7 @@
 const { syncUserToCompreface } = require('./comprefaceSync');
 const { persistComprefaceRecognitionSync } = require('./comprefaceRecognitionPersist');
 const { auditActor } = require('./auditActor');
+const { removeComprefaceGalleryForUser } = require('./comprefaceRemoveUserGallery');
 
 /**
  * Envia avatar + fotos de matrícula ao FaceMatch e persiste `comprefaceRecognitionSync`.
@@ -60,4 +61,4 @@ async function syncComprefaceGalleryAfterUserChange(prisma, userId, req, trigger
   return { comprefaceSync, comprefaceRecognitionSync: rowCf?.comprefaceRecognitionSync, syncResult };
 }
 
-module.exports = { syncComprefaceGalleryAfterUserChange };
+module.exports = { syncComprefaceGalleryAfterUserChange, removeComprefaceGalleryForUser };

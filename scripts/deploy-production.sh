@@ -45,6 +45,7 @@ RSYNC_COMMON=(
   -avz --delete
   --exclude '.env' --exclude '.env.*' --exclude 'node_modules' --exclude '.git'
   --exclude '.DS_Store' --exclude '*.log' --exclude 'backups/**'
+  --exclude 'backend/backups/**'
   --exclude 'backend/public/uploads/**'
 )
 

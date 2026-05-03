@@ -1875,7 +1875,7 @@ export default function ProfileScreen() {
             <View style={[styles.listIconBox, { backgroundColor: '#F1F5F9' }]}>
               <Ionicons name="key-outline" size={18} color="#475569" />
             </View>
-            <Text style={styles.listItemText}>Alterar Senha</Text>
+            <Text style={styles.listItemText}>{t('profile.changePassword')}</Text>
             <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
           </TouchableOpacity>
 
@@ -1887,8 +1887,10 @@ export default function ProfileScreen() {
               <Ionicons name="shield-checkmark-outline" size={18} color={C.accent} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.listItemText}>Verificação em 2 etapas</Text>
-              <Text style={styles.listItemSub}>{twoFaEnabled ? 'Ativado · Código enviado por e-mail' : 'Desativado'}</Text>
+              <Text style={styles.listItemText}>{t('profile.twoStepVerification')}</Text>
+              <Text style={styles.listItemSub}>
+                {twoFaEnabled ? t('profile.twoStepOnSub') : t('profile.twoStepOffSub')}
+              </Text>
             </View>
             <Switch
               value={twoFaEnabled}
@@ -2012,10 +2014,10 @@ export default function ProfileScreen() {
               <Text style={styles.listItemText}>{t('profile.forceSync')}</Text>
               <Text style={styles.listItemSub}>
                 {queueCount} {t('profile.pendingActions')}
-                {syncConflictCount > 0 ? ` · ${syncConflictCount} conflito(s)` : ''}
+                {syncConflictCount > 0 ? t('profile.forceSyncConflictSuffix', { count: syncConflictCount }) : ''}
               </Text>
             </View>
-            {syncing ? <Text style={{ fontSize: 12, color: '#A1A1AA' }}>Sincronizando...</Text> : <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />}
+            {syncing ? <Text style={{ fontSize: 12, color: '#A1A1AA' }}>{t('profile.syncing')}</Text> : <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />}
           </TouchableOpacity>
 
           <View style={styles.listSeparator} />
@@ -2036,14 +2038,14 @@ export default function ProfileScreen() {
               <Ionicons name="warning-outline" size={18} color="#B45309" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.listItemText}>Conflitos de sincronização</Text>
+              <Text style={styles.listItemText}>{t('profile.syncConflictsCardTitle')}</Text>
               <Text style={styles.listItemSub}>
                 {syncConflictCount > 0
-                  ? `Existem ${syncConflictCount} item(ns) em quarentena por conflito de revisão.`
-                  : 'Nenhum conflito no momento. Você pode abrir os detalhes para monitorar.'}
+                  ? t('profile.syncConflictsSubSome', { count: syncConflictCount })
+                  : t('profile.syncConflictsSubNone')}
               </Text>
               <TouchableOpacity onPress={() => router.push('/profile/sync-conflicts' as any)} style={{ marginTop: 6, alignSelf: 'flex-start' }}>
-                <Text style={{ color: '#B45309', fontSize: 12, fontWeight: '800' }}>Ver detalhes</Text>
+                <Text style={{ color: '#B45309', fontSize: 12, fontWeight: '800' }}>{t('profile.syncConflictsViewDetails')}</Text>
               </TouchableOpacity>
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
                 <TouchableOpacity
@@ -2058,7 +2060,7 @@ export default function ProfileScreen() {
                   }}
                 >
                   <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>
-                    {syncConflictsBusy ? 'Processando...' : 'Reenfileirar'}
+                    {syncConflictsBusy ? t('profile.syncConflictsProcessing') : t('profile.syncConflictsRequeue')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -2072,9 +2074,7 @@ export default function ProfileScreen() {
                     opacity: syncConflictsBusy || syncConflictCount === 0 ? 0.5 : 1,
                   }}
                 >
-                  <Text style={{ color: '#B91C1C', fontWeight: '800', fontSize: 12 }}>
-                    Limpar conflitos
-                  </Text>
+                  <Text style={{ color: '#B91C1C', fontWeight: '800', fontSize: 12 }}>{t('profile.syncConflictsClear')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2101,7 +2101,7 @@ export default function ProfileScreen() {
             <View style={[styles.listIconBox, { backgroundColor: '#FEF2F2' }]}>
               <Ionicons name="refresh-circle" size={18} color="#B91C1D" />
             </View>
-            <Text style={[styles.listItemText, { color: '#B91C1D' }]}>Limpar Cache & Reset</Text>
+            <Text style={[styles.listItemText, { color: '#B91C1D' }]}>{t('profile.clearCacheReset')}</Text>
             <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
           </TouchableOpacity>
         </View>
@@ -2129,7 +2129,7 @@ export default function ProfileScreen() {
           >
             <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 28 }}>
               <Text style={{ fontSize: 16, fontWeight: '900', color: C.primary, marginBottom: 6 }}>
-                {tfa2Action === 'enable' ? 'Confirmar ativação do 2FA' : 'Desativar 2FA'}
+                {tfa2Action === 'enable' ? t('profile.twoFaConfirmEnableTitle') : t('profile.twoFaDisableTitleShort')}
               </Text>
               <Text style={{ fontSize: 13, color: C.textSecondary, marginBottom: 16 }}>
                 {tfa2Action === 'enable'
@@ -2178,7 +2178,7 @@ export default function ProfileScreen() {
         <View style={styles.modalOverlay}>
            <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                 <Text style={styles.modalTitle}>Alterar Senha</Text>
+                 <Text style={styles.modalTitle}>{t('profile.changePassword')}</Text>
                  <TouchableOpacity onPress={() => setShowPwdModal(false)}>
                     <Ionicons name="close" size={24} color="#64748B" />
                  </TouchableOpacity>

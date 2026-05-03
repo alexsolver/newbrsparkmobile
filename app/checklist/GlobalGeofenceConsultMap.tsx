@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, LayoutAnimation } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import GlobalGeofenceMapLayers from './GlobalGeofenceMapLayers';
 import type { GlobalGeofenceMeta } from './globalGeofenceCombined';
@@ -23,6 +24,7 @@ type Props = {
 };
 
 export default function GlobalGeofenceConsultMap({ task, visible }: Props) {
+  const { t } = useTranslation();
   const gf = task?.metadata?.globalGeofence;
   const [expanded, setExpanded] = useState(true);
   const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null);
@@ -34,7 +36,7 @@ export default function GlobalGeofenceConsultMap({ task, visible }: Props) {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setStatusMsg('GPS negado — ative permissões para ver a sua posição no mapa.');
+        setStatusMsg(t('appAlerts.liveRoute.globalFenceConsultGpsDenied'));
         return;
       }
       const tick = async () => {
@@ -46,7 +48,7 @@ export default function GlobalGeofenceConsultMap({ task, visible }: Props) {
           const r = evaluateCombinedGlobalFence(lat, lng, gf);
           setStatusMsg(r.statusMsg);
         } catch {
-          setStatusMsg('Localização indisponível.');
+          setStatusMsg(t('appAlerts.liveRoute.globalFenceConsultLocUnavailable'));
         }
       };
       await tick();
@@ -55,7 +57,7 @@ export default function GlobalGeofenceConsultMap({ task, visible }: Props) {
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [visible, gf, task?.id]);
+  }, [visible, gf, task?.id, t]);
 
   if (!visible || !gf) return null;
 
@@ -72,10 +74,10 @@ export default function GlobalGeofenceConsultMap({ task, visible }: Props) {
           }
           setExpanded((e) => !e);
         }}
-        accessibilityLabel="Expandir ou recolher mapa da cerca global"
+        accessibilityLabel={t('appAlerts.liveRoute.globalFenceConsultExpandA11y')}
       >
         <Ionicons name="map" size={18} color="#0f766e" />
-        <Text style={styles.headerTitle}>Cerca global — consulta no mapa</Text>
+        <Text style={styles.headerTitle}>{t('appAlerts.liveRoute.globalFenceConsultTitle')}</Text>
         <Text style={styles.chevron}>{expanded ? '▼' : '▶'}</Text>
       </TouchableOpacity>
       {expanded && (
@@ -94,9 +96,17 @@ export default function GlobalGeofenceConsultMap({ task, visible }: Props) {
             showsUserLocation={false}
             showsMyLocationButton={false}
           >
-            <GlobalGeofenceMapLayers gf={gf} destMarkerTitle={task.title || 'Destino da OS'} />
+            <GlobalGeofenceMapLayers
+              gf={gf}
+              destMarkerTitle={
+                String(task.title || '').trim() || t('appAlerts.checklist.transitMapWoDestinationFallback')
+              }
+            />
             {myPos ? (
-              <Marker coordinate={{ latitude: myPos.lat, longitude: myPos.lng }} title="Você">
+              <Marker
+                coordinate={{ latitude: myPos.lat, longitude: myPos.lng }}
+                title={t('appAlerts.liveRoute.mapMarkerYou')}
+              >
                 <View style={styles.userDot} />
               </Marker>
             ) : null}

@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import * as Network from 'expo-network';
+import { useTranslation } from 'react-i18next';
 import { apiFetch, handleUnauthorizedMaybeSessionInvalidated } from '../services/auth';
 
 export type MatrixColumn = { id: string; label: string; cellType: 'text' | 'number' | 'yes_no' };
@@ -239,6 +240,7 @@ function parseMatrixRows(raw: unknown): Record<string, string | boolean>[] {
 
 /** Matriz com linhas adicionáveis. */
 export function ChecklistRepeatableMatrixField({ field, value, onChange, readOnly }: RepeatableMatrixProps) {
+  const { t } = useTranslation();
   const cols = useMemo(() => {
     const mc = field?.matrixColumns;
     if (!Array.isArray(mc) || !mc.length) {
@@ -346,7 +348,9 @@ export function ChecklistRepeatableMatrixField({ field, value, onChange, readOnl
                           borderColor: on ? '#22c55e' : '#e2e8f0',
                         }}
                       >
-                        <Text style={{ fontSize: 12, fontWeight: '800', color: on ? '#166534' : '#64748b' }}>{on ? 'Sim' : 'Não'}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: '800', color: on ? '#166534' : '#64748b' }}>
+                          {on ? t('common.yes') : t('common.no')}
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   );
@@ -420,13 +424,16 @@ export function ChecklistRepeatableMatrixField({ field, value, onChange, readOnl
             borderColor: '#bfdbfe',
           }}
         >
-          <Text style={{ fontWeight: '800', color: maxR != null && rows.length >= maxR ? '#94a3b8' : '#1d4ed8' }}>+ Adicionar linha</Text>
+          <Text style={{ fontWeight: '800', color: maxR != null && rows.length >= maxR ? '#94a3b8' : '#1d4ed8' }}>
+            + {t('technicianFinance.addLine')}
+          </Text>
         </TouchableOpacity>
       ) : null}
       {minR > 0 ? (
         <Text style={{ marginTop: 6, fontSize: 11, color: '#64748b' }}>
-          Mínimo de {minR} linha(s)
-          {maxR != null ? ` · máximo ${maxR}` : ''}
+          {maxR != null
+            ? t('technicianFinance.matrixRowsHintMinMax', { min: minR, max: maxR })
+            : t('technicianFinance.matrixRowsHintMin', { min: minR })}
         </Text>
       ) : null}
     </View>

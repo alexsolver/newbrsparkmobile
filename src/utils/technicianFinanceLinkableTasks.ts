@@ -20,6 +20,13 @@ export type LinkableExpenseTask = {
   linkKind: LinkableOsLinkKind;
 };
 
+/** Opções opcionais ao montar a lista (ex.: localizar títulos padrão do servidor). */
+export type LoadLinkableExpenseTasksOptions = {
+  translateTaskTitle?: (title: string) => string;
+  /** BCP 47 / locale para ordenação, ex. `en-US`. */
+  sortLocale?: string;
+};
+
 export function isPendingOrInAttendance(status: string): boolean {
   return status === 'PENDING' || status === 'IN_PROGRESS' || status === 'PAUSED';
 }
@@ -136,7 +143,9 @@ export async function buildProviderTaskStatusSets(): Promise<{
  * OS com campo de despesas do técnico no formulário: em aberto no celular **ou** concluídas há no máximo 30 dias
  * (conforme estado efectivo e datas no payload sincronizado).
  */
-export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableExpenseTask[]> {
+export async function loadLinkableTasksForTechnicianExpense(
+  opts?: LoadLinkableExpenseTasksOptions
+): Promise<LinkableExpenseTask[]> {
   let tasks: any[] = [];
   try {
     tasks = await loadFtCloudTasks();
@@ -199,7 +208,8 @@ export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableE
       osNumber: t.osNumber ?? t.os_number,
       id: String(t.id),
     });
-    const title = String(t.title || '').trim() || 'Sem título';
+    const titleBase = String(t.title || '').trim() || 'Sem título';
+    const title = opts?.translateTaskTitle ? opts.translateTaskTitle(titleBase) : titleBase;
     out.push({
       id: String(t.id),
       refId: rid,
@@ -209,7 +219,15 @@ export async function loadLinkableTasksForTechnicianExpense(): Promise<LinkableE
   }
   out.sort((a, b) => {
     if (a.linkKind !== b.linkKind) return a.linkKind === 'open' ? -1 : 1;
-    return a.displayLine.localeCompare(b.displayLine, 'pt-BR');
+    const loc = opts?.sortLocale;
+    if (loc && typeof loc === 'string' && loc.trim() !== '') {
+      try {
+        return a.displayLine.localeCompare(b.displayLine, loc.replace('_', '-'));
+      } catch {
+        /* fall through */
+      }
+    }
+    return a.displayLine.localeCompare(b.displayLine);
   });
   return out;
 }

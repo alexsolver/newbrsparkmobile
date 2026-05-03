@@ -22,34 +22,47 @@ import {
 import { ApiService } from '../../src/services/api';
 import { useTranslation } from 'react-i18next';
 
-function reasonLabel(reason: string): string {
-  const r = String(reason || '').toLowerCase();
-  if (r.includes('preflight_revision_mismatch')) return 'Revisão local diferente da revisão esperada no servidor';
-  if (r.includes('server_revision_mismatch')) return 'Servidor recusou envio por conflito de revisão';
-  if (r.includes('media_upload_stuck')) return 'Mídia local não enviada após múltiplas tentativas de sincronização';
-  return reason || 'Conflito de sincronização';
-}
-
 function isRevisionConflictReason(reason: string): boolean {
   const r = String(reason || '').toLowerCase();
   return r.includes('preflight_revision_mismatch') || r.includes('server_revision_mismatch');
 }
 
-function fmtWhen(ts: number): string {
-  try {
-    return new Date(ts).toLocaleString('pt-BR');
-  } catch {
-    return String(ts);
-  }
-}
-
 export default function SyncConflictsScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [rows, setRows] = useState<ChecklistOutboxConflict[]>([]);
+
+  const reasonLabel = useCallback(
+    (reason: string) => {
+      const r = String(reason || '').toLowerCase();
+      if (r.includes('preflight_revision_mismatch')) {
+        return t('appAlerts.syncConflict.reasonPreflightRevisionMismatch');
+      }
+      if (r.includes('server_revision_mismatch')) {
+        return t('appAlerts.syncConflict.reasonServerRevisionMismatch');
+      }
+      if (r.includes('media_upload_stuck')) {
+        return t('appAlerts.syncConflict.reasonMediaUploadStuck');
+      }
+      return String(reason || '').trim() || t('appAlerts.syncConflict.reasonGeneric');
+    },
+    [t],
+  );
+
+  const fmtWhen = useCallback(
+    (ts: number) => {
+      try {
+        const loc = String(i18n.language || 'en-US').replace('_', '-');
+        return new Date(ts).toLocaleString(loc);
+      } catch {
+        return String(ts);
+      }
+    },
+    [i18n.language],
+  );
 
   const load = useCallback(async (soft = false) => {
     if (soft) setRefreshing(true);
@@ -73,7 +86,7 @@ export default function SyncConflictsScreen() {
   const groupedByTask = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of rows) {
-      const key = r.taskId || 'sem-os';
+      const key = r.taskId || '__none__';
       map.set(key, (map.get(key) || 0) + 1);
     }
     return map.size;
@@ -165,7 +178,7 @@ export default function SyncConflictsScreen() {
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color="#1e293b" />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Conflitos de Sync</Text>
+        <Text style={s.headerTitle}>{t('appAlerts.syncConflict.screenTitle')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -179,22 +192,26 @@ export default function SyncConflictsScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
         >
           <View style={s.summaryCard}>
-            <Text style={s.summaryTitle}>Itens em conflito</Text>
-            <Text style={s.summaryLine}>{total} conflito(s) em {groupedByTask} OS(s).</Text>
+            <Text style={s.summaryTitle}>{t('appAlerts.syncConflict.summaryTitle')}</Text>
+            <Text style={s.summaryLine}>
+              {t('appAlerts.syncConflict.summaryLine', { total, tasks: groupedByTask })}
+            </Text>
             <View style={s.summaryActions}>
               <TouchableOpacity
                 style={[s.btnPrimary, bulkBusy || total === 0 ? s.btnDisabled : null]}
                 disabled={bulkBusy || total === 0}
                 onPress={() => void requeueAll()}
               >
-                <Text style={s.btnPrimaryText}>{bulkBusy ? 'Processando...' : 'Reenfileirar todos'}</Text>
+                <Text style={s.btnPrimaryText}>
+                  {bulkBusy ? t('appAlerts.syncConflict.processing') : t('appAlerts.syncConflict.requeueAllToolbar')}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[s.btnGhost, bulkBusy || total === 0 ? s.btnDisabled : null]}
                 disabled={bulkBusy || total === 0}
                 onPress={() => void clearAll()}
               >
-                <Text style={s.btnGhostText}>Limpar tudo</Text>
+                <Text style={s.btnGhostText}>{t('appAlerts.syncConflict.clearAllToolbar')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -202,11 +219,8 @@ export default function SyncConflictsScreen() {
           {rows.length === 0 ? (
             <View style={s.empty}>
               <Ionicons name="checkmark-done-circle-outline" size={24} color="#16A34A" />
-              <Text style={s.emptyTitle}>Nenhum conflito pendente</Text>
-              <Text style={s.emptyBody}>
-                Conflitos de revisão e envios bloqueados por mídia local (após várias tentativas) aparecem aqui. Use
-                «Reenfileirar» com rede estável ou após corrigir o arquivo.
-              </Text>
+              <Text style={s.emptyTitle}>{t('appAlerts.syncConflict.emptyTitle')}</Text>
+              <Text style={s.emptyBody}>{t('appAlerts.syncConflict.emptyBody')}</Text>
             </View>
           ) : (
             rows.map((row) => {
@@ -215,14 +229,20 @@ export default function SyncConflictsScreen() {
               return (
                 <View key={row.id} style={s.itemCard}>
                   <View style={s.itemTop}>
-                    <Text style={s.itemTask}>OS: {displayTaskId || 'sem taskId'}</Text>
+                    <Text style={s.itemTask}>
+                      {t('appAlerts.syncConflict.woPrefix')}{' '}
+                      {displayTaskId || t('appAlerts.syncConflict.noTaskId')}
+                    </Text>
                     <Text style={s.itemWhen}>{fmtWhen(row.at)}</Text>
                   </View>
                   <Text style={s.itemReason}>{reasonLabel(row.reason)}</Text>
                   {isRevisionConflictReason(row.reason) ? (
                     <Text style={s.itemMeta}>
-                      Revisão local: {row.submissionRevision ?? '-'} · servidor: {row.serverLastSubmittedRevision ?? '-'} · próximo esperado:{' '}
-                      {row.serverExpectedNext ?? '-'}
+                      {t('appAlerts.syncConflict.revisionLine', {
+                        local: row.submissionRevision ?? '-',
+                        server: row.serverLastSubmittedRevision ?? '-',
+                        next: row.serverExpectedNext ?? '-',
+                      })}
                     </Text>
                   ) : null}
                   {(() => {
@@ -234,8 +254,10 @@ export default function SyncConflictsScreen() {
                     return (
                       <View style={{ marginTop: 2 }}>
                         <Text style={s.itemMeta}>
-                          Tentativas de upload: {Number.isFinite(attempts) ? Math.floor(attempts) : '-'} · arquivos locais pendentes:{' '}
-                          {Number.isFinite(pending) ? Math.floor(pending) : '-'}
+                          {t('appAlerts.syncConflict.mediaUploadLine', {
+                            attempts: Number.isFinite(attempts) ? Math.floor(attempts) : '-',
+                            pending: Number.isFinite(pending) ? Math.floor(pending) : '-',
+                          })}
                         </Text>
                         {hint ? <Text style={s.itemMeta}>{hint}</Text> : null}
                       </View>
@@ -247,14 +269,16 @@ export default function SyncConflictsScreen() {
                       disabled={disabled}
                       onPress={() => void requeueOne(row)}
                     >
-                      <Text style={s.btnMiniPrimaryText}>{busyId === row.id ? 'Processando...' : 'Reenfileirar'}</Text>
+                      <Text style={s.btnMiniPrimaryText}>
+                        {busyId === row.id ? t('appAlerts.syncConflict.processing') : t('appAlerts.syncConflict.requeue')}
+                      </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[s.btnMiniDanger, disabled ? s.btnDisabled : null]}
                       disabled={disabled}
                       onPress={() => void dropOne(row)}
                     >
-                      <Text style={s.btnMiniDangerText}>Descartar</Text>
+                      <Text style={s.btnMiniDangerText}>{t('appAlerts.syncConflict.discard')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

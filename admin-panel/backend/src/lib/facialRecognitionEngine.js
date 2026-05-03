@@ -6,17 +6,28 @@ const {
   verifyFacePairWithIntegration,
   isFaceMatchNoFaceInImageError,
   pickTopRecognitionMatch,
+  flattenRecognitionSubjectCandidates,
   parseComprefaceSubjectName,
 } = require('./comprefaceClient');
 const { loadUserFacialReferenceBuffers } = require('./userFacialEnrollmentBuffers');
 const { mapVerificationFailureToUserMessage } = require('./comprefaceVerificationUserMessages');
-const { userMayOperateUnderTenant } = require('./appLoginEffectiveTenant');
+const { resolveAppEffectiveTenantId, userMayOperateUnderTenant } = require('./appLoginEffectiveTenant');
 
 const _envSim = process.env.COMPREFACE_MIN_SIMILARITY;
 const MIN_SIMILARITY = Math.min(
   0.999,
   Math.max(0.5, _envSim != null && _envSim !== '' ? Number(_envSim) : 0.88)
 );
+
+/** Limiar só para modo `identify` (opcional). Se não definido, usa o mesmo que `COMPREFACE_MIN_SIMILARITY`. */
+function envMinSimilarityIdentify() {
+  const raw = process.env.COMPREFACE_IDENTIFY_MIN_SIMILARITY;
+  if (raw != null && raw !== '') {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return Math.min(0.999, Math.max(0.5, n));
+  }
+  return MIN_SIMILARITY;
+}
 
 /** Quantas referências 1:1 pedir em paralelo ao FaceMatch (1–4). `1` por omissão (sequencial) — menos carga no serviço e latência mais previsível no login/ponto. */
 function envVerificationRefConcurrency() {
@@ -117,52 +128,105 @@ function pickSelfVerifyBestSubjectFromRecognition(
 }
 
 /**
- * Em `identify`, percorre subjects (ordenados por similaridade).
- * `syncUserToCompreface` grava subjects como `User.tenantId:userId` (org «casa»), enquanto o JWT usa o
- * tenant operacional (dedicado). Aceita candidato se o utilizador existe, o prefixo do subject bate com
- * `User.tenantId`, e (`subjTenant === tid` OU vínculo operacional via `userMayOperateUnderTenant`).
- * @returns {Promise<{ subject: string, similarity: number } | null>}
+ * Utilizador ativo a usar em `identify` quando o subject do FaceMatch aponta para um User **inativo**
+ * (galeria antiga): mesma `appAccountId` e mesma tenant «casa» do subject, preferindo quem opera na tenant pedida.
+ * @returns {Promise<{ id: string, tenantId: string } | null>}
+ */
+async function resolveActiveUserForIdentifySubject(prisma, subjectUserId, subjectHomeTenantId, operationalTenantId) {
+  const uid = String(subjectUserId || '').trim();
+  const homeTid = String(subjectHomeTenantId || '').trim();
+  const opTid = String(operationalTenantId || '').trim();
+  if (!uid || !homeTid) return null;
+
+  const row = await prisma.user.findFirst({
+    where: { id: uid },
+    select: { id: true, tenantId: true, isActive: true, appAccountId: true },
+  });
+  if (!row) return null;
+  if (String(row.tenantId || '').trim() !== homeTid) return null;
+  if (row.isActive) {
+    return { id: row.id, tenantId: String(row.tenantId || '').trim() };
+  }
+  const acc = row.appAccountId ? String(row.appAccountId).trim() : '';
+  if (!acc) return null;
+
+  const sibs = await prisma.user.findMany({
+    where: {
+      appAccountId: acc,
+      tenantId: homeTid,
+      isActive: true,
+    },
+    select: { id: true, tenantId: true },
+    orderBy: { updatedAt: 'desc' },
+    take: 8,
+  });
+  if (!sibs.length) return null;
+  for (const s of sibs) {
+    if (opTid && (await userMayOperateUnderTenant(prisma, s.id, opTid))) {
+      return { id: s.id, tenantId: String(s.tenantId || '').trim() };
+    }
+  }
+  return { id: sibs[0].id, tenantId: String(sibs[0].tenantId || '').trim() };
+}
+
+/**
+ * Em `identify`, percorre candidatos (Recognition) de **todos** os rostos na imagem, ordenados por similaridade.
+ * `syncUserToCompreface` grava subjects como `User.tenantId:userId`. Aceita candidato se o utilizador existe,
+ * o prefixo do subject bate com `User.tenantId`, e (`subjTenant === tid` OU vínculo via `userMayOperateUnderTenant`).
+ * Subjects ligados a utilizadores **inativos** na BD são ignorados ou mapeados para filiação ativa mesma conta (mesma tenant casa).
+ * @returns {Promise<{ subject: string, similarity: number, userId: string, subjectTenant: string } | null>}
  */
 async function pickIdentifySubjectFromRecognition(recognizeJson, prisma, { tenantId, minSim }) {
-  const results = recognizeJson && Array.isArray(recognizeJson.result) ? recognizeJson.result : [];
-  if (!results.length) return null;
-  const face = results[0];
-  const subjects = face && Array.isArray(face.subjects) ? face.subjects : [];
+  const candidates = flattenRecognitionSubjectCandidates(recognizeJson);
   const tid = String(tenantId || '').trim();
   if (!tid) return null;
-  for (const sub of subjects) {
+
+  /** @type {Array<{ rawSubject: string, similarity: number, subjUserId: string, subjTenant: string }>} */
+  const parsedRows = [];
+  for (const sub of candidates) {
     if (!sub || sub.subject == null || sub.similarity == null) continue;
     const similarity = Number(sub.similarity);
     if (!Number.isFinite(similarity) || similarity < minSim) continue;
     const rawSubject = String(sub.subject || '').trim();
-    let subjTenant;
-    let subjUserId;
+    if (!rawSubject) continue;
     const parsed = parseComprefaceSubjectName(rawSubject);
     if (parsed) {
-      subjTenant = String(parsed.tenantId || '').trim();
-      subjUserId = String(parsed.userId || '').trim();
+      const subjTenant = String(parsed.tenantId || '').trim();
+      const subjUserId = String(parsed.userId || '').trim();
+      if (subjUserId && subjTenant) parsedRows.push({ rawSubject, similarity, subjUserId, subjTenant });
     } else {
-      /** Subject legado sem prefixo `tenantId:userId` — assumir que o nome do subject é o id do utilizador. */
-      if (!rawSubject) continue;
-      const rowGuess = await prisma.user.findFirst({
-        where: { id: rawSubject, isActive: true },
-        select: { id: true, tenantId: true },
-      });
-      if (!rowGuess) continue;
-      subjUserId = rowGuess.id;
-      subjTenant = String(rowGuess.tenantId || '').trim();
+      parsedRows.push({ rawSubject, similarity, subjUserId: rawSubject, subjTenant: '' });
     }
-    if (!subjUserId) continue;
+  }
+  if (!parsedRows.length) return null;
 
-    const row = await prisma.user.findFirst({
-      where: { id: subjUserId, isActive: true },
-      select: { id: true, tenantId: true },
-    });
-    if (!row) continue;
-    if (String(row.tenantId || '').trim() !== subjTenant) continue;
+  const idSet = [...new Set(parsedRows.map((p) => p.subjUserId))].filter(Boolean);
+  const users = await prisma.user.findMany({
+    where: { id: { in: idSet } },
+    select: { id: true, tenantId: true, isActive: true, appAccountId: true },
+  });
+  const byId = new Map(users.map((u) => [u.id, u]));
 
-    if (subjTenant === tid || (await userMayOperateUnderTenant(prisma, row.id, tid))) {
-      return { subject: String(sub.subject), similarity };
+  for (const p of parsedRows) {
+    if (!p.subjTenant) {
+      const u = byId.get(p.subjUserId);
+      if (!u) continue;
+      p.subjTenant = String(u.tenantId || '').trim();
+    }
+    const home = byId.get(p.subjUserId);
+    if (!home) continue;
+    if (String(home.tenantId || '').trim() !== p.subjTenant) continue;
+
+    const resolved = await resolveActiveUserForIdentifySubject(prisma, p.subjUserId, p.subjTenant, tid);
+    if (!resolved) continue;
+
+    if (p.subjTenant === tid || (await userMayOperateUnderTenant(prisma, resolved.id, tid))) {
+      return {
+        subject: p.rawSubject,
+        similarity: p.similarity,
+        userId: resolved.id,
+        subjectTenant: p.subjTenant,
+      };
     }
   }
   return null;
@@ -426,7 +490,7 @@ async function verifyFacialImageBuffer(prisma, opts) {
       8,
       Number(process.env.COMPREFACE_IDENTIFY_PREDICTION_COUNT) ||
         Number(process.env.COMPREFACE_SELF_VERIFY_PREDICTION_COUNT) ||
-        12
+        16
     )
   );
   const predictionCount =
@@ -499,11 +563,26 @@ async function verifyFacialImageBuffer(prisma, opts) {
         };
       }
     }
-  } else if (mode === 'identify' && tenantId) {
-    top = await pickIdentifySubjectFromRecognition(recog.data, prisma, {
-      tenantId,
-      minSim: MIN_SIMILARITY,
-    });
+  } else if (mode === 'identify') {
+    let tidOp = String(tenantId || '').trim();
+    if (!tidOp && sessionUserId) {
+      const eff = await resolveAppEffectiveTenantId(prisma, sessionUserId);
+      if (eff) tidOp = String(eff).trim();
+    }
+    if (!tidOp && sessionUserId) {
+      const u = await prisma.user.findUnique({
+        where: { id: sessionUserId },
+        select: { tenantId: true },
+      });
+      if (u?.tenantId) tidOp = String(u.tenantId).trim();
+    }
+    const minIdent = envMinSimilarityIdentify();
+    top = tidOp
+      ? await pickIdentifySubjectFromRecognition(recog.data, prisma, {
+          tenantId: tidOp,
+          minSim: minIdent,
+        })
+      : null;
   }
   /* Em `self_verify`, nunca usar `globalTop` quando o candidato da sessão falhou.
    * Em `identify`, também não: o top global pode ser outra pessoa / registo órfão no FaceMatch e
@@ -530,8 +609,15 @@ async function verifyFacialImageBuffer(prisma, opts) {
     };
   }
 
-  const parsed = parseComprefaceSubjectName(top.subject);
-  if (!parsed) {
+  const minGate = mode === 'identify' ? envMinSimilarityIdentify() : MIN_SIMILARITY;
+
+  let parsed = null;
+  if (mode === 'identify' && top.userId != null) {
+    parsed = { tenantId: top.subjectTenant, userId: top.userId };
+  } else {
+    parsed = parseComprefaceSubjectName(top.subject);
+  }
+  if (!parsed || !parsed.userId) {
     return {
       ok: false,
       audit: {
@@ -545,7 +631,7 @@ async function verifyFacialImageBuffer(prisma, opts) {
     };
   }
 
-  if (top.similarity < MIN_SIMILARITY) {
+  if (top.similarity < minGate) {
     return {
       ok: false,
       audit: {
@@ -554,7 +640,7 @@ async function verifyFacialImageBuffer(prisma, opts) {
         at: new Date().toISOString(),
         facialAuthMode: mode,
         confidence: top.similarity,
-        message: `Confiança abaixo do mínimo (${MIN_SIMILARITY}). ${FACIAL_GALLERY_SYNC_HINT}`,
+        message: `Confiança abaixo do mínimo (${minGate}). ${FACIAL_GALLERY_SYNC_HINT}`,
       },
     };
   }

@@ -648,14 +648,14 @@ export default function ChatRoomScreen() {
   };
 
   const headerSubtitle = isOpsChat
-    ? 'Mensagens da operação com o gestor'
+    ? t('chat.opsThreadSubtitle')
     : roomInfo
       ? roomInfo.isGroup
-        ? `${roomInfo.memberCount} membros`
+        ? t('chat.previewMembers', { count: roomInfo.memberCount })
         : chatInputLocked
           ? t('chat.headerInactive')
-          : 'Chat privado'
-      : 'Carregando...';
+          : t('chat.roomPrivateSubtitle')
+      : t('chat.roomLoadingSubtitle');
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: C.cardWhite }]}>
@@ -690,9 +690,7 @@ export default function ChatRoomScreen() {
       {isOnline === false && (
         <View style={styles.offlineBannerRoom}>
           <Ionicons name="cloud-offline-outline" size={18} color={C.status.warning.fg} />
-          <Text style={styles.offlineBannerRoomText}>
-            Sem conexão. Mostramos o histórico salvo neste aparelho; mensagens de texto ficam na fila até a internet voltar.
-          </Text>
+          <Text style={styles.offlineBannerRoomText}>{t('chat.offlineRoomBanner')}</Text>
         </View>
       )}
 
@@ -724,7 +722,11 @@ export default function ChatRoomScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="chatbubble-ellipses-outline" size={52} color={C.border} />
-              <Text style={styles.emptyText}>Sem mensagens ainda{'\n'}Seja o primeiro a escrever!</Text>
+              <Text style={styles.emptyText}>
+                {t('chat.noMessages')}
+                {'\n'}
+                {t('chat.roomEmptySecondLine')}
+              </Text>
             </View>
           }
         />
@@ -742,7 +744,7 @@ export default function ChatRoomScreen() {
               {uploading ? (
                 <>
                   <ActivityIndicator size="small" color={C.primary} />
-                  <Text style={{ marginLeft: 8, fontWeight: '700', color: C.primary }}>Enviando mídia...</Text>
+                  <Text style={{ marginLeft: 8, fontWeight: '700', color: C.primary }}>{t('chat.uploadingMedia')}</Text>
                 </>
               ) : (
                 <>

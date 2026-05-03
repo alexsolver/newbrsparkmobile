@@ -535,6 +535,17 @@
   async function resolveTenantForUi() {
     const bar = document.getElementById('wt-tenant-bar');
     const saasBox = document.getElementById('wt-saas-tenant');
+    const wtSel = document.getElementById('wt-tenant-select');
+    if (wtSel && !wtSel.dataset.wtChangeBound) {
+      wtSel.dataset.wtChangeBound = '1';
+      wtSel.addEventListener('change', () => {
+        activeTenantId = wtSel.value || null;
+        if (activeTenantId) {
+          void loadSettings();
+          void loadUsersForReport(activeTenantId);
+        }
+      });
+    }
     if (canCrossTenantWorkTime && !activeTenantId) {
       bar.style.display = 'flex';
       saasBox.style.display = 'block';
@@ -544,13 +555,6 @@
       (res?.data || []).forEach((t) => {
         sel.innerHTML += `<option value="${escHtml(String(t.id))}">${escHtml(String(t.name || ''))} — ${escHtml(String(t.email || ''))}</option>`;
       });
-      sel.onchange = () => {
-        activeTenantId = sel.value || null;
-        if (activeTenantId) {
-          void loadSettings();
-          void loadUsersForReport(activeTenantId);
-        }
-      };
       return null;
     }
     bar.style.display = 'none';
@@ -562,13 +566,6 @@
       (res?.data || []).forEach((t) => {
         sel.innerHTML += `<option value="${escHtml(String(t.id))}" ${t.id === activeTenantId ? 'selected' : ''}>${escHtml(String(t.name || ''))} — ${escHtml(String(t.email || ''))}</option>`;
       });
-      sel.onchange = () => {
-        activeTenantId = sel.value || null;
-        if (activeTenantId) {
-          void loadSettings();
-          void loadUsersForReport(activeTenantId);
-        }
-      };
     } else {
       saasBox.style.display = 'none';
     }
@@ -618,7 +615,7 @@
     void loadPunches(1);
   }
 
-  document.getElementById('wt-btn-save').onclick = async () => {
+  document.getElementById('wt-btn-save').addEventListener('click', async () => {
     if (!canEditWorkTime) return;
     const tid = canCrossTenantWorkTime ? activeTenantId || document.getElementById('wt-tenant-select')?.value : activeTenantId;
     const mod = document.getElementById('wt-module-enabled');
@@ -654,12 +651,12 @@
     } finally {
       setWtSaveLoading(false);
     }
-  };
+  });
 
-  document.getElementById('wt-report-load').onclick = () => void loadPunches(1);
-  document.getElementById('wt-report-csv').onclick = () => void exportPunchesCsv();
-  document.getElementById('wt-report-prev').onclick = () => void loadPunches(reportPage - 1);
-  document.getElementById('wt-report-next').onclick = () => void loadPunches(reportPage + 1);
+  document.getElementById('wt-report-load').addEventListener('click', () => void loadPunches(1));
+  document.getElementById('wt-report-csv').addEventListener('click', () => void exportPunchesCsv());
+  document.getElementById('wt-report-prev').addEventListener('click', () => void loadPunches(reportPage - 1));
+  document.getElementById('wt-report-next').addEventListener('click', () => void loadPunches(reportPage + 1));
   applySharedPoolUi(false);
 
   const tid = await resolveTenantForUi();

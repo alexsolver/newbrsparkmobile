@@ -35,12 +35,12 @@ import { countRoutineTasksInLocalRtCacheForTemplate } from '../lib/routineTaskQu
 import { userHasCapability } from '../services/auth';
 
 const ADMIN_MENU_ITEMS = [
-  { id: 'qr', label: 'Ler QR', icon: 'qr-code-outline', color: '#14B8A6', route: '/scanner' },
-  { id: 'asset', label: 'Ativo', icon: 'business-outline', color: '#006B5C', route: '/asset/new' },
-  { id: 'expense', label: 'Financeiro', icon: 'wallet-outline', color: '#EF4444', route: '/costs/new' },
-  { id: 'stock', label: 'Estoque', icon: 'cube-outline', color: '#F59E0B', route: '/stock/new' },
-  { id: 'media', label: 'Mídia', icon: 'camera-outline', color: '#8B5CF6', route: '/media/new' },
-  { id: 'docs', label: 'Arquivos', icon: 'folder-open-outline', color: '#3B82F6', route: '/documents/new' },
+  { id: 'qr', labelKey: 'radialMenu.adminScanQr', icon: 'qr-code-outline', color: '#14B8A6', route: '/scanner' },
+  { id: 'asset', labelKey: 'radialMenu.adminAsset', icon: 'business-outline', color: '#006B5C', route: '/asset/new' },
+  { id: 'expense', labelKey: 'radialMenu.adminFinance', icon: 'wallet-outline', color: '#EF4444', route: '/costs/new' },
+  { id: 'stock', labelKey: 'radialMenu.adminStock', icon: 'cube-outline', color: '#F59E0B', route: '/stock/new' },
+  { id: 'media', labelKey: 'radialMenu.adminMedia', icon: 'camera-outline', color: '#8B5CF6', route: '/media/new' },
+  { id: 'docs', labelKey: 'radialMenu.adminFiles', icon: 'folder-open-outline', color: '#3B82F6', route: '/documents/new' },
 ];
 
 /** Métricas da barra inferior — alinhar a `src/navigation/MainTabsLayout.tsx` (cliente/prestador). */
@@ -105,6 +105,7 @@ function AdminRadialFan({
   tabBarSlot,
   triggerColor,
   triggerLabel,
+  t,
 }: {
   isOpen: boolean;
   closeMenu: () => void;
@@ -117,6 +118,7 @@ function AdminRadialFan({
   /** Cor do ícone e do rótulo do gatilho (ex.: ativo escuro / inativo cinza) */
   triggerColor: string;
   triggerLabel: string;
+  t: (key: string) => string;
 }) {
   const anim = useRef(new Animated.Value(0)).current;
 
@@ -218,7 +220,7 @@ function AdminRadialFan({
                       >
                         <Ionicons name={item.icon as any} size={22} color="#fff" />
                       </TouchableOpacity>
-                      <Text style={radialStyles.menuItemLabel}>{item.label}</Text>
+                      <Text style={radialStyles.menuItemLabel}>{t(item.labelKey)}</Text>
                     </Animated.View>
                   );
                 })}
@@ -503,6 +505,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
           tabBarSlot={tabBarSlot}
           triggerColor={isOpen ? C.slate : C.textSecondary}
           triggerLabel={t('tabs.moreActions')}
+          t={t}
         />
       </View>
     );
@@ -524,6 +527,7 @@ export function FloatingRadialMenu({ tabBarSlot = false }: { tabBarSlot?: boolea
         tabBarSlot={tabBarSlot}
         triggerColor={isOpen ? C.slate : C.textSecondary}
         triggerLabel={t('tabs.moreActions')}
+        t={t}
       />
     </View>
   );

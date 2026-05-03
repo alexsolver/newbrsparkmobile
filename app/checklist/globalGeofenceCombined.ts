@@ -3,6 +3,8 @@
  * Partilhado entre GeofenceMapScreen, mapa consultivo e GeofenceStatusBar.
  */
 
+import i18n from 'i18next';
+
 export type GlobalGeofenceGeometry = {
   zoneType: string;
   locationLat?: number | null;
@@ -121,7 +123,9 @@ function evaluateGeometryInside(
     const inside = pointInPolygon(lat, lng, poly);
     return {
       inside,
-      detail: inside ? 'dentro do polígono de serviço' : 'fora do polígono de serviço',
+      detail: inside
+        ? i18n.t('appAlerts.globalFence.geomPolygonIn')
+        : i18n.t('appAlerts.globalFence.geomPolygonOut'),
       dist: null,
     };
   }
@@ -132,7 +136,9 @@ function evaluateGeometryInside(
     const inside = d <= thr;
     return {
       inside,
-      detail: inside ? `a ${d} m do trajeto (limite ${thr} m)` : `~${d} m do trajeto (limite ${thr} m)`,
+      detail: inside
+        ? i18n.t('appAlerts.globalFence.geomRouteIn', { dist: d, thr })
+        : i18n.t('appAlerts.globalFence.geomRouteOut', { dist: d, thr }),
       dist: d,
     };
   }
@@ -143,11 +149,13 @@ function evaluateGeometryInside(
     const dist = Math.min(distA, distB);
     const thr = rGeom > 0 ? rGeom : 150;
     const inside = dist <= thr;
+    const endLabel =
+      distA < distB ? i18n.t('appAlerts.globalFence.geomSegInEndA') : i18n.t('appAlerts.globalFence.geomSegInEndB');
     return {
       inside,
       detail: inside
-        ? `a ${dist} m da extremidade ${distA < distB ? 'A' : 'B'} (limite ${thr} m)`
-        : `a ${dist} m da extremidade mais próxima (limite ${thr} m)`,
+        ? i18n.t('appAlerts.globalFence.geomSegIn', { dist, thr, end: endLabel })
+        : i18n.t('appAlerts.globalFence.geomSegOut', { dist, thr }),
       dist,
     };
   }
@@ -156,18 +164,20 @@ function evaluateGeometryInside(
     const dLat = Number(geom.locationLat);
     const dLng = Number(geom.locationLng);
     if (!Number.isFinite(dLat) || !Number.isFinite(dLng)) {
-      return { inside: false, detail: 'geometria raio sem coordenadas', dist: null };
+      return { inside: false, detail: i18n.t('appAlerts.globalFence.geomRadiusNoCoords'), dist: null };
     }
     const d = Math.round(haversine(lat, lng, dLat, dLng));
     const inside = d <= rGeom;
     return {
       inside,
-      detail: inside ? `a ${d} m do ponto da geometria (raio ${rGeom} m)` : `a ${d} m do ponto da geometria`,
+      detail: inside
+        ? i18n.t('appAlerts.globalFence.geomRadiusIn', { dist: d, r: rGeom })
+        : i18n.t('appAlerts.globalFence.geomRadiusOut', { dist: d }),
       dist: d,
     };
   }
 
-  return { inside: false, detail: 'geometria não reconhecida', dist: null };
+  return { inside: false, detail: i18n.t('appAlerts.globalFence.geomUnknown'), dist: null };
 }
 
 export function evaluateCombinedGlobalFence(
@@ -206,17 +216,19 @@ export function evaluateCombinedGlobalFence(
   let statusMsg = '';
   if (inside) {
     const parts: string[] = [];
-    if (insideDest) parts.push(`destino (${distanceDest} m ≤ ${rDest} m)`);
-    if (insideGeom) parts.push(`geometria: ${geomDetail}`);
-    statusMsg = `DENTRO: ${parts.join(' · ')}`;
+    if (insideDest && distanceDest != null)
+      parts.push(i18n.t('appAlerts.globalFence.insidePartDest', { dist: distanceDest, radius: rDest }));
+    if (insideGeom) parts.push(i18n.t('appAlerts.globalFence.insidePartGeom', { detail: geomDetail }));
+    statusMsg = i18n.t('appAlerts.globalFence.statusInside', { summary: parts.join(' · ') });
   } else {
     const parts: string[] = [];
-    if (dest) parts.push(`destino: ${distanceDest} m (raio ${rDest} m)`);
-    if (gf.geometry) parts.push(`geometria: ${geomDetail}`);
+    if (dest && distanceDest != null)
+      parts.push(i18n.t('appAlerts.globalFence.outsidePartDest', { dist: distanceDest, radius: rDest }));
+    if (gf.geometry) parts.push(i18n.t('appAlerts.globalFence.outsidePartGeom', { detail: geomDetail }));
     statusMsg =
       parts.length > 0
-        ? `FORA: não atende destino nem geometria (${parts.join(' | ')})`
-        : 'FORA: zona indisponível';
+        ? i18n.t('appAlerts.globalFence.statusOutsideDetails', { details: parts.join(' | ') })
+        : i18n.t('appAlerts.globalFence.statusOutsideUnavailable');
   }
 
   return { inside, insideDest, insideGeom, statusMsg, distanceDest, distanceGeom };

@@ -6,6 +6,7 @@ import React from 'react';
 import { Circle, Marker, Polygon, Polyline } from 'react-native-maps';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../src/theme/ThemeContext';
 import type { GlobalGeofenceMeta } from './globalGeofenceCombined';
 import { parsePolygonRaw } from './globalGeofenceCombined';
@@ -16,8 +17,10 @@ type Props = {
   destMarkerTitle?: string;
 };
 
-export default function GlobalGeofenceMapLayers({ gf, destMarkerTitle = 'Destino da OS' }: Props) {
+export default function GlobalGeofenceMapLayers({ gf, destMarkerTitle }: Props) {
+  const { t } = useTranslation();
   const { colors: C } = useTheme();
+  const resolvedDestTitle = destMarkerTitle ?? t('appAlerts.checklist.transitMapWoDestinationFallback');
   const { destination, destinationRadiusM, geometry } = gf;
   const poly = geometry ? parsePolygonRaw(geometry.locationPolygon) : [];
   const zt = String(geometry?.zoneType || '').toLowerCase();
@@ -39,8 +42,8 @@ export default function GlobalGeofenceMapLayers({ gf, destMarkerTitle = 'Destino
           />
           <Marker
             coordinate={{ latitude: destination.lat, longitude: destination.lng }}
-            title={destMarkerTitle}
-            description={`Raio ${destinationRadiusM} m`}
+            title={resolvedDestTitle}
+            description={t('appAlerts.checklist.transitMapRadiusMeters', { meters: destinationRadiusM })}
             pinColor="#059669"
           />
         </>
@@ -63,7 +66,11 @@ export default function GlobalGeofenceMapLayers({ gf, destMarkerTitle = 'Destino
             strokeWidth={3}
             lineDashPattern={[8, 4]}
           />
-          <Marker coordinate={{ latitude: poly[0][0], longitude: poly[0][1] }} title="Início (rota)" pinColor="#16a34a" />
+          <Marker
+            coordinate={{ latitude: poly[0][0], longitude: poly[0][1] }}
+            title={t('appAlerts.checklist.transitMapRouteStartMarker')}
+            pinColor="#16a34a"
+          />
           <Marker coordinate={{ latitude: poly[poly.length - 1][0], longitude: poly[poly.length - 1][1] }}>
             <View
               style={{

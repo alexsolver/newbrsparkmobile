@@ -121,7 +121,9 @@ export function ChecklistMaterialsReceiptField({ value, onChange, readOnly, user
 
   const stockMatchHint = (l: MaterialsReceiptLineV2): string | null => {
     const id = resolveReceiptLineToStockItemId(l, stockItems);
-    return id ? null : 'Sem correspondência no seu estoque pelo SKU, cadastre em Meu estoque ou ajuste a integração.';
+    return id
+      ? null
+      : 'Sem correspondência no seu estoque pelo SKU; peça à central o vínculo (meta na integração) ou alinhe o SKU ao cadastro existente.';
   };
 
   if (loading) {

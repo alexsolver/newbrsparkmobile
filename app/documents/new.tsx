@@ -31,7 +31,7 @@ export default function NewDocumentScreen() {
     });
     if (!result.canceled && result.assets[0]) {
       setDocUri(result.assets[0].uri);
-      setDocName(result.assets[0].name || 'Documento Selecionado');
+      setDocName(result.assets[0].name || t('appAlerts.documents.selectedDocFallback'));
     }
   };
 
@@ -67,11 +67,11 @@ export default function NewDocumentScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Header title="Adicionar Arquivo" leftIcon="close" onLeftPress={() => router.back()} />
+        <Header title={t('appAlerts.documents.addFileTitle')} leftIcon="close" onLeftPress={() => router.back()} />
         <View style={styles.centerBox}>
           <TouchableOpacity style={styles.actionBtn} onPress={pickDocument}>
             <Ionicons name="document-text" size={48} color="#fff" />
-            <Text style={styles.actionT}>Procurar no Celular</Text>
+            <Text style={styles.actionT}>{t('appAlerts.documents.browseDevice')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -81,23 +81,23 @@ export default function NewDocumentScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <Header title="Vincular Arquivo" leftIcon="arrow-back" onLeftPress={() => setDocUri(null)} />
+      <Header title={t('appAlerts.documents.linkFileTitle')} leftIcon="arrow-back" onLeftPress={() => setDocUri(null)} />
 
       {assets.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 }}>
           <Ionicons name="cube-outline" size={64} color={C.border} />
           <Text style={{ fontSize: 18, fontWeight: '900', color: C.slate, marginTop: 24, textAlign: 'center' }}>
-            Nenhum ativo cadastrado
+            {t('appAlerts.assetGate.noAssetTitle')}
           </Text>
           <Text style={{ fontSize: 14, color: C.textSecondary, textAlign: 'center', marginTop: 12, lineHeight: 22, fontWeight: '500' }}>
-            Para organizar seus arquivos e PDFs, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.
+            {t('appAlerts.assetGate.hintDocuments')}
           </Text>
           <TouchableOpacity
             style={{ backgroundColor: C.filledButtonBg, paddingHorizontal: 28, paddingVertical: 16, borderRadius: 14, marginTop: 32 }}
             onPress={() => router.back()}
             activeOpacity={0.8}
           >
-            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>Voltar</Text>
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>{t('common.back')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -110,13 +110,13 @@ export default function NewDocumentScreen() {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Vincular a um Patrimônio (Opcional)</Text>
+            <Text style={styles.label}>{t('appAlerts.assetGate.linkAssetOptional')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
               <TouchableOpacity
                 style={[styles.assetChip, selectedAsset === null && styles.assetChipActive]}
                 onPress={() => setSelectedAsset(null)}
               >
-                <Text style={[styles.assetChipT, selectedAsset === null && { color: '#fff' }]}>Geral</Text>
+                <Text style={[styles.assetChipT, selectedAsset === null && { color: '#fff' }]}>{t('common.general')}</Text>
               </TouchableOpacity>
 
               {assets.map((a) => (
@@ -138,7 +138,7 @@ export default function NewDocumentScreen() {
             ) : (
               <>
                 <Ionicons name="cloud-upload" size={24} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.saveBtnT}>Salvar Arquivo</Text>
+                <Text style={styles.saveBtnT}>{t('appAlerts.documents.saveFileButton')}</Text>
               </>
             )}
           </TouchableOpacity>

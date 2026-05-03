@@ -80,7 +80,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
   const [myPos, setMyPos]     = useState<{ lat: number; lng: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus]   = useState<'inside' | 'outside' | 'unknown'>('unknown');
-  const [statusMsg, setStatusMsg] = useState('Obtendo localização...');
+  const [statusMsg, setStatusMsg] = useState(() => t('appAlerts.geofenceMap.gettingLocation'));
   const [distance, setDistance]   = useState<number | null>(null);
 
   const zoneType = task.locationZoneType;
@@ -101,13 +101,13 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
 
   const evaluate = useCallback((lat: number, lng: number) => {
     if (!zoneType || zoneType === 'none') {
-      setStatus('inside'); setStatusMsg('Sem restrição geográfica nesta OS.'); return;
+      setStatus('inside'); setStatusMsg(t('appAlerts.geofenceMap.noRestriction')); return;
     }
     if (zoneType === 'combined') {
       const gfm = task.metadata?.globalGeofence;
       if (!gfm) {
         setStatus('unknown');
-        setStatusMsg('Configuração de cerca global indisponível.');
+        setStatusMsg(t('appAlerts.geofenceMap.globalConfigUnavailable'));
         return;
       }
       const r = evaluateCombinedGlobalFence(lat, lng, gfm);
@@ -122,7 +122,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
       const radiusRaw = Number(task.locationRadius);
       if (!Number.isFinite(destLat) || !Number.isFinite(destLng)) {
         setStatus('unknown');
-        setStatusMsg('Coordenadas da área indisponíveis para validação.');
+        setStatusMsg(t('appAlerts.geofenceMap.areaCoordsUnavailable'));
         return;
       }
       const radius = Number.isFinite(radiusRaw) && radiusRaw > 0 ? radiusRaw : 200;
@@ -130,25 +130,23 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
       const dist = Math.round(haversine(lat, lng, dest.lat, dest.lng));
       setDistance(dist);
       if (dist <= radius) {
-        setStatus('inside'); setStatusMsg(`DENTRO: Você está na área (${dist}m do centro)`);
+        setStatus('inside'); setStatusMsg(t('appAlerts.geofenceMap.insideRadius', { dist }));
       } else {
-        setStatus('outside'); setStatusMsg(`FORA: Você está a ${dist}m da área (raio: ${radius}m)`);
+        setStatus('outside'); setStatusMsg(t('appAlerts.geofenceMap.outsideRadius', { dist, radius }));
       }
     } else if (zoneType === 'polygon') {
       const inside = pointInPolygon(lat, lng, polygon);
       setStatus(inside ? 'inside' : 'outside');
-      setStatusMsg(inside ? 'DENTRO: Você está na área de serviço' : 'FORA: Você está do polígono de serviço');
+      setStatusMsg(inside ? t('appAlerts.geofenceMap.insidePolygonFull') : t('appAlerts.geofenceMap.outsidePolygonFull'));
     } else if (zoneType === 'route') {
       const dist = Math.round(nearestRoutePoint(lat, lng, polygon));
       setDistance(dist);
       const threshold = task.locationRadius || 100; // distância de desvio configurável
       if (dist <= threshold) {
-        setStatus('inside'); setStatusMsg(`DENTRO: Você está no trajeto correto (${dist}m da rota)`);
+        setStatus('inside'); setStatusMsg(t('appAlerts.geofenceMap.insideRoute', { dist }));
       } else {
         setStatus('outside');
-        setStatusMsg(
-          `AVISO: ~${dist} m do trajeto planejado (corredor ${threshold} m). Não bloqueia, pode iniciar; o percurso fica registrado.`
-        );
+        setStatusMsg(t('appAlerts.geofenceMap.outsideRouteWarn', { dist, thr: threshold }));
       }
     } else if (zoneType === 'segment') {
       if (polygon.length >= 2) {
@@ -158,18 +156,19 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
         setDistance(dist);
         const radius = task.locationRadius || 150;
         if (dist <= radius) {
-          setStatus('inside'); setStatusMsg(`DENTRO: Você está na extremidade ${distA < distB ? 'A' : 'B'} (${dist}m)`);
+          const end = distA < distB ? 'A' : 'B';
+          setStatus('inside'); setStatusMsg(t('appAlerts.geofenceMap.insideSegmentEnd', { end, dist }));
         } else {
-          setStatus('outside'); setStatusMsg(`FORA: Você está a ${dist}m da extremidade mais próxima (limite: ${radius}m)`);
+          setStatus('outside'); setStatusMsg(t('appAlerts.geofenceMap.outsideSegment', { dist, radius }));
         }
       }
     }
-  }, [task, polygon]);
+  }, [task, polygon, t, zoneType]);
 
   useEffect(() => {
     (async () => {
       const { status: perm } = await Location.requestForegroundPermissionsAsync();
-      if (perm !== 'granted') { setLoading(false); setStatus('unknown'); setStatusMsg('GPS negado.'); return; }
+      if (perm !== 'granted') { setLoading(false); setStatus('unknown'); setStatusMsg(t('appAlerts.geofenceMap.gpsDeniedShort')); return; }
       const loc = await getCurrentPositionWithGpsPolicy();
       const { latitude: lat, longitude: lng } = loc.coords;
       setMyPos({ lat, lng });
@@ -213,7 +212,7 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
         });
       }, 500);
     })();
-  }, []);
+  }, [task, evaluate, t]);
 
   const openInMaps = () => {
     if (zoneType === 'combined') {
@@ -362,7 +361,11 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
         showsMyLocationButton={false}
       >
         {myPos && (
-          <Marker coordinate={{ latitude: myPos.lat, longitude: myPos.lng }} title="Você" zIndex={999}>
+          <Marker
+            coordinate={{ latitude: myPos.lat, longitude: myPos.lng }}
+            title={t('appAlerts.liveRoute.mapMarkerYou')}
+            zIndex={999}
+          >
             <View style={styles.userMarkerOutline}>
               <View style={styles.userMarkerInner}>
                 {avatarUri ? (
@@ -377,7 +380,10 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
           </Marker>
         )}
         {zoneType === 'combined' && gfm ? (
-          <GlobalGeofenceMapLayers gf={gfm} destMarkerTitle={task.title || 'Destino da OS'} />
+          <GlobalGeofenceMapLayers
+            gf={gfm}
+            destMarkerTitle={String(task.title || '').trim() || t('appAlerts.checklist.transitMapWoDestinationFallback')}
+          />
         ) : null}
         {/* Radius zone */}
         {zoneType !== 'combined' &&
@@ -420,8 +426,18 @@ export default function GeofenceMapScreen({ task, failMode = 'warn', onProceed, 
               lineDashPattern={[8, 4]}
             />
             {/* Start and end markers */}
-            <Marker coordinate={{ latitude: polygon[0][0], longitude: polygon[0][1] }} title="Início" pinColor="#16a34a" />
-            <Marker coordinate={{ latitude: polygon[polygon.length-1][0], longitude: polygon[polygon.length-1][1] }} title="Fim (Destino)">
+            <Marker
+              coordinate={{ latitude: polygon[0][0], longitude: polygon[0][1] }}
+              title={t('appAlerts.checklist.transitMapLegendStart')}
+              pinColor="#16a34a"
+            />
+            <Marker
+              coordinate={{
+                latitude: polygon[polygon.length - 1][0],
+                longitude: polygon[polygon.length - 1][1],
+              }}
+              title={t('appAlerts.checklist.transitMapMarkerEndDestination')}
+            >
                <View style={{ width: 32, height: 32, backgroundColor: '#dc2626', borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' }}>
                  <FontAwesome5 name="flag-checkered" size={14} color="#fff" />
                </View>

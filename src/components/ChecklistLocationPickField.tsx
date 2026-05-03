@@ -16,8 +16,9 @@ import i18next from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 
+import { ASYNC_ADDRESS_PENDING } from '../constants/asyncAddressPending';
+
 /** Igual ao deslocamento no checklist: moradas completam em segundo plano quando não há «validação online obrigatória». */
-const ASYNC_ADDRESS_PENDING = 'A obter endereço…';
 
 async function assertConnectedWhenOnlineRequired(): Promise<boolean> {
   try {

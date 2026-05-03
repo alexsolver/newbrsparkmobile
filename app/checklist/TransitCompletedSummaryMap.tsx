@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, LayoutChangeEvent, Dimensions } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
+import { useTranslation } from 'react-i18next';
 import { formatDistance } from '../../src/i18n/formatters';
 
 const MAP_HEIGHT = 200;
@@ -108,6 +109,7 @@ export function TransitCompletedSummaryMap({
   durationLabel,
   distanceLabel,
 }: Props) {
+  const { t } = useTranslation();
   const mapRef = useRef<MapView | null>(null);
   const [canvasW, setCanvasW] = useState(() => Math.max(280, Dimensions.get('window').width - 72));
   const [mapReady, setMapReady] = useState(false);
@@ -151,19 +153,19 @@ export function TransitCompletedSummaryMap({
 
   return (
     <View style={styles.outer}>
-      <Text style={styles.sectionTitle}>Percurso registado</Text>
-      <Text style={styles.sectionHint}>Traço GPS capturado durante o deslocamento sobre mapa de ruas.</Text>
+      <Text style={styles.sectionTitle}>{t('appAlerts.checklist.transitMapRecordedTitle')}</Text>
+      <Text style={styles.sectionHint}>{t('appAlerts.checklist.transitMapRecordedHint')}</Text>
       {showMetrics ? (
         <View style={styles.metricsRow}>
           {durationLabel ? (
             <View style={styles.chip}>
-              <Text style={styles.chipLabel}>Tempo</Text>
+              <Text style={styles.chipLabel}>{t('appAlerts.checklist.transitMapTime')}</Text>
               <Text style={styles.chipValue}>{durationLabel}</Text>
             </View>
           ) : null}
           {distanceLabel ? (
             <View style={styles.chip}>
-              <Text style={styles.chipLabel}>Distância</Text>
+              <Text style={styles.chipLabel}>{t('appAlerts.checklist.transitMapDistance')}</Text>
               <Text style={styles.chipValue}>{distanceLabel}</Text>
             </View>
           ) : null}
@@ -191,10 +193,15 @@ export function TransitCompletedSummaryMap({
             lineCap="round"
             lineJoin="round"
           />
-          <Marker coordinate={mapCoords[0]} title="Início" pinColor="#16a34a" tracksViewChanges={false} />
+          <Marker
+            coordinate={mapCoords[0]}
+            title={t('appAlerts.checklist.transitMapLegendStart')}
+            pinColor="#16a34a"
+            tracksViewChanges={false}
+          />
           <Marker
             coordinate={mapCoords[mapCoords.length - 1]}
-            title="Fim"
+            title={t('appAlerts.checklist.transitMapLegendEnd')}
             pinColor="#dc2626"
             tracksViewChanges={false}
           />
@@ -218,17 +225,17 @@ export function TransitCompletedSummaryMap({
         ) : null}
         {!mapReady && !svgModel ? (
           <View style={[styles.mapFallback, { width: canvasW, height: MAP_HEIGHT }]}>
-            <Text style={styles.fallbackText}>Não foi possível desenhar o traço neste ecrã.</Text>
+            <Text style={styles.fallbackText}>{t('appAlerts.checklist.transitMapDrawFallback')}</Text>
           </View>
         ) : null}
         <View style={styles.legendRow} pointerEvents="none">
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#16a34a' }]} />
-            <Text style={styles.legendTxt}>Início</Text>
+            <Text style={styles.legendTxt}>{t('appAlerts.checklist.transitMapLegendStart')}</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />
-            <Text style={styles.legendTxt}>Fim</Text>
+            <Text style={styles.legendTxt}>{t('appAlerts.checklist.transitMapLegendEnd')}</Text>
           </View>
         </View>
       </View>

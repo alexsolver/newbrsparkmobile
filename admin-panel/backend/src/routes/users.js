@@ -8,7 +8,10 @@ const bcrypt = require('bcryptjs');
 const prisma = require('../db');
 const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const { sendExpoPushToMany } = require('../services/expoPush');
-const { syncComprefaceGalleryAfterUserChange } = require('../lib/comprefaceGallerySyncTrigger');
+const {
+  syncComprefaceGalleryAfterUserChange,
+  removeComprefaceGalleryForUser,
+} = require('../lib/comprefaceGallerySyncTrigger');
 const { isRegistrationPrimaryFacePhoto } = require('../lib/faceEnrollmentPrimary');
 const {
   MAX_FACE_ENROLLMENT_PHOTOS,
@@ -889,6 +892,15 @@ router.patch('/:id/toggle-active', async (req, res) => {
     const current = await findScopedUserOrNull(req, req.params.id);
     if (!current) return res.status(404).json({ error: 'Usuário não encontrado.' });
     const user = await prisma.user.update({ where: { id: current.id }, data: { isActive: !current.isActive } });
+    if (user.isActive === false) {
+      try {
+        await removeComprefaceGalleryForUser(prisma, current.tenantId, current.id, {
+          reason: 'Utilizador desativado (alternar estado).',
+        });
+      } catch (e) {
+        console.warn('[PATCH /users/:id/toggle-active] FaceMatch purge:', e?.message || e);
+      }
+    }
     res.json({ id: user.id, isActive: user.isActive });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -2058,7 +2070,19 @@ router.patch('/:id', express.json(), async (req, res) => {
 
     });
 
-    if (needsComprefaceSync) {
+    const becameInactive =
+      typeof isActive === 'boolean' && isActive === false && existing.isActive !== false;
+    if (becameInactive) {
+      try {
+        await removeComprefaceGalleryForUser(prisma, existing.tenantId, existing.id, {
+          reason: 'Utilizador desativado no painel.',
+        });
+      } catch (e) {
+        console.warn('[PATCH /users/:id] FaceMatch purge (inativo):', e?.message || e);
+      }
+    }
+
+    if (needsComprefaceSync && !becameInactive) {
       await syncComprefaceGalleryAfterUserChange(prisma, existing.id, req, 'user_patch');
     }
 
@@ -2158,6 +2182,15 @@ router.delete('/:id', async (req, res) => {
     }
     if (!isPlatformAdmin(authz) && String(existing.role || '').toUpperCase() === 'SAAS_ADMIN') {
       return res.status(403).json({ error: 'Apenas administrador da plataforma pode eliminar esta conta.' });
+    }
+
+    try {
+      await removeComprefaceGalleryForUser(prisma, existing.tenantId, existing.id, {
+        updateUserRow: false,
+        reason: 'Utilizador eliminado.',
+      });
+    } catch (e) {
+      console.warn('[DELETE /users/:id] FaceMatch purge:', e?.message || e);
     }
 
     await prisma.$transaction(async (tx) => {

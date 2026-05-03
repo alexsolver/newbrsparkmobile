@@ -55,7 +55,7 @@ function isProbablyImage(att: LocalAttachment) {
 }
 
 export default function NewTechnicianFinanceScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const { colors: C } = useTheme();
   const { user } = useAuth();
@@ -87,14 +87,23 @@ export default function NewTechnicianFinanceScreen() {
   const refreshLinkableOs = useCallback(async () => {
     setLinkableLoading(true);
     try {
-      const list = await loadLinkableTasksForTechnicianExpense();
+      const sortLocale = String(i18n.language || 'en-US').replace('_', '-');
+      const translateTaskTitle = (titleBase: string) => {
+        const s = String(titleBase || '').trim();
+        if (!s || s.toLowerCase() === 'sem título') return t('technicianMobile.financeTaskNoTitle');
+        if (s === 'Nova OS Designada' || s.toLowerCase() === 'nova os designada') {
+          return t('technicianMobile.financeTaskDefaultNewWo');
+        }
+        return s;
+      };
+      const list = await loadLinkableTasksForTechnicianExpense({ translateTaskTitle, sortLocale });
       setLinkableOs(list);
     } catch {
       setLinkableOs([]);
     } finally {
       setLinkableLoading(false);
     }
-  }, []);
+  }, [i18n.language, t]);
 
   useFocusEffect(
     useCallback(() => {
@@ -266,9 +275,10 @@ export default function NewTechnicianFinanceScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.flexFill}>
       <Stack.Screen options={{ headerShown: false }} />
       <ScreenSubheader
-        title="Novo lançamento"
+        title={t('technicianMobile.financeNewTitle')}
         subtitle={t('technicianMobile.financeNewSubtitle')}
         onBack={() => router.back()}
         onRightPress={() => void refreshLinkableOs()}
@@ -280,23 +290,27 @@ export default function NewTechnicianFinanceScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       >
-        <Text style={styles.lbl}>Tipo</Text>
+        <Text style={styles.lbl}>{t('technicianMobile.financeFieldType')}</Text>
         <View style={styles.kindRow}>
           <TouchableOpacity
             style={[styles.kindBtn, kind === 'expense' && styles.kindBtnExp]}
             onPress={() => setKind('expense')}
           >
-            <Text style={[styles.kindBtnTxt, kind === 'expense' && styles.kindBtnTxtOn]}>Despesa</Text>
+            <Text style={[styles.kindBtnTxt, kind === 'expense' && styles.kindBtnTxtOn]}>
+              {t('technicianMobile.financeKindExpense')}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.kindBtn, kind === 'revenue' && styles.kindBtnRev]}
             onPress={() => setKind('revenue')}
           >
-            <Text style={[styles.kindBtnTxt, kind === 'revenue' && styles.kindBtnTxtOn]}>Receita</Text>
+            <Text style={[styles.kindBtnTxt, kind === 'revenue' && styles.kindBtnTxtOn]}>
+              {t('technicianMobile.financeKindRevenue')}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.lbl}>Valor (R$)</Text>
+        <Text style={styles.lbl}>{t('technicianFinance.amountLabel')}</Text>
         <ValueInput
           style={styles.input}
           placeholder="0,00"
@@ -316,10 +330,10 @@ export default function NewTechnicianFinanceScreen() {
           <TechnicianExpenseCategoryChips value={categoryKey} onChange={(k) => setCategoryKey(k)} />
         ) : null}
 
-        <Text style={styles.lbl}>Descrição (opcional)</Text>
+        <Text style={styles.lbl}>{t('technicianFinance.descriptionOptional')}</Text>
         <TextInput
           style={[styles.input, styles.inputMulti]}
-          placeholder="Nota ou referência…"
+          placeholder={t('technicianFinance.descPlaceholder')}
           placeholderTextColor="#94a3b8"
           value={description}
           onChangeText={setDescription}
@@ -344,10 +358,10 @@ export default function NewTechnicianFinanceScreen() {
             {linkableLoading ? (
               <View style={styles.osLoading}>
                 <ActivityIndicator color="#0f766e" />
-                <Text style={styles.osLoadingTxt}>Carregando OS elegíveis…</Text>
+                <Text style={styles.osLoadingTxt}>{t('technicianMobile.financeOsLoadingLine')}</Text>
               </View>
             ) : linkableOs.length === 0 ? (
-              <Text style={styles.osEmpty}>Nenhuma OS elegível neste momento.</Text>
+              <Text style={styles.osEmpty}>{t('technicianMobile.financeOsEmptyLine')}</Text>
             ) : (
               <ScrollView
                 style={styles.osListScroll}
@@ -358,13 +372,13 @@ export default function NewTechnicianFinanceScreen() {
                 {openOs.length > 0 ? (
                   <View style={styles.osList}>
                     <Text style={styles.osSubsectionLbl}>{t('technicianMobile.financeNewOsSectionOpen')}</Text>
-                    {openOs.map((t) => renderOsRow(t))}
+                    {openOs.map((row) => renderOsRow(row))}
                   </View>
                 ) : null}
                 {completedOs.length > 0 ? (
                   <View style={[styles.osList, openOs.length > 0 && styles.osListSpaced]}>
                     <Text style={styles.osSubsectionLbl}>{t('technicianMobile.financeNewOsSectionCompleted')}</Text>
-                    {completedOs.map((t) => renderOsRow(t))}
+                    {completedOs.map((row) => renderOsRow(row))}
                   </View>
                 ) : null}
               </ScrollView>
@@ -372,13 +386,11 @@ export default function NewTechnicianFinanceScreen() {
           </>
         ) : null}
 
-        <Text style={styles.lbl}>Documentos ou fotos (opcional)</Text>
-        <Text style={styles.attachHint}>
-          Comprovativos, recibos ou fotos ficam guardados com o lançamento (até {MAX_ATTACHMENTS}).
-        </Text>
+        <Text style={styles.lbl}>{t('technicianMobile.financeAttachSectionTitle')}</Text>
+        <Text style={styles.attachHint}>{t('technicianMobile.financeAttachHint', { max: MAX_ATTACHMENTS })}</Text>
         <TouchableOpacity style={styles.addAttachBtn} onPress={pickAttachments} activeOpacity={0.88}>
           <Ionicons name="attach-outline" size={22} color="#0f766e" />
-          <Text style={styles.addAttachBtnTxt}>Adicionar anexo</Text>
+          <Text style={styles.addAttachBtnTxt}>{t('technicianMobile.financeAddAttachment')}</Text>
         </TouchableOpacity>
 
         {attachments.length > 0 ? (
@@ -394,7 +406,10 @@ export default function NewTechnicianFinanceScreen() {
                 )}
                 <View style={styles.attachMeta}>
                   <Text style={styles.attachName} numberOfLines={2}>
-                    {att.name || (isProbablyImage(att) ? 'Imagem' : 'Documento')}
+                    {att.name ||
+                      (isProbablyImage(att)
+                        ? t('technicianMobile.financeAttachImage')
+                        : t('technicianMobile.financeAttachDocument'))}
                   </Text>
                 </View>
                 <TouchableOpacity
@@ -411,7 +426,7 @@ export default function NewTechnicianFinanceScreen() {
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.9}>
           <Ionicons name="checkmark-circle" size={22} color="#fff" />
-          <Text style={styles.saveBtnTxt}>Guardar</Text>
+          <Text style={styles.saveBtnTxt}>{t('technicianMobile.financeSave')}</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -437,6 +452,7 @@ export default function NewTechnicianFinanceScreen() {
           </View>
         </View>
       </Modal>
+        </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
@@ -444,6 +460,8 @@ export default function NewTechnicianFinanceScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  /** Único filho permitido em TouchableWithoutFeedback; preenche o ecrã para o teclado. */
+  flexFill: { flex: 1 },
   scroll: { padding: 20, paddingBottom: 40 },
   lbl: { fontSize: 12, fontWeight: '800', color: '#475569', marginBottom: 8 },
   kindRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },

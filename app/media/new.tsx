@@ -80,10 +80,10 @@ export default function NewMediaScreen() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
-        <Header title="Adicionar Mídia" leftIcon="close" onLeftPress={() => router.back()} />
+        <Header title={t('media.addMedia')} leftIcon="close" onLeftPress={() => router.back()} />
         <View style={styles.centerBox}>
-          <Button title="Tirar foto" onPress={takePhoto} />
-          <Button title="Escolher da galeria" onPress={pickImage} variant="secondary" />
+          <Button title={t('media.takePhoto')} onPress={takePhoto} />
+          <Button title={t('media.chooseFromGallery')} onPress={pickImage} variant="secondary" />
         </View>
       </SafeAreaView>
     );
@@ -92,19 +92,19 @@ export default function NewMediaScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.background }]}>
       <Stack.Screen options={{ headerShown: false }} />
-      <Header title="Vincular Mídia" leftIcon="arrow-back" onLeftPress={() => setMediaUri(null)} />
+      <Header title={t('media.linkMedia')} leftIcon="arrow-back" onLeftPress={() => setMediaUri(null)} />
 
       {assets.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.lg }}>
           <Ionicons name="cube-outline" size={64} color={C.border} />
           <Text style={{ fontSize: fontSize.lg, fontWeight: fontWeight.black, color: C.slate, marginTop: space.lg, textAlign: 'center' }}>
-            Nenhum ativo cadastrado
+            {t('appAlerts.assetGate.noAssetTitle')}
           </Text>
           <Text style={{ fontSize: fontSize.sm, color: C.textSecondary, textAlign: 'center', marginTop: space.sm, lineHeight: 22, fontWeight: fontWeight.medium }}>
-            Para organizar suas mídias e fotos, você precisa ter pelo menos um Ativo (Patrimônio) cadastrado no sistema.
+            {t('appAlerts.assetGate.hintMedia')}
           </Text>
           <View style={{ marginTop: space.lg, alignSelf: 'stretch' }}>
-            <Button title="Voltar" onPress={() => router.back()} variant="secondary" />
+            <Button title={t('common.back')} onPress={() => router.back()} variant="secondary" />
           </View>
         </View>
       ) : (
@@ -112,7 +112,7 @@ export default function NewMediaScreen() {
           <Image source={{ uri: mediaUri }} style={[styles.preview, { borderRadius: radius.lg }]} />
 
           <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: C.slate }]}>Vincular a um Patrimônio (Opcional)</Text>
+            <Text style={[styles.label, { color: C.slate }]}>{t('appAlerts.assetGate.linkAssetOptional')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.sm }}>
               <TouchableOpacity
                 style={[
@@ -122,7 +122,9 @@ export default function NewMediaScreen() {
                 ]}
                 onPress={() => setSelectedAsset(null)}
               >
-                <Text style={[styles.assetChipT, { color: C.textSecondary }, selectedAsset === null && { color: C.cardWhite }]}>Geral</Text>
+                <Text style={[styles.assetChipT, { color: C.textSecondary }, selectedAsset === null && { color: C.cardWhite }]}>
+                  {t('common.general')}
+                </Text>
               </TouchableOpacity>
 
               {assets.map((a) => (
@@ -147,7 +149,7 @@ export default function NewMediaScreen() {
             </ScrollView>
           </View>
 
-          <Button title="Salvar mídia" onPress={handleSave} loading={loading} disabled={loading} />
+          <Button title={t('appAlerts.media.saveMediaButton')} onPress={handleSave} loading={loading} disabled={loading} />
         </ScrollView>
       )}
     </SafeAreaView>

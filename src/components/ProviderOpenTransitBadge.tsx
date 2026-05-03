@@ -39,7 +39,7 @@ export function ProviderOpenTransitBadge({ C, t, reduceMotion }: Props) {
     return () => loop.stop();
   }, [pulse, reduceMotion]);
 
-  const label = t('providerDashboard.openTransitBadge', 'Deslocamento iniciado');
+  const label = t('providerDashboard.openTransitBadge', 'A caminho');
 
   return (
     <Animated.View style={{ opacity: reduceMotion ? 1 : pulse }}>

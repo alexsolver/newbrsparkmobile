@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
+import { isAsyncAddressPending } from '../constants/asyncAddressPending';
 import * as Network from 'expo-network';
 import { apiFetch, getToken } from './auth';
 import { warnDev } from '../utils/devLog';
@@ -1315,7 +1316,7 @@ function transitNeedsOfflineAddressFill(o: Record<string, unknown>): boolean {
   const lng = Number(c?.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) return false;
   const addr = String(o.address || '').trim();
-  if (addr === 'A obter endereço…' || addr === 'A obter endereço...') return true;
+  if (isAsyncAddressPending(addr)) return true;
   if (!addr) return true;
   return false;
 }
@@ -1361,8 +1362,7 @@ function locationPickNeedsAddressFill(o: Record<string, unknown>): boolean {
   const pl = Number(pin.lat);
   const pg = Number(pin.lng);
   if (![gl, gg, pl, pg].every((n) => Number.isFinite(n))) return false;
-  const pend = (s: string) =>
-    !s.trim() || s.trim() === 'A obter endereço…' || s.trim() === 'A obter endereço...';
+  const pend = (s: string) => !s.trim() || isAsyncAddressPending(s);
   return pend(String(o.addressGps ?? '')) || pend(String(o.addressPin ?? ''));
 }
 
@@ -1381,8 +1381,7 @@ async function maybeEnrichLocationPickJsonString(raw: string): Promise<string | 
   const pin = o.pin as { lat: number; lng: number };
   const prevG = String(o.addressGps ?? '').trim();
   const prevP = String(o.addressPin ?? '').trim();
-  const pend = (s: string) =>
-    !s || s === 'A obter endereço…' || s === 'A obter endereço...';
+  const pend = (s: string) => !s || isAsyncAddressPending(s);
   const fallback = 'Endereço indisponível (rede ou mapas).';
   let lineG: string | null = null;
   let lineP: string | null = null;
