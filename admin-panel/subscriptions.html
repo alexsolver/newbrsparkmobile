@@ -174,21 +174,21 @@
   plansGrid.innerHTML = plans.map(p => `
     <div class="stat-card fade-in" style="--accent-color:var(--accent)">
       <div style="font-size:16px;font-weight:900;color:var(--accent);margin-bottom:4px">${escHtml(p.name)}</div>
-      <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:10px">R$ ${Number(p.priceMonthly).toFixed(0)}<span style="font-size:11px;font-weight:400;color:var(--text3)">${mpT('ten_plan_per_mo')}</span></div>
-      <div style="font-size:11px;color:var(--text3)"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxAssets === -1 ? mpT('common_unlimited') : escHtml(String(p.maxAssets))} ${mpT('sub_plan_card_assets')}</div>
-      <div style="font-size:11px;color:var(--text3)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxUsers === -1 ? mpT('common_unlimited') : escHtml(String(p.maxUsers))} ${mpT('sub_plan_card_users')}</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="construct-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${mpT('sub_plan_card_tech')} ${p.maxTechnicians === -1 ? mpT('common_unlimited') : (p.maxTechnicians ?? '—')}</div>
-      <div style="font-size:10px;color:var(--text3);line-height:1.35;margin-bottom:4px">${mpT('sub_plan_card_ia')} ${fmtQ(p.quotaAiFacialPerMonth)} · ${mpT('sub_plan_card_vis_det')} ${fmtQ(p.quotaAiVisionDetectionPerMonth)} · ${mpT('sub_plan_card_vis_an')} ${fmtQ(p.quotaAiVisionAnalysisPerMonth)}</div>
-      <div style="font-size:10px;color:var(--text3);line-height:1.35;margin-bottom:4px">${mpT('sub_plan_card_maps_routes')} ${fmtQ(p.quotaGoogleMapsRoutesPerMonth)}</div>
-      <div style="font-size:10px;color:var(--text3);line-height:1.35;margin-bottom:8px">${mpT('sub_plan_card_ft')} ${fmtQ(p.quotaFieldTasksMonthly)}${mpT('ten_plan_per_mo')} · ${mpT('sub_plan_card_rt')} ${fmtQ(p.quotaRoutineTasksMonthly)}${mpT('ten_plan_per_mo')} · ${mpT('sub_plan_card_forms')} ${fmtQ(p.maxChecklistTemplates)}</div>
-      <div style="font-size:10px;color:var(--text3);margin-bottom:10px">${mpT('sub_plan_card_facial')} <span style="font-weight:700;color:var(--text2)">${escHtml(subscriptionsFacialLabel((p.features && p.features.facialVisionProvider) || 'COMPREFACE'))}</span></div>
+      <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:10px">R$ ${Number(p.priceMonthly).toFixed(0)}<span style="font-size:11px;font-weight:400;color:var(--text3)">${escHtml(mpT('ten_plan_per_mo'))}</span></div>
+      <div style="font-size:11px;color:var(--text3)"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxAssets === -1 ? escHtml(mpT('common_unlimited')) : escHtml(String(p.maxAssets))} ${escHtml(mpT('sub_plan_card_assets'))}</div>
+      <div style="font-size:11px;color:var(--text3)"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${p.maxUsers === -1 ? escHtml(mpT('common_unlimited')) : escHtml(String(p.maxUsers))} ${escHtml(mpT('sub_plan_card_users'))}</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="construct-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${escHtml(mpT('sub_plan_card_tech'))} ${p.maxTechnicians === -1 ? escHtml(mpT('common_unlimited')) : escHtml(String(p.maxTechnicians ?? '—'))}</div>
+      <div style="font-size:10px;color:var(--text3);line-height:1.35;margin-bottom:4px">${escHtml(mpT('sub_plan_card_ia'))} ${fmtQ(p.quotaAiFacialPerMonth)} · ${escHtml(mpT('sub_plan_card_vis_det'))} ${fmtQ(p.quotaAiVisionDetectionPerMonth)} · ${escHtml(mpT('sub_plan_card_vis_an'))} ${fmtQ(p.quotaAiVisionAnalysisPerMonth)}</div>
+      <div style="font-size:10px;color:var(--text3);line-height:1.35;margin-bottom:4px">${escHtml(mpT('sub_plan_card_maps_routes'))} ${fmtQ(p.quotaGoogleMapsRoutesPerMonth)}</div>
+      <div style="font-size:10px;color:var(--text3);line-height:1.35;margin-bottom:8px">${escHtml(mpT('sub_plan_card_ft'))} ${fmtQ(p.quotaFieldTasksMonthly)}${escHtml(mpT('ten_plan_per_mo'))} · ${escHtml(mpT('sub_plan_card_rt'))} ${fmtQ(p.quotaRoutineTasksMonthly)}${escHtml(mpT('ten_plan_per_mo'))} · ${escHtml(mpT('sub_plan_card_forms'))} ${fmtQ(p.maxChecklistTemplates)}</div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:10px">${escHtml(mpT('sub_plan_card_facial'))} <span style="font-weight:700;color:var(--text2)">${escHtml(subscriptionsFacialLabel((p.features && p.features.facialVisionProvider) || 'COMPREFACE'))}</span></div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-        <span class="badge badge-accent">${p._count?.subscriptions || 0} ${mpT('sub_plan_card_tenants')}</span>
-        <button type="button" class="btn btn-ghost btn-sm facial-plan-cfg" data-plan-id="${escHtml(p.id)}" title="${mpT('sub_plan_btn_facial_title').replace(/"/g, '&quot;')}">
-          <ion-icon name="settings-outline" style="font-size:16px;vertical-align:-3px"></ion-icon> ${mpT('sub_plan_btn_facial')}
+        <span class="badge badge-accent">${p._count?.subscriptions || 0} ${escHtml(mpT('sub_plan_card_tenants'))}</span>
+        <button type="button" class="btn btn-ghost btn-sm facial-plan-cfg" data-plan-id="${escHtml(p.id)}" title="${escHtml(mpT('sub_plan_btn_facial_title'))}">
+          <ion-icon name="settings-outline" style="font-size:16px;vertical-align:-3px"></ion-icon> ${escHtml(mpT('sub_plan_btn_facial'))}
         </button>
       </div>
-    </div>`).join('') || `<div class="empty-state-pro" style="padding:24px"><p class="empty-state-pro-sub">${mpT('sub_empty_plans')}</p></div>`;
+    </div>`).join('') || `<div class="empty-state-pro" style="padding:24px"><p class="empty-state-pro-sub">${escHtml(mpT('sub_empty_plans'))}</p></div>`;
 
   plansGrid.addEventListener('click', (e) => {
     if (!canManagePlatformSubscriptions) return;
@@ -215,7 +215,7 @@
     window.location.reload();
   });
 
-  plans.forEach(p => { subPlanSel.innerHTML += `<option value="${escHtml(p.id)}">${escHtml(p.name)} — R$ ${Number(p.priceMonthly).toFixed(0)}${mpT('ten_plan_per_mo')}</option>`; });
+  plans.forEach(p => { subPlanSel.innerHTML += `<option value="${escHtml(p.id)}">${escHtml(p.name)} — R$ ${Number(p.priceMonthly).toFixed(0)}${escHtml(mpT('ten_plan_per_mo'))}</option>`; });
 
   const tenants = await CONFIG.get('/tenants?limit=200') || { data: [] };
   tenants.data.forEach(t => { document.getElementById('sub-tenant').innerHTML += `<option value="${escHtml(t.id)}">${escHtml(t.name)}</option>`; });
@@ -233,14 +233,13 @@
         <tr><td colspan="7" style="padding:0;border:none">
           <div class="empty-state-pro" style="padding:32px 20px 28px">
             <ion-icon name="card-outline"></ion-icon>
-            <div class="empty-state-pro-title">${mpT('sub_empty_subs_title')}</div>
-            <p class="empty-state-pro-sub">${mpT('sub_empty_subs_sub')}</p>
+            <div class="empty-state-pro-title">${escHtml(mpT('sub_empty_subs_title'))}</div>
+            <p class="empty-state-pro-sub">${escHtml(mpT('sub_empty_subs_sub'))}</p>
           </div>
         </td></tr>`;
       return;
     }
     tbody.innerHTML = data.data.map(s => {
-      const tid = escHtml(s.id);
       return `<tr>
         <td class="bold">${escHtml(s.tenant?.name || '—')}</td>
         <td><span class="badge badge-accent">${escHtml(s.plan?.name || '—')}</span></td>
@@ -250,7 +249,7 @@
         <td style="color:var(--text3);font-size:11px">${new Date(s.currentEnd).toLocaleDateString(mpIntlLocale())}</td>
         <td class="text-right">
           ${canManagePlatformSubscriptions && s.status !== 'CANCELLED'
-            ? `<button type="button" class="btn btn-danger btn-sm" onclick="cancelSub('${tid}')">${mpT('sub_btn_cancel_sub')}</button>`
+            ? `<button type="button" class="btn btn-danger btn-sm" onclick='cancelSub(${JSON.stringify(s.id)})'>${escHtml(mpT('sub_btn_cancel_sub'))}</button>`
             : `<span style="color:var(--text3);font-size:12px">—</span>`}
         </td>
       </tr>`;

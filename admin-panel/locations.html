@@ -213,6 +213,14 @@
   await initPage();
   applyLocationsPageI18n();
 
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   // Platform languages — derived from DB locales
   const PLATFORM_LANGS_BASE = [
     { code:'pt-BR', name:'Português (Brasil)', flag:'🇧🇷' },
@@ -290,8 +298,8 @@
       ? filtered.map(renderCountryCard).join('')
       : `<div class="empty-state-pro" style="padding:36px 20px 32px;grid-column:1/-1">
           <ion-icon name="earth-outline"></ion-icon>
-          <div class="empty-state-pro-title">${mpT('loc_empty_regions_title')}</div>
-          <p class="empty-state-pro-sub">${mpT('loc_empty_regions_sub')}</p>
+          <div class="empty-state-pro-title">${escHtml(mpT('loc_empty_regions_title'))}</div>
+          <p class="empty-state-pro-sub">${escHtml(mpT('loc_empty_regions_sub'))}</p>
         </div>`;
 
     // Language coverage: derive from active locales
@@ -302,11 +310,11 @@
       return `<tr>
         <td><strong>${l.flag} ${l.name}</strong></td>
         <td class="mono" style="font-size:11px">${l.code}</td>
-        <td>${inUse ? `<span class="badge badge-green"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> ${mpT('loc_badge_enabled')}</span>` : `<span class="badge badge-gray">${mpT('loc_badge_inactive')}</span>`}</td>
+        <td>${inUse ? `<span class="badge badge-green"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> ${escHtml(mpT('loc_badge_enabled'))}</span>` : `<span class="badge badge-gray">${escHtml(mpT('loc_badge_inactive'))}</span>`}</td>
         <td>${usage.users.toLocaleString(mpIntlLocale())}</td>
         <td><span class="badge badge-green">100%</span></td>
         <td><span class="badge badge-green">100%</span></td>
-        <td><span class="badge badge-green"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> ${mpT('loc_badge_complete')}</span></td>
+        <td><span class="badge badge-green"><ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> ${escHtml(mpT('loc_badge_complete'))}</span></td>
       </tr>`;
     }).join('');
   }
@@ -325,31 +333,31 @@
       <div class="country-header">
         <div class="country-flag">${c.flag}</div>
         <div>
-          <div class="country-name">${c.name}</div>
-          <div class="country-code">${c.code} · ${c.timezone}</div>
+          <div class="country-name">${escHtml(c.name)}</div>
+          <div class="country-code">${escHtml(c.code)} · ${escHtml(c.timezone)}</div>
         </div>
-        <label class="toggle-switch" title="${c.enabled ? mpT('loc_toggle_on') : mpT('loc_toggle_off')}" style="margin-left:auto">
-          <input type="checkbox" ${c.enabled ? 'checked' : ''} onchange="toggleRegion('${c.code}', this.checked)" />
+        <label class="toggle-switch" title="${escHtml(c.enabled ? mpT('loc_toggle_on') : mpT('loc_toggle_off'))}" style="margin-left:auto">
+          <input type="checkbox" ${c.enabled ? 'checked' : ''} onchange='toggleRegion(${JSON.stringify(String(c.code))}, this.checked)' />
           <div class="toggle-track"></div>
         </label>
       </div>
       <div class="country-langs">
-        <span class="lang-chip primary"><span class="dot"></span>${langName}</span>
-        <span class="badge ${regBadge}">${c.regulation}</span>
-        <span class="lang-chip">${c.currency}</span>
+        <span class="lang-chip primary"><span class="dot"></span>${escHtml(langName)}</span>
+        <span class="badge ${regBadge}">${escHtml(c.regulation)}</span>
+        <span class="lang-chip">${escHtml(c.currency)}</span>
       </div>
       <div class="country-stats">
         <div class="country-stat">
           <span class="country-stat-val">${c.users.toLocaleString(mpIntlLocale())}</span>
-          <span class="country-stat-label">${mpT('loc_stat_users_lbl')}</span>
+          <span class="country-stat-label">${escHtml(mpT('loc_stat_users_lbl'))}</span>
         </div>
         <div class="country-stat">
           <span class="country-stat-val">${c.assets.toLocaleString(mpIntlLocale())}</span>
-          <span class="country-stat-label">${mpT('loc_stat_assets_lbl')}</span>
+          <span class="country-stat-label">${escHtml(mpT('loc_stat_assets_lbl'))}</span>
         </div>
         <div class="country-stat">
           <span class="country-stat-val">${c.enabled ? '<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon>' : '——'}</span>
-          <span class="country-stat-label">${mpT('loc_stat_status_lbl')}</span>
+          <span class="country-stat-label">${escHtml(mpT('loc_stat_status_lbl'))}</span>
         </div>
       </div>
     </div>`;

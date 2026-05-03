@@ -1984,10 +1984,18 @@ export function subscriptionsCycleLabel(cycle) {
   return cycle || '—';
 }
 
+function escSubscriptionsStatusText(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export function subscriptionsStatusHtml(status) {
   const map = { ACTIVE: 'sub_st_ACTIVE', TRIALING: 'sub_st_TRIALING', PAST_DUE: 'sub_st_PAST_DUE', CANCELLED: 'sub_st_CANCELLED' };
   const k = map[status];
-  const label = k ? mpT(k) : String(status || '');
+  const label = k ? mpT(k) : escSubscriptionsStatusText(status || '');
   const icon =
     status === 'ACTIVE'
       ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> '

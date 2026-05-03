@@ -280,8 +280,8 @@
       tb.innerHTML = `<tr><td colspan="11" style="padding:0;border:none">
         <div class="empty-state-pro" style="padding:36px 20px 32px">
           <ion-icon name="layers-outline"></ion-icon>
-          <div class="empty-state-pro-title">${mpT('pln_empty_title')}</div>
-          <p class="empty-state-pro-sub">${mpT('pln_empty_sub')}</p>
+          <div class="empty-state-pro-title">${esc(mpT('pln_empty_title'))}</div>
+          <p class="empty-state-pro-sub">${esc(mpT('pln_empty_sub'))}</p>
         </div></td></tr>`;
       return;
     }
@@ -297,11 +297,11 @@
         <td>${fmt(p.maxTechnicians)}</td>
         <td>${esc(p.storageGb)}</td>
         <td>${fmt(p.quotaFieldTasksMonthly)}</td>
-        <td>${p.isActive === false ? `<span class="badge badge-gray">${mpT('pln_badge_no')}</span>` : `<span class="badge badge-green">${mpT('pln_badge_yes')}</span>`}</td>
+        <td>${p.isActive === false ? `<span class="badge badge-gray">${esc(mpT('pln_badge_no'))}</span>` : `<span class="badge badge-green">${esc(mpT('pln_badge_yes'))}</span>`}</td>
         <td style="text-align:right;white-space:nowrap">
           ${canManagePlans
-            ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openEditPlan('${esc(p.id)}')">${mpT('pln_btn_edit')}</button>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="duplicatePlan('${esc(p.id)}')">${mpT('pln_btn_dup')}</button>`
+            ? `<button type="button" class="btn btn-ghost btn-sm" onclick='openEditPlan(${JSON.stringify(p.id)})'>${esc(mpT('pln_btn_edit'))}</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick='duplicatePlan(${JSON.stringify(p.id)})'>${esc(mpT('pln_btn_dup'))}</button>`
             : `<span style="color:var(--text3);font-size:12px">—</span>`}
         </td>
       </tr>`,

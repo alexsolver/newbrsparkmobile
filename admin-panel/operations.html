@@ -2792,6 +2792,11 @@ function buildCard(task, colClass) {
 
   const stCard = String(task.status || '').toUpperCase();
   const safeTaskIdAttr = String(task.id).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const taskCardDomId = String(task.id).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const trackingTok = task.metadata?.trackingToken ? String(task.metadata.trackingToken) : '';
+  const trackPublicUrlJs = trackingTok
+    ? JSON.stringify(`${window.location.origin}/track.html?t=${encodeURIComponent(trackingTok)}`)
+    : '""';
   const canCancelPendingCard = colClass === 'col-pending' && stCard === 'PENDING';
   const canReopenCompletedCard =
     !isRt && colClass === 'col-completed' && ['COMPLETED', 'SYNCED'].includes(stCard);
@@ -2818,7 +2823,7 @@ function buildCard(task, colClass) {
   })();
 
   return `
-    <div class="task-card ${colClass}" onclick="openDetail('${task.id}')" id="card-${task.id}">
+    <div class="task-card ${colClass}" onclick='void openDetail(${JSON.stringify(task.id)})' id="card-${taskCardDomId}">
       <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
         ${ftRtBadgeHtml}
         <div class="task-card-email" style="margin-bottom:0">
@@ -2858,13 +2863,13 @@ function buildCard(task, colClass) {
           ${task.syncedAt ? `<span class="badge badge-green" style="font-size:8px">Sync <ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon></span>` : ''}
           </span>
         </div>
-        ${task.metadata?.trackingToken ? `
+        ${trackingTok ? `
         <div style="background:#FFF7ED; border:1px dashed #FDBA74; border-radius:4px; padding:4px 6px; display:flex; gap:4px; align-items:center" onclick="event.stopPropagation()">
           <ion-icon name="location-outline" style="color:#EA580C; font-size:12px"></ion-icon>
-          <a href="/track.html?t=${task.metadata.trackingToken}" target="_blank" style="color:#EA580C; font-size:9px; font-weight:700; flex:1; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+          <a href="/track.html?t=${encodeURIComponent(trackingTok)}" target="_blank" rel="noopener noreferrer" style="color:#EA580C; font-size:9px; font-weight:700; flex:1; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
             Acompanhar
           </a>
-          <button style="background:none; border:none; color:#2563EB; font-size:9px; font-weight:700; cursor:pointer; padding:0" onclick="navigator.clipboard.writeText(window.location.origin+'/track.html?t=${task.metadata.trackingToken}'); alert('Link copiado!'); event.stopPropagation();">
+          <button type="button" style="background:none; border:none; color:#2563EB; font-size:9px; font-weight:700; cursor:pointer; padding:0" onclick='void navigator.clipboard.writeText(${trackPublicUrlJs}); alert("Link copiado!"); event.stopPropagation();'>
             📋 Copiar
           </button>
         </div>` : ''}
@@ -4998,7 +5003,7 @@ function buildRevisionHistoryHtml(t) {
       <td style="padding:6px 8px;font-size:11px;font-family:monospace;word-break:break-all">${r.submissionId ? esc(r.submissionId) : '—'}</td>
       <td style="padding:6px 8px;white-space:nowrap">
         <button type="button" class="btn btn-sm btn-ghost" style="font-size:11px;padding:4px 8px"
-          onclick="window.openRevisionSnapshotModal(${JSON.stringify(t.id)}, ${r.revision})">Ver respostas</button>
+          onclick='window.openRevisionSnapshotModal(${JSON.stringify(t.id)}, ${r.revision})'>Ver respostas</button>
       </td>
     </tr>`
     )
@@ -5009,9 +5014,9 @@ function buildRevisionHistoryHtml(t) {
         <span>Histórico de submissões (${revs.length}) · #1 = conclusão inicial</span>
         <span style="display:flex;flex-wrap:wrap;gap:6px">
           <button type="button" class="btn btn-sm btn-ghost" style="font-size:11px"
-            onclick="window.downloadRevisionsCsv(${JSON.stringify(t.id)}, false)">Exportar CSV</button>
+            onclick='window.downloadRevisionsCsv(${JSON.stringify(t.id)}, false)'>Exportar CSV</button>
           <button type="button" class="btn btn-sm btn-ghost" style="font-size:11px"
-            onclick="window.downloadRevisionsCsv(${JSON.stringify(t.id)}, true)">CSV com respostas</button>
+            onclick='window.downloadRevisionsCsv(${JSON.stringify(t.id)}, true)'>CSV com respostas</button>
         </span>
       </div>
       <div style="overflow-x:auto;margin-top:6px;border:1px solid var(--border);border-radius:8px">
@@ -8439,7 +8444,7 @@ window.openDispatchModal = async function() {
           dataAttr = ` data-template-expected-min="${rounded}"`;
         }
       }
-      sel.innerHTML += `<option value="${t.id}"${dataAttr}>${t.title}</option>`;
+      sel.innerHTML += `<option value="${escDispatchSuggest(String(t.id))}"${dataAttr}>${escOpsChatHtml(String(t.title || ''))}</option>`;
     });
   }
   document.getElementById('d-email').value = '';
@@ -8821,7 +8826,9 @@ window.onKmlRouteFileChange = function(event) {
       if (!window._dispatchMapRoute) window.initRouteMap();
       setTimeout(function() { window.renderRoutePreview(); }, 300);
     } catch(err) {
-      document.getElementById('d-kml-route-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Erro: ' + err.message;
+      document.getElementById('d-kml-route-status').innerHTML =
+        '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Erro: ' +
+        escOpsChatHtml(String(err && err.message != null ? err.message : ''));
     }
   };
   reader.onerror = function() {
@@ -8975,7 +8982,9 @@ window.onKmlFileChange = function(event) {
       if (!window._dispatchMapPoly) window.initPolygonMap();
       setTimeout(function() { window.renderPolygonPreview(); }, 300);
     } catch(err) {
-      document.getElementById('d-kml-status').innerHTML = '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Erro: ' + err.message;
+      document.getElementById('d-kml-status').innerHTML =
+        '<ion-icon name="close-circle" style="color:var(--red);vertical-align:-2px"></ion-icon> Erro: ' +
+        escOpsChatHtml(String(err && err.message != null ? err.message : ''));
     }
   };
   reader.onerror = function() {

@@ -405,7 +405,7 @@
       return `<div class="cmp-locale-cell" data-cmp-locale="${esc(locale)}">
         <div class="cmp-locale-cell-head">
           <span class="cmp-locale-name">${esc(localeTitle)}</span>
-          <button type="button" class="btn btn-primary btn-sm" style="font-size:10px" onclick="openEditor('${type}','${locale}')">${esc(mpT('cmp_btn_new_locale'))}</button>
+          <button type="button" class="btn btn-primary btn-sm cmp-btn-open-editor" style="font-size:10px" data-cmp-type="${esc(type)}" data-cmp-locale="${esc(locale)}">${esc(mpT('cmp_btn_new_locale'))}</button>
         </div>
         <p class="cmp-locale-empty">${esc(mpT('cmp_no_version_locale'))}</p>
       </div>`;
@@ -448,9 +448,9 @@
               ${active.changeSummary ? `<div class="doc-risk">${esc(active.changeSummary)}</div>` : ''}
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <button type="button" class="btn btn-ghost btn-sm" onclick="editDoc('${active.id}')">${esc(active.isActive ? mpT('cmp_btn_edit_vigente') : mpT('cmp_btn_edit_minuta'))}</button>
-              ${!active.isActive ? `<button type="button" class="btn btn-success btn-sm" style="font-size:11px" onclick="publish('${active.id}', this)">${esc(mpT('cmp_btn_pub'))}</button>` : ''}
-              <button type="button" class="btn btn-danger btn-sm" style="font-size:11px" data-doc-id="${active.id}" data-archive-mode="${active.isActive ? 'active' : 'draft'}" onclick="archiveActiveDoc(this)">${esc(active.isActive ? mpT('cmp_archive_vigente') : mpT('cmp_archive_minuta'))}</button>
+              <button type="button" class="btn btn-ghost btn-sm cmp-btn-edit-doc" data-doc-id="${esc(active.id)}">${esc(active.isActive ? mpT('cmp_btn_edit_vigente') : mpT('cmp_btn_edit_minuta'))}</button>
+              ${!active.isActive ? `<button type="button" class="btn btn-success btn-sm cmp-btn-publish-doc" style="font-size:11px" data-doc-id="${esc(active.id)}">${esc(mpT('cmp_btn_pub'))}</button>` : ''}
+              <button type="button" class="btn btn-danger btn-sm cmp-btn-archive-active" style="font-size:11px" data-doc-id="${esc(active.id)}" data-archive-mode="${active.isActive ? 'active' : 'draft'}">${esc(active.isActive ? mpT('cmp_archive_vigente') : mpT('cmp_archive_minuta'))}</button>
             </div>
           </div>
           <div class="doc-content-preview">${esc((active.content || '').slice(0, 220))}…</div>
@@ -481,11 +481,11 @@
         </span>
         <span class="hist-title">${esc(d.title)}</span>
         <span class="hist-accepts">${acc} ${esc(mpT('cmp_accept_count'))}</span>
-        <span class="hist-date">${d.publishedAt ? new Date(d.publishedAt).toLocaleDateString(mpIntlLocale()) : d.isActive ? '—' : new Date(d.createdAt).toLocaleDateString(mpIntlLocale())}</span>
+        <span class="hist-date">${esc(d.publishedAt ? new Date(d.publishedAt).toLocaleDateString(mpIntlLocale()) : d.isActive ? '—' : new Date(d.createdAt).toLocaleDateString(mpIntlLocale()))}</span>
         <div class="hist-actions">
-          <button type="button" class="btn btn-ghost btn-sm" style="font-size:10px" onclick="editDoc('${d.id}')">${esc(mpT('cmp_btn_edit'))}</button>
-          ${!d.isActive && !d.archivedAt ? `<button type="button" class="btn btn-success btn-sm" style="font-size:10px" onclick="publish('${d.id}', this)">${esc(mpT('cmp_btn_pub'))}</button>` : ''}
-          ${!d.archivedAt ? `<button type="button" class="btn btn-danger btn-sm" style="font-size:10px" onclick="archiveDoc('${d.id}', this)">${esc(mpT('cmp_btn_archive'))}</button>` : ''}
+          <button type="button" class="btn btn-ghost btn-sm cmp-btn-edit-doc" style="font-size:10px" data-doc-id="${esc(d.id)}">${esc(mpT('cmp_btn_edit'))}</button>
+          ${!d.isActive && !d.archivedAt ? `<button type="button" class="btn btn-success btn-sm cmp-btn-publish-doc" style="font-size:10px" data-doc-id="${esc(d.id)}">${esc(mpT('cmp_btn_pub'))}</button>` : ''}
+          ${!d.archivedAt ? `<button type="button" class="btn btn-danger btn-sm cmp-btn-archive-doc" style="font-size:10px" data-doc-id="${esc(d.id)}">${esc(mpT('cmp_btn_archive'))}</button>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -522,8 +522,8 @@
             <span class="type-section-title">${titleBlock}</span>
             <span style="font-size:11px;color:var(--text3);margin-right:4px">${esc(verLine + pendLine)}</span>
             ${statusHeader}
-            <button type="button" class="btn btn-ghost btn-sm" style="font-size:11px" onclick="toggleHistory('${type}')"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> ${esc(mpT('cmp_btn_hist'))}</button>
-            <button type="button" class="btn btn-primary btn-sm" style="font-size:11px" onclick="openEditor('${type}')"><ion-icon name="add-outline" style="font-size:16px;vertical-align:-3px"></ion-icon> ${esc(mpT('cmp_btn_new_version'))}</button>
+            <button type="button" class="btn btn-ghost btn-sm cmp-btn-toggle-history" style="font-size:11px" data-cmp-type="${esc(type)}"><ion-icon name="clipboard-outline" style="vertical-align:-2px"></ion-icon> ${esc(mpT('cmp_btn_hist'))}</button>
+            <button type="button" class="btn btn-primary btn-sm cmp-btn-open-editor" style="font-size:11px" data-cmp-type="${esc(type)}"><ion-icon name="add-outline" style="font-size:16px;vertical-align:-3px"></ion-icon> ${esc(mpT('cmp_btn_new_version'))}</button>
           </div>
           <div class="cmp-locale-grid">${cells}</div>
           <div class="history-panel" id="hist-${type}">
@@ -572,8 +572,6 @@
 
   document.getElementById('cmp-locale-filter')?.addEventListener('change', () => refreshDocsList());
 
-  loadDocs();
-
   function archiveActiveLabel(btn) {
     return btn?.dataset?.archiveMode === 'active' ? mpT('cmp_archive_vigente') : mpT('cmp_archive_minuta');
   }
@@ -581,6 +579,7 @@
   // ── Toggle history panel ──────────────────────────────────────────────────────
   window.toggleHistory = (type) => {
     const p = document.getElementById(`hist-${type}`);
+    if (!p) return;
     p.classList.toggle('open');
   };
 
@@ -780,6 +779,61 @@
 
   document.getElementById('cmp-btn-draft').addEventListener('click', () => saveDoc(false));
   document.getElementById('cmp-btn-publish').addEventListener('click', () => saveDoc(true));
+
+  function wireComplianceDocsListDelegation() {
+    const root = document.getElementById('docs-list');
+    if (!root || root.dataset.cmpClickBound === '1') return;
+    root.dataset.cmpClickBound = '1';
+    root.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+
+      const editDocBtn = t.closest('.cmp-btn-edit-doc');
+      if (editDocBtn && root.contains(editDocBtn)) {
+        const id = editDocBtn.getAttribute('data-doc-id');
+        if (id) void window.editDoc(id);
+        return;
+      }
+      const publishDocBtn = t.closest('.cmp-btn-publish-doc');
+      if (publishDocBtn && root.contains(publishDocBtn)) {
+        ev.preventDefault();
+        const id = publishDocBtn.getAttribute('data-doc-id');
+        if (id) void window.publish(id, publishDocBtn);
+        return;
+      }
+      const archiveActiveBtn = t.closest('.cmp-btn-archive-active');
+      if (archiveActiveBtn && root.contains(archiveActiveBtn)) {
+        ev.preventDefault();
+        void window.archiveActiveDoc(archiveActiveBtn);
+        return;
+      }
+      const archiveDocBtn = t.closest('.cmp-btn-archive-doc');
+      if (archiveDocBtn && root.contains(archiveDocBtn)) {
+        ev.preventDefault();
+        const id = archiveDocBtn.getAttribute('data-doc-id');
+        if (id) void window.archiveDoc(id, archiveDocBtn);
+        return;
+      }
+
+      const el = t.closest('.cmp-btn-open-editor, .cmp-btn-toggle-history');
+      if (!el) return;
+      if (el.classList.contains('cmp-btn-open-editor')) {
+        const typ = el.getAttribute('data-cmp-type');
+        const loc = el.getAttribute('data-cmp-locale');
+        const typeArg = typ !== null && typ !== '' ? typ : null;
+        const locArg = loc !== null && loc !== '' ? loc : null;
+        window.openEditor(typeArg, locArg);
+        return;
+      }
+      if (el.classList.contains('cmp-btn-toggle-history')) {
+        const typ = el.getAttribute('data-cmp-type');
+        if (typ != null && typ !== '') window.toggleHistory(typ);
+      }
+    });
+  }
+
+  wireComplianceDocsListDelegation();
+  loadDocs();
 </script>
 </body>
 </html>

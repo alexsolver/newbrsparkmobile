@@ -279,9 +279,10 @@ function getBatteryHtml(level, charging) {
 }
 
 function getAccuracyColor(acc) {
-  if (!acc) return '#94a3b8';
-  if (acc < 20) return '#3b82f6';
-  if (acc <= 100) return '#f59e0b';
+  const n = Number(acc);
+  if (!Number.isFinite(n) || n <= 0) return '#94a3b8';
+  if (n < 20) return '#3b82f6';
+  if (n <= 100) return '#f59e0b';
   return '#ef4444';
 }
 
@@ -525,7 +526,7 @@ window.toggleLive = () => {
   if (liveIntervalId) {
     clearInterval(liveIntervalId);
     liveIntervalId = null;
-    btn.innerHTML = `<ion-icon name="radio-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon><span id="tel-btn-live-txt">${mpT('tel_btn_live')}</span>`;
+    btn.innerHTML = `<ion-icon name="radio-outline" style="vertical-align:-2px; margin-right:4px;"></ion-icon><span id="tel-btn-live-txt">${escTelemetryHtml(mpT('tel_btn_live'))}</span>`;
     btn.style.color = "var(--text)";
     btn.style.borderColor = "var(--border)";
   } else {
@@ -542,7 +543,7 @@ window.toggleLive = () => {
     loadTelemetry(true);
     liveIntervalId = setInterval(() => { loadTelemetry(true); }, 5000);
     
-    btn.innerHTML = `<ion-icon name="radio-button-on" style="vertical-align:-2px; margin-right:4px; color: #ef4444;"></ion-icon><span id="tel-btn-live-txt" style="color:#ef4444; font-weight:700">${mpT('tel_btn_live')}</span>`;
+    btn.innerHTML = `<ion-icon name="radio-button-on" style="vertical-align:-2px; margin-right:4px; color: #ef4444;"></ion-icon><span id="tel-btn-live-txt" style="color:#ef4444; font-weight:700">${escTelemetryHtml(mpT('tel_btn_live'))}</span>`;
     btn.style.borderColor = "#ef4444";
   }
 };

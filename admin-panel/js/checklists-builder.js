@@ -443,11 +443,18 @@ window.openChecklistVersionHistory = async function(id) {
                 <div style="font-size:12px;color:#64748b;line-height:1.45;">${note}</div>
                 <div style="font-size:11px;color:#94a3b8;margin-top:6px;">${escapeHtml(createdAt)}${who}</div>
               </div>
-              <button type="button" class="btn btn-outline btn-sm" onclick="void window.restoreChecklistVersion('${escapeHtmlAttr(targetId)}','${escapeHtmlAttr(v.id)}')">Restaurar</button>
+              <button type="button" class="btn btn-outline btn-sm cbk-restore-version" data-cbk-restore-template="${escapeHtmlAttr(String(targetId))}" data-cbk-restore-version="${escapeHtmlAttr(String(v.id))}">Restaurar</button>
             </div>
           `;
         }).join('')
       : '<p style="color:#64748b;font-size:13px;">Ainda não há versões registradas.</p>';
+    body.querySelectorAll('.cbk-restore-version').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tplId = btn.getAttribute('data-cbk-restore-template') || '';
+        const verId = btn.getAttribute('data-cbk-restore-version') || '';
+        void window.restoreChecklistVersion(tplId, verId);
+      });
+    });
     modal.style.display = 'flex';
   } catch (e) {
     fbAlert('fb_alert_history_load_fail', { detail: String(e.message || e) }, 'Não foi possível carregar o histórico: ' + (e.message || e));
@@ -3013,42 +3020,96 @@ function buildCanvasFieldElement(f) {
     div.innerHTML = `
                 <div class="canvas-drag-handle" title="Arrastar para reordenar" aria-label="Arrastar para reordenar"><ion-icon name="reorder-two-outline" style="font-size:22px;"></ion-icon></div>
                 <div class="canvas-item-main">
-                    <div title="Trocar Ícone deste Campo" onclick="window.triggerIconPickerForField(event, '${f.id}')" style="width:44px; height:44px; flex-shrink:0; background:${f.icon ? '#eff6ff' : '#f8fafc'}; border:1px ${f.icon ? 'solid #3b82f6' : 'dashed #cbd5e1'}; border-radius:10px; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:22px; color:${f.icon ? '#1d4ed8' : '#64748b'}; transition:0.2s;" onmouseover="this.style.borderColor='#3b82f6'; this.style.color='#3b82f6'" onmouseout="this.style.borderColor='${f.icon ? '#3b82f6' : '#cbd5e1'}'; this.style.color='${f.icon ? '#1d4ed8' : '#64748b'}'">
+                    <div class="cbk-canvas-icon-hit" title="Trocar Ícone deste Campo" style="width:44px; height:44px; flex-shrink:0; background:${f.icon ? '#eff6ff' : '#f8fafc'}; border:1px ${f.icon ? 'solid #3b82f6' : 'dashed #cbd5e1'}; border-radius:10px; display:flex; justify-content:center; align-items:center; cursor:pointer; font-size:22px; color:${f.icon ? '#1d4ed8' : '#64748b'}; transition:0.2s;">
                         ${iconHTML}
                     </div>
                     <div style="flex:1; min-width:0;">
                         <div style="font-size:14.5px; color:var(--text1); display:flex; align-items:center; min-width:0;">
-                            <input type="text" class="canvas-item-title-input" style="background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--text1); font-weight:bold; font-size:14.5px; outline:none; flex:1; min-width:0; width:100%; cursor:text;" value="${escapeHtmlLogic(glab(f))}" onfocus="this.style.borderBottomColor='#cbd5e1'; window.selectField('${f.id}', { skipPropertiesIfSame: true, fromCanvasTitleFocus: true });" onblur="this.style.borderBottomColor='transparent'" oninput="window.handleInlineLabelUpdate(event, '${f.id}')" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" />
+                            <input type="text" class="canvas-item-title-input" style="background:transparent; border:none; border-bottom:1px dashed transparent; color:var(--text1); font-weight:bold; font-size:14.5px; outline:none; flex:1; min-width:0; width:100%; cursor:text;" value="${escapeHtmlLogic(glab(f))}" />
                         </div>
                         <div class="canvas-item-tags">${multiTag}${condTag}</div>
                         <div class="canvas-item-meta" style="font-size:11px; color:var(--text3); margin-top:6px; letter-spacing:0.3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                          <span>ID: ${f.id}</span>
+                          <span>ID: ${escapeHtml(String(f.id))}</span>
                           <span>|</span>
                           <span>TYPE:</span>
                           <select
                             class="canvas-item-type-select"
                             style="font-size:11px; padding:2px 6px; border-radius:6px; border:1px solid #cbd5e1; background:#fff; color:#334155; max-width:220px;"
-                            onchange="window.handleInlineFieldTypeUpdate(event, '${f.id}')"
-                            onclick="event.stopPropagation();"
-                            onmousedown="event.stopPropagation();"
                             title="${typeLocked ? 'Tipo fixo para manter integridade do deslocamento' : 'Alterar tipo do campo no canvas'}"
                             ${typeLocked ? 'disabled' : ''}
                           >${typeOptions}</select>
                         </div>
                     </div>
                 </div>
-                <div class="canvas-item-toolbar" onclick="event.stopPropagation();">
-                    <button type="button" title="Propriedades do campo" onclick="window.selectField('${f.id}', { openPropertiesModal: true })"><ion-icon name="settings-outline"></ion-icon></button>
+                <div class="canvas-item-toolbar">
+                    <button type="button" class="cbk-canvas-btn-props" title="Propriedades do campo"><ion-icon name="settings-outline"></ion-icon></button>
                     ${
                         f.type === 'leitura'
                             ? ''
-                            : `<button type="button" class="${f.required ? 'is-req-active' : ''}" title="${f.required ? 'Obrigatório — clique para opcional' : 'Opcional — clique para obrigatório'}" onclick="window.toggleInlineRequired(event, '${f.id}')"><ion-icon name="${f.required ? 'checkmark-circle-outline' : 'ellipse-outline'}"></ion-icon></button>`
+                            : `<button type="button" class="cbk-canvas-btn-req ${f.required ? 'is-req-active' : ''}" title="${f.required ? 'Obrigatório — clique para opcional' : 'Opcional — clique para obrigatório'}"><ion-icon name="${f.required ? 'checkmark-circle-outline' : 'ellipse-outline'}"></ion-icon></button>`
                     }
-                    <button type="button" title="Lógica e regras" onclick="window.openLogicModal(event, '${f.id}')"><ion-icon name="options-outline"></ion-icon></button>
-                    <button type="button" title="Duplicar" onclick="window.cloneField('${f.id}')"><ion-icon name="copy-outline"></ion-icon></button>
-                    <button type="button" title="Excluir" class="danger canvas-item-delete" onclick="window.deleteField('${f.id}')"><ion-icon name="trash-outline"></ion-icon></button>
+                    <button type="button" class="cbk-canvas-btn-logic" title="Lógica e regras"><ion-icon name="options-outline"></ion-icon></button>
+                    <button type="button" class="cbk-canvas-btn-clone" title="Duplicar"><ion-icon name="copy-outline"></ion-icon></button>
+                    <button type="button" title="Excluir" class="danger canvas-item-delete cbk-canvas-btn-del"><ion-icon name="trash-outline"></ion-icon></button>
                 </div>
             `;
+
+    const fid = f.id;
+    const iconHit = div.querySelector('.cbk-canvas-icon-hit');
+    if (iconHit) {
+      iconHit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.triggerIconPickerForField(e, fid);
+      });
+      const defBorder = f.icon ? '#3b82f6' : '#cbd5e1';
+      const defColor = f.icon ? '#1d4ed8' : '#64748b';
+      iconHit.addEventListener('mouseenter', () => {
+        iconHit.style.borderColor = '#3b82f6';
+        iconHit.style.color = '#3b82f6';
+      });
+      iconHit.addEventListener('mouseleave', () => {
+        iconHit.style.borderColor = defBorder;
+        iconHit.style.color = defColor;
+      });
+    }
+    const titleInp = div.querySelector('.canvas-item-title-input');
+    if (titleInp) {
+      titleInp.addEventListener('focus', () => {
+        titleInp.style.borderBottomColor = '#cbd5e1';
+        window.selectField(fid, { skipPropertiesIfSame: true, fromCanvasTitleFocus: true });
+      });
+      titleInp.addEventListener('blur', () => {
+        titleInp.style.borderBottomColor = 'transparent';
+      });
+      titleInp.addEventListener('input', (e) => window.handleInlineLabelUpdate(e, fid));
+      titleInp.addEventListener('click', (e) => e.stopPropagation());
+      titleInp.addEventListener('mousedown', (e) => e.stopPropagation());
+    }
+    const typeSel = div.querySelector('.canvas-item-type-select');
+    if (typeSel) {
+      typeSel.addEventListener('click', (e) => e.stopPropagation());
+      typeSel.addEventListener('mousedown', (e) => e.stopPropagation());
+      typeSel.addEventListener('change', (e) => window.handleInlineFieldTypeUpdate(e, fid));
+    }
+    const toolbar = div.querySelector('.canvas-item-toolbar');
+    if (toolbar) {
+      toolbar.addEventListener('click', (e) => e.stopPropagation());
+      toolbar.querySelector('.cbk-canvas-btn-props')?.addEventListener('click', () => {
+        window.selectField(fid, { openPropertiesModal: true });
+      });
+      toolbar.querySelector('.cbk-canvas-btn-req')?.addEventListener('click', (e) => {
+        window.toggleInlineRequired(e, fid);
+      });
+      toolbar.querySelector('.cbk-canvas-btn-logic')?.addEventListener('click', (e) => {
+        window.openLogicModal(e, fid);
+      });
+      toolbar.querySelector('.cbk-canvas-btn-clone')?.addEventListener('click', () => {
+        window.cloneField(fid);
+      });
+      toolbar.querySelector('.cbk-canvas-btn-del')?.addEventListener('click', () => {
+        window.deleteField(fid);
+      });
+    }
 
     div.onclick = (e) => {
         if (window.__brsparkCanvasDragging) return;
@@ -4234,7 +4295,7 @@ function renderProperties() {
         const exBtnColor = useGeminiVision ? (isVisionComparison ? '#a21caf' : '#b91c1c') : '#0369a1';
         const visionPromptLabelRow = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
             <label class="prop-label" style="color:${vLabel}; font-size:10px; margin:0;">${escapeHtmlLogic(fbStr('fb_prop_vision_prompt_lbl', null, 'Prompt estruturado (único)'))}</label>
-            <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;padding:4px 10px;white-space:nowrap;border-color:${exBtnBorder};color:${exBtnColor};" onclick="window.openVisionAiStructuredPromptExamplesModal()" title="${escapeHtmlAttr(
+            <button type="button" class="btn btn-outline btn-sm cbk-prop-vision-ex-btn" style="font-size:11px;padding:4px 10px;white-space:nowrap;border-color:${exBtnBorder};color:${exBtnColor};" title="${escapeHtmlAttr(
                 fbStr('fb_vision_prompt_ex_btn_title', null, 'Modelos de prompt para serviços de campo (Visão de IA — análise)'),
             )}"><ion-icon name="sparkles-outline" style="vertical-align:-2px"></ion-icon> ${escapeHtmlLogic(fbStr('fb_vision_prompt_ex_btn', null, 'Exemplos'))}</button>
           </div>`;
@@ -4271,7 +4332,7 @@ function renderProperties() {
             <div style="font-size:9px;color:#64748b;margin-bottom:10px;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_hint', null, 'JPEG, PNG ou WebP (recomendado até ~2,5 MB).'))}</div>
             ${
                 refUrlRaw
-                    ? `<div style="margin-bottom:10px;"><img src="${escapeHtmlAttr(refUrlRaw)}" alt="" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid #e9d5ff;object-fit:contain;background:#fafafa" /><div style="margin-top:8px;"><button type="button" class="btn btn-outline btn-sm" style="font-size:11px;border-color:#e879f9;color:#a21caf" onclick="window.handleFieldUpdate('visionComparisonReferenceDataUrl','');if(typeof renderProperties==='function')renderProperties();">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_clear', null, 'Remover referência'))}</button></div></div>`
+                    ? `<div style="margin-bottom:10px;"><img src="${escapeHtmlAttr(refUrlRaw)}" alt="" style="max-width:100%;max-height:160px;border-radius:8px;border:1px solid #e9d5ff;object-fit:contain;background:#fafafa" /><div style="margin-top:8px;"><button type="button" class="btn btn-outline btn-sm cbk-prop-vision-ref-clear" style="font-size:11px;border-color:#e879f9;color:#a21caf">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_clear', null, 'Remover referência'))}</button></div></div>`
                     : `<div style="font-size:11px;color:#b45309;font-weight:700;margin-bottom:10px;padding:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_missing', null, 'Configure uma imagem de referência — sem ela o técnico não consegue comparar.'))}</div>`
             }`
             : '';
@@ -4443,7 +4504,7 @@ function renderProperties() {
             <div style="font-size:10px; color:#065f46; line-height:1.35; margin-bottom:10px;">${matrixIntro}</div>
             <label class="prop-label" style="color:#0f766e; font-size:10px;">${colsUiLbl}</label>
             <div id="prop-matrix-cols-ui" style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px;">${matrixRowsUi}</div>
-            <button type="button" class="btn btn-outline btn-sm" style="font-size:12px;margin-bottom:10px;" onclick="window.addRepeatableMatrixColumnRow()" ${addDisabled}>${addLbl}</button>
+            <button type="button" class="btn btn-outline btn-sm cbk-prop-matrix-add-col" style="font-size:12px;margin-bottom:10px;" ${addDisabled}>${addLbl}</button>
             <details style="margin:10px 0 4px;">
                 <summary style="cursor:pointer; font-size:11px; font-weight:700; color:#047857;">${jsonAdv}</summary>
                 <div style="font-size:10px; color:#065f46; line-height:1.35; margin:8px 0;">${jsonAdvHint}</div>
@@ -4596,8 +4657,8 @@ function renderProperties() {
                 ${sumHelp}
             </div>
             <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-                <button type="button" class="btn btn-outline btn-sm" onclick="window.signatureSummarySelectAllSources()" style="font-size:11px;padding:6px 10px;">${lblAll}</button>
-                <button type="button" class="btn btn-ghost btn-sm" onclick="window.signatureSummaryClearAllSources()" style="font-size:11px;padding:6px 10px;">${lblClear}</button>
+                <button type="button" class="btn btn-outline btn-sm cbk-prop-sigsum-select-all" style="font-size:11px;padding:6px 10px;">${lblAll}</button>
+                <button type="button" class="btn btn-ghost btn-sm cbk-prop-sigsum-clear" style="font-size:11px;padding:6px 10px;">${lblClear}</button>
             </div>
             <div style="max-height:220px; overflow-y:auto;">${
                 pickRows || `<span style="font-size:11px;color:#94a3b8">${sumNone}</span>`
@@ -4868,6 +4929,7 @@ function renderProperties() {
     }
 
     setTimeout(function () {
+        bindFieldPropertiesNonInlineHandlers(elPropsBody);
         if (f.type === 'leitura') {
             if (typeof window.initFieldReadingEditor === 'function') window.initFieldReadingEditor(f);
         } else if (typeof window.initFieldHelpEditor === 'function') {
@@ -4875,6 +4937,32 @@ function renderProperties() {
         }
         fbRestoreScrollAfterRichDomUpdate(elPropsBody, prevFieldPropsModalScroll);
     }, 0);
+}
+
+/** Botões que deixaram de usar `onclick` inline no painel de propriedades (CSP / consistência). */
+function bindFieldPropertiesNonInlineHandlers(root) {
+    if (!root) return;
+    root.querySelectorAll('.cbk-prop-vision-ex-btn').forEach((btn) => {
+        btn.addEventListener('click', () => window.openVisionAiStructuredPromptExamplesModal());
+    });
+    root.querySelectorAll('.cbk-prop-vision-ref-clear').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            window.handleFieldUpdate('visionComparisonReferenceDataUrl', '');
+            if (typeof renderProperties === 'function') renderProperties();
+        });
+    });
+    root.querySelectorAll('.cbk-prop-matrix-add-col').forEach((btn) => {
+        btn.addEventListener('click', () => window.addRepeatableMatrixColumnRow());
+    });
+    root.querySelectorAll('.cbk-prop-sigsum-select-all').forEach((btn) => {
+        btn.addEventListener('click', () => window.signatureSummarySelectAllSources());
+    });
+    root.querySelectorAll('.cbk-prop-sigsum-clear').forEach((btn) => {
+        btn.addEventListener('click', () => window.signatureSummaryClearAllSources());
+    });
+    root.querySelectorAll('.cbk-prop-matrix-rm-col').forEach((btn) => {
+        btn.addEventListener('click', (ev) => window.removeRepeatableMatrixColumnRow(ev));
+    });
 }
 
 window.renderProperties = renderProperties;
@@ -5306,7 +5394,7 @@ function buildMatrixColumnsEditorRowsHtml(f) {
                     <option value="number"${ct === 'number' ? ' selected' : ''}>${optNum}</option>
                     <option value="yes_no"${ct === 'yes_no' ? ' selected' : ''}>${optYn}</option>
                 </select>
-                <button type="button" class="btn btn-ghost btn-sm" onclick="window.removeRepeatableMatrixColumnRow(event)" title="${remTitle}" style="padding:6px 8px;line-height:1;"><ion-icon name="trash-outline"></ion-icon></button>
+                <button type="button" class="btn btn-ghost btn-sm cbk-prop-matrix-rm-col" title="${remTitle}" style="padding:6px 8px;line-height:1;"><ion-icon name="trash-outline"></ion-icon></button>
             </div>`;
         })
         .join('');
@@ -6932,7 +7020,7 @@ function renderFolderBreadcrumb() {
     if (!el) return;
     const parts = [];
     parts.push(
-        `<a href="#" style="color:#2563eb;text-decoration:none;font-weight:600;" onclick="event.preventDefault();window.enterBrowseFolder(null);return false;">Início</a>`
+        `<a href="#" class="cbk-folder-crumb" data-cbk-folder-id="" style="color:#2563eb;text-decoration:none;font-weight:600;">Início</a>`
     );
     const chain = folderPathChain(builderBrowseFolderId);
     chain.forEach((f, i) => {
@@ -6942,11 +7030,18 @@ function renderFolderBreadcrumb() {
             parts.push(`<span style="font-weight:600;color:#0f172a;">${escapeHtml(f.name)}</span>`);
         } else {
             parts.push(
-                `<a href="#" style="color:#2563eb;text-decoration:none;" onclick="event.preventDefault();window.enterBrowseFolder('${escapeHtmlAttr(f.id)}');return false;">${escapeHtml(f.name)}</a>`
+                `<a href="#" class="cbk-folder-crumb" data-cbk-folder-id="${escapeHtmlAttr(String(f.id))}" style="color:#2563eb;text-decoration:none;">${escapeHtml(f.name)}</a>`
             );
         }
     });
     el.innerHTML = parts.join('');
+    el.querySelectorAll('a.cbk-folder-crumb').forEach((a) => {
+      a.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const raw = a.getAttribute('data-cbk-folder-id');
+        window.enterBrowseFolder(raw && String(raw).trim() !== '' ? raw : null);
+      });
+    });
 }
 
 window.enterBrowseFolder = function (id) {
@@ -7664,8 +7759,8 @@ function renderMobilePreview() {
         modeBanner = `<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:10px 12px;font-size:11px;color:#92400e;margin-bottom:8px;line-height:1.45;">
             <b>Assistente:</b> campo ${n ? ix + 1 : 0} de ${n}
             <span style="display:inline-block;margin-left:8px;vertical-align:middle;">
-            <button type="button" onclick="window.shiftMobilePreviewWizardIx(-1)" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #d97706;background:#fff;">◀</button>
-            <button type="button" onclick="window.shiftMobilePreviewWizardIx(1)" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #d97706;background:#fff;margin-left:4px;">▶</button>
+            <button type="button" class="cbk-mprev-wiz" data-cbk-delta="-1" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #d97706;background:#fff;">◀</button>
+            <button type="button" class="cbk-mprev-wiz" data-cbk-delta="1" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #d97706;background:#fff;margin-left:4px;">▶</button>
             </span></div>`;
     } else {
         const hy = sectionPages;
@@ -7676,8 +7771,8 @@ function renderMobilePreview() {
         modeBanner = `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 12px;font-size:11px;color:#166534;margin-bottom:8px;line-height:1.45;">
             <b>Híbrido:</b> "${pg.pageTitle || 'Etapa'}" — etapa ${hy.length ? pix + 1 : 0} de ${hy.length}
             <span style="display:inline-block;margin-left:8px;vertical-align:middle;">
-            <button type="button" onclick="window.shiftMobilePreviewHybridPage(-1)" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #166534;background:#fff;">◀</button>
-            <button type="button" onclick="window.shiftMobilePreviewHybridPage(1)" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #166534;background:#fff;margin-left:4px;">▶</button>
+            <button type="button" class="cbk-mprev-hyb" data-cbk-delta="-1" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #166534;background:#fff;">◀</button>
+            <button type="button" class="cbk-mprev-hyb" data-cbk-delta="1" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid #166534;background:#fff;margin-left:4px;">▶</button>
             </span></div>`;
     }
 
@@ -7835,6 +7930,24 @@ function renderMobilePreview() {
     html += `<button disabled style="background:var(--primary); color:white; font-weight:800; border:none; padding:18px; border-radius:12px; font-size:16px; margin-top:10px; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">✅ SALVAR FORMULÁRIO EM OFFLINE-FIRST</button>`;
     
     contentEl.innerHTML = html;
+    bindMobilePreviewNavButtons(contentEl);
+}
+
+/** Navegação assistente / híbrido no preview móvel (sem `onclick` inline). */
+function bindMobilePreviewNavButtons(host) {
+    if (!host) return;
+    host.querySelectorAll('.cbk-mprev-wiz').forEach((btn) => {
+        const d = Number(btn.getAttribute('data-cbk-delta'));
+        btn.addEventListener('click', () => {
+            if (Number.isFinite(d)) window.shiftMobilePreviewWizardIx(d);
+        });
+    });
+    host.querySelectorAll('.cbk-mprev-hyb').forEach((btn) => {
+        const d = Number(btn.getAttribute('data-cbk-delta'));
+        btn.addEventListener('click', () => {
+            if (Number.isFinite(d)) window.shiftMobilePreviewHybridPage(d);
+        });
+    });
 }
 
 // Boot Local DB listener
@@ -8182,7 +8295,7 @@ function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
     const opSelect = `
             ${visionRatingHint}
             ${visionDetectionHint}
-            <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'operator', this.value)" style="margin-bottom:12px;">
+            <select class="prop-input" onchange="window.updateLogicRule(${JSON.stringify(ruleIndex)}, 'operator', this.value)" style="margin-bottom:12px;">
                 ${opList
                     .map(([val, i18nKey]) => {
                         const label = logicStr(i18nKey, String(val));
@@ -8202,17 +8315,17 @@ function buildLogicConditionUI(rule, ruleIndex, monitorFieldId) {
                 : logicStr('fb_logic_ph_sec_single', 'Segundos (ex.: 120)'),
         );
         valInput = `
-            <input type="${useBetween ? 'text' : 'number'}" ${useBetween ? '' : 'min="0" step="1"'} class="prop-input" placeholder="${phSec}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
+            <input type="${useBetween ? 'text' : 'number'}" ${useBetween ? '' : 'min="0" step="1"'} class="prop-input" placeholder="${phSec}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${JSON.stringify(ruleIndex)}, 'value', this.value)" style="margin-bottom:12px;" />`;
     } else if (!isFormClock && !isSection && logicConditionSingleNumberInput(op)) {
         valInput = `
             <input type="number" step="any" class="prop-input" placeholder="${escapeHtmlLogic(
                 logicValuePlaceholder(op),
-            )}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
+            )}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${JSON.stringify(ruleIndex)}, 'value', this.value)" style="margin-bottom:12px;" />`;
     } else if (!isFormClock && !isSection && !logicConditionNeedsNoValueField(op)) {
         valInput = `
             <input type="text" class="prop-input" placeholder="${escapeHtmlLogic(
                 logicValuePlaceholder(op),
-            )}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${ruleIndex}, 'value', this.value)" style="margin-bottom:12px;" />`;
+            )}" value="${escapeHtmlLogic(rule.value || '')}" onchange="window.updateLogicRule(${JSON.stringify(ruleIndex)}, 'value', this.value)" style="margin-bottom:12px;" />`;
     }
 
     return { opSelect, valInput };
@@ -8423,7 +8536,7 @@ function renderLogicRules() {
                 <label style="display:block; font-size:10px; font-weight:800; color:#64748b; margin-bottom:4px;">${escapeHtmlLogic(
                     logicStr('fb_logic_monitor_label', 'Campo monitorado (dispara o SE)'),
                 )}</label>
-                <select class="prop-input" onchange="window.updateLogicRule(${ruleIndex}, 'condFieldId', this.value)" style="margin-bottom:0;">
+                <select class="prop-input" onchange="window.updateLogicRule(${JSON.stringify(ruleIndex)}, 'condFieldId', this.value)" style="margin-bottom:0;">
                     ${condSourceOptions}
                 </select>
             </div>
@@ -8444,19 +8557,19 @@ function renderLogicRules() {
                 actionsHTML += `
                 <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch; background:#ecfdf5; padding:12px; border-radius:6px; margin-bottom:8px; border:1px solid #86efac;">
                     <div style="display:flex; gap:8px; align-items:center; justify-content:space-between;">
-                        <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'type', this.value)">
+                        <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'type', this.value)">
                             ${buildLogicActionTypeOptionsHtml('API_FETCH')}
                         </select>
-                        <div style="cursor:pointer; color:var(--red); font-size:20px;" onclick="window.removeLogicAction(${ruleIndex}, ${actionIndex})">&times;</div>
+                        <button type="button" class="cbk-logic-rm-action" aria-label="Remover ação" data-cbk-logic-rule="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-logic-action="${escapeHtmlAttr(String(actionIndex))}" style="cursor:pointer; color:var(--red); font-size:20px; border:none; background:transparent; padding:0; line-height:1;">&times;</button>
                     </div>
                     <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_target', 'Campo destino (recebe o texto extraído)'),
                     )}</label>
-                    <select class="prop-input" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'targetId', this.value)">${fieldOptsFetch}</select>
+                    <select class="prop-input" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'targetId', this.value)">${fieldOptsFetch}</select>
                     <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_method', 'Método HTTP'),
                     )}</label>
-                    <select class="prop-input" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiMethod', this.value)">
+                    <select class="prop-input" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiMethod', this.value)">
                         <option value="POST" ${(act.apiMethod || 'POST') === 'POST' ? 'selected' : ''}>${escapeHtmlLogic(
                             logicStr('fb_logic_api_method_post', 'POST (JSON com formulário, tarefa e respostas)'),
                         )}</option>
@@ -8467,17 +8580,17 @@ function renderLogicRules() {
                     <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_url', 'URL do endpoint'),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phUrl}" value="${escapeHtmlLogic(act.apiUrl || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiUrl', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phUrl}" value="${escapeHtmlLogic(act.apiUrl || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiUrl', this.value)" />
                     <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_path', 'Caminho no JSON da resposta (opcional)'),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phPath}" value="${escapeHtmlLogic(act.apiResponsePath || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiResponsePath', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phPath}" value="${escapeHtmlLogic(act.apiResponsePath || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiResponsePath', this.value)" />
                     <label style="font-size:10px; color:#166534; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_errmsg', 'Mensagem se falhar a chamada'),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phErr}" value="${escapeHtmlLogic(act.apiErrorMsg || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiErrorMsg', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phErr}" value="${escapeHtmlLogic(act.apiErrorMsg || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiErrorMsg', this.value)" />
                     <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
-                        <input type="checkbox" id="api_fetch_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiAllowOffline', this.checked)" />
+                        <input type="checkbox" id="api_fetch_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiAllowOffline', this.checked)" />
                         <label for="api_fetch_off_${ruleIndex}_${actionIndex}" style="font-size:12px; color:#166534; cursor:pointer;">${escapeHtmlLogic(
                             logicStr('fb_logic_api_fetch_offline', 'Se offline, não buscar nem alterar o campo'),
                         )}</label>
@@ -8490,10 +8603,10 @@ function renderLogicRules() {
                 actionsHTML += `
                 <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch; background:#f0f9ff; padding:12px; border-radius:6px; margin-bottom:8px; border:1px solid #bae6fd;">
                     <div style="display:flex; gap:8px; align-items:center; justify-content:space-between;">
-                        <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'type', this.value)">
+                        <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'type', this.value)">
                             ${buildLogicActionTypeOptionsHtml('API_VALIDATION')}
                         </select>
-                        <div style="cursor:pointer; color:var(--red); font-size:20px;" onclick="window.removeLogicAction(${ruleIndex}, ${actionIndex})">&times;</div>
+                        <button type="button" class="cbk-logic-rm-action" aria-label="Remover ação" data-cbk-logic-rule="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-logic-action="${escapeHtmlAttr(String(actionIndex))}" style="cursor:pointer; color:var(--red); font-size:20px; border:none; background:transparent; padding:0; line-height:1;">&times;</button>
                     </div>
                     <label style="font-size:10px; color:#0284c7; font-weight:bold;">${escapeHtmlLogic(
                         logicStr(
@@ -8501,20 +8614,20 @@ function renderLogicRules() {
                             'URL do endpoint (o app fará POST injetando o payload XML/JSON)',
                         ),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phUrlVal}" value="${escapeHtmlAttr(act.apiUrl || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiUrl', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phUrlVal}" value="${escapeHtmlAttr(act.apiUrl || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiUrl', this.value)" />
                     <label style="font-size:10px; color:#0284c7; font-weight:bold;">${escapeHtmlLogic(
                         logicStr(
                             'fb_logic_api_lbl_expected',
                             'Condição de retorno de sucesso (string/regex esperada no corpo)',
                         ),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phExp}" value="${escapeHtmlAttr(act.apiExpectedReturn || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiExpectedReturn', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phExp}" value="${escapeHtmlAttr(act.apiExpectedReturn || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiExpectedReturn', this.value)" />
                     <label style="font-size:10px; color:#0284c7; font-weight:bold;">${escapeHtmlLogic(
                         logicStr('fb_logic_api_lbl_block_msg', 'Mensagem personalizada em caso de bloqueio/erro'),
                     )}</label>
-                    <input type="text" class="prop-input" placeholder="${phBlock}" value="${escapeHtmlAttr(act.apiErrorMsg || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiErrorMsg', this.value)" />
+                    <input type="text" class="prop-input" placeholder="${phBlock}" value="${escapeHtmlAttr(act.apiErrorMsg || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiErrorMsg', this.value)" />
                     <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
-                        <input type="checkbox" id="api_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'apiAllowOffline', this.checked)" />
+                        <input type="checkbox" id="api_off_${ruleIndex}_${actionIndex}" ${act.apiAllowOffline ? 'checked' : ''} onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'apiAllowOffline', this.checked)" />
                         <label for="api_off_${ruleIndex}_${actionIndex}" style="font-size:12px; color:#0369a1; cursor:pointer;">${escapeHtmlLogic(
                             logicStr('fb_logic_api_allow_offline', 'Permitir que o técnico pule a regra se estiver offline'),
                         )}</label>
@@ -8527,7 +8640,7 @@ function renderLogicRules() {
                         <div style="color:var(--accent); font-weight:800; font-size:12px; margin-right:8px;">${escapeHtmlLogic(
                             logicStr('fb_logic_then', 'ENTÃO'),
                         )}</div>
-                        <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'type', this.value)">
+                        <select class="prop-input" style="flex:1" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'type', this.value)">
                             ${buildLogicActionTypeOptionsHtml(act.type || 'SHOW')}
                         </select>
                         <select class="prop-input" style="flex:1">
@@ -8535,10 +8648,10 @@ function renderLogicRules() {
                         </select>
                         ${
                             act.type === 'SET_VALUE'
-                                ? `<input type="text" class="prop-input" style="flex:1" placeholder="${phNewVal}" value="${escapeHtmlAttr(act.value || '')}" onchange="window.updateLogicAction(${ruleIndex}, ${actionIndex}, 'value', this.value)" />`
+                                ? `<input type="text" class="prop-input" style="flex:1" placeholder="${phNewVal}" value="${escapeHtmlAttr(act.value || '')}" onchange="window.updateLogicAction(${JSON.stringify(ruleIndex)}, ${JSON.stringify(actionIndex)}, 'value', this.value)" />`
                                 : ''
                         }
-                        <div style="cursor:pointer; color:var(--red); font-size:20px;" onclick="window.removeLogicAction(${ruleIndex}, ${actionIndex})">&times;</div>
+                        <button type="button" class="cbk-logic-rm-action" aria-label="Remover ação" data-cbk-logic-rule="${escapeHtmlAttr(String(ruleIndex))}" data-cbk-logic-action="${escapeHtmlAttr(String(actionIndex))}" style="cursor:pointer; color:var(--red); font-size:20px; border:none; background:transparent; padding:0; line-height:1;">&times;</button>
                     </div>
                 `;
             }
@@ -8556,21 +8669,38 @@ function renderLogicRules() {
                     <div style="flex:1; min-width:120px;">${valInput}</div>
                     </div>
                 </div>
-                <div style="cursor:pointer; color:var(--red); padding:4px 8px; font-weight:700; font-size:12px; border:1px solid var(--red); border-radius:4px; margin-left:12px;" onclick="window.removeLogicRule(${ruleIndex})">${escapeHtmlLogic(
+                <button type="button" class="cbk-logic-rm-rule" data-cbk-logic-rule="${escapeHtmlAttr(String(ruleIndex))}" style="cursor:pointer; color:var(--red); padding:4px 8px; font-weight:700; font-size:12px; border:1px solid var(--red); border-radius:4px; margin-left:12px; background:transparent;">${escapeHtmlLogic(
                     logicStr('fb_logic_del_rule', 'Excluir regra'),
-                )}</div>
+                )}</button>
             </div>
             
             <div style="border-top:1px dashed #cbd5e1; padding-top:12px;">
                 ${actionsHTML}
-                <button class="btn btn-outline btn-sm" style="margin-top:4px;" onclick="window.addLogicAction(${ruleIndex})">${escapeHtmlLogic(
+                <button type="button" class="btn btn-outline btn-sm cbk-logic-add-action" data-cbk-logic-rule="${escapeHtmlAttr(String(ruleIndex))}" style="margin-top:4px;">${escapeHtmlLogic(
                     logicStr('fb_logic_add_action', '+ Adicionar ação (ENTÃO)'),
                 )}</button>
             </div>
         `;
         
         container.appendChild(div);
-        
+
+        div.querySelectorAll('.cbk-logic-rm-action').forEach((btn) => {
+          const r = Number.parseInt(String(btn.getAttribute('data-cbk-logic-rule') || ''), 10);
+          const a = Number.parseInt(String(btn.getAttribute('data-cbk-logic-action') || ''), 10);
+          if (!Number.isFinite(r) || !Number.isFinite(a)) return;
+          btn.addEventListener('click', () => window.removeLogicAction(r, a));
+        });
+        div.querySelectorAll('.cbk-logic-rm-rule').forEach((btn) => {
+          const r = Number.parseInt(String(btn.getAttribute('data-cbk-logic-rule') || ''), 10);
+          if (!Number.isFinite(r)) return;
+          btn.addEventListener('click', () => window.removeLogicRule(r));
+        });
+        div.querySelectorAll('.cbk-logic-add-action').forEach((btn) => {
+          const r = Number.parseInt(String(btn.getAttribute('data-cbk-logic-rule') || ''), 10);
+          if (!Number.isFinite(r)) return;
+          btn.addEventListener('click', () => window.addLogicAction(r));
+        });
+
         // bind dynamically selected inputs
         const actionRows = div.querySelectorAll('div[style*="background:#f8fafc"]');
         actionRows.forEach((row, aIndex) => {

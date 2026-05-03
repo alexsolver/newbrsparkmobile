@@ -211,6 +211,13 @@
   await initPage();
   applyApiDocsPageI18n();
 
+  function escHtmlApiDoc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
   async function renderSpecAuditSummary() {
     try {
       const res = await fetch('openapi.json', { cache: 'no-store' });
@@ -426,7 +433,7 @@
 
   if (typeof SwaggerUIBundle === 'undefined') {
     document.getElementById('swagger-ui').innerHTML =
-      `<p style="color:var(--red);padding:16px">${mpT('apidoc_err_swagger')}</p>`;
+      `<p style="color:var(--red);padding:16px">${escHtmlApiDoc(mpT('apidoc_err_swagger'))}</p>`;
   } else {
     const specUrl = new URL('openapi.json', window.location.href).href;
     window.ui = SwaggerUIBundle({

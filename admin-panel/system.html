@@ -84,18 +84,33 @@
   await initPage();
   applySystemPageI18n();
 
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /** Nomes ion-icon: [a-z0-9-] apenas (evita XSS / atributo inválido). */
+  function sanitizeIonIconName(raw) {
+    const t = String(raw || '').trim().toLowerCase().slice(0, 80);
+    if (!/^[a-z0-9-]+$/.test(t)) return 'construct-outline';
+    return t;
+  }
+
   // Check API health
   fetch(`${CONFIG.API_BASE.replace('/api','')}/health`)
     .then(r => r.json())
     .then(data => {
-      document.getElementById('api-status').innerHTML = `<ion-icon name="checkmark-circle-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${mpT('sys_api_online')}`;
+      document.getElementById('api-status').innerHTML = `<ion-icon name="checkmark-circle-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> ${escHtml(mpT('sys_api_online'))}`;
       document.getElementById('api-status').className = 'badge badge-green';
       document.getElementById('server-time').textContent = new Date(data.ts).toLocaleString(mpIntlLocale());
       document.getElementById('db-info').textContent = mpT('sys_db_ok');
     })
     .catch(() => {
       const el = document.getElementById('api-status');
-      el.innerHTML = `<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> ${mpT('sys_api_offline')}`;
+      el.innerHTML = `<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon> ${escHtml(mpT('sys_api_offline'))}`;
       el.className = 'badge badge-red';
     });
 
@@ -105,12 +120,13 @@
     if (!flags) return;
     document.getElementById('flags-count').textContent = mpT('sys_flags_count', { n: flags.length });
     document.getElementById('flags-list').innerHTML = flags.map(f => {
-      const iconHtml = f.icon ? `<ion-icon name="${f.icon}"></ion-icon>` : '<ion-icon name="construct-outline"></ion-icon>';
+      const icn = sanitizeIonIconName(f.icon);
+      const iconHtml = f.icon ? `<ion-icon name="${icn}"></ion-icon>` : '<ion-icon name="construct-outline"></ion-icon>';
       return `<div class="flag-item">
         <span class="flag-icon">${iconHtml}</span>
-        <div class="flag-info"><div class="flag-name">${f.label}</div><div class="flag-desc">${f.description}</div></div>
+        <div class="flag-info"><div class="flag-name">${escHtml(f.label)}</div><div class="flag-desc">${escHtml(f.description)}</div></div>
         <label class="toggle">
-          <input type="checkbox" ${f.enabled ? 'checked' : ''} onchange="toggleFlag('${f.key}', this.checked)" />
+          <input type="checkbox" ${f.enabled ? 'checked' : ''} onchange='toggleFlag(${JSON.stringify(String(f.key))}, this.checked)' />
           <span class="toggle-track"></span>
         </label>
       </div>`;

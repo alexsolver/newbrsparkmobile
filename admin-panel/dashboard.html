@@ -124,7 +124,8 @@
     return String(s ?? '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function statStatusClass(status) {
@@ -246,9 +247,11 @@
         const tenantLine = tenantName
           ? `<div class="activity-tenant" style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:2px">${escHtml(dashT('dash_activity_tenant', { name: tenantName }))}</div>`
           : '';
+        const catKey = String(a.category || '').toUpperCase();
+        const actIcon = catIcon[catKey] || 'flash-outline';
         return `
         <div class="activity-item">
-          <div class="activity-icon" style="background:var(--accent-dim)"><ion-icon name="${(catIcon[a.category] || 'flash-outline')}" style="font-size:16px;color:var(--accent)" aria-hidden="true"></ion-icon></div>
+          <div class="activity-icon" style="background:var(--accent-dim)"><ion-icon name="${actIcon}" style="font-size:16px;color:var(--accent)" aria-hidden="true"></ion-icon></div>
           <div class="activity-content">
             ${tenantLine}
             <div class="activity-text"><strong>${escHtml(a.admin?.email || a.user?.email || '—')}</strong> — ${escHtml(a.action)} · <em>${escHtml(a.resource)}</em></div>

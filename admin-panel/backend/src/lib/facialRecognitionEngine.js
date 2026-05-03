@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const {
   stripDataUrlBase64,
   recognizeWithIntegration,
@@ -22,6 +23,38 @@ const FACIAL_GALLERY_SYNC_HINT =
 
 const NO_FACE_IN_IMAGE_PT_BR =
   'Nenhum rosto foi detectado na imagem enviada. Posicione o rosto de frente para a câmera, com boa iluminação; fotografias de telas, reflexos ou imagens em papel não serão validadas.';
+
+// #region agent log
+/** Debug session d37eda — NDJSON local + /tmp no servidor; fetch para ingest Cursor (só em dev). */
+function _agentDebugFacialD37(payload) {
+  const line =
+    JSON.stringify({
+      sessionId: 'd37eda',
+      timestamp: Date.now(),
+      ...payload,
+    }) + '\n';
+  const paths = [
+    '/Users/alex/Lansolver Dropbox/Alex Benedito/antigravity_cursor/BrsparkMobile/.cursor/debug-d37eda.log',
+    '/tmp/brspark-debug-d37eda.ndjson',
+  ];
+  for (const p of paths) {
+    try {
+      fs.appendFileSync(p, line);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  try {
+    fetch('http://127.0.0.1:7819/ingest/2900a63a-2d40-4831-9026-3526ab938edc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd37eda' },
+      body: JSON.stringify({ sessionId: 'd37eda', timestamp: Date.now(), ...payload }),
+    }).catch(() => {});
+  } catch (_) {
+    /* ignore */
+  }
+}
+// #endregion
 
 function auditNoFaceInImage(mode, engine) {
   return {
@@ -182,6 +215,10 @@ function pickVisionIntegration(integrations, provider) {
 async function verifyFacialImageBuffer(prisma, opts) {
   const { tenantId, sessionUserId, mode, imageBuffer } = opts;
   const buf = imageBuffer;
+  let dbgVerifyBranch = 'init';
+  let dbgRefCount = -1;
+  let dbgVerBest = null;
+  let dbgVerErrSlice = '';
   if (!buf || buf.length < 64) {
     return {
       ok: false,
@@ -194,6 +231,20 @@ async function verifyFacialImageBuffer(prisma, opts) {
       },
     };
   }
+
+  // #region agent log
+  _agentDebugFacialD37({
+    hypothesisId: 'H0',
+    location: 'facialRecognitionEngine.js:verifyFacialImageBuffer',
+    message: 'entry',
+    data: {
+      mode,
+      bufLen: buf.length,
+      tenantPrefix: tenantId ? String(tenantId).slice(0, 8) : null,
+      sessionPrefix: sessionUserId ? String(sessionUserId).slice(0, 8) : null,
+    },
+  });
+  // #endregion
 
   const provider = await resolveFacialVisionProviderForTenant(tenantId, prisma);
   const integrations = await prisma.integration.findMany({ where: { type: 'AI_LLM' } });
@@ -219,6 +270,23 @@ async function verifyFacialImageBuffer(prisma, opts) {
 
   const meta = parseMeta(visionInt.metadata);
   const engine = meta?.engine || 'unknown';
+
+  // #region agent log
+  _agentDebugFacialD37({
+    hypothesisId: 'H1',
+    location: 'facialRecognitionEngine.js:visionInt',
+    message: 'integration_selected',
+    data: {
+      provider,
+      engine,
+      visionIntId: visionInt.id,
+      hasRecKey: !!(visionInt.apiKey && String(visionInt.apiKey).trim()),
+      verKeyLen: visionInt.comprefaceVerificationKey
+        ? String(visionInt.comprefaceVerificationKey).trim().length
+        : 0,
+    },
+  });
+  // #endregion
 
   if (engine === 'aws_rekognition') {
     return {
@@ -256,15 +324,22 @@ async function verifyFacialImageBuffer(prisma, opts) {
   const useRecognitionOnlySelfVerify =
     String(process.env.COMPREFACE_SELF_VERIFY_USE_RECOGNITION_ONLY || '').trim() === '1';
   if (!useRecognitionOnlySelfVerify && mode === 'self_verify' && tenantId && sessionUserId) {
+    try {
+    dbgVerifyBranch = 'self_verify_enter';
     const verKey = visionInt.comprefaceVerificationKey && String(visionInt.comprefaceVerificationKey).trim();
     if (verKey) {
+      dbgVerifyBranch = 'has_ver_key';
       let refs = [];
       try {
         refs = await loadUserFacialReferenceBuffers(prisma, sessionUserId);
       } catch (e) {
         console.warn('[facialRecognitionEngine] loadUserFacialReferenceBuffers', e.message || e);
+        dbgVerifyBranch = 'refs_load_error';
+        dbgVerErrSlice = String(e && e.message ? e.message : e).slice(0, 160);
       }
+      dbgRefCount = refs.length;
       if (refs.length > 0) {
+        dbgVerifyBranch = 'refs_ok_compare';
         let best = -1;
         let lastErr = null;
         for (const { buf: refBuf } of refs) {
@@ -276,11 +351,34 @@ async function verifyFacialImageBuffer(prisma, opts) {
             lastErr = e;
           }
         }
+        dbgVerBest = best < 0 ? null : Number(best);
+        if (lastErr) dbgVerErrSlice = String(lastErr.message || lastErr).slice(0, 160);
         if (best >= MIN_SIMILARITY) {
-          const identified = await prisma.user.findFirst({
+          let identified = await prisma.user.findFirst({
             where: { id: sessionUserId, tenantId, isActive: true },
             select: { id: true, name: true, email: true, role: true },
           });
+          let anyUserRow = null;
+          if (!identified) {
+            anyUserRow = await prisma.user.findFirst({
+              where: { id: sessionUserId, tenantId },
+              select: { id: true, isActive: true },
+            });
+            // #region agent log
+            _agentDebugFacialD37({
+              hypothesisId: 'H5',
+              location: 'facialRecognitionEngine.js:verify_ok_prisma_miss',
+              message: 'verification_passed_but_user_query_empty',
+              data: {
+                best,
+                sessionPrefix: String(sessionUserId).slice(0, 8),
+                tenantPrefix: String(tenantId).slice(0, 8),
+                hasRowAnyActive: !!anyUserRow,
+                rowIsActive: anyUserRow ? anyUserRow.isActive : null,
+              },
+            });
+            // #endregion
+          }
           if (identified) {
             return {
               ok: true,
@@ -301,6 +399,23 @@ async function verifyFacialImageBuffer(prisma, opts) {
               },
             };
           }
+          /* Evita cair silenciosamente no Recognition: a face já bateu as referências (best >= limiar). */
+          dbgVerifyBranch = 'verify_score_ok_prisma_blocked';
+          return {
+            ok: false,
+            audit: {
+              pending: false,
+              deferredValidationFailed: true,
+              at: new Date().toISOString(),
+              facialAuthMode: mode,
+              confidence: best,
+              selfVerifyPath: 'compreface_verification',
+              message:
+                anyUserRow && anyUserRow.isActive === false
+                  ? 'A sua conta está inativa no sistema. Peça à organização para reativar o utilizador antes de validar a biometria.'
+                  : 'A biometria facial foi aceite pelo motor, mas o servidor não encontrou o utilizador ativo correspondente à sessão. Contacte o suporte ou volte a iniciar sessão.',
+            },
+          };
         }
         if (best >= 0 && best < MIN_SIMILARITY) {
           return {
@@ -332,8 +447,46 @@ async function verifyFacialImageBuffer(prisma, opts) {
             };
           }
         }
+      } else {
+        dbgVerifyBranch = 'refs_empty';
       }
+    } else {
+      dbgVerifyBranch = 'no_ver_key';
     }
+    } finally {
+      // #region agent log
+      _agentDebugFacialD37({
+        hypothesisId: 'H1-H4',
+        location: 'facialRecognitionEngine.js:after_verify_branch',
+        message: 'verification_section_summary',
+        data: {
+          dbgVerifyBranch,
+          dbgRefCount,
+          dbgVerBest,
+          dbgVerErrSlice: dbgVerErrSlice || null,
+          minSim: MIN_SIMILARITY,
+          useRecognitionOnlySelfVerify,
+        },
+      });
+      // #endregion
+    }
+  } else {
+    dbgVerifyBranch = useRecognitionOnlySelfVerify ? 'env_recognition_only' : 'not_self_verify_mode';
+    // #region agent log
+    _agentDebugFacialD37({
+      hypothesisId: 'H1-H4',
+      location: 'facialRecognitionEngine.js:verify_branch_skipped',
+      message: 'verification_section_summary',
+      data: {
+        dbgVerifyBranch,
+        dbgRefCount,
+        dbgVerBest,
+        dbgVerErrSlice: dbgVerErrSlice || null,
+        minSim: MIN_SIMILARITY,
+        useRecognitionOnlySelfVerify,
+      },
+    });
+    // #endregion
   }
 
   const predictionCountSelf = Math.min(
@@ -383,6 +536,18 @@ async function verifyFacialImageBuffer(prisma, opts) {
   }
 
   const globalTop = pickTopRecognitionMatch(recog.data);
+  // #region agent log
+  _agentDebugFacialD37({
+    hypothesisId: 'H6',
+    location: 'facialRecognitionEngine.js:post_recognize',
+    message: 'recognition_raw_top',
+    data: {
+      predictionCount,
+      globalTopSim: globalTop?.similarity ?? null,
+      globalTopSubPrefix: globalTop?.subject != null ? String(globalTop.subject).slice(0, 28) : null,
+    },
+  });
+  // #endregion
   let top = null;
   if (mode === 'self_verify' && tenantId && sessionUserId) {
     top = pickSelfVerifySubjectFromRecognition(recog.data, {
@@ -419,7 +584,28 @@ async function verifyFacialImageBuffer(prisma, opts) {
    * é frequentemente *outro* utilizador com score alto, o que gerava erro intermitente e mensagem enganadora. */
   if (!top && mode !== 'self_verify') top = globalTop;
 
+  // #region agent log
+  _agentDebugFacialD37({
+    hypothesisId: 'H6',
+    location: 'facialRecognitionEngine.js:after_pick_top',
+    message: 'final_top_state',
+    data: {
+      mode,
+      hasTop: !!top,
+      topSim: top?.similarity ?? null,
+      topSubPrefix: top?.subject != null ? String(top.subject).slice(0, 28) : null,
+      sessionPrefix: sessionUserId ? String(sessionUserId).slice(0, 8) : null,
+    },
+  });
+  // #endregion
+
   if (!top) {
+    const missingVerKey =
+      mode === 'self_verify' &&
+      !(visionInt.comprefaceVerificationKey && String(visionInt.comprefaceVerificationKey).trim());
+    const msgNoTop = missingVerKey
+      ? `Falta a chave de Verification do FaceMatch nas Integrações (campo «Verification API Key», além da Recognition). Sem ela a validação só usa a galeria global e costuma falhar mesmo com fotos corretas. ${FACIAL_GALLERY_SYNC_HINT}`
+      : `Rosto não reconhecido na galeria do servidor. ${FACIAL_GALLERY_SYNC_HINT}`;
     return {
       ok: false,
       audit: {
@@ -427,7 +613,8 @@ async function verifyFacialImageBuffer(prisma, opts) {
         deferredValidationFailed: true,
         at: new Date().toISOString(),
         facialAuthMode: mode,
-        message: `Rosto não reconhecido na galeria do servidor. ${FACIAL_GALLERY_SYNC_HINT}`,
+        ...(missingVerKey ? { missingComprefaceVerificationKey: true } : {}),
+        message: msgNoTop,
       },
     };
   }

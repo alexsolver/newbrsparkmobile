@@ -1072,12 +1072,13 @@ function renderUserEditFatalUI(variant, detail) {
           icon: 'link-outline',
           iconColor: 'var(--color-status-info-fg, var(--blue))',
         }
-      : {
+        : {
           title: t('ue_fatalNotFoundTitle'),
           description: t('ue_fatalNotFoundBody'),
           icon: 'person-remove-outline',
           iconColor: 'var(--amber)',
         };
+  const fatalIonIcon = conf.icon === 'person-remove-outline' ? 'person-remove-outline' : 'link-outline';
 
   document.documentElement.classList.remove('ue-edit-html');
   document.documentElement.classList.add('ue-edit-error-html');
@@ -1113,7 +1114,7 @@ function renderUserEditFatalUI(variant, detail) {
       <div class="page-body ue-edit-error-body">
         <div class="data-shell ue-edit-error-card fade-in">
           <div class="empty-state-pro" style="padding:36px 28px 40px">
-            <ion-icon name="${conf.icon}" style="font-size:52px;color:${conf.iconColor};opacity:0.88"></ion-icon>
+            <ion-icon name="${fatalIonIcon}" style="font-size:52px;color:${conf.iconColor};opacity:0.88"></ion-icon>
             <div class="empty-state-pro-title">${esc(conf.title)}</div>
             <p class="empty-state-pro-sub">${esc(conf.description)}</p>
             ${detailHtml}
@@ -1837,12 +1838,12 @@ function renderSchedule(workScheduleJson, locations) {
   wrap.innerHTML = DAYS.map(({ key, label }) => {
     const slots = normalizeDayToSlots(w[key]);
     const slotsHtml = slots.map((s) => slotRowHtml(s)).join('');
-    return `<div class="sched-day" data-day="${key}" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+    return `<div class="sched-day" data-day="${esc(key)}" style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-        <span style="font-weight:700;font-size:13px;min-width:92px">${label}</span>
-        <button type="button" class="btn btn-sm btn-primary sch-add-slot" data-day="${key}">${esc(t('ue_schAddSlotBtn'))}</button>
+        <span style="font-weight:700;font-size:13px;min-width:92px">${esc(label)}</span>
+        <button type="button" class="btn btn-sm btn-primary sch-add-slot" data-day="${esc(key)}">${esc(t('ue_schAddSlotBtn'))}</button>
       </div>
-      <div class="sched-slots" data-day="${key}">${slotsHtml}</div>
+      <div class="sched-slots" data-day="${esc(key)}">${slotsHtml}</div>
     </div>`;
   }).join('');
   syncSchSlotsLocsUi(wrap);

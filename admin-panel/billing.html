@@ -271,26 +271,31 @@
 
     // Populate change-plan dropdown
     const sel = document.getElementById('change-plan-id');
-    sel.innerHTML = plans.map(p => `<option value="${p.id}">${p.name} — R$ ${Number(p.priceMonthly).toFixed(2)}/mês</option>`).join('');
+    sel.innerHTML = plans
+      .map(
+        (p) =>
+          `<option value="${escHtml(String(p.id))}">${escHtml(String(p.name || ''))} — R$ ${Number(p.priceMonthly).toFixed(2)}/mês</option>`,
+      )
+      .join('');
 
     const planColors = ['var(--text3)', 'var(--blue)', 'var(--accent)', 'var(--green)'];
     document.getElementById('plans-grid').innerHTML = plans.map((p, i) => {
       const color = planColors[i] || 'var(--accent)';
       const fmt   = n => n === -1 ? 'Ilimitado' : n;
       return `<div class="stat-card" style="--accent-color:${color}">
-        <div style="font-size:16px;font-weight:900;color:${color};margin-bottom:4px">${p.name}</div>
+        <div style="font-size:16px;font-weight:900;color:${color};margin-bottom:4px">${escHtml(String(p.name || ''))}</div>
         <div style="font-size:20px;font-weight:900;color:var(--text);margin-bottom:12px">R$ ${Number(p.priceMonthly).toFixed(2)}<span style="font-size:11px;color:var(--text3)">/mês</span></div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Bens: ${fmt(p.maxAssets)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Usuários (painel): ${fmt(p.maxUsers)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="construct-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Técnicos: ${fmt(p.maxTechnicians)}</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">IA/mês · facial ${fmtQuota(p.quotaAiFacialPerMonth)} · visão det. ${fmtQuota(p.quotaAiVisionDetectionPerMonth)} · visão análise (Gemini) ${fmtQuota(p.quotaAiVisionAnalysisPerMonth)}</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">Google Maps (rotas) ${fmtQuota(p.quotaGoogleMapsRoutesPerMonth)}</div>
-        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">FT ${fmtQuota(p.quotaFieldTasksMonthly)}/mês · RT ${fmtQuota(p.quotaRoutineTasksMonthly)}/mês · Formulários ${fmtQuota(p.maxChecklistTemplates)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-bottom:14px"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> ${p.storageGb} GB</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="cube-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Bens: ${escHtml(String(fmt(p.maxAssets)))}</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="people-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Usuários (painel): ${escHtml(String(fmt(p.maxUsers)))}</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:4px"><ion-icon name="construct-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Técnicos: ${escHtml(String(fmt(p.maxTechnicians)))}</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">IA/mês · facial ${escHtml(String(fmtQuota(p.quotaAiFacialPerMonth)))} · visão det. ${escHtml(String(fmtQuota(p.quotaAiVisionDetectionPerMonth)))} · visão análise (Gemini) ${escHtml(String(fmtQuota(p.quotaAiVisionAnalysisPerMonth)))}</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">Google Maps (rotas) ${escHtml(String(fmtQuota(p.quotaGoogleMapsRoutesPerMonth)))}</div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px;line-height:1.35">FT ${escHtml(String(fmtQuota(p.quotaFieldTasksMonthly)))}/mês · RT ${escHtml(String(fmtQuota(p.quotaRoutineTasksMonthly)))}/mês · Formulários ${escHtml(String(fmtQuota(p.maxChecklistTemplates)))}</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:14px"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> ${escHtml(String(p.storageGb ?? ''))} GB</div>
         <div style="display:flex;align-items:center;justify-content:space-between">
           <span class="badge badge-gray">${p.isActive ? '<ion-icon name="ellipse-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon> Ativo' : '○ Inativo'}</span>
           ${canManageBilling
-            ? `<button class="btn btn-ghost btn-sm" onclick="openEditPlan('${p.id}')">Editar</button>`
+            ? `<button class="btn btn-ghost btn-sm" onclick='openEditPlan(${JSON.stringify(p.id)})'>Editar</button>`
             : `<span style="color:var(--text3);font-size:12px">—</span>`}
         </div>
       </div>`;
@@ -321,16 +326,16 @@
 
     document.getElementById('subs-tbody').innerHTML = subs.length
       ? subs.map(s => `<tr>
-          <td class="bold">${s.tenant?.name || '—'}<div style="font-size:10px;color:var(--text3)">${s.tenant?.email || ''}</div></td>
-          <td><span class="badge badge-gray">${s.plan?.name || '—'}</span></td>
-          <td>${cycleMap[s.billingCycle] || s.billingCycle}</td>
+          <td class="bold">${escHtml(String(s.tenant?.name || '—'))}<div style="font-size:10px;color:var(--text3)">${escHtml(String(s.tenant?.email || ''))}</div></td>
+          <td><span class="badge badge-gray">${escHtml(String(s.plan?.name || '—'))}</span></td>
+          <td>${escHtml(String(cycleMap[s.billingCycle] || s.billingCycle || ''))}</td>
           <td style="color:var(--green);font-weight:700">R$ ${s.billingCycle === 'YEARLY' ? Number(s.plan?.priceYearly || 0).toFixed(2) : Number(s.plan?.priceMonthly || 0).toFixed(2)}</td>
-          <td><span class="badge ${statusMap[s.status] || 'badge-gray'}">${statusLbl[s.status] || s.status}</span></td>
-          <td style="color:var(--text3);font-size:11px">${fmt(s.currentEnd)}</td>
+          <td><span class="badge ${statusMap[s.status] || 'badge-gray'}">${statusLbl[s.status] || escHtml(String(s.status || ''))}</span></td>
+          <td style="color:var(--text3);font-size:11px">${escHtml(fmt(s.currentEnd))}</td>
           <td style="text-align:right;white-space:nowrap">
             ${canManageBilling
-              ? `<button class="btn btn-ghost btn-sm" onclick="openChangePlan('${s.id}')">Alterar plano</button>
-            ${s.status !== 'CANCELLED' ? `<button class="btn btn-danger btn-sm" onclick="cancelSub('${s.id}')">Cancelar</button>` : ''}`
+              ? `<button class="btn btn-ghost btn-sm" onclick='openChangePlan(${JSON.stringify(s.id)})'>Alterar plano</button>
+            ${s.status !== 'CANCELLED' ? `<button class="btn btn-danger btn-sm" onclick='cancelSub(${JSON.stringify(s.id)})'>Cancelar</button>` : ''}`
               : `<span style="color:var(--text3);font-size:12px">—</span>`}
           </td>
         </tr>`).join('')

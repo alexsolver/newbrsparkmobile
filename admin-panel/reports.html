@@ -728,6 +728,23 @@ import { applyReportsStaticI18n, reportsT, reportModuleLabel } from './js/report
 await initPage();
 applyReportsStaticI18n();
 
+function repEscHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function repEscAttr(s) {
+  return repEscHtml(s).replace(/'/g, '&#039;');
+}
+
+/** Fragmento seguro para compor `id` em DOM (alinha com `getElementById` em `readFieldsFromDom`). */
+function reportDomIdFragment(s) {
+  return String(s ?? '').replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
 let cacheList = [];
 let previewTask = structuredClone(MOCK_PREVIEW_TASK);
 let previewSchema = [...MOCK_PREVIEW_SCHEMA];
@@ -853,8 +870,8 @@ function renderModuleRows(opts = {}) {
     .map((k, i) => {
       const id = `ed-mod-${k}`;
       const isOn = !!checked[k];
-      return `<div class="report-module-row" data-key="${k}">
-        <span class="report-module-label">${reportModuleLabel(k)}</span>
+      return `<div class="report-module-row" data-key="${repEscAttr(k)}">
+        <span class="report-module-label">${repEscHtml(reportModuleLabel(k))}</span>
         <div class="report-module-meta">
           <div class="report-order-actions">
             <button type="button" class="btn btn-ghost btn-sm order-up" data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
@@ -906,8 +923,8 @@ function readModulesFromDom() {
 function readFieldsFromDom() {
   const out = {};
   for (const f of previewSchema) {
-    const vis = document.getElementById(`fld-vis-${f.id}`);
-    const lab = document.getElementById(`fld-lab-${f.id}`);
+    const vis = document.getElementById(`fld-vis-${reportDomIdFragment(f.id)}`);
+    const lab = document.getElementById(`fld-lab-${reportDomIdFragment(f.id)}`);
     const isTechFin =
       f.type === 'technician_finance' ||
       f.type === 'technician_finance_expense' ||
@@ -945,14 +962,14 @@ function renderFieldRows(seed) {
       const warnBox = isTechFin
         ? `<div class="report-techfin-pdf-warn" style="margin-top:8px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:10px;line-height:1.45;color:#92400e;font-weight:600">${reportsT('rep_techfin_warn_html')}</div>`
         : '';
-      return `<div class="report-field-row" data-fid="${f.id}" data-ftype="${f.type || ''}">
+      return `<div class="report-field-row" data-fid="${repEscAttr(f.id)}" data-ftype="${repEscAttr(f.type || '')}">
         <div>
-          <div style="font-weight:700;color:var(--text);margin-bottom:4px">${f.label.replace(/</g, '')} <span style="font-weight:600;color:var(--text3);font-size:10px">${f.type}</span></div>
-          <input type="text" id="fld-lab-${f.id}" placeholder="${phFld}" value="${lab.replace(/"/g, '&quot;')}" />
+          <div style="font-weight:700;color:var(--text);margin-bottom:4px">${repEscHtml(f.label)} <span style="font-weight:600;color:var(--text3);font-size:10px">${repEscHtml(f.type || '')}</span></div>
+          <input type="text" id="fld-lab-${reportDomIdFragment(f.id)}" placeholder="${phFld}" value="${repEscAttr(lab)}" />
           ${warnBox}
         </div>
         <div class="eye">
-          <label class="report-switch" title="${visTitle}"><input type="checkbox" id="fld-vis-${f.id}" data-techfin-warn="${isTechFin ? '1' : ''}" ${vis ? 'checked' : ''} /><span></span></label>
+          <label class="report-switch" title="${visTitle}"><input type="checkbox" id="fld-vis-${reportDomIdFragment(f.id)}" data-techfin-warn="${isTechFin ? '1' : ''}" ${vis ? 'checked' : ''} /><span></span></label>
         </div>
       </div>`;
     })

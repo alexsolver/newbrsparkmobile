@@ -1020,14 +1020,14 @@
     const sortDir = document.getElementById('filter-sort-dir')?.value || 'desc';
 
     const activeFilters = [];
-    if (q) activeFilters.push(`Busca: ${q}`);
-    if (role) activeFilters.push(`Papel: ${rolePlainText(role)}`);
+    if (q) activeFilters.push(`Busca: ${escAttr(q)}`);
+    if (role) activeFilters.push(`Papel: ${escAttr(rolePlainText(role))}`);
     if (active === '1') activeFilters.push('Conta ativa');
     if (active === '0') activeFilters.push('Conta inativa');
-    if (tenantLabel && document.getElementById('filter-tenant')?.value) activeFilters.push(`Tenant: ${tenantLabel}`);
-    if (tech) activeFilters.push(`Prestador: ${tech}`);
-    if (cf) activeFilters.push(`FaceMatch: ${cf}`);
-    if (emailVer) activeFilters.push(`E-mail: ${emailVer}`);
+    if (tenantLabel && document.getElementById('filter-tenant')?.value) activeFilters.push(`Tenant: ${escAttr(tenantLabel)}`);
+    if (tech) activeFilters.push(`Prestador: ${escAttr(tech)}`);
+    if (cf) activeFilters.push(`FaceMatch: ${escAttr(cf)}`);
+    if (emailVer) activeFilters.push(`E-mail: ${escAttr(emailVer)}`);
     if (workTime) activeFilters.push('Só ponto ativo');
 
     const providerCount = rows.filter((u) => String(u.role || '').toUpperCase() === 'PROVIDER').length;
@@ -1065,7 +1065,7 @@
       </div>
       <div class="users-context-card">
         <div class="users-context-card__eyebrow">Ordenação</div>
-        <div class="users-context-card__title">${sortLabelMap[sort] || sort}</div>
+        <div class="users-context-card__title">${escAttr(sortLabelMap[sort] || sort)}</div>
         <div class="users-context-card__meta">${sortDir === 'asc' ? 'Crescente' : 'Decrescente'} · personalize colunas extras logo abaixo para adaptar a leitura.</div>
       </div>`;
   }
@@ -1522,8 +1522,6 @@
       </div>`;
     };
 
-    const uid = (id) => escAttr(id);
-
     if (!data.length) {
       document.getElementById('users-tbody').innerHTML = `
         <tr><td colspan="${usersListColspan()}" style="padding:0;border:none">
@@ -1576,11 +1574,11 @@
               <div class="ue-dropdown" data-ul-actions-menu hidden role="menu">
                 <a class="ue-dropdown__item ue-dropdown__item--link" role="menuitem" href="user-edit.html?id=${encodeURIComponent(u.id)}&readonly=1" onclick="storeUserEditNav(${idx})">${escAttr(t('ul_viewUser'))}</a>
                 <a class="ue-dropdown__item ue-dropdown__item--link" role="menuitem" href="user-edit.html?id=${encodeURIComponent(u.id)}" target="_blank" rel="noopener" onclick="storeUserEditNav(${idx})">${escAttr(t('openNewTab'))}</a>
-                ${canImpersonatePanelTarget(u) ? `<button type="button" class="ue-dropdown__item" role="menuitem" onclick="ulStartImpersonate(${JSON.stringify(u.id)})">${escAttr(t('ul_impersonateBtn'))}</button>` : ''}
-                <button type="button" class="ue-dropdown__item" role="menuitem" onclick="openReset('${uid(u.id)}')">${escAttr(t('ul_resetPwdBtn'))}</button>
+                ${canImpersonatePanelTarget(u) ? `<button type="button" class="ue-dropdown__item" role="menuitem" onclick='ulStartImpersonate(${JSON.stringify(u.id)})'>${escAttr(t('ul_impersonateBtn'))}</button>` : ''}
+                <button type="button" class="ue-dropdown__item" role="menuitem" onclick='openReset(${JSON.stringify(u.id)})'>${escAttr(t('ul_resetPwdBtn'))}</button>
                 <hr class="ue-dropdown__sep" />
-                ${canManageTenantUsers ? `<button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick="ulConfirmDeleteUser(${JSON.stringify(u.id)}, ${JSON.stringify(String(u.name || mailShown || u.id))})">${escAttr(t('ul_deleteUser'))}</button>` : ''}
-                <button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick="toggleUser('${uid(u.id)}')">${escAttr(u.isActive ? t('ul_deactivate') : t('ul_activate'))}</button>
+                ${canManageTenantUsers ? `<button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick='ulConfirmDeleteUser(${JSON.stringify(u.id)}, ${JSON.stringify(String(u.name || mailShown || u.id))})'>${escAttr(t('ul_deleteUser'))}</button>` : ''}
+                <button type="button" class="ue-dropdown__item ue-dropdown__item--danger" role="menuitem" onclick='toggleUser(${JSON.stringify(u.id)})'>${escAttr(u.isActive ? t('ul_deactivate') : t('ul_activate'))}</button>
               </div>
             </div>
           </div>

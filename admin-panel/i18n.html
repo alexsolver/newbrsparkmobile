@@ -107,6 +107,65 @@
     await initPage();
     applyTrlPageI18n();
 
+    function escHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function escAttr(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+    }
+
+    async function saveLocale(id, btn) {
+      const card = btn.closest('.panel');
+      if (!card || !id) return;
+      const data = { id };
+      card.querySelectorAll('.locale-in').forEach((input) => {
+        data[input.dataset.field] = input.value;
+      });
+      btn.disabled = true;
+      btn.textContent = 'Salvando...';
+      try {
+        await CONFIG.post('/i18n/locales', data);
+        alert(mpT('trl_alert_profile_ok'));
+      } catch (err) {
+        alert(mpT('trl_alert_err', { msg: err && err.message ? String(err.message) : String(err) }));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Salvar';
+      }
+    }
+
+    function wireLocalesGridSaveDelegation() {
+      const g = document.getElementById('locales-grid');
+      if (!g || g.dataset.localeSaveBound === '1') return;
+      g.dataset.localeSaveBound = '1';
+      g.addEventListener('click', (ev) => {
+        const btn = ev.target instanceof Element ? ev.target.closest('.i18n-locale-save-btn') : null;
+        if (!btn) return;
+        const id = btn.getAttribute('data-locale-id');
+        if (id) void saveLocale(id, btn);
+      });
+    }
+
+    function wireI18nTableTranslateDelegation() {
+      const tb = document.getElementById('i18n-tbody');
+      if (!tb || tb.dataset.translateRowBound === '1') return;
+      tb.dataset.translateRowBound = '1';
+      tb.addEventListener('click', (ev) => {
+        const btn = ev.target instanceof Element ? ev.target.closest('.i18n-translate-row-btn') : null;
+        if (!btn) return;
+        const key = btn.getAttribute('data-i18n-key');
+        if (key) void translateRow(key);
+      });
+    }
+
     let allEntries = [];
     let modifiedEntries = new Set();
     const sourceFilter = document.getElementById('source-filter');
@@ -143,17 +202,17 @@
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
                 <div style="display:flex;align-items:center;gap:10px">
                   <span style="font-size:24px">${getFlag(l.countryCode)}</span>
-                  <strong style="color:var(--text)">${l.name}</strong>
-                  <span class="badge badge-gray">${l.countryCode}</span>
+                  <strong style="color:var(--text)">${escHtml(l.name)}</strong>
+                  <span class="badge badge-gray">${escHtml(l.countryCode)}</span>
                 </div>
-                <button class="btn btn-ghost btn-sm" onclick="saveLocale('${l.id}', this)">Salvar</button>
+                <button type="button" class="btn btn-ghost btn-sm i18n-locale-save-btn" data-locale-id="${escAttr(l.id)}">Salvar</button>
               </div>
               <div class="grid-2" style="gap:10px; font-size:12px">
-                <div class="form-group"><label class="form-label">Moeda</label><input class="form-control sm locale-in" data-field="currencySymbol" value="${l.currencySymbol}"></div>
-                <div class="form-group"><label class="form-label">Cód. Moeda</label><input class="form-control sm locale-in" data-field="currency" value="${l.currency}"></div>
-                <div class="form-group"><label class="form-label">Formato Data</label><input class="form-control sm locale-in" data-field="dateFormat" value="${l.dateFormat}"></div>
-                <div class="form-group"><label class="form-label">Doc. ID Label</label><input class="form-control sm locale-in" data-field="taxIdLabel" value="${l.taxIdLabel}"></div>
-                <div class="form-group"><label class="form-label">Postal Label</label><input class="form-control sm locale-in" data-field="postalCodeLabel" value="${l.postalCodeLabel}"></div>
+                <div class="form-group"><label class="form-label">Moeda</label><input class="form-control sm locale-in" data-field="currencySymbol" value="${escAttr(l.currencySymbol)}"></div>
+                <div class="form-group"><label class="form-label">Cód. Moeda</label><input class="form-control sm locale-in" data-field="currency" value="${escAttr(l.currency)}"></div>
+                <div class="form-group"><label class="form-label">Formato Data</label><input class="form-control sm locale-in" data-field="dateFormat" value="${escAttr(l.dateFormat)}"></div>
+                <div class="form-group"><label class="form-label">Doc. ID Label</label><input class="form-control sm locale-in" data-field="taxIdLabel" value="${escAttr(l.taxIdLabel)}"></div>
+                <div class="form-group"><label class="form-label">Postal Label</label><input class="form-control sm locale-in" data-field="postalCodeLabel" value="${escAttr(l.postalCodeLabel)}"></div>
                 <div class="form-group"><label class="form-label">Sistema</label>
                   <select class="form-control sm locale-in" data-field="measureSystem">
                     <option value="METRIC" ${l.measureSystem === 'METRIC' ? 'selected' : ''}>Métrico</option>
@@ -162,23 +221,11 @@
                 </div>
                 <div class="form-group" style="grid-column:1/-1">
                   <label class="form-label">Timezone</label>
-                  <input class="form-control sm locale-in" data-field="timezone" value="${l.timezone}">
+                  <input class="form-control sm locale-in" data-field="timezone" value="${escAttr(l.timezone)}">
                 </div>
               </div>
             </div>
           `).join('');
-          
-          window.saveLocale = async (id, btn) => {
-             const card = btn.closest('.panel');
-             const data = { id };
-             card.querySelectorAll('.locale-in').forEach(input => {
-                data[input.dataset.field] = input.value;
-             });
-             btn.disabled = true; btn.textContent = 'Salvando...';
-             await CONFIG.post('/i18n/locales', data);
-             btn.disabled = false; btn.textContent = 'Salvar';
-             alert(mpT('trl_alert_profile_ok'));
-          };
         } catch (err) {
           localesGrid.innerHTML = '';
           const errDiv = document.createElement('div');
@@ -242,15 +289,15 @@
       badge.textContent = mpT('trl_counter', { n: filtered.length });
 
       tbody.innerHTML = filtered.map(e => `
-        <tr data-key="${e.key}" ${e.isOverride ? 'style="background:var(--accent)08"' : ''}>
+        <tr data-key="${escAttr(e.key)}" ${e.isOverride ? 'style="background:var(--accent)08"' : ''}>
           <td class="mono" style="font-size:11px; word-break:break-all">
             ${e.isOverride ? '<span class="badge badge-accent" style="font-size:9px">Override</span><br>' : ''}
-            <span style="color:var(--text3)">${e.group || ''}</span> ${e.key}
-            <button class="btn btn-ghost btn-sm" onclick="translateRow('${e.key}')" title="Traduzir esta linha com IA" style="padding:2px 6px;margin-left:4px;font-size:10px;opacity:.7"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon></button>
+            <span style="color:var(--text3)">${escHtml(e.group || '')}</span> ${escHtml(e.key)}
+            <button type="button" class="btn btn-ghost btn-sm i18n-translate-row-btn" data-i18n-key="${escAttr(e.key)}" title="${escAttr('Traduzir esta linha com IA')}" style="padding:2px 6px;margin-left:4px;font-size:10px;opacity:.7"><ion-icon name="flash-outline" style="color:var(--amber);vertical-align:-2px"></ion-icon></button>
           </td>
-          <td><textarea class="form-control i18n-input" data-lang="pt-BR" data-key="${e.key}">${e.ptBr}</textarea></td>
-          <td><textarea class="form-control i18n-input" data-lang="en-US" data-key="${e.key}">${e.enUs}</textarea></td>
-          <td><textarea class="form-control i18n-input" data-lang="es-ES" data-key="${e.key}">${e.esEs}</textarea></td>
+          <td><textarea class="form-control i18n-input" data-lang="pt-BR" data-key="${escAttr(e.key)}">${escHtml(e.ptBr)}</textarea></td>
+          <td><textarea class="form-control i18n-input" data-lang="en-US" data-key="${escAttr(e.key)}">${escHtml(e.enUs)}</textarea></td>
+          <td><textarea class="form-control i18n-input" data-lang="es-ES" data-key="${escAttr(e.key)}">${escHtml(e.esEs)}</textarea></td>
         </tr>
       `).join('');
 
@@ -271,8 +318,9 @@
 
       try {
         const changes = [];
-        modifiedEntries.forEach(key => {
-          const rowInputs = tbody.querySelectorAll(`.i18n-input[data-key="${key}"]`);
+        modifiedEntries.forEach((key) => {
+          const row = [...tbody.querySelectorAll('tr[data-key]')].find((r) => r.dataset.key === key);
+          const rowInputs = row ? row.querySelectorAll('.i18n-input') : [];
           const entry = { key, ptBr: '', enUs: '', esEs: '' };
           rowInputs.forEach(i => {
              if (i.dataset.lang === 'pt-BR') entry.ptBr = i.value;
@@ -313,6 +361,8 @@
     document.getElementById('search-input').oninput = renderEntries;
     document.getElementById('save-all-btn').onclick = saveAll;
     document.getElementById('ai-translate-btn').onclick = translateAll;
+    wireLocalesGridSaveDelegation();
+    wireI18nTableTranslateDelegation();
     loadEntries();
 
     // ── AI Translation ──────────────────────────────────────────────────────────
@@ -328,9 +378,11 @@
     }
 
     async function translateRow(key) {
-      const ptEl = tbody.querySelector(`.i18n-input[data-key="${key}"][data-lang="pt-BR"]`);
-      const enEl = tbody.querySelector(`.i18n-input[data-key="${key}"][data-lang="en-US"]`);
-      const esEl = tbody.querySelector(`.i18n-input[data-key="${key}"][data-lang="es-ES"]`);
+      const row = [...tbody.querySelectorAll('tr[data-key]')].find((r) => r.dataset.key === key);
+      if (!row) return;
+      const ptEl = row.querySelector('.i18n-input[data-lang="pt-BR"]');
+      const enEl = row.querySelector('.i18n-input[data-lang="en-US"]');
+      const esEl = row.querySelector('.i18n-input[data-lang="es-ES"]');
       if (!ptEl || !enEl || !esEl) return;
 
       const ptVal = ptEl.value.trim();
@@ -347,8 +399,8 @@
       if (!enVal) { enEl.value = await myMemoryTranslate(source, srcLang, 'en');    modifiedEntries.add(key); }
       if (!esVal) { esEl.value = await myMemoryTranslate(source, srcLang, 'es');    modifiedEntries.add(key); }
 
-      const row = tbody.querySelector(`tr[data-key="${key}"]`);
-      if (row) row.style.background = 'var(--accent)08';
+      const rowMark = [...tbody.querySelectorAll('tr[data-key]')].find((r) => r.dataset.key === key);
+      if (rowMark) rowMark.style.background = 'var(--accent)08';
     }
 
     async function translateAll() {
@@ -416,7 +468,16 @@
 
       cancel.textContent = 'Fechar';
       cancel.onclick = () => { modal.style.display = 'none'; cancel.textContent = 'Cancelar'; };
-      if (!aiCancelled) txt.textContent = `<ion-icon name="checkmark-circle" style="color:var(--green);vertical-align:-2px"></ion-icon> Concluído! ${done} entradas traduzidas. Clique em Salvar.`;
+      if (!aiCancelled) {
+        txt.textContent = '';
+        const okIc = document.createElement('ion-icon');
+        okIc.setAttribute('name', 'checkmark-circle');
+        okIc.setAttribute('style', 'color:var(--green);vertical-align:-2px');
+        txt.appendChild(okIc);
+        txt.appendChild(
+          document.createTextNode(` Concluído! ${done} entradas traduzidas. Clique em Salvar.`),
+        );
+      }
     }
   </script>
 

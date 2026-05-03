@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Animated,
   View,
@@ -12,6 +12,7 @@ import {
   Image,
   Modal,
   AppState,
+  InteractionManager,
   Platform,
   DeviceEventEmitter,
   type AppStateStatus,
@@ -101,6 +102,7 @@ import {
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
 import { ChecklistCalculatedFieldSync } from '../../src/components/ChecklistCalculatedFieldSync';
 import { warnDev } from '../../src/utils/devLog';
+import { agentDebugLog } from '../../src/utils/agentDebugIngest';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { fetchExecutionOpsChat, getOpsChatAckStorageKey } from '../../src/services/executionOpsChat';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
@@ -2328,7 +2330,33 @@ async function postVerifyFaceForField(fieldData: any, imgBase64: string): Promis
         facialAuthMode: fieldData?.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
       }),
     });
-    const apiResp: any = await rawResp.json();
+    let apiResp: any;
+    try {
+      apiResp = await rawResp.json();
+    } catch {
+      // #region agent log
+      agentDebugLog({
+        location: 'checklist/[id].tsx:postVerifyFaceForField',
+        message: 'verify_face_json_parse_fail',
+        data: { httpStatus: rawResp.status, httpOk: rawResp.ok },
+        hypothesisId: 'H2',
+      });
+      // #endregion
+      return { ok: false, kind: 'network' };
+    }
+    // #region agent log
+    agentDebugLog({
+      location: 'checklist/[id].tsx:postVerifyFaceForField',
+      message: 'verify_face_http_body',
+      data: {
+        httpStatus: rawResp.status,
+        httpOk: rawResp.ok,
+        hasError: Boolean(apiResp?.error),
+        matchTrue: apiResp?.match === true,
+      },
+      hypothesisId: 'H2',
+    });
+    // #endregion
     if (apiResp?.error) {
       const msg = sanitizeFacialUserFacingCopy(String(apiResp.error));
       return { ok: false, kind: 'error_msg', message: msg || 'Erro ao validar a biometria facial.' };
@@ -2339,6 +2367,14 @@ async function postVerifyFaceForField(fieldData: any, imgBase64: string): Promis
     }
     return { ok: true, data: apiResp };
   } catch {
+    // #region agent log
+    agentDebugLog({
+      location: 'checklist/[id].tsx:postVerifyFaceForField',
+      message: 'verify_face_fetch_throw',
+      data: {},
+      hypothesisId: 'H2',
+    });
+    // #endregion
     return { ok: false, kind: 'network' };
   }
 }
@@ -3341,6 +3377,9 @@ export default function ChecklistEngine() {
   responsesForPauseExitRef.current = responses;
   /** Atualizado a cada render e de forma síncrona em `handleInput` — usado por flush facial e por `submitExecution`. */
   const responsesRefForFacial = useRef(responses);
+  /** Preenchido após definir `flushPendingFacialVerifications` — `processFacialImage` dispara flush sem mudança de foco da rota (câmera no mesmo ecrã). */
+  const requestPendingFacialAndVisionFlushRef = useRef<(() => void) | null>(null);
+  const lastConnectivityDrivenFlushAtRef = useRef(0);
   const templateRefForFacial = useRef(template);
   /** Preenchimento assíncrono de morada em URIs de foto (`processFacialImage` vem antes da definição de `handleInput`). */
   const handleInputRef = useRef<
@@ -4057,12 +4096,23 @@ export default function ChecklistEngine() {
       }
     } else {
       let usePending = false;
+      let netConnected: boolean | 'unknown' = 'unknown';
       try {
         const netState = await Network.getNetworkStateAsync();
+        netConnected = netState.isConnected === true;
         if (netState.isConnected === false) usePending = true;
       } catch {
         usePending = true;
+        netConnected = 'unknown';
       }
+      // #region agent log
+      agentDebugLog({
+        location: 'checklist/[id].tsx:processFacialImage',
+        message: 'facial_non_strict_net',
+        data: { fieldId, usePendingAfterNet: usePending, netConnected },
+        hypothesisId: 'H1',
+      });
+      // #endregion
       if (!usePending) {
         setFacialVerifyBusyId(facialBusyKey);
         try {
@@ -4082,12 +4132,28 @@ export default function ChecklistEngine() {
             );
             return false;
           } else {
+            // #region agent log
+            agentDebugLog({
+              location: 'checklist/[id].tsx:processFacialImage',
+              message: 'facial_non_strict_verify_network',
+              data: { fieldId, resultKind: result.kind },
+              hypothesisId: 'H2',
+            });
+            // #endregion
             usePending = true;
           }
         } finally {
           clearFacialBusy();
         }
       }
+      // #region agent log
+      agentDebugLog({
+        location: 'checklist/[id].tsx:processFacialImage',
+        message: 'facial_non_strict_final',
+        data: { fieldId, usePending, strictOnline },
+        hypothesisId: 'H1',
+      });
+      // #endregion
       if (usePending) writePendingAudit();
     }
 
@@ -4108,6 +4174,13 @@ export default function ChecklistEngine() {
       fieldId,
       scope,
       uriAtCommit: persistedUri,
+    });
+    /** Sem mudança de foco da rota (ImagePicker/câmera), `useFocusEffect` não volta a correr — re-tentar verify após o React fundir `handleInput` no ref (1.º flush pode ainda ver estado antigo). */
+    InteractionManager.runAfterInteractions(() => {
+      requestPendingFacialAndVisionFlushRef.current?.();
+      requestAnimationFrame(() => {
+        requestPendingFacialAndVisionFlushRef.current?.();
+      });
     });
     return true;
   };
@@ -6606,12 +6679,37 @@ export default function ChecklistEngine() {
     if (!tmpl?.schemaData?.length) return;
     try {
       const netState = await Network.getNetworkStateAsync();
-      if (netState.isConnected === false) return;
+      if (netState.isConnected === false) {
+        // #region agent log
+        agentDebugLog({
+          location: 'checklist/[id].tsx:flushPendingFacialVerifications',
+          message: 'facial_flush_abort_offline',
+          data: {},
+          hypothesisId: 'H4',
+        });
+        // #endregion
+        return;
+      }
     } catch {
+      // #region agent log
+      agentDebugLog({
+        location: 'checklist/[id].tsx:flushPendingFacialVerifications',
+        message: 'facial_flush_abort_net_check',
+        data: {},
+        hypothesisId: 'H4',
+      });
+      // #endregion
       return;
     }
-    /** Só depois do await: snapshot antigo antes da rede fazia o flush ignorar ou desalinhar com o rascunho atual. */
-    const res = responsesRefForFacial.current;
+    // #region agent log
+    agentDebugLog({
+      location: 'checklist/[id].tsx:flushPendingFacialVerifications',
+      message: 'facial_flush_enter',
+      data: { online: true },
+      hypothesisId: 'H4',
+    });
+    // #endregion
+    /** Leituras sempre via `responsesRefForFacial.current` — um snapshot único ficava obsoleto após `hiFlush` / `processFacialImage` (estado ainda não fundido no objeto antigo). */
     facialFlushBusyRef.current = true;
     try {
       let currentSectionId: string | null = null;
@@ -6623,13 +6721,24 @@ export default function ChecklistEngine() {
           continue;
         }
         if (f.type !== 'facial_recognition') continue;
-        if (schemaFieldRequiresOnlineValidation(f)) continue;
+        if (schemaFieldRequiresOnlineValidation(f)) {
+          // #region agent log
+          agentDebugLog({
+            location: 'checklist/[id].tsx:flushPendingFacialVerifications',
+            message: 'facial_flush_skip_online_required',
+            data: { fieldId: f.id },
+            hypothesisId: 'H3',
+          });
+          // #endregion
+          continue;
+        }
 
         const runForScope = async (scope: SectionRepeatScope | null) => {
-          const bioRaw = getScopedFieldValue(res, scope, facialBiometricStorageKey(f.id));
+          const snap = responsesRefForFacial.current;
+          const bioRaw = getScopedFieldValue(snap, scope, facialBiometricStorageKey(f.id));
           const audit = parseFacialBiometricAudit(bioRaw);
           if (!(audit as { pending?: boolean } | null)?.pending) return;
-          const uriRaw = getScopedFieldValue(res, scope, f.id);
+          const uriRaw = getScopedFieldValue(snap, scope, f.id);
           const uri = firstFacialMediaUri(uriRaw);
           if (!uri) return;
           const path = uri.split('?')[0];
@@ -6711,13 +6820,54 @@ export default function ChecklistEngine() {
               }),
               scope
             );
+          } else if (result.kind === 'error_msg') {
+            const prevCapEm = (audit as { capturedAt?: string })?.capturedAt;
+            const prevGeoEm = audit as {
+              captureLat?: string;
+              captureLng?: string;
+              captureAddr?: string;
+            };
+            hiFlush(
+              bioKey,
+              JSON.stringify({
+                pending: false,
+                deferredValidationFailed: true,
+                at: new Date().toISOString(),
+                ...(typeof prevCapEm === 'string' && prevCapEm.trim()
+                  ? { capturedAt: prevCapEm.trim() }
+                  : {}),
+                ...(prevGeoEm.captureLat && prevGeoEm.captureLng
+                  ? { captureLat: String(prevGeoEm.captureLat), captureLng: String(prevGeoEm.captureLng) }
+                  : {}),
+                ...(prevGeoEm.captureAddr && String(prevGeoEm.captureAddr).trim()
+                  ? { captureAddr: String(prevGeoEm.captureAddr).trim() }
+                  : {}),
+                facialAuthMode: f.facialAuthMode === 'identify' ? 'identify' : 'self_verify',
+                message:
+                  sanitizeFacialUserFacingCopy(result.message) ||
+                  'Erro ao validar a biometria no servidor. Tente novamente ou contacte o suporte.',
+              }),
+              scope
+            );
+          } else {
+            // #region agent log
+            agentDebugLog({
+              location: 'checklist/[id].tsx:flushPendingFacialVerifications',
+              message:
+                result.kind === 'network'
+                  ? 'facial_flush_verify_network_stays_pending'
+                  : 'facial_flush_verify_unhandled',
+              data: { fieldId: f.id, kind: result.kind },
+              hypothesisId: 'H4',
+            });
+            // #endregion
           }
         };
 
         if (!curSecRepeat) {
           await runForScope(null);
         } else if (currentSectionId) {
-          const rows = getRepeatRows(res, currentSectionId);
+          const rows = getRepeatRows(responsesRefForFacial.current, currentSectionId);
           for (let ri = 0; ri < rows.length; ri++) {
             await runForScope({ sectionId: currentSectionId, rowIndex: ri });
           }
@@ -6743,7 +6893,6 @@ export default function ChecklistEngine() {
     }
     const token = await getToken();
     if (!token) return;
-    const res = responsesRefForFacial.current;
     visionFlushBusyRef.current = true;
     try {
       let currentSectionId: string | null = null;
@@ -6758,7 +6907,7 @@ export default function ChecklistEngine() {
         if (!isVisionSimNaoMediaFieldType(ft)) continue;
 
         const runForScope = async (scope: SectionRepeatScope | null) => {
-          const raw = getScopedFieldValue(res, scope, f.id);
+          const raw = getScopedFieldValue(responsesRefForFacial.current, scope, f.id);
           const o = parseVisionChecklistStored(raw);
           if (!o || !isVisionPendingAnalysisRecord(o) || !visionStoredHasRunnableMedia(f, o)) return;
           const uri = String(o.localUri || '').trim();
@@ -6791,7 +6940,7 @@ export default function ChecklistEngine() {
         if (!curSecRepeat) {
           await runForScope(null);
         } else if (currentSectionId) {
-          const rows = getRepeatRows(res, currentSectionId);
+          const rows = getRepeatRows(responsesRefForFacial.current, currentSectionId);
           for (let ri = 0; ri < rows.length; ri++) {
             await runForScope({ sectionId: currentSectionId, rowIndex: ri });
           }
@@ -6802,16 +6951,48 @@ export default function ChecklistEngine() {
     }
   }, [isReadOnly, loading, runVisionChecklistAnalyze]);
 
+  const runFacialThenVisionFlush = useCallback(() => {
+    void flushPendingFacialVerifications().then(() => {
+      void flushPendingVisionAnalyses();
+    });
+  }, [flushPendingFacialVerifications, flushPendingVisionAnalyses]);
+
+  useLayoutEffect(() => {
+    requestPendingFacialAndVisionFlushRef.current = runFacialThenVisionFlush;
+    return () => {
+      requestPendingFacialAndVisionFlushRef.current = null;
+    };
+  }, [runFacialThenVisionFlush]);
+
+  /** Re-tentar biometria/visão pendente quando a rede liga ou a app volta ao primeiro plano (o foco da rota pode não mudar após a câmera). */
+  useEffect(() => {
+    if (loading || isReadOnly) return undefined;
+    const bump = () => {
+      const now = Date.now();
+      if (now - lastConnectivityDrivenFlushAtRef.current < 650) return;
+      lastConnectivityDrivenFlushAtRef.current = now;
+      runFacialThenVisionFlush();
+    };
+    const netSub = Network.addNetworkStateListener((s) => {
+      if (s.isConnected === true) bump();
+    });
+    const appSub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') bump();
+    });
+    return () => {
+      netSub.remove();
+      appSub.remove();
+    };
+  }, [loading, isReadOnly, runFacialThenVisionFlush]);
+
   useFocusEffect(
     useCallback(() => {
       if (loading || isReadOnly) return undefined;
       const t = setTimeout(() => {
-        void flushPendingFacialVerifications().then(() => {
-          void flushPendingVisionAnalyses();
-        });
+        runFacialThenVisionFlush();
       }, 700);
       return () => clearTimeout(t);
-    }, [loading, isReadOnly, flushPendingFacialVerifications, flushPendingVisionAnalyses])
+    }, [loading, isReadOnly, runFacialThenVisionFlush])
   );
 
   const mergeMediaUriIntoField = (fieldId: string, uri: string, scope?: SectionRepeatScope | null) => {

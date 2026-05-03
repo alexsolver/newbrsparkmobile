@@ -111,10 +111,14 @@
       .replace(/"/g, '&quot;');
   }
 
+  /** Última lista carregada — evita `JSON.stringify(t)` inteiro em `onclick='...'` (apóstrofos quebram o atributo). */
+  let notificationsTemplatesCache = [];
+
   async function loadTemplates() {
     const raw = await CONFIG.get('/notifications/templates');
     if (!raw) return;
     const templates = Array.isArray(raw) ? raw : [];
+    notificationsTemplatesCache = templates;
     document.getElementById('tmpl-count').textContent =
       templates.length === 1 ? mpT('notif_tmpl_count_one') : mpT('notif_tmpl_count_many', { n: templates.length });
     document.getElementById('template-list').innerHTML = templates.length
@@ -127,9 +131,9 @@
           ${t.subject ? `<div class="flag-desc" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">${escHtml(mpT('notif_subject_prefix'))} ${escHtml(t.subject)}</div>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:12px">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="editTemplate(${JSON.stringify(t).replace(/"/g, '&quot;')})">${escHtml(mpT('notif_btn_edit'))}</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick='editTemplate(${JSON.stringify(t.id)})'>${escHtml(mpT('notif_btn_edit'))}</button>
           <label class="toggle">
-            <input type="checkbox" ${t.isActive ? 'checked' : ''} onclick="toggleTemplate('${t.id}', this.checked)" />
+            <input type="checkbox" ${t.isActive ? 'checked' : ''} onclick='toggleTemplate(${JSON.stringify(t.id)}, this.checked)' />
             <span class="toggle-track"></span>
           </label>
         </div>
@@ -152,7 +156,9 @@
     openModal('template-modal');
   };
 
-  window.editTemplate = (t) => {
+  window.editTemplate = (id) => {
+    const t = notificationsTemplatesCache.find((x) => x.id === id || String(x.id) === String(id));
+    if (!t) return;
     document.getElementById('notif-modal-title').textContent = mpT('notif_modal_edit');
     document.getElementById('tmpl-id').value = t.id;
     document.getElementById('tmpl-key').value = t.key;
@@ -178,7 +184,7 @@
         <div class="activity-content">
           <div class="activity-text"><strong>${escHtml(l.template?.label || l.templateId)}</strong> → ${escHtml(l.recipient)}</div>
           <div class="activity-time">
-            ${new Date(l.sentAt).toLocaleString(mpIntlLocale())}
+            ${escHtml(new Date(l.sentAt).toLocaleString(mpIntlLocale()))}
             <span class="badge ${statusMap[l.status] || 'badge-gray'}">${escHtml(l.status)}</span>
           </div>
         </div>

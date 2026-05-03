@@ -2079,8 +2079,8 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
                </div>
                <div style="font-size:9px;color:#94a3b8;margin-bottom:6px;font-weight:600">Contador de etapa (início/fim automáticos no app)</div>
                <div style="font-size:10px; color:#64748b; font-weight:600; display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
-                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="play-circle-outline"></ion-icon> Início: ${formatTime(startIso)} <span style="opacity:0.85">(${fmtIsoShort(startIso)})</span></span>
-                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="stop-circle-outline"></ion-icon> Fim: ${formatTime(endIso)} <span style="opacity:0.85">(${fmtIsoShort(endIso)})</span></span>
+                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="play-circle-outline"></ion-icon> Início: ${esc(formatTime(startIso))} <span style="opacity:0.85">(${esc(fmtIsoShort(startIso))})</span></span>
+                  <span style="background:#e2e8f0; padding:2px 6px; border-radius:4px;"><ion-icon name="stop-circle-outline"></ion-icon> Fim: ${esc(formatTime(endIso))} <span style="opacity:0.85">(${esc(fmtIsoShort(endIso))})</span></span>
                   ${durationStr ? `<span style="color:#8b5cf6; font-weight:800;"><ion-icon name="time-outline"></ion-icon> Duração: ${esc(durationStr)}</span>` : startIso && !endIso ? `<span style="color:#94a3b8;font-weight:700">Em curso ou não concluída no envio</span>` : ''}
                </div>
             </div>

@@ -181,10 +181,14 @@
     return /^[a-z0-9._-]+$/i.test(n) ? n : 'help-outline';
   }
 
+  /** Última lista — evita `JSON.stringify(t)` em `onclick='...'` (apóstrofos no JSON quebram o atributo). */
+  let metatagsRowsCache = [];
+
   async function loadTags() {
     const type = document.getElementById('filter-type').value;
     const raw = await CONFIG.get(`/metatags${type ? `?type=${encodeURIComponent(type)}` : ''}`);
     const tags = Array.isArray(raw) ? raw : [];
+    metatagsRowsCache = tags;
 
     document.getElementById('stat-total').textContent        = tags.length;
     document.getElementById('stat-asset-types').textContent  = tags.filter(t => t.type === 'ASSET_TYPE').length;
@@ -211,8 +215,8 @@
           <td><span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:${col};border:1px solid var(--border)"></span></td>
           <td><span class="badge ${t.isActive ? 'badge-green' : 'badge-gray'}">${t.isActive ? '<ion-icon name="ellipse-outline" style="font-size:14px;vertical-align:middle;margin-right:4px"></ion-icon> Ativo' : '○ Inativo'}</span></td>
           <td class="text-right" style="white-space:nowrap">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="editTag(${JSON.stringify(t).replace(/"/g,'&quot;')})">Editar</button>
-            <button type="button" class="btn btn-danger btn-sm" onclick="deleteTag('${escHtml(t.id)}')"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
+            <button type="button" class="btn btn-ghost btn-sm mt-btn-edit" data-metatag-id="${escHtml(String(t.id))}">Editar</button>
+            <button type="button" class="btn btn-danger btn-sm mt-btn-delete" data-metatag-id="${escHtml(String(t.id))}"><ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon></button>
           </td>
         </tr>`;
       }).join('')
@@ -726,7 +730,9 @@
     openModal('tag-modal');
   };
 
-  window.editTag = (t) => {
+  window.editTag = (id) => {
+    const t = metatagsRowsCache.find((x) => x.id === id || String(x.id) === String(id));
+    if (!t) return;
     document.getElementById('tag-id').value    = t.id;
     document.getElementById('tag-modal-title').textContent = 'Editar: ' + t.ptBr;
     document.getElementById('tag-type').value  = t.type;
@@ -766,6 +772,28 @@
   });
 
   document.getElementById('filter-type').addEventListener('change', loadTags);
+
+  (function wireMetatagsTableDelegation() {
+    const tb = document.getElementById('tags-tbody');
+    if (!tb || tb.dataset.mtDelegBound === '1') return;
+    tb.dataset.mtDelegBound = '1';
+    tb.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const editB = t.closest('.mt-btn-edit');
+      if (editB && tb.contains(editB)) {
+        const id = editB.getAttribute('data-metatag-id');
+        if (id != null && id !== '') window.editTag(id);
+        return;
+      }
+      const delB = t.closest('.mt-btn-delete');
+      if (delB && tb.contains(delB)) {
+        const id = delB.getAttribute('data-metatag-id');
+        if (id != null && id !== '') void window.deleteTag(id);
+      }
+    });
+  })();
+
   loadTags();
 
   // ─── Seeds de Categorias de Mídia (criados na primeira inicialização) ──────
