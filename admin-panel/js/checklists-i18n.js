@@ -319,6 +319,9 @@ const M = {
     fb_prop_vision_show_ai_chk_lbl: 'Mostrar detalhes da resposta da IA no app',
     fb_prop_vision_show_ai_hint:
       'Desmarque para ocultar no formulário do técnico o texto da resposta, confiança, racional e bloco de classificação 0–10 (a mídia e o estado «concluído» mantêm-se). Relatórios e resumo de assinatura podem continuar mostrando os dados.',
+    fb_prop_vision_comparison_show_ref_chk_lbl: 'Mostrar foto de referência ao técnico no app',
+    fb_prop_vision_comparison_show_ref_hint:
+      'Se desmarcar, o prestador não vê a miniatura da referência no formulário; a imagem continua a ser enviada ao servidor para comparar com a captura em campo.',
     fb_prop_vision_grid_lbl: 'Grade de fotos (composição única antes do envio)',
     fb_prop_vision_grid_help:
       'Só <b>1×1</b> ou <b>2×2</b>. Com mais de uma célula, o app exige <b>todas</b> as fotos (câmera) antes de analisar; só <b>foto</b> (sem vídeo). Modelos antigos com grade maior passam a <b>2×2</b> ao salvar.',
@@ -1086,6 +1089,9 @@ const M = {
     fb_prop_vision_show_ai_chk_lbl: 'Show AI response details in the app',
     fb_prop_vision_show_ai_hint:
       'Uncheck to hide from the technician’s form the response text, confidence, rationale, and 0–10 block (media and “completed” state remain). Reports and signature summary may still show the data.',
+    fb_prop_vision_comparison_show_ref_chk_lbl: 'Show reference photo to the technician in the app',
+    fb_prop_vision_comparison_show_ref_hint:
+      'If unchecked, the provider does not see the reference thumbnail in the form; the image is still sent to the server to compare with the field capture.',
     fb_prop_vision_grid_lbl: 'Photo grid (single composite before upload)',
     fb_prop_vision_grid_help:
       'Only <b>1×1</b> or <b>2×2</b>. With more than one cell, the app requires <b>all</b> photos (camera) before analysis; <b>photo</b> only (no video). Older models with a larger grid are saved as <b>2×2</b>.',

@@ -2502,7 +2502,8 @@
     "visionYoloVideoFrameBody": "The detection service (YOLO) only accepts images. Could not extract a frame from the video. Take a photo or try again.",
     "visionComparisonPhotoOnlyTitle": "Reference comparison",
     "visionComparisonPhotoOnlyBody": "This field only accepts a photo (not video) to compare with the reference image.",
-    "visionComparisonMissingReferenceBody": "This field has no valid reference image in the template. Ask an administrator to configure the form."
+    "visionComparisonMissingReferenceBody": "This field has no valid reference image in the template. Ask an administrator to configure the form.",
+    "visionComparisonReferencePreviewLabel": "Reference (standard)"
   },
   "pause": {
     "pickCategory": "Pause reason",

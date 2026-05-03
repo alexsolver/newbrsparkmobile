@@ -4255,6 +4255,14 @@ function renderProperties() {
                     : `<div style="font-size:11px;color:#b45309;font-weight:700;margin-bottom:10px;padding:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;">${escapeHtmlLogic(fbStr('fb_prop_vision_ref_missing', null, 'Configure uma imagem de referência — sem ela o técnico não consegue comparar.'))}</div>`
             }`
             : '';
+        const showRefToTechnician = f.visionComparisonShowReferenceInForm !== false;
+        const referenceVisibilityHtml = isVisionComparison
+            ? `<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;cursor:pointer;padding:8px 10px;border-radius:8px;border:1px solid #f0abfc;background:#fdf4ff">
+              <input type="checkbox" ${showRefToTechnician ? 'checked' : ''} onchange="window.handleFieldUpdate('visionComparisonShowReferenceInForm', this.checked); if(typeof renderProperties==='function')renderProperties();" style="accent-color:#a21caf;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+              <span style="font-size:12px;font-weight:700;color:#701a75;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_comparison_show_ref_chk_lbl', null, 'Mostrar foto de referência ao técnico no app'))}</span>
+            </label>
+            <div style="font-size:9px;color:#64748b;margin:-4px 0 12px;line-height:1.35">${escapeHtmlLogic(fbStr('fb_prop_vision_comparison_show_ref_hint', null, 'Se desmarcar, o prestador não vê a miniatura da referência no formulário; a imagem continua a ser usada no servidor para comparar com a captura.'))}</div>`
+            : '';
         const capturePickHtml = isVisionComparison
             ? `<div style="font-size:12px;font-weight:700;color:${vLabel};margin-bottom:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_comparison_capture_fixed', null, 'Captura no app: somente foto (câmera).'))}</div>`
             : `<label class="prop-label" style="color:${vLabel}; font-size:10px;">${escapeHtmlLogic(fbStr('fb_prop_vision_capture_lbl', null, 'Tipo de captura pela câmera'))}</label>
@@ -4277,6 +4285,7 @@ function renderProperties() {
               ${vBody}
             </div>
             ${referencePickHtml}
+            ${referenceVisibilityHtml}
             ${ratingPickHtml}
             ${showAiResponseHtml}
             ${capturePickHtml}

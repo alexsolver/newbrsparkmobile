@@ -2502,7 +2502,8 @@
     "visionYoloVideoFrameBody": "Der Erkennungsdienst (YOLO) akzeptiert nur Bilder. Es konnte kein Frame aus dem Video extrahiert werden. Machen Sie ein Foto oder versuchen Sie es erneut.",
     "visionComparisonPhotoOnlyTitle": "Vergleich mit Referenz",
     "visionComparisonPhotoOnlyBody": "Dieses Feld akzeptiert nur ein Foto (kein Video) zum Vergleich mit dem Referenzbild.",
-    "visionComparisonMissingReferenceBody": "Die Vorlage für dieses Feld enthält kein gültiges Referenzbild. Bitten Sie einen Administrator, das Formular zu konfigurieren."
+    "visionComparisonMissingReferenceBody": "Die Vorlage für dieses Feld enthält kein gültiges Referenzbild. Bitten Sie einen Administrator, das Formular zu konfigurieren.",
+    "visionComparisonReferencePreviewLabel": "Referenz (Sollzustand)"
   },
   "pause": {
     "pickCategory": "Pausengrund",

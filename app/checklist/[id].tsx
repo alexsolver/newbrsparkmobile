@@ -933,6 +933,14 @@ function visionAiShowsResponseInForm(field: any): boolean {
   return field?.visionShowAiResponseInForm !== false;
 }
 
+/** Comparação IA: miniatura da referência visível ao prestador no formulário (padrão: sim). */
+function visionComparisonShowsReferenceToProvider(field: any): boolean {
+  const v =
+    field?.visionComparisonShowReferenceInForm ?? field?.vision_comparison_show_reference_in_form;
+  if (v === false || v === 'false' || v === 0 || v === '0' || v === 'off' || v === 'no') return false;
+  return true;
+}
+
 /** Alinha ao Form Builder: `photo_only` | `video_only` | `photo_and_video` (padrão). */
 function normalizeVisionCaptureMode(field: any): 'photo_only' | 'video_only' | 'photo_and_video' {
   if (effectiveSchemaFieldType(field) === 'vision_ai_comparison') return 'photo_only';
@@ -10894,10 +10902,13 @@ export default function ChecklistEngine() {
 
                     return (
                       <>
-                        {showVisionCaptureHero && useVisionComparison && refThumbUri ? (
+                        {showVisionCaptureHero &&
+                        useVisionComparison &&
+                        refThumbUri &&
+                        visionComparisonShowsReferenceToProvider(field) ? (
                           <View style={{ marginBottom: 10, alignItems: 'center' }}>
                             <Text style={{ fontSize: 11, fontWeight: '800', color: '#86198f', marginBottom: 6 }}>
-                              Referência (padrão)
+                              {t('checklistForm.visionComparisonReferencePreviewLabel')}
                             </Text>
                             <Image
                               source={{ uri: refThumbUri }}

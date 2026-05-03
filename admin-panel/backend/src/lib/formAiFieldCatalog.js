@@ -123,7 +123,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowVisionAiAnalysis',
     descPt:
-      'Visão de IA Comparação: foto de referência definida no painel + captura em campo (só foto; grelha 1×1 ou 2×2 como na análise); Gemini compara as imagens, devolve nota 0–10 e texto das diferenças (endpoint /api/checklists/vision/compare).',
+      'Visão de IA Comparação: foto de referência definida no painel + captura em campo (só foto; grelha 1×1 ou 2×2 como na análise); Gemini compara as imagens, devolve nota 0–10 e texto das diferenças (endpoint /api/checklists/vision/compare). Opcional: `visionComparisonShowReferenceInForm` (padrão true) controla se o técnico vê a miniatura da referência no app.',
   },
   {
     type: 'transit_start',

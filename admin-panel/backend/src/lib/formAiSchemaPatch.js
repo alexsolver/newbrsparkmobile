@@ -341,6 +341,13 @@ function applySchemaPatch(schemaData, patch) {
           s.startsWith('data:image/') && s.length <= 9 * 1024 * 1024 ? s : '';
       }
       if (
+        cur.type === 'vision_ai_comparison' &&
+        (p.visionComparisonShowReferenceInForm === true ||
+          p.visionComparisonShowReferenceInForm === false)
+      ) {
+        cur.visionComparisonShowReferenceInForm = !!p.visionComparisonShowReferenceInForm;
+      }
+      if (
         cur.type === 'vision_ai_analysis' &&
         (p.visionRating0To10Enabled === true || p.visionRating0To10Enabled === false)
       ) {

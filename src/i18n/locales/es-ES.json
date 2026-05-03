@@ -2502,7 +2502,8 @@
     "visionYoloVideoFrameBody": "El servicio de detección (YOLO) solo acepta imagen. No se pudo extraer un fotograma del vídeo. Haga una foto o inténtelo de nuevo.",
     "visionComparisonPhotoOnlyTitle": "Comparación con referencia",
     "visionComparisonPhotoOnlyBody": "Este campo solo admite foto (no vídeo) para comparar con la imagen de referencia.",
-    "visionComparisonMissingReferenceBody": "El modelo de este campo no tiene una imagen de referencia válida. Pida al administrador que configure el formulario."
+    "visionComparisonMissingReferenceBody": "El modelo de este campo no tiene una imagen de referencia válida. Pida al administrador que configure el formulario.",
+    "visionComparisonReferencePreviewLabel": "Referencia (patrón)"
   },
   "pause": {
     "pickCategory": "Motivo de la pausa",
