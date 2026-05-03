@@ -2,6 +2,7 @@
 const router = require('express').Router();
 const prisma  = require('../db');
 const authUser = require('../middleware/authUser');
+const { adminAuthThenPanel } = require('../middleware/auth');
 const { latestGpsAgeSecondsByExecutionIds } = require('../lib/executionTelemetryGps');
 const { normalizeOsrmBaseUrl, DEFAULT_OSRM_BASE } = require('../lib/osrmBaseUrl');
 const { osrmEtaMinutesMatchOrRoute } = require('../lib/osrmEta');
@@ -216,7 +217,7 @@ setTimeout(runEtaCron, 5000);
 
 // ─── POST /api/telemetry/batch — recebe array de eventos do app ───────────────
 // Aceita sem autenticação JWT obrigatória (app offline-first)
-router.post('/batch', async (req, res) => {
+router.post('/batch', authUser, async (req, res) => {
   try {
     const { events, ownerEmail, tenantId } = req.body;
     if (!Array.isArray(events) || events.length === 0) {
@@ -424,9 +425,11 @@ router.post('/batch', async (req, res) => {
 });
 
 // ─── GET /api/telemetry — consulta admin ─────────────────────────────────────
-router.get('/', async (req, res) => {
+router.get('/', adminAuthThenPanel, async (req, res) => {
   try {
     const { ownerEmail, executionId, eventType, tenantId, from, to, limit = 100 } = req.query;
+    const parsedLimit = Number.parseInt(String(limit), 10);
+    const safeLimit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 1000) : 100;
     const where = {};
     if (ownerEmail)  where.ownerEmail  = ownerEmail;
     if (executionId) where.executionId = executionId;
@@ -440,14 +443,14 @@ router.get('/', async (req, res) => {
     const events = await prisma.telemetryEvent.findMany({
       where,
       orderBy: { serverTimestamp: 'desc' },
-      take: Math.min(parseInt(limit), 1000),
+      take: safeLimit,
     });
     res.json(events);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ─── GET /api/telemetry/run-eta — força cálculo de ETA agora ─────────────────
-router.get('/run-eta', async (req, res) => {
+router.get('/run-eta', adminAuthThenPanel, async (req, res) => {
   try {
     await runEtaCron();
     const updated = await prisma.checklistExecution.findMany({

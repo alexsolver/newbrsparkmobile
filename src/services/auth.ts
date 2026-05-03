@@ -16,6 +16,7 @@ import * as Device from 'expo-device';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import { Platform, Alert } from 'react-native';
+import * as Network from 'expo-network';
 
 async function getDeviceId(): Promise<string> {
   try {
@@ -1464,8 +1465,28 @@ export function subscribeSessionInvalidated(cb: () => void): () => void {
   };
 }
 
-/** Logout + alerta + notificação aos listeners (push remoto ou 401 SESSION_INVALIDATED). Idempotente. */
-export async function applySessionInvalidatedFromServer(): Promise<void> {
+/**
+ * Logout + alerta + notificação aos listeners (401 SESSION_INVALIDATED ou push FORCE_LOGOUT).
+ * Idempotente. Com `force: true` (ex.: push administrativo) aplica sempre.
+ * Sem rede: não apaga sessão — o app é offline-first; a revalidação ocorre no próximo pedido com internet.
+ */
+export async function applySessionInvalidatedFromServer(options?: { force?: boolean }): Promise<void> {
+  if (!options?.force) {
+    try {
+      const net = await Network.getNetworkStateAsync();
+      if (net.isConnected !== true) {
+        console.warn(
+          '[Auth] SESSION_INVALIDATED sem rede — sessão local mantida (offline-first). Revalidação ao voltar online.',
+        );
+        return;
+      }
+    } catch {
+      console.warn(
+        '[Auth] SESSION_INVALIDATED: rede indeterminada — sessão local mantida (offline-first).',
+      );
+      return;
+    }
+  }
   const hasAccess = !!(await getToken());
   const hasRefresh = !!(await getRefreshTokenSecure());
   if (!hasAccess && !hasRefresh) return;

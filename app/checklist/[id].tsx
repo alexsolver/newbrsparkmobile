@@ -1193,6 +1193,14 @@ function normalizeVisionGridSlotUris(raw: unknown, count: number): string[] {
   return out;
 }
 
+/** Slots da grelha no rascunho (camelCase no app; snake_case possível vindo do servidor). */
+function visionGridSlotUrisRawFromStored(o: Record<string, any> | null | undefined): unknown {
+  if (!o || typeof o !== 'object') return undefined;
+  if (Array.isArray(o.gridSlotUris)) return o.gridSlotUris;
+  if (Array.isArray(o.grid_slot_uris)) return o.grid_slot_uris;
+  return undefined;
+}
+
 const VISION_STATUS_PENDING_ANALYSIS = 'pending_analysis';
 
 function isVisionPendingAnalysisRecord(o: Record<string, any> | null | undefined): boolean {
@@ -1206,7 +1214,7 @@ function visionStoredHasRunnableMedia(field: any, o: Record<string, any>): boole
   if (!localUri) return false;
   const layout = getVisionAnalysisGridLayout(field);
   if (layout.count <= 1) return true;
-  const slots = normalizeVisionGridSlotUris(o.gridSlotUris, layout.count);
+  const slots = normalizeVisionGridSlotUris(visionGridSlotUrisRawFromStored(o), layout.count);
   return slots.every((u) => u.length > 0);
 }
 
@@ -1562,7 +1570,7 @@ function collectSummaryThumbnailUris(fieldDef: any | undefined, raw: unknown): s
     const o = parseVisionChecklistStored(raw);
     const u = o?.localUri != null ? String(o.localUri).trim() : '';
     if (u) return [u];
-    const slots = o?.gridSlotUris;
+    const slots = visionGridSlotUrisRawFromStored(o);
     if (Array.isArray(slots)) {
       const first = slots.map((x) => String(x || '').trim()).find(Boolean);
       return first ? [first] : [];
@@ -6343,7 +6351,7 @@ export default function ChecklistEngine() {
         o.mediaFileName || (String(mime).startsWith('video') ? 'video.mp4' : 'foto.jpg'),
       );
       const layout = getVisionAnalysisGridLayout(field);
-      const slots = normalizeVisionGridSlotUris(o.gridSlotUris, layout.count);
+      const slots = normalizeVisionGridSlotUris(visionGridSlotUrisRawFromStored(o), layout.count);
       const quiet = !!retryOpts?.quiet;
       const baseOpts = layout.count > 1 ? { persistExtras: { gridSlotUris: slots as string[] }, quiet } : { quiet };
       void runVisionChecklistAnalyze(field, uri, mime, name, scope ?? null, baseOpts);
@@ -6503,7 +6511,7 @@ export default function ChecklistEngine() {
           if (typeof hi !== 'function') return;
           const raw = getScopedFieldValue(responsesRefForFacial.current, scope ?? null, field.id);
           const prev = parseVisionChecklistStored(raw);
-          const slots = normalizeVisionGridSlotUris(prev?.gridSlotUris, layout.count);
+          const slots = normalizeVisionGridSlotUris(visionGridSlotUrisRawFromStored(prev), layout.count);
           slots[slotIndex] = uri;
           const nextObj: Record<string, unknown> = {
             gridSlotUris: slots,
@@ -6515,8 +6523,9 @@ export default function ChecklistEngine() {
             (ftAuto === 'vision_ai_analysis' || ftAuto === 'vision_ai_comparison') &&
             slots.every((u) => String(u || '').trim().length > 0)
           ) {
+            const slotsSnapshot = slots.slice();
             queueMicrotask(() => {
-              startVisionGridAnalyze(field, scope ?? null);
+              startVisionGridAnalyze(field, scope ?? null, { confirmedSlotUris: slotsSnapshot });
             });
           }
         } catch (err: any) {
@@ -6529,7 +6538,11 @@ export default function ChecklistEngine() {
     })();
   };
 
-  const startVisionGridAnalyze = (field: any, scope?: SectionRepeatScope | null) => {
+  const startVisionGridAnalyze = (
+    field: any,
+    scope?: SectionRepeatScope | null,
+    opts?: { confirmedSlotUris?: string[] | null },
+  ) => {
     if (visionGridCompose) return;
     const layout = getVisionAnalysisGridLayout(field);
     if (layout.count <= 1) return;
@@ -6543,13 +6556,21 @@ export default function ChecklistEngine() {
       const uri = String(prev.localUri || '').trim();
       const mime = String(prev.mediaMimeType || 'image/png');
       const name = String(prev.mediaFileName || 'grelha-visao.png');
-      const slotsForExtras = normalizeVisionGridSlotUris(prev.gridSlotUris, layout.count);
+      const slotsForExtras = normalizeVisionGridSlotUris(visionGridSlotUrisRawFromStored(prev), layout.count);
       void runVisionChecklistAnalyze(field, uri, mime, name, scope ?? null, {
         persistExtras: { gridSlotUris: slotsForExtras },
       });
       return;
     }
-    const slots = normalizeVisionGridSlotUris(prev?.gridSlotUris, layout.count);
+    const snap = opts?.confirmedSlotUris;
+    const slotsFromSnap =
+      Array.isArray(snap) &&
+      snap.length === layout.count &&
+      snap.every((u) => String(u || '').trim().length > 0)
+        ? snap.map((u) => String(u || '').trim())
+        : null;
+    const slots =
+      slotsFromSnap ?? normalizeVisionGridSlotUris(visionGridSlotUrisRawFromStored(prev), layout.count);
     if (!slots.every((u) => u.length > 0)) {
       Alert.alert(
         t('appAlerts.checklist.gridPhotosMissingTitle'),
@@ -6745,7 +6766,7 @@ export default function ChecklistEngine() {
             o.mediaFileName || (String(mime).startsWith('video') ? 'video.mp4' : 'foto.jpg'),
           );
           const layout = getVisionAnalysisGridLayout(f);
-          const slots = normalizeVisionGridSlotUris(o.gridSlotUris, layout.count);
+          const slots = normalizeVisionGridSlotUris(visionGridSlotUrisRawFromStored(o), layout.count);
           await runVisionChecklistAnalyze(
             f,
             uri,
@@ -10882,7 +10903,7 @@ export default function ChecklistEngine() {
                         isVisionPendingAnalysisRecord(stored) &&
                         visionStoredHasRunnableMedia(field, stored),
                     );
-                    const slotUris = normalizeVisionGridSlotUris(stored?.gridSlotUris, gridLayout.count);
+                    const slotUris = normalizeVisionGridSlotUris(visionGridSlotUrisRawFromStored(stored), gridLayout.count);
                     const sc = scope ?? null;
                     const composingThisField = Boolean(
                       visionGridCompose &&
@@ -10902,10 +10923,11 @@ export default function ChecklistEngine() {
 
                     return (
                       <>
-                        {showVisionCaptureHero &&
-                        useVisionComparison &&
+                        {useVisionComparison &&
                         refThumbUri &&
-                        visionComparisonShowsReferenceToProvider(field) ? (
+                        visionComparisonShowsReferenceToProvider(field) &&
+                        !isReadOnly &&
+                        !analysisDone ? (
                           <View style={{ marginBottom: 10, alignItems: 'center' }}>
                             <Text style={{ fontSize: 11, fontWeight: '800', color: '#86198f', marginBottom: 6 }}>
                               {t('checklistForm.visionComparisonReferencePreviewLabel')}

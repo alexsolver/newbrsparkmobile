@@ -189,7 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = notification.request?.content?.data as Record<string, unknown> | undefined;
       const t = data?.type;
       if (t === 'FORCE_LOGOUT') {
-        applySessionInvalidatedFromServer().catch(() => {});
+        applySessionInvalidatedFromServer({ force: true }).catch(() => {});
         return;
       }
       if (t === 'EVALUATION_CLIENT_SURVEY_INVITE') {
@@ -285,8 +285,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(fresh);
               runAvatarWarm(fresh);
             } else {
-              effective = null;
-              setUser(null);
+              /** Offline-first: `validateSession` pode devolver null com credenciais ainda em disco (rede/401 transitório). */
+              const persisted = await AuthService.getUser();
+              if (persisted) {
+                effective = persisted;
+                setUser(persisted);
+              } else {
+                effective = null;
+                setUser(null);
+              }
             }
           } catch {
             /* mantém localUser em effective */
@@ -514,6 +521,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(fresh);
       runAvatarWarm(fresh);
       return fresh;
+    }
+    const local = await AuthService.getUser();
+    if (local) {
+      setUser(local);
+      return local;
     }
     return null;
   }, [runAvatarWarm]);

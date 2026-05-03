@@ -1716,6 +1716,26 @@ window.initBuilderDirtyTracking = function () {
 
 const elPropsBody = document.getElementById('field-properties-modal-body');
 
+/**
+ * Após substituir `innerHTML`, o browser repõe `scrollTop` em 0 — o modal «salta» para o topo.
+ * Restaura a posição após layout / editores (Quill) montarem.
+ */
+function fbRestoreScrollAfterRichDomUpdate(host, prevTop) {
+    if (!host || prevTop == null || prevTop <= 0) return;
+    const apply = () => {
+        try {
+            const max = Math.max(0, host.scrollHeight - host.clientHeight);
+            host.scrollTop = Math.min(Math.floor(prevTop), max);
+        } catch (e) {
+            /* ignore */
+        }
+    };
+    apply();
+    requestAnimationFrame(() => requestAnimationFrame(apply));
+    setTimeout(apply, 0);
+    setTimeout(apply, 50);
+}
+
 /** Modal de propriedades; quando false, clicar só no cartão não re-renderiza o painel. */
 window.fieldPropertiesModalOpen = false;
 
@@ -4599,6 +4619,15 @@ function renderProperties() {
                   ? fbStr('fb_prop_online_validation_lookup', null, '')
                   : fbStr('fb_prop_online_validation_generic', null, '');
 
+    let prevFieldPropsModalScroll = 0;
+    try {
+        if (window.fieldPropertiesModalOpen && elPropsBody) {
+            prevFieldPropsModalScroll = elPropsBody.scrollTop || 0;
+        }
+    } catch (e) {
+        prevFieldPropsModalScroll = 0;
+    }
+
     elPropsBody.innerHTML = `
         <div class="prop-group">
             <label class="prop-label">${escapeHtmlLogic(
@@ -4844,6 +4873,7 @@ function renderProperties() {
         } else if (typeof window.initFieldHelpEditor === 'function') {
             window.initFieldHelpEditor(f);
         }
+        fbRestoreScrollAfterRichDomUpdate(elPropsBody, prevFieldPropsModalScroll);
     }, 0);
 }
 
@@ -8347,10 +8377,22 @@ function renderLogicRules() {
 
     const container = document.getElementById('logic-rules-container');
     const emptyState = document.getElementById('logic-empty-state');
-    
+    if (!container || !emptyState) return;
+
+    let logicScrollHost = null;
+    let logicPrevScroll = 0;
+    try {
+        logicScrollHost = container.parentElement;
+        if (logicScrollHost) logicPrevScroll = logicScrollHost.scrollTop || 0;
+    } catch (e) {
+        logicScrollHost = null;
+        logicPrevScroll = 0;
+    }
+
     if(!field.rules || field.rules.length === 0) {
         container.innerHTML = '';
         emptyState.style.display = 'block';
+        fbRestoreScrollAfterRichDomUpdate(logicScrollHost, logicPrevScroll);
         return;
     }
     
@@ -8538,6 +8580,7 @@ function renderLogicRules() {
             }
         });
     });
+    fbRestoreScrollAfterRichDomUpdate(logicScrollHost, logicPrevScroll);
 }
 
 window.renderLogicRules = renderLogicRules;

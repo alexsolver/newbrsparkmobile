@@ -365,7 +365,7 @@ router.get('/translate-mymemory', adminAuthThenPanel, async (req, res) => {
 });
 
 // --- Pastas de modelos (Form Builder → "Meus formulários") ---
-router.get('/template-folders', async (req, res) => {
+router.get('/template-folders', adminAuthThenPanel, async (req, res) => {
   try {
     const rows = await prisma.checklistTemplateFolder.findMany({
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -377,7 +377,7 @@ router.get('/template-folders', async (req, res) => {
   }
 });
 
-router.post('/template-folders', async (req, res) => {
+router.post('/template-folders', adminAuthThenPanel, async (req, res) => {
   try {
     const { name, parentId } = req.body;
     if (!name || typeof name !== 'string' || !String(name).trim()) {
@@ -406,7 +406,7 @@ router.post('/template-folders', async (req, res) => {
   }
 });
 
-router.patch('/template-folders/:id', async (req, res) => {
+router.patch('/template-folders/:id', adminAuthThenPanel, async (req, res) => {
   try {
     const { id } = req.params;
     const { name } = req.body;
@@ -427,7 +427,7 @@ router.patch('/template-folders/:id', async (req, res) => {
   }
 });
 
-router.delete('/template-folders/:id', async (req, res) => {
+router.delete('/template-folders/:id', adminAuthThenPanel, async (req, res) => {
   try {
     const { id } = req.params;
     await prisma.checklistTemplateFolder.delete({ where: { id } });
@@ -442,7 +442,7 @@ router.delete('/template-folders/:id', async (req, res) => {
 });
 
 /** Mover modelo para outra pasta (dropdown no modal) */
-router.patch('/templates/:id/folder', async (req, res) => {
+router.patch('/templates/:id/folder', adminAuthThenPanel, async (req, res) => {
   try {
     const { id } = req.params;
     let { folderId } = req.body;
@@ -577,7 +577,7 @@ router.get('/templates/:id/history', adminAuthThenPanel, async (req, res) => {
 });
 
 // POST /api/checklists/templates (Admin Panel salva um schema)
-router.post('/templates', async (req, res) => {
+router.post('/templates', adminAuthThenPanel, async (req, res) => {
     try {
         const { id, title, description, metadata } = req.body;
         let { settings, schemaData, folderId, changeNote } = req.body;
