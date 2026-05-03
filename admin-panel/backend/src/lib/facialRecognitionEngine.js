@@ -61,6 +61,37 @@ function pickSelfVerifySubjectFromRecognition(recognizeJson, { tenantId, session
 }
 
 /**
+ * Melhor match do utilizador da sessão em `self_verify` **sem** filtro de limiar.
+ * Usado quando o CompreFace ordena outro subject primeiro: o técnico pode estar na
+ * lista com score abaixo do mínimo — nesse caso não se deve fazer fallback para o
+ * top global (outra pessoa), sob pena de mensagem falsa «não corresponde ao utilizador da OS».
+ * @returns {{ subject: string, similarity: number } | null}
+ */
+function pickSelfVerifyBestSubjectFromRecognition(recognizeJson, { tenantId, sessionUserId }) {
+  const results = recognizeJson && Array.isArray(recognizeJson.result) ? recognizeJson.result : [];
+  if (!results.length) return null;
+  const face = results[0];
+  const subjects = face && Array.isArray(face.subjects) ? face.subjects : [];
+  const tid = String(tenantId || '').trim();
+  const sid = String(sessionUserId || '').trim();
+  if (!sid) return null;
+  let best = null;
+  for (const sub of subjects) {
+    if (!sub || sub.subject == null || sub.similarity == null) continue;
+    const similarity = Number(sub.similarity);
+    if (!Number.isFinite(similarity)) continue;
+    const parsed = parseComprefaceSubjectName(String(sub.subject));
+    if (!parsed) continue;
+    if (String(parsed.userId) !== sid) continue;
+    if (tid && String(parsed.tenantId) !== tid) continue;
+    if (!best || similarity > best.similarity) {
+      best = { subject: String(sub.subject), similarity };
+    }
+  }
+  return best;
+}
+
+/**
  * Em `identify`, percorre subjects (ordenados por similaridade) e escolhe o primeiro
  * que corresponde a um utilizador ativo do tenant da sessão, acima do limiar.
  * @returns {Promise<{ subject: string, similarity: number } | null>}
@@ -265,13 +296,34 @@ async function verifyFacialImageBuffer(prisma, opts) {
       sessionUserId,
       minSim: MIN_SIMILARITY,
     });
+    if (!top) {
+      const bestSelf = pickSelfVerifyBestSubjectFromRecognition(recog.data, {
+        tenantId,
+        sessionUserId,
+      });
+      if (bestSelf && bestSelf.similarity < MIN_SIMILARITY) {
+        return {
+          ok: false,
+          audit: {
+            pending: false,
+            deferredValidationFailed: true,
+            at: new Date().toISOString(),
+            facialAuthMode: mode,
+            confidence: bestSelf.similarity,
+            message: `Confiança abaixo do mínimo (${MIN_SIMILARITY}). ${FACIAL_GALLERY_SYNC_HINT}`,
+          },
+        };
+      }
+    }
   } else if (mode === 'identify' && tenantId) {
     top = await pickIdentifySubjectFromRecognition(recog.data, prisma, {
       tenantId,
       minSim: MIN_SIMILARITY,
     });
   }
-  if (!top) top = globalTop;
+  /* Em `self_verify`, nunca usar `globalTop` quando o candidato da sessão falhou: o top global
+   * é frequentemente *outro* utilizador com score alto, o que gerava erro intermitente e mensagem enganadora. */
+  if (!top && mode !== 'self_verify') top = globalTop;
 
   if (!top) {
     return {

@@ -42,6 +42,7 @@ import {
   getServiceCategories,
   ensureServiceCategoriesColorColumn,
 } from '../../../src/database';
+import { warnDev } from '../../../src/utils/devLog';
 import { LEGACY_SERVICE_CATEGORY_I18N } from '../../../src/services/directoryCategories';
 import { resolveDirectoryMediaUri } from '../../../src/utils/directoryMediaUrl';
 import { ApiService, ProviderService } from '../../../src/services/api';
@@ -2863,7 +2864,11 @@ export default function DashboardScreen() {
 
          const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
          let executedTasksRaw = [];
-         try { executedTasksRaw = JSON.parse(executedStr); } catch(e) {}
+         try {
+           executedTasksRaw = JSON.parse(executedStr);
+         } catch (e) {
+           warnDev('home.loadData.parseExecutedTasks', e);
+         }
          if (!Array.isArray(executedTasksRaw)) executedTasksRaw = [];
          
          const executedMap: Record<string, any> = {};
@@ -2908,7 +2913,11 @@ export default function DashboardScreen() {
          
          const inprogStr = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
          let inprogressTasks = [];
-         try { inprogressTasks = JSON.parse(inprogStr); } catch(e) {}
+         try {
+           inprogressTasks = JSON.parse(inprogStr);
+         } catch (e) {
+           warnDev('home.loadData.parseInprogressTasks', e);
+         }
          if (!Array.isArray(inprogressTasks)) inprogressTasks = [];
          const outboxInProgIds = await getTaskIdsWithPendingExecutionStatusOutbox();
          const inprogressMerged = Array.from(
@@ -2920,14 +2929,22 @@ export default function DashboardScreen() {
          
          const accStr = await AsyncStorage.getItem('@brspark_accepted_tasks') || '[]';
          let acceptedTasks: string[] = [];
-         try { acceptedTasks = JSON.parse(accStr); } catch(e) {}
+         try {
+           acceptedTasks = JSON.parse(accStr);
+         } catch (e) {
+           warnDev('home.loadData.parseAcceptedTasks', e);
+         }
          if (!Array.isArray(acceptedTasks)) acceptedTasks = [];
          const acceptedIdSet = new Set(acceptedTasks.map((id: string) => String(id)));
          setAcceptedIds(acceptedIdSet);
          
          const rejStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
          let rejectedTasks: string[] = [];
-         try { rejectedTasks = JSON.parse(rejStr); } catch(e) {}
+         try {
+           rejectedTasks = JSON.parse(rejStr);
+         } catch (e) {
+           warnDev('home.loadData.parseRejectedTasks', e);
+         }
          if (!Array.isArray(rejectedTasks)) rejectedTasks = [];
 
          // Inject executed tasks that disappeared from the backend (cloud purged) back into the dataset
@@ -6069,7 +6086,9 @@ export default function DashboardScreen() {
                                 let rejArr: string[] = [];
                                 try {
                                   rejArr = JSON.parse(rStr);
-                                } catch (e) {}
+                                } catch (e) {
+                                  warnDev('home.rejectActivity.parseRejectedTasks', e);
+                                }
                                 if (!Array.isArray(rejArr)) rejArr = [];
                                 if (!rejArr.includes(String(selectedTask.id))) {
                                   rejArr.push(String(selectedTask.id));

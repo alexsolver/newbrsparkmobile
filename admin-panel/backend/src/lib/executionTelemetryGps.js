@@ -1,4 +1,5 @@
 'use strict';
+const { Prisma } = require('@prisma/client');
 const prisma = require('../db');
 
 function isSafeExecutionId(id) {
@@ -10,8 +11,7 @@ async function latestGpsAgeSecondsByExecutionIds(ids) {
   const safe = [...new Set(ids)].filter(isSafeExecutionId);
   if (!safe.length) return new Map();
   try {
-    const list = safe.map((id) => `'${id.replace(/'/g, "''")}'`).join(',');
-    const rows = await prisma.$queryRawUnsafe(`
+    const rows = await prisma.$queryRaw`
       SELECT DISTINCT ON ("executionId") "executionId",
         LEAST(
           2147483647,
@@ -21,11 +21,11 @@ async function latestGpsAgeSecondsByExecutionIds(ids) {
           )
         )::integer AS "ageSec"
       FROM "TelemetryEvent"
-      WHERE "executionId" IN (${list})
+      WHERE "executionId" IN (${Prisma.join(safe)})
         AND "lat" IS NOT NULL
         AND "lng" IS NOT NULL
       ORDER BY "executionId", COALESCE("deviceTimestamp", "serverTimestamp") DESC
-    `);
+    `;
     const m = new Map();
     for (const r of rows) {
       if (r.executionId != null && r.ageSec != null) {

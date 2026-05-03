@@ -19,6 +19,7 @@ import {
   TECH_PUSH_ACTION_OPEN,
   TECH_PUSH_ACTION_REJECT,
 } from '../constants/pushNotifications';
+import { warnDev } from '../utils/devLog';
 
 LogBox.ignoreLogs(['expo-notifications: Android Push notifications']);
 
@@ -198,7 +199,9 @@ export const NotificationService = {
     try {
       const readIds = _notifications.filter((n) => n.read).map((n) => n.id);
       await AsyncStorage.setItem(READ_NOTIFICATIONS_V2_KEY, JSON.stringify(readIds));
-    } catch (e) {}
+    } catch (e) {
+      warnDev('NotificationService.saveReadStates', e);
+    }
   },
 
   async syncRealNotifications(userEmail: string) {
@@ -394,7 +397,9 @@ export const NotificationService = {
           await AsyncStorage.setItem(READ_NOTIFICATIONS_V2_KEY, legacy).catch(() => {});
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      warnDev('NotificationService.syncRealNotifications.readStates', e);
+    }
     if (Array.isArray(readStates)) {
       generated = generated.map((notif) =>
         readStates.includes(notif.id) ? { ...notif, read: true } : notif

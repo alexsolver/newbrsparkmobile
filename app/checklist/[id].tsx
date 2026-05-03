@@ -99,6 +99,8 @@ import {
   summarizeLocationPickValue,
 } from '../../src/components/ChecklistLocationPickField';
 import { checkAttachmentMeta } from '../../src/utils/safeAttachment';
+import { ChecklistCalculatedFieldSync } from '../../src/components/ChecklistCalculatedFieldSync';
+import { warnDev } from '../../src/utils/devLog';
 import { taskOsLabel } from '../../src/utils/taskOsLabel';
 import { fetchExecutionOpsChat, getOpsChatAckStorageKey } from '../../src/services/executionOpsChat';
 import { PAUSE_CATEGORIES, PAUSE_DETAIL_MIN_LEN, type PauseCategoryDef } from '../../src/checklist/pauseCatalog';
@@ -150,11 +152,6 @@ import { evaluateBusinessCondition } from '../../src/lib/businessRuleCondition';
 import { getCurrentPositionWithGpsPolicy } from '../../src/lib/getCurrentPositionWithAccuracyFallback';
 import { startChecklistGpsWarmup } from '../../src/lib/checklistGpsWarmup';
 import { effectiveSchemaFieldType } from '../../src/services/checklistTemplateSchema';
-import {
-  formatCalculatedResultDisplay,
-  resolveCalcDisplayMode,
-} from '../../src/checklist/calculatedFieldFormat';
-
 /** Ícone + cor por categoria no picker de pausa (alinhado ao checklist laranja + hierarquia visual). */
 const PAUSE_PICKER_CAT_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   personal: 'person-outline',
@@ -3886,7 +3883,9 @@ export default function ChecklistEngine() {
              const ipReq = await fetch('https://api.ipify.org/?format=json');
              const ipJson = await ipReq.json();
              if (ipJson.ip) meta.ip = ipJson.ip;
-          } catch(e) {}
+          } catch (e) {
+            warnDev('checklist.signatureFetchIpify', e);
+          }
 
           const sigField = currentSigField as string;
           const sigScope = currentSigScope;
@@ -4414,7 +4413,9 @@ export default function ChecklistEngine() {
         try {
           const thisTask = await findCloudTaskById(String(resolvedTaskId || ''));
           if (thisTask) taskLocation = thisTask;
-        } catch (e) {}
+        } catch (e) {
+          warnDev('checklist.geofenceFindCloudTask', e);
+        }
 
         const hasTaskPolygon = !!taskLocation?.locationPolygon;
         const taskDestLat = Number(taskLocation?.locationLat);
@@ -4856,11 +4857,15 @@ export default function ChecklistEngine() {
               const meta = { ...(row.metadata || {}), ...(status === 'ACCEPTED' ? { acceptedAt: ts } : {}) };
               return { ...row, metadata: meta };
             });
-          } catch (err) {}
+          } catch (err) {
+            warnDev('checklist.notifyKanbanStatus.patchCloudTask', err);
+          }
 
           await enqueueExecutionStatusPatch(tid, { status, timestamp: ts });
           await AsyncStorage.setItem(key, 'true');
-      } catch(e) {}
+      } catch (e) {
+        warnDev('checklist.notifyKanbanStatus', e);
+      }
   };
 
   useEffect(() => {
@@ -4932,7 +4937,11 @@ export default function ChecklistEngine() {
 
       const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
       let execs = [];
-      try { execs = JSON.parse(executedStr); } catch(e){}
+      try {
+        execs = JSON.parse(executedStr);
+      } catch (e) {
+        warnDev('checklist.loadTemplate.parseExecutedTasks', e);
+      }
       if (!Array.isArray(execs)) execs = [];
 
       /** Cache da execução (GET) — inclui `status`; não depender só da lista de concluídas (pode expirar aos 30 dias). */
@@ -4944,8 +4953,8 @@ export default function ChecklistEngine() {
         try {
           const snap = JSON.parse(execStrEarly);
           if (executionIsViewOnly(snap)) snapshotIsTerminal = true;
-        } catch {
-          /* ignore */
+        } catch (e) {
+          warnDev('checklist.loadTemplate.parseExecutionSnapshot', e);
         }
       }
 
@@ -6900,7 +6909,9 @@ export default function ChecklistEngine() {
                   const { latitude, longitude } = loc.coords;
                   gpsQuery += `&lat=${latitude}&lng=${longitude}`;
                 }
-              } catch (e) {}
+              } catch (e) {
+                warnDev('checklist.cameraCaptureGps', e);
+              }
 
               if (type === 'facial_recognition') {
                 const facialQs = await buildFacialCaptureQuerySuffix();
@@ -7139,7 +7150,9 @@ export default function ChecklistEngine() {
       try {
           const u = await AuthSvc.getCurrentUser();
           if (u && u.email) uEmail = u.email;
-      } catch(e) {}
+      } catch (e) {
+        warnDev('checklist.submit.getCurrentUser', e);
+      }
 
       const ownerForStock =
         user?.email && String(user.email).trim() ? String(user.email).trim() : uEmail;
@@ -7158,7 +7171,9 @@ export default function ChecklistEngine() {
           if (origTask?.osNumber != null && String(origTask.osNumber).trim() !== '') {
             osNumMeta = String(origTask.osNumber).trim();
           }
-      } catch(e) {}
+      } catch (e) {
+        warnDev('checklist.submit.findCloudTask', e);
+      }
 
       let finalResponses = { ...responses };
       if (!isReadOnly) {
@@ -10722,29 +10737,16 @@ export default function ChecklistEngine() {
                   )}
                 />
               )}
-              {field.type === 'calculated' && (() => {
-                 let rawFormula = field.calcFormula || '';
-                 Object.keys(responses).forEach(key => {
-                     let valObj = responses[key];
-                     let val = parseFloat(Array.isArray(valObj) ? valObj[0] : valObj);
-                     if(isNaN(val)) val = 0;
-                     rawFormula = rawFormula.split(key).join(val.toString());
-                 });
-                 let result = 0;
-                 try { result = eval(rawFormula); } catch(e){}
-                 
-                 if(vv(field.id) !== result) {
-                     setTimeout(() => hi(field.id, result), 0);
-                 }
-                 const dispMode = resolveCalcDisplayMode(field, field.calcFormula || '', schema);
-                 const displayText = formatCalculatedResultDisplay(result, dispMode);
-                 
-                 return (
-                   <View style={[styles.input, {backgroundColor:'#f5f3ff', borderColor:'#c4b5fd'}]}>
-                      <Text style={{color:'#7c3aed', fontFamily:'monospace', fontWeight:'bold'}}>Resultado: {displayText}</Text>
-                   </View>
-                 );
-              })()}
+              {field.type === 'calculated' && (
+                <ChecklistCalculatedFieldSync
+                  field={field}
+                  schema={schema}
+                  responses={responses as Record<string, unknown>}
+                  storedValue={vv(field.id)}
+                  onSyncValue={hi}
+                  containerStyle={[styles.input, { backgroundColor: '#f5f3ff', borderColor: '#c4b5fd' }]}
+                />
+              )}
               {(field.type === 'checkbox' || field.type === 'yes_no') &&
                 (fieldAllowsMultiple(field) ? (
                   <View style={{ gap: 10 }}>

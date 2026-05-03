@@ -23,6 +23,7 @@ import { useAuth } from '../../../src/hooks/useAuth';
 import { usePersona } from '../../../src/context/PersonaContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CHAT_UNREAD_CHANGED_EVENT } from '../../../src/lib/chatUnreadEvents';
+import { warnDev } from '../../../src/utils/devLog';
 import { DeviceEventEmitter } from 'react-native';
 import { relTimeShort } from '../../../src/i18n/relativeTime';
 
@@ -128,13 +129,17 @@ export default function ChatScreen() {
     try {
       const raw = await AsyncStorage.getItem(ARCHIVED_KEY);
       if (raw) setArchivedIds(new Set(JSON.parse(raw)));
-    } catch (_) {}
+    } catch (e) {
+      warnDev('chat.loadArchived', e);
+    }
   };
 
   const saveArchived = async (ids: Set<string>) => {
     try {
       await AsyncStorage.setItem(ARCHIVED_KEY, JSON.stringify([...ids]));
-    } catch (_) {}
+    } catch (e) {
+      warnDev('chat.saveArchived', e);
+    }
   };
 
   const toggleArchive = async (roomId: string) => {

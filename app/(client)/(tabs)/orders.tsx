@@ -23,6 +23,7 @@ import { userHasCapability } from '../../../src/services/auth';
 import type { AgendaScope } from '../../../src/services/agendaService';
 import { taskOsLabel } from '../../../src/utils/taskOsLabel';
 import { LocationZoneTypeBadge } from '../../../src/components/LocationZoneTypeBadge';
+import { warnDev } from '../../../src/utils/devLog';
 
 const CLOUD_DONE = new Set(['COMPLETED', 'SYNCED', 'DONE', 'CLOSED', 'FINISHED', 'COMPLETE', 'ARCHIVED']);
 const CLOUD_CANCELLED = new Set(['CANCELLED', 'CANCELED']);
@@ -109,7 +110,9 @@ export default function OrdersScreen() {
              };
           });
           setRealTasks(mapped);
-        } catch(e) {}
+        } catch (e) {
+          warnDev('orders.fetchTasks', e);
+        }
       }
       fetchTasks();
     }, [user, userRole, mode, canUseProviderMode, agendaScope])

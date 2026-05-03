@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { apiFetch } from '../../src/services/auth';
 import { getLocalAssets } from '../../src/database';
+import { warnDev } from '../../src/utils/devLog';
 
 export default function AssetShareScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -174,7 +175,11 @@ export default function AssetShareScreen() {
     setEditingShare(share);
     setPermission(share.permission);
     let mods = ['*'];
-    try { mods = typeof share.modules === 'string' ? JSON.parse(share.modules) : share.modules; } catch(e){}
+    try {
+      mods = typeof share.modules === 'string' ? JSON.parse(share.modules) : share.modules;
+    } catch (e) {
+      warnDev('assetShare.openEdit.parseModules', e);
+    }
     setSelectedModules(Array.isArray(mods) ? mods : ['*']);
     
     if (share.expiresAt) {

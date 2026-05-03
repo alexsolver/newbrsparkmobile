@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { DirectExpense, AssetBudget, CostSummary, RecurringCost } from '../types/costs';
 import { StockService } from './stockService';
 import { formatCurrency, formatDate } from '../i18n/formatters';
+import { warnDev } from '../utils/devLog';
 const GET_KEYS = (email: string) => ({
   EXPENSES: AuthService.getUserKey('costs_expenses', email),
   BUDGETS: AuthService.getUserKey('costs_budgets', email),
@@ -76,7 +77,11 @@ export const CostService = {
     const all: RecurringCost[] = safeParse(data);
     const filtered = all.filter(c => c.id !== id);
     await AsyncStorage.setItem(keys.RECURRING, JSON.stringify(filtered));
-    try { await Notifications.cancelScheduledNotificationAsync(id); } catch (_) {}
+    try {
+      await Notifications.cancelScheduledNotificationAsync(id);
+    } catch (e) {
+      warnDev('costService.deleteRecurringCost.cancelNotification', e);
+    }
   },
 
   getBudgets: async (ownerEmail?: string): Promise<AssetBudget[]> => {
@@ -203,7 +208,11 @@ export const CostService = {
 
     // Atualizar Notificação
     if (recurring.alertDaysBefore !== undefined) {
-      try { await CostService.scheduleRecurringNotification(recurring); } catch (_) {}
+      try {
+        await CostService.scheduleRecurringNotification(recurring);
+      } catch (e) {
+        warnDev('costService.markRecurringAsPaid.scheduleNotification', e);
+      }
     }
   },
 
@@ -256,13 +265,21 @@ export const CostService = {
 
     // Atualizar Notificação
     if (recurring.alertDaysBefore !== undefined) {
-      try { await CostService.scheduleRecurringNotification(recurring); } catch (_) {}
+      try {
+        await CostService.scheduleRecurringNotification(recurring);
+      } catch (e) {
+        warnDev('costService.anticipateRecurring.scheduleNotification', e);
+      }
     }
   },
 
   scheduleRecurringNotification: async (cost: RecurringCost) => {
     if (!cost.id) return;
-    try { await Notifications.cancelScheduledNotificationAsync(cost.id); } catch (_) {}
+    try {
+      await Notifications.cancelScheduledNotificationAsync(cost.id);
+    } catch (e) {
+      warnDev('costService.scheduleRecurringNotification.cancelPrior', e);
+    }
     if (cost.status !== 'ACTIVE' || !cost.nextDueDate || cost.alertDaysBefore === undefined) return;
 
     const dueDate = new Date(cost.nextDueDate);

@@ -1,4 +1,5 @@
 'use strict';
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { enforcePanelPermissions } = require('./panelPermissions');
 const { buildAdminAuthorization } = require('../lib/authorization');
@@ -106,11 +107,19 @@ async function adminOrReportsApiKey(req, res, next) {
   }
   const token = header.slice(7).trim();
   const reportsKey = process.env.REPORTS_API_KEY && String(process.env.REPORTS_API_KEY).trim();
-  if (reportsKey && token === reportsKey) {
-    req.reportsApiKeyAuth = true;
-    req.admin = null;
-    req.authorization = null;
-    return continueWithRlsTransaction(req, res, next, { reportsApiKey: true });
+  if (reportsKey && reportsKey.length > 0 && token.length === reportsKey.length) {
+    try {
+      const a = Buffer.from(token, 'utf8');
+      const b = Buffer.from(reportsKey, 'utf8');
+      if (crypto.timingSafeEqual(a, b)) {
+        req.reportsApiKeyAuth = true;
+        req.admin = null;
+        req.authorization = null;
+        return continueWithRlsTransaction(req, res, next, { reportsApiKey: true });
+      }
+    } catch {
+      /* timingSafeEqual só com buffers do mesmo comprimento */
+    }
   }
   if (!loadAdminBearerOr401(req, res)) return;
   return continueWithRlsTransaction(req, res, next);

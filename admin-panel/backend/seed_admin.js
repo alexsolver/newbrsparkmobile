@@ -1,3 +1,6 @@
+/**
+ * APENAS desenvolvimento / demo — credencial fraca fixa. Não usar em produção nem expor esta BD.
+ */
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();

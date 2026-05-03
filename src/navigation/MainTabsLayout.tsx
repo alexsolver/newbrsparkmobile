@@ -33,6 +33,7 @@ import { getWorkTimeOutboxForDisplay } from '../services/workTimePunchOutbox';
 import { fetchWorkTimeMe, fetchWorkTimePunchesWithLocalFallback } from '../services/workTimeService';
 import { fetchGpsCapturePolicyMe } from '../services/gpsCapturePolicyStore';
 import { readWorkTimeMeCacheForUser, writeWorkTimeMeCache } from '../services/workTimeMeCache';
+import { warnDev } from '../utils/devLog';
 import { mergePendingWithServerPunches } from '../services/workTimePunchesCache';
 import { pushWorkTimePunchOutbox } from '../services/workTimePunchOutbox';
 import { emitWorkTimeJourneyChanged, WORK_TIME_JOURNEY_CHANGED } from '../lib/workTimeJourneyEvents';
@@ -551,7 +552,9 @@ export function MainTabsLayout({ tabBarVariant }: { tabBarVariant: TabBarPersona
           updated[r.id] = r.unreadCount ?? 0;
         });
         prevRoomCounts.current = updated;
-      } catch (e) {}
+      } catch (e) {
+        warnDev('MainTabsLayout.fetchChatUnread', e);
+      }
     };
     void fetchChatUnread().catch(() => {});
     const unreadChangedSub = DeviceEventEmitter.addListener(CHAT_UNREAD_CHANGED_EVENT, () => {
