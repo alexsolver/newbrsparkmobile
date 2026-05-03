@@ -12,7 +12,8 @@
  * - Debug mais simples
  */
 import * as FileSystem from 'expo-file-system/legacy';
-import { API_BASE, getToken, handleUnauthorizedMaybeSessionInvalidated } from './auth';
+import { getToken, handleUnauthorizedMaybeSessionInvalidated } from './auth';
+import { API_BASE } from './appApiBase';
 
 export interface UploadResult {
   url: string | null;

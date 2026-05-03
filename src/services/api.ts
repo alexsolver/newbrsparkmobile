@@ -8,10 +8,12 @@ import {
   replaceDirectoryProvidersCache,
 } from '../database';
 import { primeOsrmBaseFromConfig } from './osrmConfig';
-import { apiFetch, API_BASE } from './auth';
+import { apiFetch } from './auth';
+import { API_BASE } from './appApiBase';
 import { fullSync } from './syncService';
 
-export { API_BASE, apiFetch };
+export { API_BASE } from './appApiBase';
+export { apiFetch };
 
 const PROVIDERS_CACHE_MAX = 50;
 
@@ -39,6 +41,15 @@ function filterProvidersLocal(
   });
 }
 
+export type ProviderSearchResult = {
+  data: any[];
+  total: number;
+  totalPages: number;
+  fromCache: boolean;
+  /** Dados possivelmente desactualizados (rede, CMS ou cache local de recurso). */
+  stale?: boolean;
+};
+
 export const ProviderService = {
   async search(params: {
     q?: string;
@@ -48,7 +59,7 @@ export const ProviderService = {
     limit?: number;
     /** Ignora cache HTTP / evita 304; bust de proxy. Usar após pull-to-refresh ou TTL de diretório. */
     forceRefresh?: boolean;
-  }): Promise<{ data: any[]; total: number; totalPages: number; fromCache: boolean }> {
+  }): Promise<ProviderSearchResult> {
     const { q = '', category = '', city = '', page = 1, limit = 20, forceRefresh = false } = params;
     const qs = new URLSearchParams();
     if (q) qs.set('q', q);
@@ -69,7 +80,7 @@ export const ProviderService = {
       },
     };
 
-    const applyFilteredCache = () => {
+    const applyFilteredCache = (stale: boolean): ProviderSearchResult => {
       const cached = getProviders();
       const filtered = filterProvidersLocal(cached, q, category, city);
       return {
@@ -77,6 +88,7 @@ export const ProviderService = {
         total: filtered.length,
         totalPages: 1,
         fromCache: true as const,
+        stale,
       };
     };
 
@@ -94,7 +106,7 @@ export const ProviderService = {
       const dirSrc = (res.headers.get('X-BrSpark-Directory-Source') || '').trim();
       // Defesa: BFF deve usar 4xx/5xx quando o CMS falha; se algum proxy devolver 200 + erro lógico, cai no cache local.
       if (dirSrc === 'laravel-error' || dirSrc === 'cms-not-configured') {
-        return applyFilteredCache();
+        return applyFilteredCache(true);
       }
       const results: any[] = json.data || [];
 
@@ -108,9 +120,13 @@ export const ProviderService = {
         total: json.total ?? results.length,
         totalPages: json.totalPages ?? 1,
         fromCache: false,
+        stale: false,
       };
-    } catch {
-      return applyFilteredCache();
+    } catch (e) {
+      if (params.forceRefresh) {
+        throw e instanceof Error ? e : new Error(String(e));
+      }
+      return applyFilteredCache(true);
     }
   },
 };

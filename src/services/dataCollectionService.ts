@@ -16,6 +16,7 @@ import { getCurrentPositionWithGpsPolicy } from '../lib/getCurrentPositionWithAc
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getIntegritySnapshot, detectMockLocation } from './integrityService';
 import { apiFetch } from './auth';
+import { safeJsonParse } from '../utils/safeJsonParse';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -101,7 +102,10 @@ class DataCollectionService {
   async loadPolicy(): Promise<void> {
     try {
       const raw = await AsyncStorage.getItem(POLICY_KEY);
-      if (raw) this.policy = { ...DEFAULT_POLICY, ...JSON.parse(raw) };
+      if (raw) {
+        const partial = safeJsonParse<Partial<CollectionPolicy>>(raw, {}, 'dataCollection.loadPolicy');
+        this.policy = { ...DEFAULT_POLICY, ...partial };
+      }
     } catch (e) {
       console.warn('[DataCollection] loadPolicy: falha ao ler cache local, uso da política por defeito.', e);
     }
@@ -428,11 +432,10 @@ class DataCollectionService {
       const raw    = await AsyncStorage.getItem(TELEMETRY_KEY);
       let outbox: any[] = [];
       if (raw) {
-        try {
-          outbox = JSON.parse(raw);
-          if (!Array.isArray(outbox)) outbox = [];
-        } catch {
+        outbox = safeJsonParse<unknown[]>(raw, [], 'dataCollection.telemetryOutbox');
+        if (!Array.isArray(outbox)) {
           console.warn('[DataCollection] Outbox corrompida, reiniciando fila livre.');
+          outbox = [];
         }
       }
       

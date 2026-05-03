@@ -3220,7 +3220,11 @@ function tryInitReportTransitMap(t, mapElementId, setMapRef, getPreviousMap) {
         }
       }
     } catch (err) {
-      mapEl.innerHTML = `<div style="padding:20px;color:red;font-family:monospace;">LEAFLET CRASH: ${err.message}</div>`;
+      mapEl.innerHTML = '';
+      const crashDiv = document.createElement('div');
+      crashDiv.style.cssText = 'padding:20px;color:red;font-family:monospace;';
+      crashDiv.textContent = 'LEAFLET CRASH: ' + (err && err.message ? String(err.message) : String(err));
+      mapEl.appendChild(crashDiv);
       if (setMapRef) setMapRef(null);
     }
   }, 150);
@@ -6180,7 +6184,14 @@ function applyDetailModalHeader(t) {
     CANCELLED: 'badge-red',
     REJECTED: 'badge-red',
   };
-  document.getElementById('detail-modal-badge').innerHTML = `<span class="badge ${statusBadgeMap[t.status] || 'badge-red'}">${t.status || '?'}</span>`;
+  const stUp = String(t.status || '').toUpperCase();
+  const badgeCls = statusBadgeMap[stUp] || 'badge-red';
+  const badgeHost = document.getElementById('detail-modal-badge');
+  badgeHost.innerHTML = '';
+  const badgeSpan = document.createElement('span');
+  badgeSpan.className = 'badge ' + badgeCls;
+  badgeSpan.textContent = t.status || '?';
+  badgeHost.appendChild(badgeSpan);
   const stHdr = String(t.status || '').toUpperCase();
   const isRoutineHdr = t.routineTaskNumber != null && String(t.routineTaskNumber).trim() !== '';
   const reopenHdr = document.getElementById('detail-reopen-revision-btn');

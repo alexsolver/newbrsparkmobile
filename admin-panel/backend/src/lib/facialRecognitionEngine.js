@@ -3,10 +3,13 @@
 const {
   stripDataUrlBase64,
   recognizeWithIntegration,
+  verifyFacePairWithIntegration,
   isFaceMatchNoFaceInImageError,
   pickTopRecognitionMatch,
   parseComprefaceSubjectName,
 } = require('./comprefaceClient');
+const { loadUserFacialReferenceBuffers } = require('./userFacialEnrollmentBuffers');
+const { mapVerificationFailureToUserMessage } = require('./comprefaceVerificationUserMessages');
 
 const _envSim = process.env.COMPREFACE_MIN_SIMILARITY;
 const MIN_SIMILARITY = Math.min(
@@ -151,11 +154,13 @@ function pickVisionIntegration(integrations, provider) {
   const vision = integrations.filter((i) => {
     const meta = parseMeta(i.metadata);
     if (!meta || meta.category !== 'COMPUTER_VISION') return false;
+    if (i.status !== 'ACTIVE') return false;
     if (provider === 'AWS' && meta.engine !== 'aws_rekognition') return false;
     if (provider === 'COMPREFACE' && meta.engine !== 'compreface') return false;
-    if (provider === 'AUTO') return i.status === 'ACTIVE';
+    if (provider === 'AUTO') return true;
     return true;
   });
+  vision.sort((a, b) => String(a.id).localeCompare(String(b.id)));
   if (provider === 'AUTO') {
     const cf = vision.find((i) => parseMeta(i.metadata)?.engine === 'compreface');
     if (cf) return cf;
@@ -240,6 +245,95 @@ async function verifyFacialImageBuffer(prisma, opts) {
         message: 'Motor de visão não suportado para validação no servidor.',
       },
     };
+  }
+
+  /**
+   * `self_verify` via Recognition na galeria global falha quando o utilizador não entra no top-N
+   * de candidatos (muitos rostos no tenant / scores apertados). Se existir chave de Verification no
+   * CompreFace, comparamos a captura 1:1 com avatar + fotos de matrícula do utilizador da sessão.
+   * `COMPREFACE_SELF_VERIFY_USE_RECOGNITION_ONLY=1` força só o fluxo antigo (Recognition).
+   */
+  const useRecognitionOnlySelfVerify =
+    String(process.env.COMPREFACE_SELF_VERIFY_USE_RECOGNITION_ONLY || '').trim() === '1';
+  if (!useRecognitionOnlySelfVerify && mode === 'self_verify' && tenantId && sessionUserId) {
+    const verKey = visionInt.comprefaceVerificationKey && String(visionInt.comprefaceVerificationKey).trim();
+    if (verKey) {
+      let refs = [];
+      try {
+        refs = await loadUserFacialReferenceBuffers(prisma, sessionUserId);
+      } catch (e) {
+        console.warn('[facialRecognitionEngine] loadUserFacialReferenceBuffers', e.message || e);
+      }
+      if (refs.length > 0) {
+        let best = -1;
+        let lastErr = null;
+        for (const { buf: refBuf } of refs) {
+          if (!refBuf || refBuf.length < 64) continue;
+          try {
+            const sim = await verifyFacePairWithIntegration(visionInt, buf, refBuf, verKey);
+            if (Number.isFinite(sim) && sim > best) best = sim;
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+        if (best >= MIN_SIMILARITY) {
+          const identified = await prisma.user.findFirst({
+            where: { id: sessionUserId, tenantId, isActive: true },
+            select: { id: true, name: true, email: true, role: true },
+          });
+          if (identified) {
+            return {
+              ok: true,
+              audit: {
+                pending: false,
+                at: new Date().toISOString(),
+                engine: 'server',
+                confidence: best,
+                facialAuthMode: 'self_verify',
+                selfVerifyPath: 'compreface_verification',
+                identifiedUserId: identified.id,
+                identifiedUser: {
+                  id: identified.id,
+                  name: identified.name,
+                  email: identified.email,
+                  role: identified.role,
+                },
+              },
+            };
+          }
+        }
+        if (best >= 0 && best < MIN_SIMILARITY) {
+          return {
+            ok: false,
+            audit: {
+              pending: false,
+              deferredValidationFailed: true,
+              at: new Date().toISOString(),
+              facialAuthMode: mode,
+              confidence: best,
+              selfVerifyPath: 'compreface_verification',
+              message: `Confiança abaixo do mínimo (${MIN_SIMILARITY}). ${FACIAL_GALLERY_SYNC_HINT}`,
+            },
+          };
+        }
+        if (lastErr) {
+          const mapped = mapVerificationFailureToUserMessage(lastErr);
+          if (mapped) {
+            return {
+              ok: false,
+              audit: {
+                pending: false,
+                deferredValidationFailed: true,
+                at: new Date().toISOString(),
+                facialAuthMode: mode,
+                selfVerifyPath: 'compreface_verification',
+                message: mapped.message,
+              },
+            };
+          }
+        }
+      }
+    }
   }
 
   const predictionCountSelf = Math.min(

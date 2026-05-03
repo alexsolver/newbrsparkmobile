@@ -15,6 +15,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import * as Network from 'expo-network';
 import { apiFetch, getToken } from './auth';
+import { warnDev } from '../utils/devLog';
 import { 
   getSyncQueue, clearSyncQueueItem, 
   saveStockItemLocal,
@@ -1955,7 +1956,11 @@ export async function pullVault(ownerEmail: string): Promise<void> {
         const assetId = k.split('vault:').pop() || k;
         let entries = [];
         if (raw) {
-          try { entries = JSON.parse(raw); } catch {}
+          try {
+            entries = JSON.parse(raw);
+          } catch (parseErr) {
+            warnDev(`pullVault JSON.parse key=${k}`, parseErr);
+          }
         }
         return { assetId, entries };
       })
@@ -1975,7 +1980,12 @@ export async function pullVault(ownerEmail: string): Promise<void> {
         AsyncStorage.setItem(AuthService.getUserKey(`vault:${assetId}`, ownerEmail), JSON.stringify(entries))
       )
     );
-  } catch { /* offline */ }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    warnDev('pullVault', e);
+    if (e instanceof Error && e.name === 'AbortError') return;
+    if (/Network request failed|Failed to fetch|Aborted|abort/i.test(msg)) return;
+  }
 }
 
 export async function pullMediaMetadata(ownerEmail: string): Promise<void> {

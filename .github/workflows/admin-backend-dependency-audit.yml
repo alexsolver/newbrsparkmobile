@@ -1,0 +1,32 @@
+name: Auditoria de dependências (admin backend)
+
+on:
+  pull_request:
+    paths:
+      - 'admin-panel/backend/package.json'
+      - 'admin-panel/backend/package-lock.json'
+      - '.github/workflows/admin-backend-dependency-audit.yml'
+  push:
+    branches: [main, master, develop]
+
+jobs:
+  npm-audit:
+    name: npm audit (painel PostgreSQL)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-panel/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: admin-panel/backend/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm audit (critical+)
+        run: npm run audit:deps

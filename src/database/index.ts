@@ -1,6 +1,15 @@
 import * as SQLite from 'expo-sqlite';
 import { Asset, AssetLocation } from '../types/asset';
 import { isMobileWarehouseAsset } from '../utils/mobileWarehouseAsset';
+import { warnDev } from '../utils/devLog';
+
+/** Migrações idempotentes: ignora «coluna já existe»; em dev regista outros erros. */
+function warnIfMigrationErrorUnexpected(e: unknown): void {
+  if (!__DEV__) return;
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/duplicate column|already exists/i.test(msg)) return;
+  warnDev('initDatabase.execSync', e);
+}
 
 /** Por omissão inclui armazém móvel (necessário para stock). Use false em listagens de bens. */
 export type LocalAssetReadOptions = {
@@ -227,87 +236,143 @@ export function initDatabase() {
   // Adiciona coluna parent_id caso a tabela já exista sem ela (migração)
   try {
     db.execSync(`ALTER TABLE assets ADD COLUMN parent_id TEXT DEFAULT NULL;`);
-  } catch (_) { /* coluna já existe */ }
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
 
   // Adiciona coluna display_order
   try {
     db.execSync(`ALTER TABLE assets ADD COLUMN display_order INTEGER DEFAULT 0;`);
-  } catch (_) { /* já existe */ }
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
 
   // Adiciona coluna owner_email (isolamento por usuário)
   try {
     db.execSync(`ALTER TABLE assets ADD COLUMN owner_email TEXT DEFAULT NULL;`);
-  } catch (_) { /* coluna já existe */ }
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
 
   // Adiciona coluna sub_location (localização dentro do bem pai)
   try {
     db.execSync(`ALTER TABLE assets ADD COLUMN sub_location TEXT DEFAULT NULL;`);
-  } catch (_) { /* coluna já existe */ }
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
 
   // Adiciona coluna sub_location_id em stock_items (referência ao asset_location)
   try {
     db.execSync(`ALTER TABLE stock_items ADD COLUMN asset_location_id TEXT DEFAULT NULL;`);
-  } catch (_) { /* coluna já existe */ }
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
 
   // Adiciona coluna is_stock em asset_locations (indica que é ponto de estoque)
   try {
     db.execSync(`ALTER TABLE asset_locations ADD COLUMN is_stock INTEGER DEFAULT 0;`);
-  } catch (_) { /* já existe */ }
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
 
   // Adiciona coluna remote_url em media_items (URL do arquivo no cloud storage)
   try {
     db.execSync(`ALTER TABLE media_items ADD COLUMN remote_url TEXT DEFAULT NULL;`);
-  } catch (_) { /* já existe */ }
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
 
   // Migra tabela providers: adiciona phone, city, state se não existirem
-  try { db.execSync(`ALTER TABLE providers ADD COLUMN phone TEXT`); } catch (_) {}
-  try { db.execSync(`ALTER TABLE providers ADD COLUMN city TEXT`); } catch (_) {}
-  try { db.execSync(`ALTER TABLE providers ADD COLUMN state TEXT DEFAULT 'SP'`); } catch (_) {}
-  try { db.execSync(`ALTER TABLE providers ADD COLUMN logo_url TEXT`); } catch (_) {}
-  try { db.execSync(`ALTER TABLE providers ADD COLUMN hero_image_url TEXT`); } catch (_) {}
+  try {
+    db.execSync(`ALTER TABLE providers ADD COLUMN phone TEXT`);
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
+  try {
+    db.execSync(`ALTER TABLE providers ADD COLUMN city TEXT`);
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
+  try {
+    db.execSync(`ALTER TABLE providers ADD COLUMN state TEXT DEFAULT 'SP'`);
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
+  try {
+    db.execSync(`ALTER TABLE providers ADD COLUMN logo_url TEXT`);
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
+  try {
+    db.execSync(`ALTER TABLE providers ADD COLUMN hero_image_url TEXT`);
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
 
   // Adiciona coluna owner_email em sync_queue caso não exista (migração)
   try {
     db.execSync(`ALTER TABLE sync_queue ADD COLUMN owner_email TEXT DEFAULT NULL;`);
-  } catch (_) { /* já existe */ }
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
 
   // Migrações massivas para owner_email em outros módulos
   const tablesToMigrate = ['stock_items', 'stock_movements', 'asset_locations', 'providers', 'assets_history'];
-  tablesToMigrate.forEach(table => {
+  tablesToMigrate.forEach((table) => {
     try {
       db.execSync(`ALTER TABLE ${table} ADD COLUMN owner_email TEXT DEFAULT NULL;`);
-    } catch (_) {}
+    } catch (e) {
+      warnIfMigrationErrorUnexpected(e);
+    }
   });
 
   try {
     db.execSync(`ALTER TABLE tech_stock_movements ADD COLUMN reason TEXT DEFAULT NULL;`);
-  } catch (_) {}
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
   try {
     db.execSync(`ALTER TABLE tech_stock_movements ADD COLUMN responsibleId TEXT DEFAULT NULL;`);
-  } catch (_) {}
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
   try {
     db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN attachments_json TEXT DEFAULT NULL;`);
-  } catch (_) {}
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
   try {
     db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN linked_task_ids_json TEXT DEFAULT NULL;`);
-  } catch (_) {}
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
   try {
     db.execSync(
       `ALTER TABLE tech_finance_entries ADD COLUMN finance_value_unlocked INTEGER DEFAULT 0;`
     );
-  } catch (_) {}
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
   try {
     db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN split_group_id TEXT DEFAULT NULL;`);
-  } catch (_) {}
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
   try {
     db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN category_key TEXT DEFAULT NULL;`);
-  } catch (_) {}
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
   try {
     db.execSync(`ALTER TABLE tech_finance_entries ADD COLUMN receipt_realized_at TEXT DEFAULT NULL;`);
-  } catch (_) {}
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
   try {
     db.execSync(`ALTER TABLE service_categories ADD COLUMN color TEXT`);
-  } catch (_) {}
+  } catch (e) {
+    warnIfMigrationErrorUnexpected(e);
+  }
 }
 
 
@@ -315,11 +380,19 @@ export function initDatabase() {
 function parseRow(row: any): Asset {
   let parsedDetails = {};
   if (row.details) {
-    try { parsedDetails = JSON.parse(row.details); } catch (_) {}
+    try {
+      parsedDetails = JSON.parse(row.details);
+    } catch (e) {
+      warnDev('database.parseRow.details', e);
+    }
   }
   let parsedSubLocation = null;
   if (row.sub_location) {
-    try { parsedSubLocation = JSON.parse(row.sub_location); } catch (_) {}
+    try {
+      parsedSubLocation = JSON.parse(row.sub_location);
+    } catch (e) {
+      warnDev('database.parseRow.subLocation', e);
+    }
   }
   return {
     id: row.id,
@@ -603,7 +676,11 @@ export function saveAssetsLocal(assets: Asset[], ownerEmail?: string) {
 
   assets.forEach(asset => {
     let detailsBlob = '{}';
-    try { detailsBlob = asset.details ? JSON.stringify(asset.details) : '{}'; } catch (_) {}
+    try {
+      detailsBlob = asset.details ? JSON.stringify(asset.details) : '{}';
+    } catch (e) {
+      warnDev('database.saveAssetsForUserBatch.stringifyDetails', e);
+    }
     stmt.executeSync([
       asset.id,
       asset.title,
@@ -640,7 +717,11 @@ export function saveAssetsForUser(assets: Asset[], ownerEmail: string) {
 
   assets.forEach(asset => {
     let detailsBlob = '{}';
-    try { detailsBlob = asset.details ? JSON.stringify(asset.details) : '{}'; } catch (_) {}
+    try {
+      detailsBlob = asset.details ? JSON.stringify(asset.details) : '{}';
+    } catch (e) {
+      warnDev('database.saveAssetsForUser.stringifyDetails', e);
+    }
     stmt.executeSync([
       asset.id,
       asset.title,

@@ -401,7 +401,7 @@
       (res?.data || []).forEach((u) => {
         const m = mailShown(u);
         const lab = `${u.name || m || u.id} — ${m}`;
-        sel.innerHTML += `<option value="${u.id}">${escHtml(lab)}</option>`;
+        sel.innerHTML += `<option value="${escHtml(String(u.id))}">${escHtml(lab)}</option>`;
       });
     } catch {
       /* ignore */
@@ -542,7 +542,7 @@
       const sel = document.getElementById('wt-tenant-select');
       sel.innerHTML = '<option value="">Selecione o tenant…</option>';
       (res?.data || []).forEach((t) => {
-        sel.innerHTML += `<option value="${t.id}">${t.name} — ${t.email}</option>`;
+        sel.innerHTML += `<option value="${escHtml(String(t.id))}">${escHtml(String(t.name || ''))} — ${escHtml(String(t.email || ''))}</option>`;
       });
       sel.onchange = () => {
         activeTenantId = sel.value || null;
@@ -560,7 +560,7 @@
       const sel = document.getElementById('wt-tenant-select');
       sel.innerHTML = '';
       (res?.data || []).forEach((t) => {
-        sel.innerHTML += `<option value="${t.id}" ${t.id === activeTenantId ? 'selected' : ''}>${t.name} — ${t.email}</option>`;
+        sel.innerHTML += `<option value="${escHtml(String(t.id))}" ${t.id === activeTenantId ? 'selected' : ''}>${escHtml(String(t.name || ''))} — ${escHtml(String(t.email || ''))}</option>`;
       });
       sel.onchange = () => {
         activeTenantId = sel.value || null;

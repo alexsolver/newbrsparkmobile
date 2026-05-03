@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { API_BASE, type User } from '../services/auth';
+import type { User } from '../services/auth';
+import { API_BASE } from '../services/appApiBase';
 import { resolveAvatarUri } from '../services/avatarLocalCache';
 import { normalizeUserAvatarUrl } from '../utils/normalizeUserAvatarUrl';
 

@@ -1,4 +1,4 @@
-import { API_BASE } from './auth';
+import { API_BASE } from './appApiBase';
 
 /** Rótulos i18n legados (nomes curtos) quando o `id` não vem do CMS. */
 export const LEGACY_SERVICE_CATEGORY_I18N: Record<string, string> = {

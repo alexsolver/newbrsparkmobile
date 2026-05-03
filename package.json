@@ -21,6 +21,7 @@
     "test:provider-task-filter-regression": "npx --yes tsx scripts/test-provider-task-filter-regression.ts",
     "test:register-personal-client-helper": "node scripts/test-register-personal-client-helper.mjs",
     "test:multitenancy-regression-suite": "node scripts/test-multitenancy-regression-suite.mjs",
+    "audit:deps": "npm audit --omit=dev --audit-level=critical",
     "i18n:check": "node scripts/i18n-validate.mjs",
     "i18n:sync-es": "node scripts/i18n-sync-es.mjs",
     "eas:build:android": "eas build --profile production --platform android",

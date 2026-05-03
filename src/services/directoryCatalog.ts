@@ -1,4 +1,4 @@
-import { API_BASE } from './auth';
+import { API_BASE } from './appApiBase';
 import { ensureDirectoryCmsOriginLoaded } from '../utils/directoryMediaUrl';
 
 const directoryFetchInit: RequestInit = {

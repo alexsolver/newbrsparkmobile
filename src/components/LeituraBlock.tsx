@@ -1,15 +1,58 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import RenderHtml, { type MixedStyleRecord } from 'react-native-render-html';
-import { API_BASE } from '../services/auth';
+import { API_BASE } from '../services/appApiBase';
+
+function hostnameFromApiBase(base: string): string | null {
+  const raw = String(base || '').trim();
+  if (!raw) return null;
+  try {
+    const u = new URL(raw.includes('://') ? raw : `https://${raw}`);
+    return u.hostname || null;
+  } catch {
+    return null;
+  }
+}
 
 const MAX_HTML_CHARS = 400_000;
+
+function extractImgSrc(attrs: string): string {
+  const m = attrs.match(/\bsrc\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+  return String((m && (m[2] || m[3] || m[4])) || '').trim();
+}
+
+/**
+ * Remove `<img>` cujo `src` não seja seguro (evita beacons / tracking de terceiros).
+ * Permite: `data:image/…`, paths relativos (`/…`), e mesmo host que `allowedAssetHostname` (ex.: CDN da API).
+ */
+function stripUntrustedImgTags(html: string, allowedAssetHostname: string | null): string {
+  return html.replace(/<img\b([^>]*)>/gi, (full, attrs: string) => {
+    const src = extractImgSrc(attrs);
+    if (!src) return full;
+    if (/^javascript:|^vbscript:/i.test(src)) return '';
+    if (/^data:image\//i.test(src)) return full;
+    if (src.startsWith('/') || src.startsWith('./')) return full;
+    if (allowedAssetHostname && /^https?:\/\//i.test(src)) {
+      try {
+        if (new URL(src).hostname.toLowerCase() === allowedAssetHostname.toLowerCase()) return full;
+      } catch {
+        /* URL inválida */
+      }
+    }
+    return '';
+  });
+}
+
+export type SanitizeLeituraOptions = {
+  /** Hostname da API (sem porta) para permitir imagens absolutas do mesmo domínio. */
+  allowedAssetHostname?: string | null;
+};
 
 /**
  * Remove scripts, iframes, hiperligações e handlers inseguros do HTML da Leitura.
  * `<a>` vira `<span>` (sem navegação). Sem DOMParser — compatível com React Native.
  */
-export function sanitizeLeituraHtml(html: string): string {
+export function sanitizeLeituraHtml(html: string, options?: SanitizeLeituraOptions): string {
   let s = String(html || '').slice(0, MAX_HTML_CHARS);
   if (!s.trim()) return '';
   s = s.replace(/<script\b[\s\S]*?<\/script>/gi, '');
@@ -22,6 +65,7 @@ export function sanitizeLeituraHtml(html: string): string {
   s = s.replace(/\s+src\s*=\s*["']?\s*javascript:[^"'>\s]*/gi, '');
   s = s.replace(/<a\b[^>]*>/gi, '<span>');
   s = s.replace(/<\/a>/gi, '</span>');
+  s = stripUntrustedImgTags(s, options?.allowedAssetHostname ?? null);
   return s;
 }
 
@@ -76,7 +120,11 @@ type LeituraBlockProps = {
 export function LeituraBlock({ contentHtml }: LeituraBlockProps) {
   const { width } = useWindowDimensions();
   const contentWidth = Math.max(200, width - 48);
-  const safe = useMemo(() => sanitizeLeituraHtml(String(contentHtml || '')), [contentHtml]);
+  const allowedHost = useMemo(() => hostnameFromApiBase(API_BASE), []);
+  const safe = useMemo(
+    () => sanitizeLeituraHtml(String(contentHtml || ''), { allowedAssetHostname: allowedHost }),
+    [contentHtml, allowedHost],
+  );
   const baseUrl = useMemo(() => {
     const b = String(API_BASE || '').replace(/\/$/, '');
     return b ? `${b}/` : undefined;

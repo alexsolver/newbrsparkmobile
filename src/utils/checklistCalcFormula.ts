@@ -2,6 +2,9 @@ import { Parser } from 'expr-eval';
 
 const parser = new Parser();
 
+/** Limite de caracteres na expressão após substituição (evita parse CPU pesado). */
+const MAX_FORMULA_EXPRESSION_CHARS = 4096;
+
 /**
  * Substitui referências a chaves de resposta na fórmula.
  * Ordena chaves por comprimento decrescente para evitar que um ID prefixo de outro corrompa a expressão.
@@ -26,6 +29,7 @@ export function substituteChecklistFormulaKeys(formula: string, responses: Recor
 export function evaluateChecklistMathExpression(expression: string): number {
   const trimmed = (expression || '').trim();
   if (!trimmed) return 0;
+  if (trimmed.length > MAX_FORMULA_EXPRESSION_CHARS) return NaN;
   try {
     const parsed = parser.parse(trimmed);
     const n = parsed.evaluate({});

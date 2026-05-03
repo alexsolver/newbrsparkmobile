@@ -14,7 +14,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
 import * as Network from 'expo-network';
-import { API_BASE } from '../services/auth';
+import { API_BASE } from '../services/appApiBase';
 
 const NET_DEBOUNCE_MS_ANDROID = 400;
 const NET_DEBOUNCE_MS_IOS = 120;

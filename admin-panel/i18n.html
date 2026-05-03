@@ -180,7 +180,11 @@
              alert(mpT('trl_alert_profile_ok'));
           };
         } catch (err) {
-          localesGrid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--danger)">Erro: ${err.message}</div>`;
+          localesGrid.innerHTML = '';
+          const errDiv = document.createElement('div');
+          errDiv.style.cssText = 'grid-column:1/-1;text-align:center;padding:40px;color:var(--danger)';
+          errDiv.textContent = 'Erro: ' + (err && err.message ? String(err.message) : String(err));
+          localesGrid.appendChild(errDiv);
         }
         return;
       }
@@ -214,7 +218,15 @@
           }
         }
         renderEntries();
-      } catch (err) { tbody.innerHTML = `<tr><td colspan="4">Erro: ${err.message}</td></tr>`; }
+      } catch (err) {
+        tbody.innerHTML = '';
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 4;
+        td.textContent = 'Erro: ' + (err && err.message ? String(err.message) : String(err));
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      }
     }
 
     function renderEntries() {
@@ -378,10 +390,22 @@
           if (!ptVal) { ptEl.value = await myMemoryTranslate(source, srcLang, 'pt-BR'); modifiedEntries.add(key); }
           if (!enVal) { enEl.value = await myMemoryTranslate(source, srcLang, 'en');    modifiedEntries.add(key); }
           if (!esVal) { esEl.value = await myMemoryTranslate(source, srcLang, 'es');    modifiedEntries.add(key); }
-          log.innerHTML += `<div style="color:var(--green)"><ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon> ${key}</div>`;
+          const okRow = document.createElement('div');
+          okRow.style.color = 'var(--green)';
+          okRow.innerHTML = '<ion-icon name="checkmark-outline" style="vertical-align:-2px"></ion-icon> ';
+          okRow.appendChild(document.createTextNode(String(key)));
+          log.appendChild(okRow);
           log.scrollTop = log.scrollHeight;
         } catch(e) {
-          log.innerHTML += `<div style="color:var(--red)"><ion-icon name="close" style="color:var(--red);vertical-align:-2px"></ion-icon> ${key}: ${e.message}</div>`;
+          const errRow = document.createElement('div');
+          errRow.style.color = 'var(--red)';
+          errRow.innerHTML = '<ion-icon name="close" style="color:var(--red);vertical-align:-2px"></ion-icon> ';
+          errRow.appendChild(
+            document.createTextNode(
+              String(key) + ': ' + (e && e.message ? String(e.message) : String(e)),
+            ),
+          );
+          log.appendChild(errRow);
         }
         done++;
         const pct = Math.round((done / toTranslate.length) * 100);

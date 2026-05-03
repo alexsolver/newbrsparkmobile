@@ -258,6 +258,14 @@ function initMap() {
   }).addTo(map);
 }
 
+function escTelemetryHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function getBatteryHtml(level, charging) {
   if (level === null || level === undefined) return '—';
   const pct = Math.round(level * 100);
@@ -322,7 +330,13 @@ window.loadTelemetry = async (isSilent = false) => {
     renderList(sorted);
     drawMap(sorted);
   } catch (err) {
-    if (!isSilent) listEl.innerHTML = `<li style="padding:20px;text-align:center;color:red">Erro: ${err.message}</li>`;
+    if (!isSilent) {
+      listEl.innerHTML = '';
+      const li = document.createElement('li');
+      li.style.cssText = 'padding:20px;text-align:center;color:red';
+      li.textContent = 'Erro: ' + (err && err.message ? String(err.message) : String(err));
+      listEl.appendChild(li);
+    }
   }
 };
 
@@ -330,19 +344,22 @@ function renderList(events) {
   const listEl = document.getElementById('events-list');
   listEl.innerHTML = events.map((ev, i) => {
     const time = telemetryDisplayTime(ev).toLocaleTimeString('pt-BR');
-    const typeCls = `evt-${ev.eventType}` || 'evt-HEARTBEAT';
+    const typeKey = String(ev.eventType || 'HEARTBEAT').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48) || 'UNKNOWN';
+    const typeCls = `evt-${typeKey}`;
     const bat = getBatteryHtml(ev.batteryLevel, ev.batteryCharging);
     const mockIcon = ev.isMockLocation ? '<ion-icon name="warning" style="color:#ef4444" title="Mock GPS Detectado"></ion-icon>' : '';
+    const typeLabel = escTelemetryHtml(ev.eventType);
+    const netLabel = escTelemetryHtml(ev.networkType || 'APP');
     
     return `
       <li class="event-item" id="ev-idx-${i}" onclick="selectEvent(${i})">
         <div class="event-header">
-          <span class="event-type ${typeCls}">${ev.eventType}</span>
+          <span class="event-type ${typeCls}">${typeLabel}</span>
           <span class="event-time">${time} ${mockIcon}</span>
         </div>
         <div class="event-meta">
           ${bat}
-          <span>${ev.networkType || 'APP'}</span>
+          <span>${netLabel}</span>
           <span>Acc: ${ev.accuracy ? Math.round(ev.accuracy)+'m' : '—'}</span>
         </div>
       </li>
@@ -359,13 +376,13 @@ window.selectEvent = (idx) => {
 
   // Atualizar painel de detalhes superior
   const osStr = [ev.deviceModel, ev.osVersion, ev.appVersion ? `v${ev.appVersion}` : ''].filter(Boolean).join(' • ');
-  document.getElementById('det-os').innerHTML = osStr || '—';
+  document.getElementById('det-os').textContent = osStr || '—';
   
   const chgStr = ev.batteryCharging ? ' (Carregando)' : '';
   const batLvl = ev.batteryLevel !== null ? `${Math.round(ev.batteryLevel * 100)}%` : '—';
-  document.getElementById('det-bat').innerHTML = `${batLvl}${chgStr}`;
+  document.getElementById('det-bat').textContent = `${batLvl}${chgStr}`;
   
-  document.getElementById('det-net').innerHTML = ev.networkType || 'Desconhecida';
+  document.getElementById('det-net').textContent = ev.networkType || 'Desconhecida';
 
   const fmtTs = (iso) =>
     iso
@@ -381,9 +398,13 @@ window.selectEvent = (idx) => {
   document.getElementById('det-ts-device').textContent = fmtTs(ev.deviceTimestamp);
   document.getElementById('det-ts-server').textContent = fmtTs(ev.serverTimestamp);
   
-  let accHtml = ev.accuracy ? `${Math.round(ev.accuracy)} metros` : '—';
-  if (ev.isMockLocation) accHtml = `<span class="detail-val alert"><ion-icon name="warning" style="vertical-align:-2px"></ion-icon> Mock GPS</span>`;
-  document.getElementById('det-acc').innerHTML = accHtml;
+  const accEl = document.getElementById('det-acc');
+  if (ev.isMockLocation) {
+    accEl.innerHTML =
+      '<span class="detail-val alert"><ion-icon name="warning" style="vertical-align:-2px"></ion-icon> Mock GPS</span>';
+  } else {
+    accEl.textContent = ev.accuracy ? `${Math.round(ev.accuracy)} metros` : '—';
+  }
 
   // Dar zoom no marcador
   if (ev.lat && ev.lng) {
@@ -422,11 +443,13 @@ function drawMap(events) {
     const m = L.marker([ev.lat, ev.lng], { icon: circleIcon, eventId: ev.id }).addTo(map);
     const time = telemetryDisplayTime(ev).toLocaleTimeString('pt-BR');
     
+    const evTypeEsc = escTelemetryHtml(ev.eventType);
+    const accM = ev.accuracy != null && Number.isFinite(Number(ev.accuracy)) ? `${Math.round(Number(ev.accuracy))}m` : '—';
     m.bindPopup(`
       <div style="font-size:12px;font-family:Inter,sans-serif">
-        <div style="font-weight:800;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin-bottom:4px">${time}</div>
-        <div style="font-size:11px"><b>Evento:</b> ${ev.eventType}</div>
-        <div style="font-size:11px"><b>Precisão:</b> ${ev.accuracy ? Math.round(ev.accuracy)+'m' : '—'}</div>
+        <div style="font-weight:800;border-bottom:1px solid #e2e8f0;padding-bottom:4px;margin-bottom:4px">${escTelemetryHtml(time)}</div>
+        <div style="font-size:11px"><b>Evento:</b> ${evTypeEsc}</div>
+        <div style="font-size:11px"><b>Precisão:</b> ${accM}</div>
         <div style="font-size:11px"><b>Autenticidade:</b> ${ev.isMockLocation ? '<span style="color:red">MOCK</span>' : 'Válido'}</div>
       </div>
     `);
@@ -481,8 +504,9 @@ window.exportTelemetry = () => {
     ev.lng ?? ''
   ]);
   
+  const escCsv = (v) => String(v ?? '').replace(/"/g, '""');
   const csvContent = [headers.join(',')].concat(
-    rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    rows.map((row) => row.map((cell) => `"${escCsv(cell)}"`).join(',')),
   ).join('\\n');
   
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

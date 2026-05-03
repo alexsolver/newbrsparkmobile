@@ -2,9 +2,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-
-/** Mesma chave que `auth.ts` — nunca incluir no JSON exportado. */
-const JWT_STORAGE_KEY = 'brspark_jwt';
+import { TOKEN_KEY as JWT_STORAGE_KEY } from '../services/appSessionTokenStorage';
 
 /**
  * Lista fechada (portabilidade LGPD): apenas conta e preferências de interface.

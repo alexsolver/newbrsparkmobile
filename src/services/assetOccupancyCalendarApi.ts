@@ -1,4 +1,5 @@
-import { apiFetch, API_BASE } from './auth';
+import { apiFetch } from './auth';
+import { API_BASE } from './appApiBase';
 
 /** Garante URL absoluta (em dev o servidor pode devolver só o path). */
 export function absoluteOccupancyFeedUrl(raw: string): string {

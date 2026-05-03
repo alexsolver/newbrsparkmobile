@@ -17,7 +17,6 @@ import { useAuth } from '../src/hooks/useAuth';
 import { useResolvedAvatarUri } from '../src/hooks/useResolvedAvatarUri';
 import {
   AuthService,
-  API_BASE,
   getToken,
   isTechnicianProfileActive,
   isTechnicianAvatarLocked,
@@ -28,6 +27,7 @@ import {
   userHasCapability,
   isB2CConsumerUser,
 } from '../src/services/auth';
+import { API_BASE } from '../src/services/appApiBase';
 import { writeAvatarFromBase64 } from '../src/services/avatarLocalCache';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Notifications from 'expo-notifications';

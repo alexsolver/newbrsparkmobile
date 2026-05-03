@@ -197,7 +197,8 @@
             'Se existir uma conta com esse e-mail, você receberá um link para redefinir a senha em instantes.'
         );
       } catch (err) {
-        resetErrorEl.innerHTML = `<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon>  ${err.message}`;
+        resetErrorEl.innerHTML = '<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon>  ';
+        resetErrorEl.appendChild(document.createTextNode(err && err.message ? String(err.message) : String(err)));
         resetErrorEl.classList.add('show');
         resetSubmitBtn.innerHTML = 'Enviar link';
         resetSubmitBtn.disabled = false;
@@ -241,7 +242,8 @@
           window.location.href = defaultLandingPageForRole(data.user.role || '');
         }, 350);
       } catch (err) {
-        errorEl.innerHTML = `<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon>  ${err.message}`;
+        errorEl.innerHTML = '<ion-icon name="close-outline" style="vertical-align:-2px"></ion-icon>  ';
+        errorEl.appendChild(document.createTextNode(err && err.message ? String(err.message) : String(err)));
         errorEl.classList.add('show');
         loginBtn.innerHTML = 'Entrar';
         loginBtn.disabled = false;

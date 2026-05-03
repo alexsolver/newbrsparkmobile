@@ -5,6 +5,7 @@ import * as Crypto from 'expo-crypto';
 import { gcm } from '@noble/ciphers/aes.js';
 import { Buffer } from 'buffer';
 import { getSyncQueue, queueOfflineAction } from '../database';
+import { parseJsonOrNull, safeJsonParse } from '../utils/safeJsonParse';
 import type { User } from './auth';
 import { OPERATIONAL_TRANSIT_LOCK_STORAGE_KEY } from './operationalTransitLock';
 
@@ -163,12 +164,10 @@ async function encryptRecoverySnapshot(snapshot: RecoverySnapshot): Promise<stri
 }
 
 async function decodeRecoverySnapshotFromFile(raw: string): Promise<RecoverySnapshot | null> {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return null;
+  const parsed = parseJsonOrNull(trimmed, 'decodeRecoverySnapshotFromFile');
+  if (parsed === null) return null;
 
   // Backward compatibility: legacy plaintext snapshot.
   if (
@@ -191,7 +190,7 @@ async function decodeRecoverySnapshotFromFile(raw: string): Promise<RecoverySnap
     const cipherBytes = base64ToBytes(parsed.ciphertextB64);
     const plainBytes = gcm(key, iv).decrypt(cipherBytes);
     const plain = new TextDecoder().decode(plainBytes);
-    const snapshot = JSON.parse(plain) as RecoverySnapshot;
+    const snapshot = safeJsonParse<RecoverySnapshot | null>(plain, null, 'decodeRecoverySnapshot.decrypted');
     if (!snapshot || typeof snapshot !== 'object') return null;
     if (Number(snapshot.version) !== RECOVERY_VERSION) return null;
     return snapshot;
@@ -229,12 +228,8 @@ function checklistOutboxIdentityKey(item: any): string {
 
 function parseJsonArray(raw: string | null | undefined): unknown[] {
   if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  const parsed = parseJsonOrNull(String(raw), 'offlineRecovery.parseJsonArray');
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 function mergeUniqueArrayForKey(key: string, currentRaw: string | null, incomingRaw: string): string {
@@ -310,11 +305,8 @@ export async function createEmergencyOfflineBackup(
     const payloadRaw = row?.payload;
     let payload: unknown = payloadRaw;
     if (typeof payloadRaw === 'string') {
-      try {
-        payload = JSON.parse(payloadRaw);
-      } catch {
-        payload = payloadRaw;
-      }
+      const p = parseJsonOrNull(payloadRaw, 'recoverySyncQueue.payload');
+      payload = p !== null ? p : payloadRaw;
     }
     return {
       action: String(row?.action || ''),

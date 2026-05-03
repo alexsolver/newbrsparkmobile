@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 import { clearRoomListCache } from './chatOfflineStorage';
 import { clearLocalDatabase } from '../database';
 import { deleteAvatarCache, mergeServerUserWithLocalAvatar } from './avatarLocalCache';
@@ -14,9 +13,24 @@ import {
 } from '../lib/opsChatAckLocal';
 import * as Device from 'expo-device';
 import * as Application from 'expo-application';
-import Constants from 'expo-constants';
 import { Platform, Alert } from 'react-native';
 import * as Network from 'expo-network';
+import { warnDev } from '../utils/devLog';
+import { safeJsonParse } from '../utils/safeJsonParse';
+import {
+  TOKEN_KEY,
+  USER_KEY,
+  getToken,
+  clearAccessTokenStorage,
+  setAccessTokenStorage,
+  clearRefreshTokenSecure,
+  getRefreshTokenSecure,
+  setRefreshTokenSecure,
+} from './appSessionTokenStorage';
+import { API_BASE } from './appApiBase';
+
+export { getToken, TOKEN_KEY, USER_KEY } from './appSessionTokenStorage';
+export { API_BASE };
 
 async function getDeviceId(): Promise<string> {
   try {
@@ -29,147 +43,6 @@ async function getDeviceId(): Promise<string> {
     console.warn('Failed to get device id', e);
   }
   return Device.osBuildId || 'unknown_device';
-}
-
-// ─── Config ──────────────────────────────────────────────────────────────────
-/** Porta da API (admin-panel/backend + PostgreSQL). */
-const DEV_API_PORT = process.env.EXPO_PUBLIC_API_PORT || '3001';
-
-const ENV_DEV_HOST =
-  String(
-    (typeof process !== 'undefined' && process.env.EXPO_PUBLIC_DEV_API_HOST) ||
-      (typeof process !== 'undefined' && process.env.EXPO_PUBLIC_API_HOST) ||
-      '',
-  ).trim();
-
-function pushHostCandidate(out: string[], raw: unknown) {
-  if (raw && typeof raw === 'string' && raw.trim()) out.push(raw.trim());
-}
-
-/** URIs que o Expo preenche com o host do packager (LAN, túnel, etc.). */
-function collectExpoBundlerHostUris(): string[] {
-  const uris: string[] = [];
-  try {
-    pushHostCandidate(uris, Constants.expoConfig?.hostUri);
-    const m = Constants.manifest;
-    if (m && typeof m === 'object' && m !== null && 'debuggerHost' in m) {
-      pushHostCandidate(uris, (m as { debuggerHost?: string }).debuggerHost);
-    }
-    const m2 = Constants.manifest2 as { extra?: { expoClient?: { hostUri?: string } } } | null | undefined;
-    pushHostCandidate(uris, m2?.extra?.expoClient?.hostUri);
-  } catch {
-    /* ignore */
-  }
-  return uris;
-}
-
-/** Host Metro/Expo (mesmo PC que corre `expo start`) — evita IP fixo errado na Wi‑Fi. */
-function inferExpoDevLanHost(): string | null {
-  try {
-    for (const raw of collectExpoBundlerHostUris()) {
-      const host = raw.split(':')[0]?.trim();
-      if (!host || host === 'localhost' || host === '127.0.0.1') continue;
-      if (!isLikelyLocalLanApiBase(`http://${host}:${DEV_API_PORT}`)) continue;
-      return host;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-const FALLBACK_LAN_IP = '192.168.15.73';
-const MAC_IP = ENV_DEV_HOST || inferExpoDevLanHost() || FALLBACK_LAN_IP;
-
-/** Origem da API em release: só esquema+host (+porta se preciso). Sem `/api` no fim (o app acrescenta `/api/...`). */
-function normalizeProductionApiBase(raw: string | undefined): string | undefined {
-  if (raw == null || typeof raw !== 'string') return undefined;
-  let u = raw.trim().replace(/\/+$/, '');
-  if (u.toLowerCase().endsWith('/api')) {
-    u = u.slice(0, -4).replace(/\/+$/, '');
-  }
-  return u.length > 0 ? u : undefined;
-}
-
-const PRODUCTION_API_DEFAULT = 'https://api.brspark.com';
-
-const fromEnvRaw = normalizeProductionApiBase(process.env.EXPO_PUBLIC_API_BASE);
-/** Em dev, permite forçar produção: `EXPO_PUBLIC_USE_PRODUCTION_API=1` no .env (e `EXPO_PUBLIC_API_BASE` se quiser outro host). */
-const forceProductionInDev =
-  __DEV__ && String(process.env.EXPO_PUBLIC_USE_PRODUCTION_API || '').trim() === '1';
-
-/**
- * Em dispositivo físico, `http://localhost:3001` / `127.0.0.1` na API apontam para o próprio telemóvel.
- * Se o Metro expõe um host LAN em `expoConfig.hostUri`, substituímos por esse host (mantém a porta do `.env`).
- * Em simulador/emulador, sem host LAN do Expo, mantém-se loopback (acesso ao host da máquina).
- * Em **dispositivo físico**, se ainda não houver host do Metro, usa `EXPO_PUBLIC_DEV_API_HOST` ou o IP fallback do projeto.
- */
-function rewriteDevLoopbackApiBaseIfNeeded(apiBase: string): string {
-  if (!__DEV__ || Platform.OS === 'web') return apiBase;
-  try {
-    const u = new URL(String(apiBase || '').trim());
-    const h = u.hostname.toLowerCase();
-    if (h !== 'localhost' && h !== '127.0.0.1') return apiBase;
-    let lanHost = inferExpoDevLanHost();
-    if (!lanHost && Device.isDevice) {
-      const eh = ENV_DEV_HOST.replace(/^https?:\/\//i, '').split(':')[0]?.trim();
-      if (eh && eh !== 'localhost' && eh !== '127.0.0.1') lanHost = eh;
-    }
-    if (!lanHost && Device.isDevice) {
-      lanHost = FALLBACK_LAN_IP;
-    }
-    if (!lanHost) return apiBase;
-    const portPart = u.port ? `:${u.port}` : '';
-    const next = `${u.protocol}//${lanHost}${portPart}`.replace(/\/+$/, '');
-    const prev = apiBase.replace(/\/+$/, '');
-    if (next !== prev) {
-      console.warn('[BrSpark] API_BASE em loopback no dispositivo — redirecionado para o host LAN:', prev, '→', next);
-    }
-    return next;
-  } catch {
-    return apiBase;
-  }
-}
-
-function isLikelyLocalLanApiBase(url: string): boolean {
-  try {
-    const u = new URL(url);
-    if (u.protocol !== 'http:') return false;
-    const h = u.hostname.toLowerCase();
-    if (h === 'localhost' || h === '127.0.0.1' || h === '10.0.2.2') return true;
-    if (h.startsWith('192.168.')) return true;
-    const p = h.split('.').map((x) => Number(x));
-    return p.length === 4 && p[0] === 10 && p.every((n) => !Number.isNaN(n));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Base da API (origem sem `/api` no fim).
- * - **Release:** `EXPO_PUBLIC_API_BASE` (EAS / build) ou produção por defeito.
- * - **Dev:** se existir `EXPO_PUBLIC_API_BASE` no `.env`, usa-se sempre (LAN, VPN, https público, túnel).
- *   Sem isso: `EXPO_PUBLIC_DEV_API_HOST` → host inferido do Metro (`expoConfig.hostUri`) → IP fallback + porta.
- *   `EXPO_PUBLIC_USE_PRODUCTION_API=1` força produção como antes.
- *   Se `EXPO_PUBLIC_API_BASE` for loopback e o Metro indicar host LAN, substitui-se automaticamente (evita erro no telemóvel).
- */
-const RESOLVED_API_BASE: string = (() => {
-  if (__DEV__) {
-    if (forceProductionInDev) {
-      return rewriteDevLoopbackApiBaseIfNeeded(fromEnvRaw || PRODUCTION_API_DEFAULT);
-    }
-    if (fromEnvRaw) {
-      return rewriteDevLoopbackApiBaseIfNeeded(fromEnvRaw);
-    }
-    return rewriteDevLoopbackApiBaseIfNeeded(`http://${MAC_IP}:${DEV_API_PORT}`);
-  }
-  return fromEnvRaw || PRODUCTION_API_DEFAULT;
-})();
-
-export const API_BASE = RESOLVED_API_BASE;
-
-if (__DEV__) {
-  console.log('[BrSpark] API_BASE →', API_BASE);
 }
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -357,50 +230,6 @@ export class MultipleAccountsError extends Error {
   }
 }
 
-const TOKEN_KEY = 'brspark_jwt';
-const USER_KEY  = 'brspark_user';
-/** Refresh opaco do app — SecureStore (fallback AsyncStorage em ambientes sem Keychain/Keystore). */
-const REFRESH_TOKEN_SECURE_KEY = 'brspark_refresh_token_v1';
-const REFRESH_TOKEN_ASYNC_FALLBACK_KEY = 'brspark_refresh_token_fb';
-
-async function clearRefreshTokenSecure(): Promise<void> {
-  try {
-    await SecureStore.deleteItemAsync(REFRESH_TOKEN_SECURE_KEY);
-  } catch {
-    /* inexistente */
-  }
-  try {
-    await AsyncStorage.removeItem(REFRESH_TOKEN_ASYNC_FALLBACK_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-async function getRefreshTokenSecure(): Promise<string | null> {
-  try {
-    const a = await SecureStore.getItemAsync(REFRESH_TOKEN_SECURE_KEY);
-    if (a) return a;
-  } catch {
-    /* ignore */
-  }
-  try {
-    return await AsyncStorage.getItem(REFRESH_TOKEN_ASYNC_FALLBACK_KEY);
-  } catch {
-    return null;
-  }
-}
-
-async function setRefreshTokenSecure(token: string): Promise<void> {
-  try {
-    await SecureStore.setItemAsync(REFRESH_TOKEN_SECURE_KEY, token);
-    await AsyncStorage.removeItem(REFRESH_TOKEN_ASYNC_FALLBACK_KEY);
-    return;
-  } catch {
-    /* SecureStore indisponível (ex.: web) */
-  }
-  await AsyncStorage.setItem(REFRESH_TOKEN_ASYNC_FALLBACK_KEY, token);
-}
-
 /**
  * Remove JWT + utilizador + refresh locais **sem** purge de SQLite/caches nem alertas.
  * Fluxos públicos (ex.: registo OTP): evita que `apiFetch`/`validateSession` enviem Bearer antigo
@@ -408,8 +237,9 @@ async function setRefreshTokenSecure(token: string): Promise<void> {
  */
 export async function clearStoredAppCredentials(): Promise<void> {
   await clearRefreshTokenSecure();
+  await clearAccessTokenStorage();
   try {
-    await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+    await AsyncStorage.removeItem(USER_KEY);
   } catch {
     /* ignore */
   }
@@ -449,7 +279,7 @@ export async function persistAppSessionPayload(data: {
   user: User;
   refreshToken?: string | null;
 }): Promise<void> {
-  await AsyncStorage.setItem(TOKEN_KEY, data.token);
+  await setAccessTokenStorage(data.token);
   await AsyncStorage.setItem(USER_KEY, JSON.stringify(data.user));
   const rt = data.refreshToken != null ? String(data.refreshToken).trim() : '';
   if (rt) await setRefreshTokenSecure(rt);
@@ -484,10 +314,11 @@ async function refreshAccessTokenOnce(): Promise<boolean> {
       }
       const data = (await res.json()) as { token?: string; refreshToken?: string };
       if (!data.token || !data.refreshToken) return false;
-      await AsyncStorage.setItem(TOKEN_KEY, data.token);
+      await setAccessTokenStorage(data.token);
       await setRefreshTokenSecure(String(data.refreshToken));
       return true;
-    } catch {
+    } catch (e) {
+      warnDev('refreshAccessTokenOnce', e);
       return false;
     } finally {
       refreshAccessTokenInFlight = null;
@@ -567,13 +398,10 @@ export async function purgeAllBrSparkLocalCaches(): Promise<void> {
 
   clearLocalDatabase();
   await clearRefreshTokenSecure();
+  await clearAccessTokenStorage();
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-export async function getToken(): Promise<string | null> {
-  return AsyncStorage.getItem(TOKEN_KEY);
-}
-
 /** Evita «JSON Parse error: Unexpected character: <» quando o proxy devolve HTML (404/502). */
 async function parseFetchJsonBody(res: Response): Promise<unknown> {
   const text = await res.text();
@@ -641,7 +469,7 @@ export class AuthService {
     try {
       const raw = await AsyncStorage.getItem(PRESERVED_LOCAL_OWNER_KEY);
       if (!raw) return null;
-      const parsed = JSON.parse(raw) as PreservedLocalOwner;
+      const parsed = safeJsonParse<PreservedLocalOwner | null>(raw, null, 'loadPreservedLocalOwner');
       if (!parsed || typeof parsed !== 'object') return null;
       if (!parsed.id || !parsed.email || !parsed.tenantId) return null;
       return parsed;
@@ -1154,7 +982,12 @@ export class AuthService {
     if (preserveLocalData) {
       await AuthService.savePreservedLocalOwner(existing, options?.reason);
       await clearRefreshTokenSecure();
-      await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+      await clearAccessTokenStorage();
+      try {
+        await AsyncStorage.removeItem(USER_KEY);
+      } catch {
+        /* ignore */
+      }
       return;
     }
     if (existing) {
@@ -1206,12 +1039,11 @@ export class AuthService {
   /** Recupera usuário salvo localmente */
   static async getUser(): Promise<User | null> {
     try {
-      const [userData, token] = await Promise.all([
-        AsyncStorage.getItem(USER_KEY),
-        AsyncStorage.getItem(TOKEN_KEY),
-      ]);
+      const [userData, token] = await Promise.all([AsyncStorage.getItem(USER_KEY), getToken()]);
       if (!userData || !token) return null;
-      return JSON.parse(userData) as User;
+      const u = safeJsonParse<User | null>(userData, null, 'AuthService.getUser');
+      if (!u || typeof u !== 'object' || !String((u as User).id || '').trim()) return null;
+      return u as User;
     } catch {
       return null;
     }

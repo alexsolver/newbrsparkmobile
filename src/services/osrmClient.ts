@@ -2,7 +2,7 @@
  * Chamadas OSRM no app — tolerante a respostas sem `code`, e fallback Table → N× Route
  * (muitos servidores self-hosted não expõem /table/v1).
  */
-import { API_BASE } from './auth';
+import { API_BASE } from './appApiBase';
 import { getOsrmBaseUrl, getOsrmRoutingBaseCandidates } from './osrmConfig';
 
 const UA = 'BrsparkMobile/1.0';

@@ -251,22 +251,42 @@ export default function ServicesScreen() {
       setLoadingMore(true);
     }
 
-    const result = await ProviderService.search({
-      q,
-      category: cat,
-      city,
-      page: pg,
-      limit: 20,
-      forceRefresh: isRefresh,
-    });
-
-    setFromCache(result.fromCache);
-    setTotal(result.total);
-    setTotalPages(result.totalPages);
-    setProviders(prev => (pg === 1 && !append) ? result.data : [...prev, ...result.data]);
-    setLoading(false);
-    setRefreshing(false);
-    setLoadingMore(false);
+    try {
+      const result = await ProviderService.search({
+        q,
+        category: cat,
+        city,
+        page: pg,
+        limit: 20,
+        forceRefresh: isRefresh,
+      });
+      setFromCache(result.fromCache);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
+      setProviders(prev => (pg === 1 && !append ? result.data : [...prev, ...result.data]));
+    } catch (e) {
+      console.warn('[services] ProviderService.search', e);
+      try {
+        const fallback = await ProviderService.search({
+          q,
+          category: cat,
+          city,
+          page: pg,
+          limit: 20,
+          forceRefresh: false,
+        });
+        setFromCache(fallback.fromCache);
+        setTotal(fallback.total);
+        setTotalPages(fallback.totalPages);
+        setProviders(prev => (pg === 1 && !append ? fallback.data : [...prev, ...fallback.data]));
+      } catch {
+        /* sem rede / sem cache */
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
+    }
     },
     [geoCity],
   );

@@ -671,6 +671,13 @@
     "logo-youtube"
 ];
 
+  /** Nomes de íon-icon: só [a-z0-9-] para evitar quebra de atributo / XSS no preview. */
+  function sanitizeIonIconName(raw) {
+    const s = String(raw || '').trim().toLowerCase().slice(0, 80);
+    if (!/^[a-z0-9-]+$/.test(s)) return 'help-outline';
+    return s;
+  }
+
   function renderCommonIcons(filter = '') {
     const grid = document.getElementById('common-icons');
     const filtered = commonIcons.filter(icon => icon.toLowerCase().includes(filter.toLowerCase()));
@@ -692,7 +699,7 @@
   }
 
   function updateIconPreview(name) {
-    const icon = document.getElementById('tag-icon').value.trim() || 'help-outline';
+    const icon = sanitizeIonIconName(document.getElementById('tag-icon').value.trim() || 'help-outline');
     const color = document.getElementById('tag-color').value;
     const preview = document.getElementById('icon-preview');
     preview.innerHTML = `<ion-icon name="${icon}"></ion-icon>`;

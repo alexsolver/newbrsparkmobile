@@ -1,4 +1,4 @@
-import { API_BASE } from '../services/auth';
+import { API_BASE } from '../services/appApiBase';
 
 function envTrim(key: string): string {
   if (typeof process === 'undefined') return '';

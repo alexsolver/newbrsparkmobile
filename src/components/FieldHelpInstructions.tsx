@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { API_BASE } from '../services/auth';
+import { API_BASE } from '../services/appApiBase';
 
 export type FieldHelpInstructionsProps = {
   plainDescription?: string;

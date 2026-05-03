@@ -1,0 +1,28 @@
+name: Auditoria de dependências (app)
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/dependency-audit.yml'
+  push:
+    branches: [main, master, develop]
+
+jobs:
+  npm-audit:
+    name: npm audit (runtime, critical+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: npm audit — apenas dependências de runtime, nível critical
+        run: npm run audit:deps

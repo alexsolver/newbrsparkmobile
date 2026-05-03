@@ -257,6 +257,14 @@
 
   const fmtQuota = (n) => (n === -1 || n === null || n === undefined ? '∞' : n);
 
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   async function loadPlans() {
     const plans = await CONFIG.get('/plans') || [];
     allPlans = plans;

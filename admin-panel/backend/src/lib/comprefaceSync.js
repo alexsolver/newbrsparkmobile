@@ -1,6 +1,4 @@
 'use strict';
-const fs = require('fs').promises;
-const path = require('path');
 const {
   buildComprefaceApiRoots,
   comprefaceSubjectName,
@@ -9,40 +7,26 @@ const {
   deleteStaleBrsparkSubjectFacesForUser,
   addFaceToSubject,
 } = require('./comprefaceClient');
-const { isRegistrationPrimaryFacePhoto } = require('./faceEnrollmentPrimary');
-
-function parseVisionMeta(raw) {
-  try {
-    return typeof raw === 'string' ? JSON.parse(raw) : raw;
-  } catch {
-    return null;
-  }
-}
-
-async function findActiveCompreface(prisma) {
-  return prisma.integration.findFirst({
-    where: { name: 'Exadel CompreFace', status: 'ACTIVE' },
-  });
-}
+const {
+  resolveFacialVisionProviderForTenant,
+  pickVisionIntegration,
+  parseMeta,
+} = require('./facialRecognitionEngine');
+const { loadUserFacialReferenceBuffersFromUser } = require('./userFacialEnrollmentBuffers');
 
 /**
- * @param {string} ref — URL absoluta ou path /uploads/...
- * @param {string} publicRoot — pasta public do painel
+ * Mesma integração CompreFace que `/api/vision/verify-face` (plano do tenant + AI_LLM vision).
+ * Antes: `name === 'Exadel CompreFace'` — se o registo tiver outro nome ou existir mais do que uma
+ * entrada, a galeria sincronizava noutro sítio do que a validação lia.
  */
-async function bufferFromPublicOrUrl(ref, publicRoot) {
-  const s = String(ref || '').trim();
-  if (!s) return null;
-  if (/^https?:\/\//i.test(s)) {
-    const r = await fetch(s, { signal: AbortSignal.timeout(45000) });
-    if (!r.ok) throw new Error(`Download HTTP ${r.status}`);
-    return Buffer.from(await r.arrayBuffer());
-  }
-  if (s.startsWith('/')) {
-    const rel = s.replace(/^\//, '');
-    const abs = path.join(publicRoot, rel);
-    return fs.readFile(abs);
-  }
-  return null;
+async function findActiveComprefaceForTenant(prisma, tenantId) {
+  const provider = await resolveFacialVisionProviderForTenant(tenantId, prisma);
+  const integrations = await prisma.integration.findMany({ where: { type: 'AI_LLM' } });
+  const int = pickVisionIntegration(integrations, provider);
+  if (!int?.apiKey) return null;
+  const meta = parseMeta(int.metadata);
+  if (!meta || meta.category !== 'COMPUTER_VISION' || meta.engine !== 'compreface') return null;
+  return int;
 }
 
 /**
@@ -50,82 +34,23 @@ async function bufferFromPublicOrUrl(ref, publicRoot) {
  * @returns {Promise<{ ok: boolean, subject?: string, faces?: number, root?: string, error?: string }>}
  */
 async function syncUserToCompreface(prisma, userId) {
-  const integration = await findActiveCompreface(prisma);
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return { ok: false, error: 'Usuário não encontrado.' };
+
+  const integration = await findActiveComprefaceForTenant(prisma, user.tenantId);
   if (!integration?.apiKey) {
-    return { ok: false, error: 'Nenhuma integração FaceMatch (Exadel CompreFace) ativa com API Key.' };
+    return {
+      ok: false,
+      error:
+        'Nenhuma integração CompreFace ativa (visão / biometria) alinhada ao plano do tenant, ou API Key em falta. Verifique Integrações e o motor facial no plano.',
+    };
   }
-  const meta = parseVisionMeta(integration.metadata);
+  const meta = parseMeta(integration.metadata);
   if (!meta || meta.category !== 'COMPUTER_VISION' || meta.engine !== 'compreface') {
     return { ok: false, error: 'Integração FaceMatch inválida ou inativa.' };
   }
 
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return { ok: false, error: 'Usuário não encontrado.' };
-
-  const publicRoot = path.join(__dirname, '../../public');
-  const buffers = [];
-  const urlsSeen = new Set();
-
-  async function pushBufferFromUrl(sourceUrl, buf, fileName) {
-    if (!buf || buf.length < 64) return;
-    const key = String(sourceUrl || fileName || '').trim() || fileName;
-    if (urlsSeen.has(key)) return;
-    urlsSeen.add(key);
-    buffers.push({ buf, name: fileName });
-  }
-
-  const list = Array.isArray(user.faceEnrollmentPhotos) ? user.faceEnrollmentPhotos : [];
-  const primaryList = list.filter((p) => p && isRegistrationPrimaryFacePhoto(p));
-  const restList = list.filter((p) => p && !isRegistrationPrimaryFacePhoto(p));
-
-  for (const p of primaryList) {
-    if (!p.url) continue;
-    try {
-      const b = await bufferFromPublicOrUrl(p.url, publicRoot);
-      const ext = String(p.mimeType || '')
-        .toLowerCase()
-        .includes('png')
-        ? 'png'
-        : 'jpg';
-      await pushBufferFromUrl(
-        p.url,
-        b,
-        `${String(p.id || 'fe').replace(/[^\w.-]/g, '_')}.${ext}`
-      );
-    } catch (e) {
-      console.warn('[comprefaceSync] faceEnrollment primary', p.id, e.message);
-    }
-  }
-
-  const av = String(user.avatarUrl || '').trim();
-  if (av) {
-    try {
-      const b = await bufferFromPublicOrUrl(user.avatarUrl, publicRoot);
-      await pushBufferFromUrl(av, b, 'avatar.jpg');
-    } catch (e) {
-      console.warn('[comprefaceSync] avatarUrl', e.message);
-    }
-  }
-
-  for (const p of restList) {
-    if (!p || typeof p !== 'object' || !p.url) continue;
-    try {
-      const b = await bufferFromPublicOrUrl(p.url, publicRoot);
-      const ext =
-        String(p.mimeType || '')
-          .toLowerCase()
-          .includes('png')
-          ? 'png'
-          : 'jpg';
-      await pushBufferFromUrl(
-        p.url,
-        b,
-        `${String(p.id || 'fe').replace(/[^\w.-]/g, '_')}.${ext}`
-      );
-    } catch (e) {
-      console.warn('[comprefaceSync] faceEnrollment', p.id, e.message);
-    }
-  }
+  const buffers = await loadUserFacialReferenceBuffersFromUser(user);
 
   if (!buffers.length) {
     return { ok: false, error: 'Sem imagens válidas (avatar ou fotos de matrícula).' };
@@ -164,4 +89,4 @@ async function syncUserToCompreface(prisma, userId) {
   return { ok: false, error: lastErr || 'Falha ao contatar o FaceMatch em todas as URLs tentadas.' };
 }
 
-module.exports = { syncUserToCompreface, findActiveCompreface };
+module.exports = { syncUserToCompreface, findActiveComprefaceForTenant };

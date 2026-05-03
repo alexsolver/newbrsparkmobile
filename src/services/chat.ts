@@ -1,4 +1,5 @@
-import { apiFetch, API_BASE } from './auth';
+import { apiFetch } from './auth';
+import { API_BASE } from './appApiBase';
 import { emitChatUnreadChanged } from '../lib/chatUnreadEvents';
 
 export interface ChatContact {

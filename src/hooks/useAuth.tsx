@@ -3,7 +3,6 @@ import { AppState, type AppStateStatus } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import {
   AuthService,
-  API_BASE,
   TwoFactorRequired,
   User,
   subscribeSessionInvalidated,
@@ -14,6 +13,7 @@ import {
   canUseFieldWorkAppRole,
   canUseProviderMode,
 } from '../services/auth';
+import { API_BASE } from '../services/appApiBase';
 import { ApiService } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { dataCollectionService } from '../services/dataCollectionService';
@@ -22,6 +22,8 @@ import { normalizeUserAvatarUrl } from '../utils/normalizeUserAvatarUrl';
 import { NotificationService } from '../services/notifications';
 import { resetGpsCapturePolicyToDefaults } from '../services/gpsCapturePolicyStore';
 import i18n from '../i18n';
+import { warnDev } from '../utils/devLog';
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -75,14 +77,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     warmAvatarCacheForUser(forWarm, async partial => {
       const next = await AuthService.patchUserInStorage(partial);
       if (next) setUser(next);
-    }).catch(() => {});
+    }).catch((e) => warnDev('useAuth.runAvatarWarm', e));
   }, []);
 
   useEffect(() => {
     if (!user) return;
     if (userRole === 'TECHNICIAN' && !canUseProviderMode(user)) {
       _setUserRole('CLIENT');
-      AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
+      AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch((e) =>
+        warnDev('useAuth.syncRoleStorage.technicianToClient', e),
+      );
       dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
     }
   }, [user, user?.technicianProfile?.status, user?.role, userRole]);
@@ -93,11 +97,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const k = String(user.tenant?.kind || '').toUpperCase();
     if (k === 'CLIENT' && userRole !== 'CLIENT') {
       _setUserRole('CLIENT');
-      AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
+      AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch((e) =>
+        warnDev('useAuth.syncRoleStorage.tenantClient', e),
+      );
       dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
     } else if (k === 'PROVIDER' && userRole !== 'TECHNICIAN') {
       _setUserRole('TECHNICIAN');
-      AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN').catch(() => {});
+      AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN').catch((e) =>
+        warnDev('useAuth.syncRoleStorage.tenantProvider', e),
+      );
       dataCollectionService.onSessionOpen(user.email, user.tenantId, true);
     }
   }, [user?.tenantId, user?.tenant?.kind, user?.email, userRole]);
@@ -120,8 +128,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           await AsyncStorage.setItem('@brspark_active_persona_v1', 'client');
         }
-      } catch {
-        /* ignore */
+      } catch (e) {
+        warnDev('useAuth.persistActivePersona', e);
       }
     })();
   }, [user, userRole, loading]);
@@ -136,7 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const prev = prevTechnicianStatusRef.current;
     if (prev !== null && prev !== 'ACTIVE' && st === 'ACTIVE' && userRole === 'CLIENT' && canUseProviderMode(user)) {
       _setUserRole('TECHNICIAN');
-      AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN').catch(() => {});
+      AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN').catch((e) =>
+        warnDev('useAuth.syncRoleStorage.technicianActivated', e),
+      );
       dataCollectionService.onSessionOpen(user.email, user.tenantId, true);
     }
     prevTechnicianStatusRef.current = st || null;
@@ -165,16 +175,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(after);
               if (!after) {
                 _setUserRole('CLIENT');
-                await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
+                await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch((e) =>
+                  warnDev('useAuth.appStateRefresh.clearRole', e),
+                );
               }
             }
-          } catch {
-            /* ignore */
+          } catch (e) {
+            warnDev('useAuth.appStateRefresh.validateSession', e);
           }
-        } catch {
-          /* ignore */
+        } catch (e) {
+          warnDev('useAuth.appStateRefresh', e);
         }
-      })().catch(() => {});
+      })().catch((e) => warnDev('useAuth.appStateRefresh.unhandled', e));
     };
     const sub = AppState.addEventListener('change', onState);
     return () => sub.remove();
@@ -189,7 +201,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = notification.request?.content?.data as Record<string, unknown> | undefined;
       const t = data?.type;
       if (t === 'FORCE_LOGOUT') {
-        applySessionInvalidatedFromServer({ force: true }).catch(() => {});
+        applySessionInvalidatedFromServer({ force: true }).catch((e) =>
+          warnDev('useAuth.forceLogoutFromPush', e),
+        );
         return;
       }
       if (t === 'EVALUATION_CLIENT_SURVEY_INVITE') {
@@ -462,7 +476,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearStoredAppCredentials();
     setUser(null);
     _setUserRole('CLIENT');
-    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
+    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch((e) =>
+      warnDev('useAuth.clearSessionForRegistrationFlow', e),
+    );
   }, []);
 
   const logout = async () => {
@@ -477,7 +493,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AuthService.deleteAccount();
     setUser(null);
     _setUserRole('CLIENT');
-    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch(() => {});
+    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch((e) =>
+      warnDev('useAuth.deleteAccount.clearRole', e),
+    );
   };
 
   const setUserRole = async (role: 'CLIENT' | 'TECHNICIAN') => {

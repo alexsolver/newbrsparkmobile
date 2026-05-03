@@ -30,7 +30,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { API_BASE, getToken, apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
+import { getToken, apiFetch, isTechnicianProfileActive } from '../../src/services/auth';
+import { API_BASE } from '../../src/services/appApiBase';
 import { rid, defaultSchedule } from '../../src/lib/technicianScheduleForm';
 
 /** Agenda vazia no cadastro: turnos e mapa ficam para o perfil depois da aprovação. */

@@ -4,7 +4,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { lightColors, darkColors, ColorPalette } from './colors';
 import { useAuth } from '../hooks/useAuth';
 import { useAppContext } from '../context/AppContext';
-import { API_BASE, GUEST_LOGIN_BRANDING_KEY, canUseProviderMode } from '../services/auth';
+import { GUEST_LOGIN_BRANDING_KEY, canUseProviderMode } from '../services/auth';
+import { API_BASE } from '../services/appApiBase';
 
 const BRANDING_CACHE_KEY = '@brspark:tenant_branding_cache';
 const BRANDING_LOGO_CACHE_KEY = '@brspark:tenant_branding_logo_cache';

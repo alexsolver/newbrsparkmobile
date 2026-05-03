@@ -1,7 +1,7 @@
 /**
  * Base URL do OSRM: prioridade EXPO_PUBLIC_OSRM_BASE_URL → GET /api/config (integração painel) → demo público.
  */
-import { API_BASE } from './auth';
+import { API_BASE } from './appApiBase';
 
 export const OSRM_FALLBACK_BASE = 'https://router.project-osrm.org';
 

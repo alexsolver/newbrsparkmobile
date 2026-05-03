@@ -15,12 +15,12 @@ import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
 import { useAuth } from '../../src/hooks/useAuth';
 import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 import {
-  API_BASE,
   AuthService,
   TwoFactorRequired,
   beginPublicAuthFlow,
   endPublicAuthFlow,
 } from '../../src/services/auth';
+import { API_BASE } from '../../src/services/appApiBase';
 import { complianceDocFallbackUrl } from '../../src/constants/legalPublicUrls';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ApiService } from '../../src/services/api';
