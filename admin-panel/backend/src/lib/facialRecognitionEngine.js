@@ -146,8 +146,9 @@ async function pickIdentifySubjectFromRecognition(recognizeJson, prisma, { tenan
     const parsed = parseComprefaceSubjectName(String(sub.subject));
     if (!parsed) continue;
     if (String(parsed.tenantId) !== tid) continue;
+    /** Mesma regra que `self_verify` pós-CompreFace: `tid` é o contexto JWT; `User.tenantId` pode ser a org «casa». */
     const identified = await prisma.user.findFirst({
-      where: { id: parsed.userId, tenantId: tid, isActive: true },
+      where: { id: parsed.userId, isActive: true },
       select: { id: true },
     });
     if (identified) {
@@ -340,28 +341,38 @@ async function verifyFacialImageBuffer(prisma, opts) {
       dbgRefCount = refs.length;
       if (refs.length > 0) {
         dbgVerifyBranch = 'refs_ok_compare';
+        const pairOut = await Promise.all(
+          refs.map(async ({ buf: refBuf }) => {
+            if (!refBuf || refBuf.length < 64) return { sim: -1, err: null };
+            try {
+              const sim = await verifyFacePairWithIntegration(visionInt, buf, refBuf, verKey);
+              return {
+                sim: Number.isFinite(sim) ? Number(sim) : -1,
+                err: null,
+              };
+            } catch (e) {
+              return { sim: -1, err: e };
+            }
+          }),
+        );
         let best = -1;
         let lastErr = null;
-        for (const { buf: refBuf } of refs) {
-          if (!refBuf || refBuf.length < 64) continue;
-          try {
-            const sim = await verifyFacePairWithIntegration(visionInt, buf, refBuf, verKey);
-            if (Number.isFinite(sim) && sim > best) best = sim;
-          } catch (e) {
-            lastErr = e;
-          }
+        for (const r of pairOut) {
+          if (r.sim > best) best = r.sim;
+          if (r.err) lastErr = r.err;
         }
         dbgVerBest = best < 0 ? null : Number(best);
         if (lastErr) dbgVerErrSlice = String(lastErr.message || lastErr).slice(0, 160);
         if (best >= MIN_SIMILARITY) {
+          /** `tenantId` aqui é o contexto operacional (dedicado / JWT). `User.tenantId` é a org «casa» — não filtrar por ele ou prestadores em cliente falham apesar do motor aceitar. */
           let identified = await prisma.user.findFirst({
-            where: { id: sessionUserId, tenantId, isActive: true },
+            where: { id: sessionUserId, isActive: true },
             select: { id: true, name: true, email: true, role: true },
           });
           let anyUserRow = null;
           if (!identified) {
             anyUserRow = await prisma.user.findFirst({
-              where: { id: sessionUserId, tenantId },
+              where: { id: sessionUserId },
               select: { id: true, isActive: true },
             });
             // #region agent log
@@ -499,7 +510,7 @@ async function verifyFacialImageBuffer(prisma, opts) {
       8,
       Number(process.env.COMPREFACE_IDENTIFY_PREDICTION_COUNT) ||
         Number(process.env.COMPREFACE_SELF_VERIFY_PREDICTION_COUNT) ||
-        12
+        8
     )
   );
   const predictionCount =
@@ -662,18 +673,10 @@ async function verifyFacialImageBuffer(prisma, opts) {
     };
   }
 
-  const identified =
-    mode === 'identify'
-      ? await prisma.user.findFirst({
-          where: tenantId
-            ? { id: parsed.userId, tenantId, isActive: true }
-            : { id: parsed.userId, isActive: true },
-          select: { id: true, name: true, email: true, role: true },
-        })
-      : await prisma.user.findFirst({
-          where: { id: parsed.userId, tenantId, isActive: true },
-          select: { id: true, name: true, email: true, role: true },
-        });
+  const identified = await prisma.user.findFirst({
+    where: { id: parsed.userId, isActive: true },
+    select: { id: true, name: true, email: true, role: true },
+  });
 
   if (!identified) {
     return {
