@@ -66,10 +66,10 @@
       </form>
 
       <p class="login-hint" style="margin-top:12px;font-size:11px;line-height:1.45;color:var(--text3)">
-        <strong>Dev:</strong> após <code>npm run db:seed</code> — slug <code>aria</code>; <strong>SaaS admin</strong> <code>admin@aria.com</code> (menu completo); <strong>Gestor</strong> <code>gestor@aria.com</code>. Senha deste login: <code>SAAS_PANEL_PASSWORD</code> no <code>.env</code> ou, por defeito no seed, <code>123456</code> (não é <code>admin123</code> — esse é só do admin legado sem slug).
+        <strong>Dev:</strong> após <code>npm run db:seed</code> — slug <code>aria</code>, e-mail <code>admin@aria.com</code> (SaaS) ou <code>gestor@aria.com</code>. Senha: <code>SAAS_PANEL_PASSWORD</code> no <code>.env</code> do backend (ex.: <code>admin123</code>); se não estiver definida, o seed usa <code>123456</code>. Alterou a env? Volte a correr <code>npm run db:seed</code>.
       </p>
-      <p class="login-hint" style="margin-top:0;padding-top:12px;border-top:none">
-        API PostgreSQL: <code>cd admin-panel/backend && npm run dev</code> — abrir o painel pela URL do servidor (ex. <code>http://localhost:3001/index.html</code>).
+      <p class="login-hint" style="margin-top:0">
+        API: <code>cd admin-panel/backend && npm run dev</code> — abrir o painel em <code>http://localhost:PORT/index.html</code> (mesma origem que a API evita CORS).
       </p>
     </div>
   </div>

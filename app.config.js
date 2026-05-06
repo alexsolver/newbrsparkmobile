@@ -34,7 +34,7 @@ const mapsKey =
   '';
 
 /** EAS: @alexsolver/AriaMobile — https://expo.dev/accounts/alexsolver/projects/AriaMobile */
-const EAS_PROJECT_ID_FALLBACK = '8afa6988-8e45-42e8-afd5-67728288f086';
+const EAS_PROJECT_ID_FALLBACK = 'b19dad43-e01d-418f-bd34-a8b1f11fd2c0';
 
 /** Obrigatório para EAS Build/Submit e getExpoPushTokenAsync. */
 const easProjectId =
@@ -56,6 +56,7 @@ for (const p of extraPlugins) {
 module.exports = {
   expo: {
     ...appJson.expo,
+    owner: 'alexsolver',
     /** Mesmo `expo.version` (app.json) em todas as plataformas — updates OTA só chegam a binários com esta runtime. */
     runtimeVersion: {
       policy: 'appVersion',

@@ -34,8 +34,6 @@ npx serve .          # ou Live Server no VS Code
 # Acesse http://localhost:5500
 ```
 
-**Login:** `admin@aria.com` / `admin123`
-
 ---
 
 ## Estrutura
