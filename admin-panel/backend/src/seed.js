@@ -502,7 +502,7 @@ async function main() {
 
   const demoUserHash = await bcrypt.hash('demo123', 10);
   const mariaDemo = await prisma.user.upsert({
-    where: { email_tenantId: { email: 'maria@brspark.com', tenantId: tenantDemo.id } },
+    where: { email: 'maria@brspark.com' },
     update: {},
     create: {
       tenantId: tenantDemo.id,
@@ -534,12 +534,7 @@ async function main() {
       },
     });
     await prisma.user.upsert({
-      where: {
-        email_tenantId: {
-          email: 'admin@brspark.com',
-          tenantId: brsparkTenant.id,
-        },
-      },
+      where: { email: 'admin@brspark.com' },
       update: {
         role: 'SAAS_ADMIN',
         isActive: true,
@@ -556,12 +551,7 @@ async function main() {
       },
     });
     await prisma.user.upsert({
-      where: {
-        email_tenantId: {
-          email: 'gestor@brspark.com',
-          tenantId: brsparkTenant.id,
-        },
-      },
+      where: { email: 'gestor@brspark.com' },
       update: { role: 'MANAGER', isActive: true, name: 'Gestor (demo)', password: saasHash },
       create: {
         tenantId: brsparkTenant.id,
@@ -574,12 +564,7 @@ async function main() {
     });
     // Prestador demo: despacho exige User ativo + TechnicianProfile.status ACTIVE (não basta isActive).
     const alexTech = await prisma.user.upsert({
-      where: {
-        email_tenantId: {
-          email: 'alex@brspark.com',
-          tenantId: brsparkTenant.id,
-        },
-      },
+      where: { email: 'alex@brspark.com' },
       update: {
         isActive: true,
         role: 'PROVIDER',
@@ -644,7 +629,7 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { email_tenantId: { email: 'alex@startup.io', tenantId: tenantTrial.id } },
+    where: { email: 'alex@startup.io' },
     update: {},
     create: {
       tenantId: tenantTrial.id,
