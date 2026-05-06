@@ -1204,13 +1204,13 @@ router.post('/:id/send-email-verification', express.json(), async (req, res) => 
     if (!saved) return res.status(500).json({ error: 'Não foi possível gerar o token de verificação.' });
 
     const link = buildPublicVerifyEmailLink(token);
-    const subject = 'Confirme o seu e-mail — BrSpark';
+    const subject = 'Confirme o seu e-mail — Aria';
     const text = link
       ? `Olá,\n\nClique no link abaixo para confirmar o seu e-mail. O link fica válido por 48 horas.\n\n${link}\n\nSe não foi você que pediu isso, ignore esta mensagem.\n`
-      : `Olá,\n\nNo painel BrSpark, use o fluxo de verificação com o token abaixo (válido por 48 horas).\n\n${token}\n\nSe não foi você que pediu isso, ignore esta mensagem.\n`;
+      : `Olá,\n\nNo painel Aria, use o fluxo de verificação com o token abaixo (válido por 48 horas).\n\n${token}\n\nSe não foi você que pediu isso, ignore esta mensagem.\n`;
     const html = link
       ? `<p>Olá,</p><p><strong>Confirme o seu e-mail</strong> clicando no link abaixo. O link fica válido por <strong>48 horas</strong>.</p><p><a href="${escapeHtmlEmail(link)}">Confirmar o e-mail</a></p><p>Se não foi você que pediu isso, ignore esta mensagem.</p>`
-      : `<p>Olá,</p><p>No painel BrSpark, <strong>confirme o seu e-mail</strong> com o token abaixo (válido por <strong>48 horas</strong>).</p><p style="font-family:monospace;word-break:break-all">${escapeHtmlEmail(token)}</p><p>Se não foi você que pediu isso, ignore esta mensagem.</p>`;
+      : `<p>Olá,</p><p>No painel Aria, <strong>confirme o seu e-mail</strong> com o token abaixo (válido por <strong>48 horas</strong>).</p><p style="font-family:monospace;word-break:break-all">${escapeHtmlEmail(token)}</p><p>Se não foi você que pediu isso, ignore esta mensagem.</p>`;
 
     const { send, provider } = await sendTransactionalEmailWithFallback({
       to: existing.email,

@@ -2,7 +2,7 @@
  * useConnectivity — estado "online" coerente para o app offline-first.
  *
  * 1) Sem transporte (Wi‑Fi/dados) → offline imediato.
- * 2) Caso contrário, ping leve em /api/config (servidor BrSpark acessível).
+ * 2) Caso contrário, ping leve em /api/config (servidor Aria acessível).
  *
  * Não usamos só `isInternetReachable`: no Android costuma atrasar ou dar falso negativo;
  * a fonte de verdade após haver interface é o fetch.

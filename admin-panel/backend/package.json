@@ -1,7 +1,7 @@
 {
-  "name": "brspark-admin-backend",
+  "name": "aria-admin-backend",
   "version": "1.0.0",
-  "description": "BrSpark Admin Panel — PostgreSQL Backend API",
+  "description": "Aria Admin Panel — PostgreSQL Backend API",
   "type": "commonjs",
   "main": "src/index.js",
   "scripts": {
@@ -14,6 +14,7 @@
     "db:migrate": "bash scripts/db-migrate.sh",
     "db:backup": "bash scripts/backup.sh manual",
     "db:seed": "node src/seed.js",
+    "db:create-saas-admin": "node scripts/create-saas-admin.js",
     "db:studio": "npx prisma studio",
     "backfill:os-numbers": "node scripts/backfillOsNumbers.js",
     "dropbox:check": "node scripts/check_dropbox.js",

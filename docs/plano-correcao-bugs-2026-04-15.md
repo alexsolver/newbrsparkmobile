@@ -56,7 +56,7 @@
 - Evidencia:
   - `GET /api/providers` retornando:
     - Status `200`
-    - Header `X-BrSpark-Directory-Source: laravel-error`
+    - Header `X-Aria-Directory-Source: laravel-error`
     - Body vazio (`data: []`) quando CMS falha (`fetch failed` em log).
 - Impacto:
   - Falhas de integracao parecem "sem dados" para o app.
@@ -76,7 +76,7 @@
 - Causa provavel:
   - Logica de fallback baseada apenas em excecao/`!res.ok`, sem considerar header de erro de origem.
 - Correcao proposta:
-  - Tratar `X-BrSpark-Directory-Source=laravel-error` como erro logico para disparar fallback local.
+  - Tratar `X-Aria-Directory-Source=laravel-error` como erro logico para disparar fallback local.
   - Opcional: fallback quando `data=[]` + `source=laravel-error` na primeira pagina.
 
 ## Plano de execucao da correcao (priorizado)
@@ -89,7 +89,7 @@
 
 ### Fase 1 - Robustez de diretorio (1-2 dias)
 1. Backend: alterar `/api/providers` para retornar erro HTTP apropriado quando CMS indisponivel e sem fallback PG.
-2. Mobile: interpretar `X-BrSpark-Directory-Source` e cair para cache local quando houver erro de origem.
+2. Mobile: interpretar `X-Aria-Directory-Source` e cair para cache local quando houver erro de origem.
 3. Adicionar logs estruturados para distinguir "sem dados reais" de "erro upstream".
 
 ### Fase 2 - Testes de regressao (1 dia)
@@ -107,6 +107,6 @@
 ## Checklist de validacao final
 - [x] `npx tsc --noEmit` sem erros (verificado 2026-04-28).
 - [x] `node --check admin-panel/js/checklists-builder.js` sem erros — duplicata `MAX_VISION_SIMNAO_QUESTIONS` corrigida no código actual.
-- [x] `/api/providers` não retorna **200** vazio quando CMS falha sem fallback — resposta **503** + `X-BrSpark-Directory-Source: laravel-error` + `error: CMS_DIRECTORY_UNAVAILABLE` (`admin-panel/backend/src/index.js`).
-- [x] App mobile: `ProviderService.search` usa cache local em `!res.ok` **e** se `res.ok` mas header `X-BrSpark-Directory-Source` ∈ `{ laravel-error, cms-not-configured }` (`src/services/api.ts`, 2026-04-28).
+- [x] `/api/providers` não retorna **200** vazio quando CMS falha sem fallback — resposta **503** + `X-Aria-Directory-Source: laravel-error` + `error: CMS_DIRECTORY_UNAVAILABLE` (`admin-panel/backend/src/index.js`).
+- [x] App mobile: `ProviderService.search` usa cache local em `!res.ok` **e** se `res.ok` mas header `X-Aria-Directory-Source` ∈ `{ laravel-error, cms-not-configured }` (`src/services/api.ts`, 2026-04-28).
 - [ ] Testes automatizados da Fase 2 do plano (cenários CMS ok / indisponível / fallback PG) — pendente.

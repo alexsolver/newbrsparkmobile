@@ -235,7 +235,7 @@ function buildPanelSessionBootstrap(admin) {
     } else {
       context = {
         scope: PLATFORM_SCOPE,
-        label: 'Plataforma BrSpark',
+        label: 'Plataforma Aria',
         tenantId: null,
         tenantName: null,
         tenantSlug: null,

@@ -5,8 +5,8 @@ const { sendExpoPushToMany } = require('../services/expoPush');
 const { extractClientEmailFromMetadata } = require('./technicianClientChatGate');
 const { resolveActiveUserIdsForDispatchOwnerEmail } = require('./userEmailUnique');
 
-const PUSH_CATEGORY_CLIENT = 'BRSPARK_CLIENT_TRACKING';
-const ANDROID_CLIENT_CHANNEL = 'brspark-cliente';
+const PUSH_CATEGORY_CLIENT = 'ARIA_CLIENT_TRACKING';
+const ANDROID_CLIENT_CHANNEL = 'aria-cliente';
 
 async function resolveUserIdsForClientPush(clientEmail, tenantId) {
   const raw = String(clientEmail || '').trim();

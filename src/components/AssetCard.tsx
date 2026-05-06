@@ -325,7 +325,7 @@ function createAssetCardStyles(C: ColorPalette) {
     paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6,
     backgroundColor: '#FFF7ED', borderWidth: 0.5, borderColor: '#FDBA74',
   },
-  linkPillOrangeActive: { backgroundColor: '#F97316', borderColor: '#F97316' },
+  linkPillOrangeActive: { backgroundColor: '#0d9488', borderColor: '#0d9488' },
   linkPillOrangeT: { fontSize: 8.5, fontWeight: '800', color: '#7C2D12' },
 
   // Keep old linkPill/linkPillActive/linkPillT for any other uses

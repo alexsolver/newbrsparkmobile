@@ -387,7 +387,7 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
       console.warn('[checklists/vision/analyze] URL da integração (inválida?):', visionIntegrationTarget);
     }
 
-    const boundary = '----BrSparkVision' + Date.now().toString(36);
+    const boundary = '----AriaVision' + Date.now().toString(36);
     const bodyBuf = buildMultipartBuffer(boundary, [
       {
         name: 'media',
@@ -459,7 +459,7 @@ router.post('/vision/analyze', authUser, upload.single('media'), async (req, res
     const outMsg = isTimeout
       ? 'Tempo esgotado ao contatar o serviço de visão (integração «Visão IA - YOLO»).'
       : isUpstreamNet
-        ? `O servidor BrSpark não conseguiu contatar o URL da integração de visão (YOLO). O pedido parte do computador onde roda o Node (backend, porta 3001), não do celular: esse PC precisa resolver o DNS e abrir TCP a esse host (mesma VPN que o serviço, firewall, http/https corretos). Confirme no painel a integração «Visão IA - YOLO». Detalhe: ${msg}`
+        ? `O servidor Aria não conseguiu contatar o URL da integração de visão (YOLO). O pedido parte do computador onde roda o Node (backend, porta 3001), não do celular: esse PC precisa resolver o DNS e abrir TCP a esse host (mesma VPN que o serviço, firewall, http/https corretos). Confirme no painel a integração «Visão IA - YOLO». Detalhe: ${msg}`
         : msg;
     const status = isTimeout || isUpstreamNet ? 502 : 500;
     console.error('[checklists/vision/analyze]', {

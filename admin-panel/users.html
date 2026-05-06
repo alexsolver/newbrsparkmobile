@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Usuários</title>
+  <title>Aria Admin — Usuários</title>
   <link rel="stylesheet" href="css/main.css" />
 </head>
 <body>
@@ -369,7 +369,7 @@
     panelCaps.has('tenant.users.write.self') ||
     panelCaps.has('tenant.users.write.limited') ||
     panelCaps.has('tenant.users.write.any');
-  const USER_FILTERS_EXPANDED_LS = 'brspark_users_filters_expanded';
+  const USER_FILTERS_EXPANDED_LS = 'aria_users_filters_expanded';
   try {
     const ufPanel0 = document.getElementById('users-filters-panel');
     if (ufPanel0 && localStorage.getItem(USER_FILTERS_EXPANDED_LS) === '0') ufPanel0.classList.add('is-collapsed');
@@ -377,7 +377,7 @@
     /* ignore */
   }
   applyUsersListPageI18n();
-  /** Conta de login humana (`AppAccount.emailNorm`), não `User.email` sintético (+brspark.ws…). */
+  /** Conta de login humana (`AppAccount.emailNorm`), não `User.email` sintético (+aria.ws…). */
   function ulHumanLoginEmail(u) {
     const ln = u?.loginEmailNorm;
     if (ln && String(ln).trim()) return String(ln).trim();
@@ -445,8 +445,8 @@
   loadColPrefs();
   refreshTableColClasses();
 
-  const NAV_CTX_KEY = 'brspark_user_edit_nav';
-  const DUP_DRAFT_KEY = 'brspark_user_duplicate_draft';
+  const NAV_CTX_KEY = 'aria_user_edit_nav';
+  const DUP_DRAFT_KEY = 'aria_user_duplicate_draft';
   /** Quando o rascunho «duplicar» abre antes de `/tenants` popular os checkboxes (admin plataforma). */
   let pendingDupTenantForCb = null;
 
@@ -523,7 +523,7 @@
     if (canImpersonateAny) return true;
     if (canImpersonateOwnTenant) {
       try {
-        const t = JSON.parse(sessionStorage.getItem('brspark_panel_tenant') || 'null');
+        const t = JSON.parse(sessionStorage.getItem('aria_panel_tenant') || 'null');
         return t && t.id === u.tenantId;
       } catch {
         return false;
@@ -565,26 +565,26 @@
       return;
     }
     const backup = {
-      token: sessionStorage.getItem('brspark_admin_token'),
-      email: sessionStorage.getItem('brspark_admin_email'),
-      name: sessionStorage.getItem('brspark_admin_name'),
-      role: sessionStorage.getItem('brspark_admin_role'),
-      panelMode: sessionStorage.getItem('brspark_panel_mode'),
-      panelTenant: sessionStorage.getItem('brspark_panel_tenant'),
+      token: sessionStorage.getItem('aria_admin_token'),
+      email: sessionStorage.getItem('aria_admin_email'),
+      name: sessionStorage.getItem('aria_admin_name'),
+      role: sessionStorage.getItem('aria_admin_role'),
+      panelMode: sessionStorage.getItem('aria_panel_mode'),
+      panelTenant: sessionStorage.getItem('aria_panel_tenant'),
       targetLabel: u.name || ulHumanLoginEmail(u) || id,
     };
     try {
-      sessionStorage.setItem('brspark_impersonation_backup', JSON.stringify(backup));
+      sessionStorage.setItem('aria_impersonation_backup', JSON.stringify(backup));
     } catch {
       alert(t('ul_impersonateStorageErr'));
       return;
     }
-    sessionStorage.setItem('brspark_admin_token', res.token);
-    sessionStorage.setItem('brspark_admin_email', res.user.email || '');
-    sessionStorage.setItem('brspark_admin_name', res.user.name || '');
-    sessionStorage.setItem('brspark_admin_role', res.user.role || '');
-    sessionStorage.setItem('brspark_panel_mode', 'tenant');
-    sessionStorage.setItem('brspark_panel_tenant', JSON.stringify(res.tenant));
+    sessionStorage.setItem('aria_admin_token', res.token);
+    sessionStorage.setItem('aria_admin_email', res.user.email || '');
+    sessionStorage.setItem('aria_admin_name', res.user.name || '');
+    sessionStorage.setItem('aria_admin_role', res.user.role || '');
+    sessionStorage.setItem('aria_panel_mode', 'tenant');
+    sessionStorage.setItem('aria_panel_tenant', JSON.stringify(res.tenant));
     applyPanelSessionBootstrap(res);
     persistAdminSessionBundleFromSessionStorage();
     window.location.href = 'dashboard.html';
@@ -598,7 +598,7 @@
     openModal('reset-email-modal');
   }
 
-  const LS_COLS_KEY = 'brspark_users_list_cols';
+  const LS_COLS_KEY = 'aria_users_list_cols';
   function loadColPrefs() {
     try {
       const r = JSON.parse(localStorage.getItem(LS_COLS_KEY) || '{}');

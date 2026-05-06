@@ -122,7 +122,7 @@ def main() -> int:
     # Live Activity: mesma marca, fundo transparente, 360 px (nítido em @2x/@3x)
     badge = white_to_transparent_rgb(master, thr=248)
     badge = badge.resize((360, 360), Image.Resampling.LANCZOS)
-    badge.save(LIVE / "brspark-badge.png", "PNG", optimize=True)
+    badge.save(LIVE / "aria-badge.png", "PNG", optimize=True)
 
     # Favicon web
     fav = master.resize((48, 48), Image.Resampling.LANCZOS)
@@ -135,7 +135,7 @@ def main() -> int:
         "assets/android-icon-foreground.png",
         "assets/android-icon-background.png",
         "assets/android-icon-monochrome.png",
-        "assets/liveActivity/brspark-badge.png",
+        "assets/liveActivity/aria-badge.png",
         "assets/favicon.png",
     ):
         print(f"  {ROOT / rel}")

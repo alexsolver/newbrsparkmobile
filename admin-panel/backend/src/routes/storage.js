@@ -358,7 +358,7 @@ router.post('/upload', async (req, res) => {
 
       console.log('[STORAGE] Renovando token do Dropbox...');
       const token = await getDropboxAccessToken(appKey.trim(), appSecret.trim(), refreshToken.trim());
-      const rootFolder  = integration.baseUrl || '/BrSpark';
+      const rootFolder  = integration.baseUrl || '/Aria';
       const dropboxPath = `${rootFolder}/${remotePath}`.replace(/\/\//g, '/');
       console.log(`[STORAGE] Dropbox upload: ${dropboxPath} (${buffer.length} bytes)`);
       await uploadToDropbox(buffer, token, dropboxPath);
@@ -462,7 +462,7 @@ async function syncStrandedFiles() {
           const res = await uploadToS3(buffer, integration, remotePath, 'application/octet-stream');
           newUrl = res.url;
         } else if (integration.provider === 'dropbox') {
-          const rootFolder = integration.baseUrl || '/BrSpark';
+          const rootFolder = integration.baseUrl || '/Aria';
           const dropboxPath = `${rootFolder}/${remotePath}`.replace(/\\/g, '/').replace(/\/\//g, '/');
           await uploadToDropbox(buffer, dbxToken, dropboxPath);
           newUrl = await getDropboxDirectLink(dbxToken, dropboxPath);

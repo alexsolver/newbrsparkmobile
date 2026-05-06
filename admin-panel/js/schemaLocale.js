@@ -1,6 +1,6 @@
 /**
  * Paridade com `src/checklist/schemaLocale.ts` — rótulos por locale no schema (Forms Builder).
- * Expõe `window.BrSparkSchemaLocale` para checklists-builder.js (script clássico).
+ * Expõe `window.AriaSchemaLocale` para checklists-builder.js (script clássico).
  */
 (function (global) {
   var PRIMARY = 'pt-BR';
@@ -62,7 +62,7 @@
     }
   }
 
-  global.BrSparkSchemaLocale = {
+  global.AriaSchemaLocale = {
     PRIMARY: PRIMARY,
     SUPPORTED: SUPPORTED,
     normalizeSchemaLocaleTag: normalizeSchemaLocaleTag,

@@ -20,11 +20,11 @@ function databaseUrlWithPoolFloor(raw) {
   }
   const minLimit = Math.max(
     5,
-    Math.min(100, Number(process.env.BRSPARK_PRISMA_CONNECTION_LIMIT_MIN) || 25),
+    Math.min(100, Number(process.env.ARIA_PRISMA_CONNECTION_LIMIT_MIN) || 25),
   );
   const minTimeoutSec = Math.max(
     15,
-    Math.min(300, Number(process.env.BRSPARK_PRISMA_POOL_TIMEOUT_SEC) || 60),
+    Math.min(300, Number(process.env.ARIA_PRISMA_POOL_TIMEOUT_SEC) || 60),
   );
   const curLimit = Number(u.searchParams.get('connection_limit'));
   const curTimeout = Number(u.searchParams.get('pool_timeout'));

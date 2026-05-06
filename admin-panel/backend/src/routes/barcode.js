@@ -33,7 +33,7 @@ async function queryCosmos(gtin) {
 
   const r = await httpsGet(hostname, path, {
     'X-Cosmos-Token': integration.apiKey,
-    'User-Agent': 'BrSpark'
+    'User-Agent': 'Aria'
   });
 
   if (r.status === 200) {
@@ -66,7 +66,7 @@ async function queryUpcItemDb(gtin) {
   const basePath = '/' + hostPath.split('/').slice(1).join('/');
   const reqPath = `${basePath.endsWith('/') ? basePath.slice(0, -1) : basePath}/lookup?upc=${gtin}`;
 
-  const headers = { 'User-Agent': 'BrSpark' };
+  const headers = { 'User-Agent': 'Aria' };
   if (apiKey) headers['user_key'] = apiKey;
 
   const r = await httpsGet(hostname, reqPath, headers);

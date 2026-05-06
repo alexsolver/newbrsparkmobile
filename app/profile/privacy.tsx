@@ -1,5 +1,5 @@
 /**
- * PrivacySettings — BrSpark Field Service
+ * PrivacySettings — Aria Field Service
  *
  * Tela "Minha Privacidade" acessível pelo perfil do técnico.
  * Permite visualizar e revogar consentimentos aceitos a qualquer momento.
@@ -88,10 +88,10 @@ export default function PrivacySettings() {
   const loadConsents = useCallback(async () => {
     setLoading(true);
     try {
-      const email = await AsyncStorage.getItem('@brspark_email') || '';
+      const email = await AsyncStorage.getItem('@aria_email') || '';
       setOwnerEmail(email);
 
-      const raw = await AsyncStorage.getItem('@brspark_collection_policy');
+      const raw = await AsyncStorage.getItem('@aria_collection_policy');
       if (raw) setPolicy(JSON.parse(raw));
 
       const res = await apiFetch(`/api/compliance/consents?ownerEmail=${encodeURIComponent(email)}`);

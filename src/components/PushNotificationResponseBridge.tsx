@@ -18,7 +18,7 @@ import { setPendingOpenExecutionFromPush } from '../lib/pushExecutionOpenIntent'
 import { apiFetch } from '../services/auth';
 import i18n from '../i18n';
 import { enqueueExecutionStatusPatch, pullTasks } from '../services/syncService';
-import { BRSPARK_PERSONA_STORAGE_KEY } from '../context/PersonaContext';
+import { ARIA_PERSONA_STORAGE_KEY } from '../context/PersonaContext';
 import { getPersonaHomeHref } from '../navigation/personaRouting';
 import {
   startTechTaskLiveActivity,
@@ -74,7 +74,7 @@ async function handleNotificationResponse(
     if (!taskId) return;
     setPendingOpenExecutionFromPush(taskId);
     try {
-      const raw = await AsyncStorage.getItem(BRSPARK_PERSONA_STORAGE_KEY);
+      const raw = await AsyncStorage.getItem(ARIA_PERSONA_STORAGE_KEY);
       const p = raw === 'provider' ? 'provider' : 'client';
       router.replace(getPersonaHomeHref(p) as never);
     } catch {
@@ -203,7 +203,7 @@ async function handleNotificationResponse(
   if (!taskId) return;
 
   const content = response.notification.request.content;
-  const liveTitle = String(content.title || 'BrSpark').slice(0, 56);
+  const liveTitle = String(content.title || 'Aria').slice(0, 56);
   const liveSub = [content.subtitle, content.body]
     .filter((x) => typeof x === 'string' && String(x).trim())
     .map((x) => String(x).trim())
@@ -279,7 +279,7 @@ async function handleNotificationResponse(
         );
         return;
       }
-      const rStr = await AsyncStorage.getItem('@brspark_rejected_tasks');
+      const rStr = await AsyncStorage.getItem('@aria_rejected_tasks');
       let rejArr: string[] = [];
       try {
         rejArr = rStr ? JSON.parse(rStr) : [];
@@ -289,7 +289,7 @@ async function handleNotificationResponse(
       if (!Array.isArray(rejArr)) rejArr = [];
       if (!rejArr.includes(taskId)) {
         rejArr.push(taskId);
-        await AsyncStorage.setItem('@brspark_rejected_tasks', JSON.stringify(rejArr));
+        await AsyncStorage.setItem('@aria_rejected_tasks', JSON.stringify(rejArr));
       }
     } catch {
       Alert.alert(i18n.t('common.error'), i18n.t('appAlerts.push.declineActivityError'));
@@ -307,7 +307,7 @@ async function handleNotificationResponse(
     /** Sem isto o painel ficava em «Aguardando Envio»: RECEIVED só após GET /api/sync/tasks. */
     await pullTasks().catch(() => {});
     try {
-      const raw = await AsyncStorage.getItem(BRSPARK_PERSONA_STORAGE_KEY);
+      const raw = await AsyncStorage.getItem(ARIA_PERSONA_STORAGE_KEY);
       const p = raw === 'provider' ? 'provider' : 'client';
       router.replace(getPersonaHomeHref(p) as never);
     } catch {
@@ -352,7 +352,7 @@ export function PushNotificationResponseBridge() {
       const c = notification.request.content;
       void startTechTaskLiveActivity({
         taskId,
-        title: String(c.title || 'BrSpark').slice(0, 56),
+        title: String(c.title || 'Aria').slice(0, 56),
         subtitle: [c.subtitle, c.body]
           .filter((x) => typeof x === 'string' && String(x).trim())
           .map((x) => String(x).trim())

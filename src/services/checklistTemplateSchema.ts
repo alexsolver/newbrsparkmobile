@@ -4,7 +4,7 @@ import { apiFetch } from './auth';
 const cache = new Map<string, { schema: any[]; ts: number }>();
 const TTL_MS = 5 * 60 * 1000;
 
-const TEMPLATES_STORAGE_KEY = '@brspark_templates';
+const TEMPLATES_STORAGE_KEY = '@aria_templates';
 
 /**
  * Tipo canónico do campo (alinha ao motor do checklist): `type` + `fieldType` / `kind` legados.

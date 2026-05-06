@@ -39,7 +39,7 @@ function configFromIntegrationRow(row) {
   const clientSecret = String(row.apiKey || '').trim();
   const sendAsUser = String(meta.microsoftSendAsUser || '').trim();
   const fromName =
-    String(meta.microsoftFromName != null ? meta.microsoftFromName : 'BrSpark').trim() || 'BrSpark';
+    String(meta.microsoftFromName != null ? meta.microsoftFromName : 'Aria').trim() || 'Aria';
   const graphBase = normalizeMicrosoftGraphApiBaseUrl(row.baseUrl);
   if (!tenantId || !clientId || !clientSecret || !sendAsUser) {
     return {
@@ -90,7 +90,7 @@ async function resolveMicrosoftGraphConfig() {
   const clientSecret = String(process.env.MICROSOFT_GRAPH_CLIENT_SECRET || '').trim();
   const sendAsUser = String(process.env.MICROSOFT_GRAPH_SEND_AS_USER || '').trim();
   const fromName =
-    String(process.env.MICROSOFT_GRAPH_FROM_NAME || 'BrSpark').trim() || 'BrSpark';
+    String(process.env.MICROSOFT_GRAPH_FROM_NAME || 'Aria').trim() || 'Aria';
   const graphBase = normalizeMicrosoftGraphApiBaseUrl(process.env.MICROSOFT_GRAPH_API_BASE);
   if (tenantId && clientId && clientSecret && sendAsUser) {
     return {

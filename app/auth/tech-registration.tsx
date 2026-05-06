@@ -1748,7 +1748,7 @@ export default function TechRegistrationScreen() {
                 : 'Faça login no app com o e-mail do convite.'
               : tenantName
                 ? `Organização da sua conta: ${tenantName}`
-                : 'Faça login com a mesma conta BrSpark em que pediu para ser prestador.'}
+                : 'Faça login com a mesma conta Aria em que pediu para ser prestador.'}
           </Text>
           <View style={styles.warn}>
             <Text style={styles.warnText}>
@@ -1757,7 +1757,7 @@ export default function TechRegistrationScreen() {
                   O convite foi enviado para{' '}
                   <Text style={{ fontWeight: '800' }}>{invitedEmailHint || 'o e-mail indicado pelo gestor'}</Text>.
                   {'\n\n'}
-                  A conta BrSpark com esse e-mail precisa existir antes de aceitar o convite (use "Criar conta" na tela de
+                  A conta Aria com esse e-mail precisa existir antes de aceitar o convite (use "Criar conta" na tela de
                   login, se ainda não tiver).
                 </>
               ) : (
@@ -1802,7 +1802,7 @@ export default function TechRegistrationScreen() {
                 router.push({ pathname: '/auth/login', params: { techRegToken: token } } as any);
               }}
             >
-              <Text style={styles.btnText}>Entrar no BrSpark</Text>
+              <Text style={styles.btnText}>Entrar no Aria</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -2061,14 +2061,14 @@ export default function TechRegistrationScreen() {
         {isCompanyInvite ? (
           <>
             <Text style={styles.sub}>
-              {tenantName ? `Convidado pela organização: ${tenantName}` : 'Cadastro ligado a uma organização na BrSpark'}
+              {tenantName ? `Convidado pela organização: ${tenantName}` : 'Cadastro ligado a uma organização na Aria'}
             </Text>
             <View style={styles.infoCallout}>
               <Text style={styles.infoCalloutText}>
                 <Text style={{ fontWeight: '800', color: C.slate }}>Com convite: </Text>
                 O nome acima é a <Text style={{ fontWeight: '700' }}>empresa ou conta organizadora</Text> que criou o
                 convite no painel. O e-mail fixo abaixo é o que o gestor associou ao convite; precisa ser o mesmo da
-                sua conta BrSpark.
+                sua conta Aria.
               </Text>
             </View>
           </>
@@ -2149,7 +2149,7 @@ export default function TechRegistrationScreen() {
         <TextInput style={[styles.input, { opacity: 0.85 }]} value={email} editable={false} />
         <Text style={styles.fieldHint}>
           {isCompanyInvite
-            ? 'Fixo: deve coincidir com o e-mail indicado pela empresa e com o login BrSpark.'
+            ? 'Fixo: deve coincidir com o e-mail indicado pela empresa e com o login Aria.'
             : 'Fixo: é o e-mail com que você entrou no app; usamos para validar a candidatura.'}
         </Text>
         <Text style={styles.label}>Telefone ou WhatsApp</Text>
@@ -2480,11 +2480,11 @@ export default function TechRegistrationScreen() {
           {isCompanyInvite ? (
             <>
               Após aprovação do gestor da empresa, a sua conta passa a atuar como{' '}
-              <Text style={{ fontWeight: '800' }}>Prestador</Text> nessa organização, com sessão no app BrSpark.
+              <Text style={{ fontWeight: '800' }}>Prestador</Text> nessa organização, com sessão no app Aria.
             </>
           ) : (
             <>
-              Após a análise e aprovação da equipe BrSpark, o modo{' '}
+              Após a análise e aprovação da equipe Aria, o modo{' '}
               <Text style={{ fontWeight: '800' }}>Prestador</Text> será habilitado na organização da sua conta, para
               receber ordens de serviço conforme as regras da plataforma.
             </>

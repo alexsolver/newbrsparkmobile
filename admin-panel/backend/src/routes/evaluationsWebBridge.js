@@ -26,7 +26,7 @@ function timingSafeEqual(a, b) {
  */
 router.post('/laravel-evaluations-bridge', express.json(), async (req, res) => {
   try {
-    const expected = process.env.BRSPARK_WEB_BRIDGE_SECRET;
+    const expected = process.env.ARIA_WEB_BRIDGE_SECRET;
     if (!expected || !timingSafeEqual(req.headers['x-bridge-secret'], expected)) {
       return res.status(401).json({ error: 'Não autorizado.' });
     }
@@ -47,7 +47,7 @@ router.post('/laravel-evaluations-bridge', express.json(), async (req, res) => {
     if (!tenant) {
       return res.status(404).json({
         error:
-          'Tenant não encontrado na base BrSpark (PostgreSQL). Confirme se o tenant do Laravel foi provisionado e está ligado ao tenant do Node.',
+          'Tenant não encontrado na base Aria (PostgreSQL). Confirme se o tenant do Laravel foi provisionado e está ligado ao tenant do Node.',
       });
     }
 
@@ -58,7 +58,7 @@ router.post('/laravel-evaluations-bridge', express.json(), async (req, res) => {
     if (!user) {
       return res.status(404).json({
         error:
-          'Utilizador não encontrado na base BrSpark (PostgreSQL). O e-mail e tenant devem coincidir com uma conta de app/painel Node.',
+          'Utilizador não encontrado na base Aria (PostgreSQL). O e-mail e tenant devem coincidir com uma conta de app/painel Node.',
       });
     }
     if (user.tenant?.status === 'SUSPENDED' || user.tenant?.status === 'CANCELLED') {

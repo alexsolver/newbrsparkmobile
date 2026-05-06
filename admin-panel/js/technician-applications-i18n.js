@@ -6,7 +6,7 @@ import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-r
 
 const M = {
   'pt-BR': {
-    tp_pageTitle: 'BrSpark Admin — Prestadores · Candidaturas',
+    tp_pageTitle: 'Aria Admin — Prestadores · Candidaturas',
     tp_bc_panel: 'Painel',
     tp_bc_prestadores: 'Prestadores',
     tp_bc_here: 'Candidaturas',
@@ -62,7 +62,7 @@ const M = {
     tp_act_reject: 'Recusar',
     tp_modal_invite_title: 'Convidar prestador',
     tp_modal_invite_note_html:
-      '<strong>Requisito:</strong> o prestador já deve ter <strong>conta no app BrSpark</strong> com o <strong>mesmo e-mail</strong> que você vai convidar (cadastro na aba «Criar conta» na tela de login do app). Se ainda não existir usuário com esse e-mail, o convite não será criado.',
+      '<strong>Requisito:</strong> o prestador já deve ter <strong>conta no app Aria</strong> com o <strong>mesmo e-mail</strong> que você vai convidar (cadastro na aba «Criar conta» na tela de login do app). Se ainda não existir usuário com esse e-mail, o convite não será criado.',
     tp_lbl_invite_email: 'E-mail do candidato *',
     tp_ph_invite_email: 'tecnico@exemplo.com',
     tp_lbl_invite_tenant: 'Tenant (conta) *',
@@ -96,7 +96,7 @@ const M = {
     tp_invite_email_fail: 'Aviso: o convite foi criado, mas o envio por e-mail falhou: {detail}',
     tp_invite_email_fail_unknown: 'erro desconhecido',
     tp_invite_ok_intro:
-      'Convite criado.\n\nO prestador já deve ter conta no BrSpark com este e-mail (cadastro no app) antes de abrir o link.',
+      'Convite criado.\n\nO prestador já deve ter conta no Aria com este e-mail (cadastro no app) antes de abrir o link.',
     tp_invite_ok_token: 'Token (guarde para o candidato):',
     tp_invite_ok_link: 'Sugestão de link no app:',
     tp_st_invited: 'Convidado',
@@ -107,7 +107,7 @@ const M = {
     tp_st_rejected: 'Recusado',
   },
   'en-US': {
-    tp_pageTitle: 'BrSpark Admin — Providers · Applications',
+    tp_pageTitle: 'Aria Admin — Providers · Applications',
     tp_bc_panel: 'Home',
     tp_bc_prestadores: 'Providers',
     tp_bc_here: 'Applications',
@@ -162,7 +162,7 @@ const M = {
     tp_act_reject: 'Reject',
     tp_modal_invite_title: 'Invite technician',
     tp_modal_invite_note_html:
-      '<strong>Requirement:</strong> the technician must already have a <strong>BrSpark app account</strong> with the <strong>same email</strong> you are inviting (sign up from “Create account” on the app login). If no user exists with that email, the invite will not be created.',
+      '<strong>Requirement:</strong> the technician must already have a <strong>Aria app account</strong> with the <strong>same email</strong> you are inviting (sign up from “Create account” on the app login). If no user exists with that email, the invite will not be created.',
     tp_lbl_invite_email: 'Applicant email *',
     tp_ph_invite_email: 'tech@example.com',
     tp_lbl_invite_tenant: 'Tenant (account) *',
@@ -196,7 +196,7 @@ const M = {
     tp_invite_email_fail: 'Note: the invite was created but email delivery failed: {detail}',
     tp_invite_email_fail_unknown: 'unknown error',
     tp_invite_ok_intro:
-      'Invite created.\n\nThe technician must already have a BrSpark account with this email (app sign-up) before opening the link.',
+      'Invite created.\n\nThe technician must already have a Aria account with this email (app sign-up) before opening the link.',
     tp_invite_ok_token: 'Token (keep for the applicant):',
     tp_invite_ok_link: 'Suggested in-app link:',
     tp_st_invited: 'Invited',

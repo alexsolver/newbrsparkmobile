@@ -1,10 +1,10 @@
 /** Emitido após `pullTasks` gravar o cache FT/RT (ofertas broadcast podem atualizar fora do dashboard). */
-export const BRSPARK_CLOUD_TASKS_UPDATED = 'BRSPARK_CLOUD_TASKS_UPDATED';
+export const ARIA_CLOUD_TASKS_UPDATED = 'ARIA_CLOUD_TASKS_UPDATED';
 
 /** Conclusão de checklist gravada localmente — o dashboard actualiza abas antes do próximo `loadData`. */
-export const BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY = 'BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY';
+export const ARIA_PROVIDER_TASK_COMPLETED_LOCALLY = 'ARIA_PROVIDER_TASK_COMPLETED_LOCALLY';
 
-export type BrsparkProviderTaskCompletedPayload = {
+export type AriaProviderTaskCompletedPayload = {
   taskId: string;
   completedAt: string;
   refId?: string;
@@ -12,8 +12,8 @@ export type BrsparkProviderTaskCompletedPayload = {
 };
 
 /** Lock global de deslocamento em aberto — `taskId` null quando não há trecho aberto. */
-export const BRSPARK_OPEN_TRANSIT_CHANGED = 'BRSPARK_OPEN_TRANSIT_CHANGED';
+export const ARIA_OPEN_TRANSIT_CHANGED = 'ARIA_OPEN_TRANSIT_CHANGED';
 
-export type BrsparkOpenTransitPayload = {
+export type AriaOpenTransitPayload = {
   taskId: string | null;
 };

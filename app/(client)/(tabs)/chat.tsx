@@ -27,7 +27,7 @@ import { warnDev } from '../../../src/utils/devLog';
 import { DeviceEventEmitter } from 'react-native';
 import { relTimeShort } from '../../../src/i18n/relativeTime';
 
-const ARCHIVED_KEY = '@brspark_archived_rooms';
+const ARCHIVED_KEY = '@aria_archived_rooms';
 const ROOM_ARCHIVE_PREFIX = 'room:';
 const OPS_ARCHIVE_PREFIX = 'ops:';
 const AUTO_ARCHIVE_GENERAL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -82,7 +82,7 @@ export default function ChatScreen() {
   const { user } = useAuth();
   const roleUpper = String(user?.role || '').toUpperCase();
   const canCreateChatGroup = ['MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN'].includes(roleUpper);
-  const isBrSparkSaasUser = roleUpper === 'SAAS_ADMIN';
+  const isAriaSaasUser = roleUpper === 'SAAS_ADMIN';
   const { isOnline } = useConnectivity(8000);
   const { colors: C } = useTheme();
   const { activePersona } = usePersona();
@@ -871,7 +871,7 @@ export default function ChatScreen() {
                     onChangeText={setNewEmail}
                     returnKeyType="done" />
                   <Text style={styles.helperText}>
-                    {isBrSparkSaasUser ? t('chat.inviteHelperSaas') : t('chat.inviteHelperTenant')}
+                    {isAriaSaasUser ? t('chat.inviteHelperSaas') : t('chat.inviteHelperTenant')}
                   </Text>
                   
                   <TouchableOpacity style={[styles.primaryBtn, sendingRequest && { opacity: 0.5 }]} disabled={sendingRequest} onPress={handleSendRequest}>

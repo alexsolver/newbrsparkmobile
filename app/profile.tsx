@@ -58,8 +58,8 @@ import {
 import { usePersona } from '../src/context/PersonaContext';
 import { ProviderAffiliationsApi } from '../src/services/providerAffiliations';
 
-const REGION_KEY   = '@brspark_region';
-const LANGUAGE_KEY = '@brspark_language';
+const REGION_KEY   = '@aria_region';
+const LANGUAGE_KEY = '@aria_language';
 const PREF_PUSH_ENABLED_KEY = '@pref_push_enabled';
 
 async function readPushEnabledPreference(): Promise<boolean> {
@@ -100,9 +100,9 @@ function countBiometricFaceEnrollmentPhotos(photos: { id?: string }[] | undefine
   return photos.filter((p) => p && p.id && p.id !== REGISTRATION_PRIMARY_FACE_ID).length;
 }
 
-const BRSPARK_COMPANY_SIGNUP_URL =
-  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BRSPARK_COMPANY_SIGNUP_URL) ||
-  'https://www.brspark.com/empresa';
+const ARIA_COMPANY_SIGNUP_URL =
+  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_ARIA_COMPANY_SIGNUP_URL) ||
+  'https://www.aria.com/empresa';
 
 type ProfileTab = 'conta' | 'trabalho' | 'config' | 'sync';
 
@@ -1718,8 +1718,8 @@ export default function ProfileScreen() {
               style={{ backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 12, alignItems: 'center' }}
               onPress={async () => {
                 try {
-                  const can = await Linking.canOpenURL(BRSPARK_COMPANY_SIGNUP_URL);
-                  if (can) await Linking.openURL(BRSPARK_COMPANY_SIGNUP_URL);
+                  const can = await Linking.canOpenURL(ARIA_COMPANY_SIGNUP_URL);
+                  if (can) await Linking.openURL(ARIA_COMPANY_SIGNUP_URL);
                   else Alert.alert('', t('profile.companySignupOpenError'));
                 } catch {
                   Alert.alert('', t('profile.companySignupOpenError'));

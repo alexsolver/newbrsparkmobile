@@ -20,6 +20,12 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+    if (!process.env.JWT_SECRET) {
+      console.error('[auth/login] JWT_SECRET ausente');
+      return res.status(500).json({
+        error: 'Servidor sem JWT_SECRET. Defina no .env do backend e reinicie.',
+      });
+    }
 
     const admin = await prisma.admin.findUnique({ where: { email: email.toLowerCase().trim() } });
     if (!admin) return res.status(401).json({ error: 'Credenciais inválidas.' });
@@ -83,6 +89,12 @@ async function postTenantLogin(req, res) {
     const { tenantSlug, email, password } = req.body;
     if (!tenantSlug || !email || !password) {
       return res.status(400).json({ error: 'Organização, e-mail e senha são obrigatórios.' });
+    }
+    if (!process.env.JWT_SECRET) {
+      console.error('[auth/tenant-login] JWT_SECRET ausente');
+      return res.status(500).json({
+        error: 'Servidor sem JWT_SECRET. Defina no .env do backend e reinicie.',
+      });
     }
 
     const slugNorm = String(tenantSlug).trim().toLowerCase();

@@ -20,21 +20,21 @@
 #             no separador Postgres — só 127.0.0.1 com o túnel aberto.
 #
 # Chave SSH: esta conta usa a tua chave pública (não a .pem do deploy). Por omissão
-#   ~/.ssh/id_ed25519 — ajusta com BRSPARK_DB_TUNNEL_KEY se necessário.
+#   ~/.ssh/id_ed25519 — ajusta com ARIA_DB_TUNNEL_KEY se necessário.
 #
 set -euo pipefail
 
-SSH_HOST="${BRSPARK_SSH_HOST:-3.149.14.138}"
-SSH_USER="${BRSPARK_DB_TUNNEL_USER:-dbtunnel}"
-SSH_KEY="${BRSPARK_DB_TUNNEL_KEY:-$HOME/.ssh/id_ed25519}"
+SSH_HOST="${ARIA_SSH_HOST:-3.149.14.138}"
+SSH_USER="${ARIA_DB_TUNNEL_USER:-dbtunnel}"
+SSH_KEY="${ARIA_DB_TUNNEL_KEY:-$HOME/.ssh/id_ed25519}"
 LOCAL_PORT="${LOCAL_PG_PORT:-15432}"
-REMOTE_PG="${BRSPARK_REMOTE_PG_HOST:-127.0.0.1}"
-REMOTE_PORT="${BRSPARK_REMOTE_PG_PORT:-5432}"
+REMOTE_PG="${ARIA_REMOTE_PG_HOST:-127.0.0.1}"
+REMOTE_PORT="${ARIA_REMOTE_PG_PORT:-5432}"
 
 if [[ ! -f "$SSH_KEY" ]]; then
   echo "[db-tunnel] Chave não encontrada: $SSH_KEY" >&2
   echo "         Coloque a chave privada correspondente à pública em authorized_keys do ${SSH_USER} no servidor," >&2
-  echo "         ou defina BRSPARK_DB_TUNNEL_KEY=/caminho/para/id_ed25519" >&2
+  echo "         ou defina ARIA_DB_TUNNEL_KEY=/caminho/para/id_ed25519" >&2
   exit 1
 fi
 

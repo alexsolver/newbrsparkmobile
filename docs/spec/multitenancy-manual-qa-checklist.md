@@ -7,7 +7,7 @@ Documento complementar para condução executiva do rollout:
 
 ## Perfis mínimos de teste
 
-- `SAAS_ADMIN` da BrSpark com acesso global.
+- `SAAS_ADMIN` da Aria com acesso global.
 - `TENANT_ADMIN` de um tenant parceiro A.
 - `MANAGER` de um tenant parceiro A.
 - `TENANT_ADMIN` de um tenant parceiro B.
@@ -28,7 +28,7 @@ Documento complementar para condução executiva do rollout:
 5. Rodar antes do QA manual:
    - `npm run test:multitenancy-regression-suite`
 
-## Bloco 1: Plataforma BrSpark
+## Bloco 1: Plataforma Aria
 
 ### 1.1 Login global no painel
 
@@ -38,7 +38,7 @@ Documento complementar para condução executiva do rollout:
 4. Confirmar que é possível abrir detalhes de ambos os tenants.
 
 Resultado esperado:
-- O contexto visual e a sessão indicam plataforma BrSpark.
+- O contexto visual e a sessão indicam plataforma Aria.
 - O usuário enxerga múltiplos tenants sem depender de branding, slug especial ou fallback legado.
 
 ### 1.2 Gestão global de tenants

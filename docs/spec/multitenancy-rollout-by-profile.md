@@ -1,6 +1,6 @@
 # Rollout Multitenancy Por Perfil
 
-Objetivo: executar a homologação final e o rollout operacional do modelo multitenant da BrSpark com uma sequência clara por perfil, superfície e risco.
+Objetivo: executar a homologação final e o rollout operacional do modelo multitenant da Aria com uma sequência clara por perfil, superfície e risco.
 
 ## Resultado Esperado
 
@@ -12,7 +12,7 @@ Objetivo: executar a homologação final e o rollout operacional do modelo multi
 
 ## Perfis Obrigatórios
 
-- `SAAS_ADMIN` da BrSpark
+- `SAAS_ADMIN` da Aria
 - `TENANT_ADMIN` do tenant A
 - `MANAGER` do tenant A
 - `TENANT_ADMIN` do tenant B
@@ -34,7 +34,7 @@ Critério de saída:
 - contas de teste válidas
 - dados mínimos disponíveis nos tenants A e B
 
-### Fase 1: Plataforma BrSpark
+### Fase 1: Plataforma Aria
 
 Perfil: `SAAS_ADMIN`
 
@@ -181,7 +181,7 @@ Se qualquer item acima falhar, status do rollout = `NO-GO`.
 
 ### Etapa 1: Ativação Controlada
 
-1. Validar primeiro com tenant interno BrSpark.
+1. Validar primeiro com tenant interno Aria.
 2. Validar depois com 1 tenant parceiro piloto.
 3. Acompanhar logs de:
    - login
@@ -243,4 +243,4 @@ Preencher por execução:
 - Produto: valida UX e nomenclatura por contexto
 - QA: executa cenários e registra evidências
 - Engenharia: corrige desvios e reexecuta cenários afetados
-- Operação BrSpark: aprova entrada em produção com base nos perfis reais
+- Operação Aria: aprova entrada em produção com base nos perfis reais

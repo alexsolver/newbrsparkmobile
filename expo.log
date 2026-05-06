@@ -1,10 +1,10 @@
 
-> brsparkmobile@1.0.0 start
+> ariamobile@1.0.0 start
 > expo start -c
 
-Starting project at /Users/alex/Desktop/BrsparkMobile
+Starting project at /Users/alex/Desktop/AriaMobile
 › Port 8081 is running this app in another window
-  /Users/alex/Desktop/BrsparkMobile (pid 38175)
+  /Users/alex/Desktop/AriaMobile (pid 38175)
 Input is required, but 'npx expo' is in non-interactive mode.
 Required input:
 > Use port 8082 instead?

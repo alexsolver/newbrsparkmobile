@@ -65,7 +65,7 @@ async function publishOne(docId, reviewedBy) {
 }
 
 async function main() {
-  const reviewedBy = process.env.ADMIN_EMAIL || 'compliance-script@brspark.com';
+  const reviewedBy = process.env.ADMIN_EMAIL || 'compliance-script@aria.com';
   const results = [];
   for (const id of PRIVACY_DOC_IDS) {
     results.push(await publishOne(id, reviewedBy));

@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#EA580C" />
+  <meta name="theme-color" content="#0d9488" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title data-i18n-title>BrSpark</title>
+  <title data-i18n-title>Aria</title>
 
   <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="css/brspark-tokens.css" />
+  <link rel="stylesheet" href="css/aria-tokens.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
   <!-- Ionicons -->
@@ -382,7 +382,7 @@
       font-size: 15px; line-height: 1.4; word-break: break-word;
       text-align: left;
     }
-    .from-tech .chat-bubble { background: #EA580C; color: #fff; }
+    .from-tech .chat-bubble { background: #0d9488; color: #fff; }
     .from-client .chat-bubble { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
     .from-system .chat-meta { text-align: center; }
     .from-system .chat-bubble {
@@ -581,12 +581,12 @@
   let lastData = null;
 
   // ── Idioma (prioridade: ?lang= / ?locale= → localStorage → navegador → pt-BR) ──
-  const TRACK_LOCALE_STORAGE = 'brspark_track_locale_v1';
+  const TRACK_LOCALE_STORAGE = 'aria_track_locale_v1';
   /** Idioma para traduzir mensagens do outro lado no chat (separado do idioma da UI da página). */
-  const TRACK_CHAT_LOCALE_STORAGE = 'brspark_track_chat_locale_v1';
+  const TRACK_CHAT_LOCALE_STORAGE = 'aria_track_chat_locale_v1';
   const STR = {
     'pt-BR': {
-      pageTitle: 'Acompanhe seu técnico · BrSpark',
+      pageTitle: 'Acompanhe seu técnico · Aria',
       loadingText: 'Conectando ao técnico…',
       expiredTitle: 'Link expirado',
       expiredDefault: 'Este link de rastreamento expirou.',
@@ -604,7 +604,7 @@
       infoInProgress: 'Serviço em andamento',
       ftNumberLabel: 'Número da FT',
       rtNumberLabel: 'Número da RT',
-      rolePartner: 'Profissional parceiro BrSpark',
+      rolePartner: 'Profissional parceiro Aria',
       arrivedTitle: 'Técnico chegou!',
       arrivedSub: 'Sua atividade está em andamento.',
       arrivedBtn: 'Ver no mapa',
@@ -663,7 +663,7 @@
       topCardDetailsToggle: 'Mostrar ou ocultar detalhes do serviço',
     },
     en: {
-      pageTitle: 'Track your technician · BrSpark',
+      pageTitle: 'Track your technician · Aria',
       loadingText: 'Connecting to technician…',
       expiredTitle: 'Link expired',
       expiredDefault: 'This tracking link has expired.',
@@ -681,7 +681,7 @@
       infoInProgress: 'Service in progress',
       ftNumberLabel: 'Field task no.',
       rtNumberLabel: 'Routine task no.',
-      rolePartner: 'BrSpark partner professional',
+      rolePartner: 'Aria partner professional',
       arrivedTitle: 'Technician has arrived!',
       arrivedSub: 'Your service is in progress.',
       arrivedBtn: 'View map',
@@ -739,7 +739,7 @@
       topCardDetailsToggle: 'Show or hide service details',
     },
     es: {
-      pageTitle: 'Siga a su técnico · BrSpark',
+      pageTitle: 'Siga a su técnico · Aria',
       loadingText: 'Conectando con el técnico…',
       expiredTitle: 'Enlace caducado',
       expiredDefault: 'Este enlace de seguimiento ha caducado.',
@@ -757,7 +757,7 @@
       infoInProgress: 'Servicio en curso',
       ftNumberLabel: 'Número de FT',
       rtNumberLabel: 'Número de RT',
-      rolePartner: 'Profesional asociado BrSpark',
+      rolePartner: 'Profesional asociado Aria',
       arrivedTitle: '¡El técnico ha llegado!',
       arrivedSub: 'Su actividad está en curso.',
       arrivedBtn: 'Ver mapa',
@@ -815,7 +815,7 @@
       topCardDetailsToggle: 'Mostrar u ocultar detalles del servicio',
     },
     fr: {
-      pageTitle: 'Suivez votre technicien · BrSpark',
+      pageTitle: 'Suivez votre technicien · Aria',
       loadingText: 'Connexion au technicien…',
       expiredTitle: 'Lien expiré',
       expiredDefault: 'Ce lien de suivi a expiré.',
@@ -833,7 +833,7 @@
       infoInProgress: 'Intervention en cours',
       ftNumberLabel: 'N° FT',
       rtNumberLabel: 'N° RT',
-      rolePartner: 'Professionnel partenaire BrSpark',
+      rolePartner: 'Professionnel partenaire Aria',
       arrivedTitle: 'Le technicien est arrivé !',
       arrivedSub: 'Votre prestation est en cours.',
       arrivedBtn: 'Voir la carte',
@@ -1488,7 +1488,7 @@
         face.style.boxShadow = '';
       }
     } else {
-      face.style.borderColor = '#EA580C';
+      face.style.borderColor = '#0d9488';
       face.style.boxShadow = '0 2px 12px rgba(234, 88, 12, 0.45)';
     }
   }
@@ -1942,7 +1942,7 @@
 
   function avatarFallback(name) {
     const n = encodeURIComponent((name || 'T').split(' ').slice(0,2).join('+'));
-    return `https://ui-avatars.com/api/?name=${n}&background=EA580C&color=fff&size=100&bold=true`;
+    return `https://ui-avatars.com/api/?name=${n}&background=0d9488&color=fff&size=100&bold=true`;
   }
 
   function escTrImgAttr(s) {
@@ -1964,8 +1964,8 @@
         ">
           <div class="track-map-tech-face" style="
             width:100%;height:100%;border-radius:50%;box-sizing:border-box;
-            border:3px solid #EA580C;
-            box-shadow:0 2px 12px rgba(234,88,12,0.45);
+            border:3px solid #0d9488;
+            box-shadow:0 2px 12px rgba(13,148,136,0.45);
             overflow:hidden;background:#FFF7ED;position:relative;
           ">
             <img src="${escTrImgAttr(imgSrc)}"

@@ -1,12 +1,12 @@
 /**
  * Textos da listagem e ficha de usuários (painel admin), pt-BR, en-US, es-ES e de-DE.
- * Preferência: localStorage `brspark_admin_ui_locale`; se vazio, **pt-BR** (painel).
+ * Preferência: localStorage `aria_admin_ui_locale`; se vazio, **pt-BR** (painel).
  */
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
 import { USER_PAGES_ES_MERGE } from './user-pages-es-merge.js';
 import { USER_PAGES_DE_MERGE } from './user-pages-de-merge.js';
 
-const LS_LOCALE = 'brspark_admin_ui_locale';
+const LS_LOCALE = 'aria_admin_ui_locale';
 
 const M = {
   'pt-BR': {
@@ -16,7 +16,7 @@ const M = {
     localeEn: 'English (US)',
     localeEs: 'Español',
     localeDe: 'Deutsch',
-    nav_home_title: 'BrSpark, Início',
+    nav_home_title: 'Aria, Início',
     nav_sidebar_expand: 'Expandir menu',
     nav_sidebar_collapse: 'Recolher menu',
     nav_panel_tenant_scope: 'Organização (contexto)',
@@ -558,7 +558,7 @@ const M = {
     ue_schLocsMapBtn: 'Áreas no mapa',
     ue_schSlotLocsTitle: 'Bases atendidas neste turno',
     ue_schSlotLocsHelp_html:
-      'Use <strong>Minha posição</strong> ou <strong>Ir</strong> com o nome da cidade para centrar o mapa. Clique nas bases no mapa ou na lista para marcar várias. Sem seleção, o turno não fixa base (mantém o universo de «Regiões atendidas»). Pode ainda definir <strong>várias áreas circulares</strong> (km) com <strong>+ Área</strong>: o círculo surge no alfinete ou no centro do mapa; arraste o marcador laranja do centro ou edite o raio na lista.',
+      'Use <strong>Minha posição</strong> ou <strong>Ir</strong> com o nome da cidade para centrar o mapa. Clique nas bases no mapa ou na lista para marcar várias. Sem seleção, o turno não fixa base (mantém o universo de «Regiões atendidas»). Pode ainda definir <strong>várias áreas circulares</strong> (km) com <strong>+ Área</strong>: o círculo surge no alfinete ou no centro do mapa; arraste o marcador ciano do centro ou edite o raio na lista.',
     ue_schSlotLocsMeta: '{{bases}} base(s) · {{selected}} selecionada(s) · {{circles}} área(s) por raio (km)',
     ue_schSlotCirclesTitle: 'Áreas por raio (km)',
     ue_schSlotCirclesAddBtn: '+ Área',
@@ -694,7 +694,7 @@ const M = {
     ue_navActivity: 'Atividade',
     ue_secSessionNotesTitle: 'Sessão, notas e preferências',
     ue_lblSessionCurrent: 'Sessão atual (painel / app)',
-    pr_pageTitle: 'BrSpark Admin — Prestadores',
+    pr_pageTitle: 'Aria Admin — Prestadores',
     pr_bc_panel: 'Painel',
     pr_bc_here: 'Prestadores',
     pr_hero_title: 'Prestadores',
@@ -800,7 +800,7 @@ const M = {
     pr_invite_push_ok: 'Notificação no celular: {n} aceite(s) pela Expo.{err} Abra a app → Empresas (vínculos).',
     pr_invite_push_partial: 'Push: {n} token(s) registrado(s), 0 entregues.{e}',
     pr_invite_push_none: 'Push: nenhum token Expo (o prestador precisa abrir a app com notificações ativas).',
-    pdc_pageTitle: 'BrSpark Admin — Diretório de prestadores',
+    pdc_pageTitle: 'Aria Admin — Diretório de prestadores',
     pdc_bc_panel: 'Painel',
     pdc_bc_prestadores: 'Prestadores',
     pdc_bc_here: 'Diretório',
@@ -859,7 +859,7 @@ const M = {
     localeEn: 'English (US)',
     localeEs: 'Spanish',
     localeDe: 'German',
-    nav_home_title: 'BrSpark, Home',
+    nav_home_title: 'Aria, Home',
     nav_sidebar_expand: 'Expand menu',
     nav_sidebar_collapse: 'Collapse menu',
     nav_panel_tenant_scope: 'Organization (context)',
@@ -1533,7 +1533,7 @@ const M = {
     ue_navActivity: 'Activity',
     ue_secSessionNotesTitle: 'Session, notes & preferences',
     ue_lblSessionCurrent: 'Current session (panel / app)',
-    pr_pageTitle: 'BrSpark Admin — Providers',
+    pr_pageTitle: 'Aria Admin — Providers',
     pr_bc_panel: 'Home',
     pr_bc_here: 'Providers',
     pr_hero_title: 'Providers',
@@ -1638,7 +1638,7 @@ const M = {
     pr_invite_push_ok: 'Mobile notification: {n} accepted by Expo.{err} Open the app → Companies (links).',
     pr_invite_push_partial: 'Push: {n} token(s) registered, 0 delivered.{e}',
     pr_invite_push_none: 'Push: no Expo tokens (the technician must open the app with notifications on).',
-    pdc_pageTitle: 'BrSpark Admin — Provider directory',
+    pdc_pageTitle: 'Aria Admin — Provider directory',
     pdc_bc_panel: 'Home',
     pdc_bc_prestadores: 'Providers',
     pdc_bc_here: 'Directory',

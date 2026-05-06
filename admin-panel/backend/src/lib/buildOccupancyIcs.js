@@ -49,9 +49,9 @@ function buildOccupancyIcs({ events, assetId, calName }) {
 
   push('BEGIN:VCALENDAR');
   push('VERSION:2.0');
-  push('PRODID:-//BrSpark//Occupancy//PT');
+  push('PRODID:-//Aria//Occupancy//PT');
   push('CALSCALE:GREGORIAN');
-  push(`X-WR-CALNAME:${icsEscape(calName || 'BrSpark')}`);
+  push(`X-WR-CALNAME:${icsEscape(calName || 'Aria')}`);
   push('METHOD:PUBLISH');
 
   const list = Array.isArray(events) ? events : [];
@@ -69,7 +69,7 @@ function buildOccupancyIcs({ events, assetId, calName }) {
       const aStart = ev.agendaStartAt ? new Date(ev.agendaStartAt).getTime() : NaN;
       const aEnd = ev.agendaEndAt ? new Date(ev.agendaEndAt).getTime() : NaN;
       if (Number.isFinite(aStart) && Number.isFinite(aEnd) && aEnd > aStart) {
-        const uid = `brspark-${String(ev.id).replace(/[^a-zA-Z0-9-]/g, '')}@brspark`;
+        const uid = `aria-${String(ev.id).replace(/[^a-zA-Z0-9-]/g, '')}@aria`;
         const dtStamp = formatIcsUtcNow();
         const ds = new Date(aStart).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
         const de = new Date(aEnd).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
@@ -101,7 +101,7 @@ function buildOccupancyIcs({ events, assetId, calName }) {
     const ed = ymdToIcsDate(edExclusive);
     if (!ed) return;
 
-    const uid = `brspark-${String(ev.id).replace(/[^a-zA-Z0-9-]/g, '')}@brspark`;
+    const uid = `aria-${String(ev.id).replace(/[^a-zA-Z0-9-]/g, '')}@aria`;
     const dtStamp = formatIcsUtcNow();
     push('BEGIN:VEVENT');
     push(`UID:${uid}`);

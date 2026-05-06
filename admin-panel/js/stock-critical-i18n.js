@@ -6,7 +6,7 @@ import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-r
 
 const M = {
   'pt-BR': {
-    sc_pageTitle: 'BrSpark Admin, Estoque abaixo do mínimo',
+    sc_pageTitle: 'Aria Admin, Estoque abaixo do mínimo',
     sc_bc_panel: 'Painel',
     sc_bc_here: 'Estoque abaixo do mínimo',
     sc_hero_title: 'Estoque abaixo do mínimo',
@@ -41,7 +41,7 @@ const M = {
     sc_page_of: 'Página {page} de {total}',
   },
   'en-US': {
-    sc_pageTitle: 'BrSpark Admin, Below-minimum stock',
+    sc_pageTitle: 'Aria Admin, Below-minimum stock',
     sc_bc_panel: 'Home',
     sc_bc_here: 'Below-minimum stock',
     sc_hero_title: 'Below-minimum stock',
@@ -76,7 +76,7 @@ const M = {
     sc_page_of: 'Page {page} of {total}',
   },
   'es-ES': {
-    sc_pageTitle: 'BrSpark Admin, Stock por debajo del mínimo',
+    sc_pageTitle: 'Aria Admin, Stock por debajo del mínimo',
     sc_bc_panel: 'Inicio',
     sc_bc_here: 'Stock por debajo del mínimo',
     sc_hero_title: 'Stock por debajo del mínimo',

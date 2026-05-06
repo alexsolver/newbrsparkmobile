@@ -33,7 +33,7 @@ const MSG = {
 };
 
 /**
- * Tenants onde o limite `maxTechnicians` do plano não aplica (piscina «BrSpark App (master)» + tenant org legada brspark).
+ * Tenants onde o limite `maxTechnicians` do plano não aplica (piscina «Aria App (master)» + tenant org legada aria).
  * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} prisma
  * @param {string} tenantId
  */

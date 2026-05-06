@@ -46,7 +46,7 @@ async function resolveTenantForCmsMirror(slug, ownerEmail) {
  */
 router.post('/cms-branding-mirror', express.json({ limit: '256kb' }), async (req, res) => {
   try {
-    const token = (process.env.CMS_INTERNAL_API_TOKEN || process.env.BRSPARK_INTERNAL_API_TOKEN || '').trim();
+    const token = (process.env.CMS_INTERNAL_API_TOKEN || process.env.ARIA_INTERNAL_API_TOKEN || '').trim();
     if (!token || !timingSafeBearer(token, req.headers.authorization)) {
       return res.status(401).json({ error: 'Não autorizado.' });
     }

@@ -24,7 +24,7 @@ function isGlobalAppTenantEntity(tenant) {
   return !!tenantSlug && tenantSlug === configuredSlug.toLowerCase();
 }
 
-async function resolveTenantAppDisplayName(prisma, tenantId, fallback = 'BrSpark') {
+async function resolveTenantAppDisplayName(prisma, tenantId, fallback = 'Aria') {
   const id = String(tenantId || '').trim();
   if (!id) return fallback;
   try {
@@ -46,7 +46,7 @@ async function resolveTenantAppDisplayName(prisma, tenantId, fallback = 'BrSpark
   }
 }
 
-async function resolveGlobalLiveActivityBadgeKey(prisma, fallback = 'brspark-badge') {
+async function resolveGlobalLiveActivityBadgeKey(prisma, fallback = 'aria-badge') {
   const configuredId = getGlobalAppTenantId();
   const configuredSlug = getGlobalAppTenantSlug();
   try {

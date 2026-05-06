@@ -1,7 +1,7 @@
 #!/bin/bash
-# backup.sh — Backup automático do banco PostgreSQL BrSpark
+# backup.sh — Backup automático do banco PostgreSQL Aria
 # Uso: ./scripts/backup.sh [motivo]
-# Salva em: ./backups/brspark_YYYY-MM-DD_HH-MM-SS.sql.gz
+# Salva em: ./backups/aria_YYYY-MM-DD_HH-MM-SS.sql.gz
 
 set -e
 
@@ -10,11 +10,11 @@ mkdir -p "$BACKUP_DIR"
 
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 REASON="${1:-manual}"
-FILENAME="${BACKUP_DIR}/brspark_${TIMESTAMP}_${REASON}.sql.gz"
+FILENAME="${BACKUP_DIR}/aria_${TIMESTAMP}_${REASON}.sql.gz"
 
 # Lê DATABASE_URL do .env
 RAW_URL=$(grep DATABASE_URL "$(dirname "$0")/../.env" 2>/dev/null | cut -d= -f2- | tr -d '"')
-RAW_URL="${RAW_URL:-postgresql://alex@localhost:5432/brspark_admin}"
+RAW_URL="${RAW_URL:-postgresql://alex@localhost:5432/aria_admin}"
 # Remove parâmetros de query (ex: ?schema=public é do Prisma, não do pg_dump)
 DB_URL="${RAW_URL%%\?*}"
 

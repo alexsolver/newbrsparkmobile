@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const router = express.Router();
 const prisma = require('../db');
-const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
+const { deliverAriaLaravelEvent, EVENT_TYPES } = require('../lib/ariaSyncWebhook');
 const authUser = require('../middleware/authUser');
 const { adminAuthThenPanel } = require('../middleware/auth');
 const { recordSync } = require('../services/cockpitMetrics');
@@ -65,7 +65,7 @@ function friendlyChecklistTemplateSaveError(err) {
     const msg = String(err.message || '');
     if (code === 'P2021' || /does not exist in the current database/i.test(msg)) {
         return (
-            'A base de dados está desatualizada (falta uma ou mais tabelas do BrSpark). ' +
+            'A base de dados está desatualizada (falta uma ou mais tabelas do Aria). ' +
             'No servidor, na pasta admin-panel/backend, execute: npx prisma migrate deploy  e reinicie a API.'
         );
     }
@@ -1178,7 +1178,7 @@ router.patch('/executions/:taskId/status', authUser, async (req, res) => {
             );
             const tplTenantId = existing.template?.tenantId || null;
             if (tplTenantId) {
-                deliverBrsparkLaravelEvent({
+                deliverAriaLaravelEvent({
                     type: EVENT_TYPES.CHECKLIST_EXECUTION_COMPLETED,
                     idempotencyKey: `exec-${execution.id}-done-${nextStatus}`,
                     payload: {

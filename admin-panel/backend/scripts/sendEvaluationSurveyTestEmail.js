@@ -5,7 +5,7 @@
  * Usa a primeira instância PENDING com token na base; não altera dados.
  *
  * Uso:
- *   cd admin-panel/backend && node scripts/sendEvaluationSurveyTestEmail.js alex@brspark.com
+ *   cd admin-panel/backend && node scripts/sendEvaluationSurveyTestEmail.js alex@aria.com
  *
  * Requer: DATABASE_URL, Microsoft Graph e/ou MAILERSEND_* ou Nylas, ADMIN_PANEL_PUBLIC_BASE_URL (evaluation-survey.html).
  */
@@ -28,7 +28,7 @@ function escHrefAttr(url) {
 }
 
 async function main() {
-  const to = String(process.argv[2] || 'alex@brspark.com')
+  const to = String(process.argv[2] || 'alex@aria.com')
     .trim()
     .toLowerCase();
   if (!to.includes('@')) {
@@ -63,7 +63,7 @@ async function main() {
   }
 
   const osLabel = inst.execution?.osNumber != null ? String(inst.execution.osNumber) : '—';
-  const tenantLabel = inst.tenant?.name || 'BrSpark';
+  const tenantLabel = inst.tenant?.name || 'Aria';
   const tplName = inst.template?.name || 'Avaliação de serviço';
 
   const subject = `[Teste] ${tenantLabel} — Avalie o atendimento (OS ${osLabel})`;

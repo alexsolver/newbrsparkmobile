@@ -1,13 +1,13 @@
 /**
  * Textos da página RT (tarefas de rotina), pt-BR, en-US e es-ES.
- * Preferência: `getAdminUiLocale()` (localStorage `brspark_admin_ui_locale`; padrão pt-BR).
+ * Preferência: `getAdminUiLocale()` (localStorage `aria_admin_ui_locale`; padrão pt-BR).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang } from './admin-i18n-resolve.js';
 
 const M = {
   'pt-BR': {
-    rt_pageTitle: 'BrSpark Admin, RT, Tarefas de rotina',
+    rt_pageTitle: 'Aria Admin, RT, Tarefas de rotina',
     rt_bc_panel: 'Painel',
     rt_bc_page: 'Tarefas de rotina',
     rt_hero_title: 'RT, Tarefas de rotina',
@@ -89,7 +89,7 @@ const M = {
     rt_aria_live_region: 'Mensagens de tarefas de rotina',
   },
   'en-US': {
-    rt_pageTitle: 'BrSpark Admin, RT, Routine tasks',
+    rt_pageTitle: 'Aria Admin, RT, Routine tasks',
     rt_bc_panel: 'Home',
     rt_bc_page: 'Routine tasks',
     rt_hero_title: 'RT, Routine tasks',

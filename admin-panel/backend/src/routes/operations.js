@@ -1069,9 +1069,9 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
           const appDisplayName = await resolveTenantAppDisplayName(
             prisma,
             execution.templateTenantId || execution.template?.tenantId || null,
-            'BrSpark'
+            'Aria'
           );
-          const liveActivityBadgeKey = await resolveGlobalLiveActivityBadgeKey(prisma, 'brspark-badge');
+          const liveActivityBadgeKey = await resolveGlobalLiveActivityBadgeKey(prisma, 'aria-badge');
           const osNum = execution.osNumber ? String(execution.osNumber).trim() : '';
           const bodyLine = `A administração do ${appDisplayName} pediu uma nova revisão: ${taskTitle}`;
           const core = (osNum ? `${osNum} · ${bodyLine}` : bodyLine).trim();
@@ -1081,9 +1081,9 @@ router.post('/tasks/:id/reopen-for-revision', async (req, res) => {
           const pushRes = await sendExpoPushToMany(pushTokens, {
             title: `Nova revisão · ${appDisplayName}`.slice(0, 120),
             body,
-            categoryId: 'BRSPARK_TECH_ACTIVITY',
+            categoryId: 'ARIA_TECH_ACTIVITY',
             android: {
-              channelId: 'brspark-tecnico',
+              channelId: 'aria-tecnico',
               sound: 'default',
             },
             data: { taskId: id, type: 'os_reopened_revision', appDisplayName, liveActivityBadgeKey },

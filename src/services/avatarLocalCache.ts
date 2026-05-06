@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
-const SUBDIR = 'brspark_avatars/';
+const SUBDIR = 'aria_avatars/';
 
 function docDir(): string | null {
   return FileSystem.documentDirectory;

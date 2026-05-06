@@ -303,7 +303,7 @@ router.post('/asset', async (req, res) => {
 router.get('/providers', async (_req, res) => {
   try {
     if (String(process.env.DIRECTORY_POSTGRES_FALLBACK || '') !== '1') {
-      res.set('X-BrSpark-Sync-Providers-Source', 'disabled');
+      res.set('X-Aria-Sync-Providers-Source', 'disabled');
       return res.json([]);
     }
     const providers = await prisma.serviceProvider.findMany({
@@ -566,7 +566,7 @@ router.get('/tasks', async (req, res) => {
     const tenantId = String(req.user?.tenantId || '').trim();
     if (!tenantId) {
       console.warn('[sync/tasks] JWT sem tenantId — retorno vazio (isolamento multi-tenant).');
-      res.set('X-BrSpark-Sync-Tasks-Reason', 'no-tenant');
+      res.set('X-Aria-Sync-Tasks-Reason', 'no-tenant');
       return res.json([]);
     }
 
@@ -579,7 +579,7 @@ router.get('/tasks', async (req, res) => {
       console.log(
         `[sync/tasks] ${ownerEmail} — inelegível para FT/OS (papel ≠ PROVIDER ou e-mail da sessão fora dos candidatos de ownerEmail); retorno vazio.`
       );
-      res.set('X-BrSpark-Sync-Tasks-Reason', 'field-tasks-ineligible');
+      res.set('X-Aria-Sync-Tasks-Reason', 'field-tasks-ineligible');
       return res.json([]);
     }
 

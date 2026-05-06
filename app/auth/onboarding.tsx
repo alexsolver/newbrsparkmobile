@@ -47,7 +47,7 @@ function isNotificationOnboardingSatisfied(status: string | null): boolean {
   return status === 'granted' || status === 'provisional';
 }
 
-const REGION_KEY = '@brspark_region';
+const REGION_KEY = '@aria_region';
 const ALLOWED_REGIONS = ['BR', 'US', 'ES', 'AR', 'DE'] as const;
 
 function defaultConsents(isTechnician: boolean): ConsentState {
@@ -121,7 +121,7 @@ export default function OnboardingScreen() {
   const [consents, setConsents] = useState<ConsentState>(() => defaultConsents(false));
   const [policy, setPolicy] = useState<any>(null);
   const [prefsRegion, setPrefsRegion] = useState<string>(() => getDeviceRegion());
-  /** true se o país veio de @brspark_region (cadastro/perfil); false = só heurística do telefone. */
+  /** true se o país veio de @aria_region (cadastro/perfil); false = só heurística do telefone. */
   const [regionFromStorage, setRegionFromStorage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notifStatus, setNotifStatus] = useState<string | null>(null);
@@ -135,7 +135,7 @@ export default function OnboardingScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem('@brspark_collection_policy');
+        const raw = await AsyncStorage.getItem('@aria_collection_policy');
         if (raw) setPolicy(JSON.parse(raw));
       } catch {}
     })();
@@ -256,7 +256,7 @@ export default function OnboardingScreen() {
     }
     setLoading(true);
     try {
-      const ownerEmail = await AsyncStorage.getItem('@brspark_email') || '';
+      const ownerEmail = await AsyncStorage.getItem('@aria_email') || '';
       const policyId = policy?.id || null;
       const tenantId = policy?.tenantId || null;
       const appVersion = '1.0';
@@ -282,7 +282,7 @@ export default function OnboardingScreen() {
       await requestOsLocationPermissions(isTechnician, consents);
       await NotificationService.registerForPushNotificationsAsync().catch(() => {});
       await dataCollectionService.onSessionOpen(ownerEmail, tenantId || undefined, isTechnician);
-      await AsyncStorage.setItem('@brspark_onboarding_done', '1');
+      await AsyncStorage.setItem('@aria_onboarding_done', '1');
       if (isTechnician) {
         await AsyncStorage.setItem(ONBOARDING_PROVIDER_DONE_KEY, '1');
       }

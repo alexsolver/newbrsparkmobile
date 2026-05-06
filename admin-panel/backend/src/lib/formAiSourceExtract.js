@@ -24,11 +24,11 @@ async function extractDocxForAi(buffer) {
 }
 
 /**
- * Array parece schemaData BrSpark (tipos conhecidos; campos com label exceto section_break).
+ * Array parece schemaData Aria (tipos conhecidos; campos com label exceto section_break).
  * @param {unknown[]} arr
  * @returns {boolean}
  */
-function looksLikeBrsparkSchemaArray(arr) {
+function looksLikeAriaSchemaArray(arr) {
   if (!Array.isArray(arr) || arr.length === 0) return false;
   for (const x of arr) {
     if (!x || typeof x !== 'object' || Array.isArray(x)) return false;
@@ -51,7 +51,7 @@ function looksLikeBrsparkSchemaArray(arr) {
  * @param {Buffer} buffer
  * @returns {{ schemaArray: object[], title: string, description: string } | null}
  */
-function tryBrsparkJsonImport(buffer) {
+function tryAriaJsonImport(buffer) {
   const text = buffer.toString('utf8').trim();
   if (!text || (text[0] !== '{' && text[0] !== '[')) return null;
   let data;
@@ -61,7 +61,7 @@ function tryBrsparkJsonImport(buffer) {
     return null;
   }
   const arr = Array.isArray(data) ? data : data && Array.isArray(data.schemaData) ? data.schemaData : null;
-  if (!arr || !looksLikeBrsparkSchemaArray(arr)) return null;
+  if (!arr || !looksLikeAriaSchemaArray(arr)) return null;
   const envelope = Array.isArray(data) ? {} : data;
   const title = typeof envelope.title === 'string' ? envelope.title.trim() : '';
   const description = typeof envelope.description === 'string' ? envelope.description.trim() : '';
@@ -94,7 +94,7 @@ function extractJsonDocumentForAi(buffer) {
 }
 
 /**
- * Excel | Word | PDF | Imagem (OCR) | JSON (schema BrSpark ou texto para IA).
+ * Excel | Word | PDF | Imagem (OCR) | JSON (schema Aria ou texto para IA).
  * @param {Buffer} buffer
  * @param {string} ext — ex.: ".docx"
  * @param {string} [_originalName]
@@ -102,7 +102,7 @@ function extractJsonDocumentForAi(buffer) {
  *   | ({ kind: 'tabular' } & Awaited<ReturnType<typeof extractWorkbookForAi>>)
  *   | ({ kind: 'document' } & Awaited<ReturnType<typeof extractDocxForAi>>)
  *   | ({ kind: 'document' } & ReturnType<typeof extractJsonDocumentForAi>)
- *   | { kind: 'brspark_schema'; schemaArray: object[]; title: string; description: string; markdown: string; columnSignals: []; truncated: boolean; format: string }
+ *   | { kind: 'aria_schema'; schemaArray: object[]; title: string; description: string; markdown: string; columnSignals: []; truncated: boolean; format: string }
  * >}
  */
 async function extractSourceForFormAi(buffer, ext, _originalName) {
@@ -132,10 +132,10 @@ async function extractSourceForFormAi(buffer, ext, _originalName) {
   }
 
   if (e === '.json') {
-    const br = tryBrsparkJsonImport(buffer);
+    const br = tryAriaJsonImport(buffer);
     if (br) {
       return {
-        kind: 'brspark_schema',
+        kind: 'aria_schema',
         schemaArray: br.schemaArray,
         title: br.title,
         description: br.description,
@@ -179,8 +179,8 @@ const SUPPORTED_FORM_AI_EXTENSIONS = [
 
 module.exports = {
   extractSourceForFormAi,
-  tryBrsparkJsonImport,
-  looksLikeBrsparkSchemaArray,
+  tryAriaJsonImport,
+  looksLikeAriaSchemaArray,
   SUPPORTED_FORM_AI_EXTENSIONS,
   MAX_CANONICAL_CHARS,
 };

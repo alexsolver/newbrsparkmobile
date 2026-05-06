@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["AriaAutomaticTimeModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.ariaautomatictime.AriaAutomaticTimeModule"]
+  }
+}

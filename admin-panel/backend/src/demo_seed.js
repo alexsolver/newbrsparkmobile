@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 const bcrypt = require('bcryptjs');
 
 async function main() {
-  console.log('🚀 Generating Demo Data for BrSpark Global SaaS...\n');
+  console.log('🚀 Generating Demo Data for Aria Global SaaS...\n');
 
   // 1. Fetch Locale Profiles
   const br = await prisma.localeProfile.findFirst({ where: { countryCode: 'BR' } });
@@ -23,7 +23,7 @@ async function main() {
 
   // 3. Create Demo Tenants
   const tenantsData = [
-    { name: 'Brspark Global Brazil', slug: 'brspark-br', email: 'contato@brspark.br', localeId: br.id, planId: pro.id },
+    { name: 'Aria Global Brazil', slug: 'aria-br', email: 'contato@aria.br', localeId: br.id, planId: pro.id },
     { name: 'Solaris Energy US', slug: 'solaris-us', email: 'operations@solaris.us', localeId: us.id, planId: enterprise.id },
     { name: 'Iberia Logistics', slug: 'iberia-es', email: 'info@iberia.es', localeId: es.id, planId: basic.id },
   ];

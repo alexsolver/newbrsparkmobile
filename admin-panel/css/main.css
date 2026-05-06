@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-@import url('brspark-tokens.css');
+@import url('aria-tokens.css');
 
 /* ── Reset & Base ────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -14,8 +14,8 @@
   --text:        #020617; /* Slate 950 */
   --text2:       #1E293B; /* Slate 800 */
   --text3:       #475569; /* Slate 600 */
-  --accent:      #F97316;
-  --accent-dim:  rgba(249,115,22,0.12);
+  --accent:      var(--color-brand-primary);
+  --accent-dim:  rgba(13, 148, 136, 0.12);
   --green:       #10B981;
   --green-dim:   rgba(16,185,129,0.1);
   --amber:       #F59E0B;
@@ -332,7 +332,7 @@ body:has(> aside.sidebar) .main-content {
 .topbar-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
 /* Barra superior global (idioma + conta) — injetada por sidebar.js */
-.brspark-app-topbar.topbar-actions {
+.aria-app-topbar.topbar-actions {
   gap: 12px;
   align-items: center;
 }
@@ -1081,9 +1081,9 @@ tbody td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 .btn-primary {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 2px 8px rgba(249,115,22,0.2);
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.2);
 }
-.btn-primary:hover { background: #EA580C; box-shadow: 0 4px 16px rgba(249,115,22,0.3); transform: translateY(-1px); }
+.btn-primary:hover { background: var(--color-brand-accent); box-shadow: 0 4px 16px rgba(13, 148, 136, 0.3); transform: translateY(-1px); }
 .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
 .btn-ghost:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
 .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
@@ -1119,7 +1119,7 @@ tbody td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
   outline: none;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
-.form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(249,115,22,0.15); }
+.form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15); }
 .form-control::placeholder { color: var(--text3); }
 
 /* Modal «Janelas dedicadas» (ficha utilizador): sem largura mínima na 1.ª coluna, o <select> do dia
@@ -2337,7 +2337,7 @@ th.text-right {
   position: absolute;
   width: 600px; height: 600px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(249,115,22,0.1) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(13, 148, 136, 0.1) 0%, transparent 70%);
   top: -200px; left: -200px;
   pointer-events: none;
 }
@@ -2345,7 +2345,7 @@ th.text-right {
   position: absolute;
   width: 400px; height: 400px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(249,115,22,0.06) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(13, 148, 136, 0.06) 0%, transparent 70%);
   bottom: -100px; right: -100px;
   pointer-events: none;
 }
@@ -2401,9 +2401,9 @@ th.text-right {
   letter-spacing: 1px;
   cursor: pointer;
   transition: all var(--transition);
-  box-shadow: 0 4px 16px rgba(249,115,22,0.3);
+  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.3);
 }
-.login-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(249,115,22,0.4); }
+.login-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(13, 148, 136, 0.4); }
 .login-btn:active { transform: translateY(0); }
 .login-error {
   background: var(--red-dim);

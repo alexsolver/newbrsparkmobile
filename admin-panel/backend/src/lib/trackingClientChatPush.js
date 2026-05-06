@@ -4,7 +4,7 @@ const { sendExpoPushToMany } = require('../services/expoPush');
 const { resolveActiveUserIdsForDispatchOwnerEmail } = require('./userEmailUnique');
 
 /** Canal Android alinhado a `ANDROID_CHANNEL_TRACKING_CLIENT_CHAT` no app (notifications.ts). */
-const CHANNEL_TRACKING_CLIENT_CHAT = 'brspark-tracking-client-chat';
+const CHANNEL_TRACKING_CLIENT_CHAT = 'aria-tracking-client-chat';
 
 const LOG_LABEL = 'trackingClientChatPush';
 

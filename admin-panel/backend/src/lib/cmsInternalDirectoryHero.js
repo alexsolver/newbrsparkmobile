@@ -2,7 +2,7 @@
 
 /**
  * Chamadas autenticadas por token ao Laravel (banner do diretório público).
- * Requer CMS_DIRECTORY_BASE_URL + CMS_INTERNAL_API_TOKEN (igual a BRSPARK_INTERNAL_API_TOKEN no Laravel).
+ * Requer CMS_DIRECTORY_BASE_URL + CMS_INTERNAL_API_TOKEN (igual a ARIA_INTERNAL_API_TOKEN no Laravel).
  */
 
 function cmsBase() {

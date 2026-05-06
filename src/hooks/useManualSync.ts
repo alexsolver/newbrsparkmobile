@@ -5,7 +5,7 @@ import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SYNC_COOLDOWN = 60000; // 1 minuto
-const LAST_SYNC_KEY = 'brspark_last_manual_sync';
+const LAST_SYNC_KEY = 'aria_last_manual_sync';
 
 export function useManualSync(onSuccess?: () => Promise<void> | void) {
   const [refreshing, setRefreshing] = useState(false);

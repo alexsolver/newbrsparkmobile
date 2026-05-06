@@ -1,5 +1,5 @@
 /**
- * app.js — BrSpark Admin Panel App Utilities & Mock Data
+ * app.js — Aria Admin Panel App Utilities & Mock Data
  */
 
 import { Auth } from './auth.js';
@@ -36,7 +36,7 @@ export const MOCK = {
   activity: [
     { icon: '🏢', bg: 'rgba(249,115,22,0.12)', text: '<strong>Casa Verde Airbnb</strong> iniciou período de trial', time: '18 min atrás' },
     { icon: '📦', bg: 'rgba(239,68,68,0.12)',   text: 'Alerta de estoque crítico em <strong>Rede Hospitalar SP</strong>', time: '1h atrás' },
-    { icon: '🔐', bg: 'rgba(16,185,129,0.12)',  text: '<strong>admin@brspark.com</strong> acessou o painel', time: '2h atrás' },
+    { icon: '🔐', bg: 'rgba(16,185,129,0.12)',  text: '<strong>admin@aria.com</strong> acessou o painel', time: '2h atrás' },
     { icon: '💳', bg: 'rgba(245,158,11,0.12)',  text: 'Pagamento confirmado — <strong>Coastal Ventures</strong> Enterprise', time: '3h atrás' },
     { icon: '⚠️', bg: 'rgba(245,158,11,0.12)',  text: 'TechFleet Logística suspenso por inadimplência', time: '6h atrás' },
     { icon: '🔧', bg: 'rgba(249,115,22,0.12)', text: 'Atualização v2.4.1 implantada com sucesso', time: 'Ontem 22:15' },

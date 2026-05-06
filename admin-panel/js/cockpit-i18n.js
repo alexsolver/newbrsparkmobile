@@ -6,7 +6,7 @@ import { mpT } from './menu-pages-i18n.js';
 
 const M = {
   'pt-BR': {
-    cp_pageTitle: 'BrSpark Admin, Cockpit global',
+    cp_pageTitle: 'Aria Admin, Cockpit global',
     cp_bc_panel: 'Painel',
     cp_bc_page: 'Cockpit global',
     cp_hero_title: 'Cockpit global, operações',
@@ -98,7 +98,7 @@ const M = {
     cp_ml_db_hist: 'OS concluídas (histórico)',
   },
   'en-US': {
-    cp_pageTitle: 'BrSpark Admin, Global cockpit',
+    cp_pageTitle: 'Aria Admin, Global cockpit',
     cp_bc_panel: 'Home',
     cp_bc_page: 'Global cockpit',
     cp_hero_title: 'Global cockpit, operations',

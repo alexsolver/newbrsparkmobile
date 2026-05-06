@@ -1,5 +1,5 @@
 /**
- * Proxy BrSpark → Google Routes API (cota por tenant no servidor).
+ * Proxy Aria → Google Routes API (cota por tenant no servidor).
  * Falha silenciosa (null) para o checklist continuar com OSRM.
  */
 import { apiFetch } from './auth';

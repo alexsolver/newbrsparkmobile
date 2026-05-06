@@ -31,11 +31,11 @@ function schemaDataToAnalyzeBlocks(schemaData) {
       if (lab) return lab;
       return f.type === 'section_break' ? `Etapa ${i + 1}` : 'Campo';
     })(),
-    context: f.type === 'section_break' ? 'Schema JSON BrSpark' : `Schema JSON · ${f.type}`,
+    context: f.type === 'section_break' ? 'Schema JSON Aria' : `Schema JSON · ${f.type}`,
   }));
 }
 
-function titleFromBrsparkImport(snapTitle, schemaData) {
+function titleFromAriaImport(snapTitle, schemaData) {
   const t = sanitizeTemplateText(snapTitle, 200);
   if (t) return t;
   const sec = schemaData.find((x) => x.type === 'section_break' && x.label && String(x.label).trim());
@@ -83,12 +83,12 @@ router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), 
       return res.status(400).json({ error: e.message || 'Não foi possível ler o arquivo.' });
     }
 
-    if (snapshot.kind === 'brspark_schema') {
+    if (snapshot.kind === 'aria_schema') {
       const { schemaData, warnings: wNorm } = normalizeSchemaDataFromLlm(snapshot.schemaArray);
       if (!schemaData.length) {
         return res.status(400).json({ error: 'O JSON não produziu campos válidos após validação.' });
       }
-      const title = titleFromBrsparkImport(snapshot.title, schemaData);
+      const title = titleFromAriaImport(snapshot.title, schemaData);
       const description = sanitizeTemplateText(snapshot.description, 500);
       const blocks = schemaDataToAnalyzeBlocks(schemaData);
       return res.json({
@@ -98,13 +98,13 @@ router.post('/ai/analyze-from-file', adminAuthThenPanel, upload.single('file'), 
         blocks,
         warnings: [
           ...wNorm,
-          'Importação direta: arquivo JSON reconhecido como schema BrSpark (sem chamada à IA).',
+          'Importação direta: arquivo JSON reconhecido como schema Aria (sem chamada à IA).',
         ],
         truncated: false,
         source: {
           format: snapshot.format,
           name: file.originalname || null,
-          importKind: 'brspark_schema',
+          importKind: 'aria_schema',
         },
       });
     }
@@ -218,12 +218,12 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
       return res.status(400).json({ error: e.message || 'Não foi possível ler o arquivo.' });
     }
 
-    if (snapshot.kind === 'brspark_schema') {
+    if (snapshot.kind === 'aria_schema') {
       const { schemaData, warnings: wNorm } = normalizeSchemaDataFromLlm(snapshot.schemaArray);
       if (!schemaData.length) {
         return res.status(400).json({ error: 'O JSON não produziu campos válidos após validação.' });
       }
-      const title = titleFromBrsparkImport(snapshot.title, schemaData);
+      const title = titleFromAriaImport(snapshot.title, schemaData);
       const description = sanitizeTemplateText(snapshot.description, 500);
       return res.json({
         ok: true,
@@ -232,13 +232,13 @@ router.post('/ai/draft-from-file', adminAuthThenPanel, upload.single('file'), as
         schemaData,
         warnings: [
           ...wNorm,
-          'Importação direta: schema BrSpark em JSON (sem IA).',
+          'Importação direta: schema Aria em JSON (sem IA).',
         ],
         truncated: false,
         source: {
           format: snapshot.format,
           name: file.originalname || null,
-          importKind: 'brspark_schema',
+          importKind: 'aria_schema',
         },
       });
     }

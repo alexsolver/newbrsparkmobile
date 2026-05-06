@@ -1,4 +1,4 @@
-# BrSpark Admin Panel
+# Aria Admin Panel
 
 Painel web exclusivo para administradores da plataforma. Backend Node.js + Express + Prisma + **PostgreSQL**. Frontend HTML/CSS/JS puro — sem build step.
 
@@ -13,7 +13,7 @@ cd admin-panel/backend
 # Copie e configure o .env
 cp .env.example .env
 # Edite DATABASE_URL com suas credenciais PostgreSQL:
-# postgresql://USER:PASSWORD@localhost:5432/brspark_admin
+# postgresql://USER:PASSWORD@localhost:5432/aria_admin
 ```
 
 ### 2. Inicialize o banco e o seed
@@ -34,7 +34,7 @@ npx serve .          # ou Live Server no VS Code
 # Acesse http://localhost:5500
 ```
 
-**Login:** `admin@brspark.com` / `admin123`
+**Login:** `admin@aria.com` / `admin123`
 
 ---
 

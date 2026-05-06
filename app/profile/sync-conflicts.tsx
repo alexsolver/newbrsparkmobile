@@ -184,7 +184,7 @@ export default function SyncConflictsScreen() {
 
       {loading ? (
         <View style={s.center}>
-          <ActivityIndicator color="#EA580C" />
+          <ActivityIndicator color="#0d9488" />
         </View>
       ) : (
         <ScrollView

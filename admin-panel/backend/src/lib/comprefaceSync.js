@@ -4,7 +4,7 @@ const {
   comprefaceSubjectName,
   ensureSubject,
   deleteFacesForSubject,
-  deleteStaleBrsparkSubjectFacesForUser,
+  deleteStaleAriaSubjectFacesForUser,
   addFaceToSubject,
 } = require('./comprefaceClient');
 const {
@@ -63,7 +63,7 @@ async function syncUserToCompreface(prisma, userId) {
 
   for (const root of roots) {
     try {
-      const { cleaned: orphanSubjectsCleaned } = await deleteStaleBrsparkSubjectFacesForUser(
+      const { cleaned: orphanSubjectsCleaned } = await deleteStaleAriaSubjectFacesForUser(
         root,
         apiKey,
         user.tenantId,

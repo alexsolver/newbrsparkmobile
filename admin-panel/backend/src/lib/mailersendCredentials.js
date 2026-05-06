@@ -40,7 +40,7 @@ async function resolveMailerSendConfig() {
   const envToken = String(process.env.MAILERSEND_API_TOKEN || '').trim();
   const envFrom = String(process.env.MAILERSEND_FROM_EMAIL || '').trim();
   const envName =
-    String(process.env.MAILERSEND_FROM_NAME || process.env.MAILERSEND_FROM || 'BrSpark').trim() || 'BrSpark';
+    String(process.env.MAILERSEND_FROM_NAME || process.env.MAILERSEND_FROM || 'Aria').trim() || 'Aria';
   const envBase = String(process.env.MAILERSEND_API_BASE || '').trim();
 
   let row = null;

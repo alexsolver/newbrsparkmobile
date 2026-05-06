@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Cliente HTTP para o diretório público do BrsparkWeb (Laravel).
+ * Cliente HTTP para o diretório público do AriaWeb (Laravel).
  * Com CMS_DIRECTORY_BASE_URL, /api/providers do Node faz de BFF ao Laravel.
  * Sem fallback em PostgreSQL salvo DIRECTORY_POSTGRES_FALLBACK=1 no backend.
  * O CMS devolve uma linha por profissional com vitrine (`listed_in_app`), não agregada só por tenant.

@@ -15,7 +15,7 @@ import { getAssetRootIconColor } from '../../src/assetKind';
 const NOTES_ACCENT = MEDIA_TAG_COLORS.WARRANTY;
 
 const TYPE_ICONS: Record<string, { icon: any; color: string }> = {
-  REAL_ESTATE: { icon: 'home-outline', color: '#F97316' },
+  REAL_ESTATE: { icon: 'home-outline', color: '#0d9488' },
   VEHICLE: { icon: 'car-outline', color: '#10B981' },
   VALUABLE: { icon: 'diamond-outline', color: '#D946EF' },
   JEWELRY: { icon: 'rose-outline', color: '#F43F5E' },

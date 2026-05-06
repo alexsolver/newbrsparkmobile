@@ -277,12 +277,12 @@ async function listRecognitionSubjects(root, apiKey) {
 }
 
 /**
- * Remove faces de subjects BrSpark `tenantId:userId` quando o userId coincide com o usuário
+ * Remove faces de subjects Aria `tenantId:userId` quando o userId coincide com o usuário
  * mas o tenantId é diferente do atual (ex.: mudança de tenant / dados antigos no FaceMatch).
- * Não remove o subject atual nem subjects sem formato BrSpark.
+ * Não remove o subject atual nem subjects sem formato Aria.
  * @returns {Promise<{ cleaned: number }>}
  */
-async function deleteStaleBrsparkSubjectFacesForUser(root, apiKey, currentTenantId, userId) {
+async function deleteStaleAriaSubjectFacesForUser(root, apiKey, currentTenantId, userId) {
   const uid = String(userId || '').trim();
   const tid = String(currentTenantId || '').trim();
   if (!uid || !tid) return { cleaned: 0 };
@@ -505,7 +505,7 @@ module.exports = {
   ensureSubject,
   deleteFacesForSubject,
   listRecognitionSubjects,
-  deleteStaleBrsparkSubjectFacesForUser,
+  deleteStaleAriaSubjectFacesForUser,
   addFaceToSubject,
   verifyFacePairWithIntegration,
   extractVerificationBestSimilarity,

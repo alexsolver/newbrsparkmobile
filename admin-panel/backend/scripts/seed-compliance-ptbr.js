@@ -27,7 +27,7 @@ const LOCALE_BUNDLES = [
 ];
 
 async function main() {
-  const createdBy = process.env.ADMIN_EMAIL || 'admin@brspark.com';
+  const createdBy = process.env.ADMIN_EMAIL || 'admin@aria.com';
   const effectiveFrom = new Date(EFFECTIVE_FROM);
 
   const deactivated = await prisma.complianceDoc.updateMany({

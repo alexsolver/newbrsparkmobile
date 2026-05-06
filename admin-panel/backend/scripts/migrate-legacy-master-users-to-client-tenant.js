@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Migra utilizadores «app móvel» que ainda estão na tenant master (ex.: slug brspark)
+ * Migra utilizadores «app móvel» que ainda estão na tenant master (ex.: slug aria)
  * para uma tenant nova `CLIENT`, movendo também dados directamente ligados ao utilizador
  * na tenant antiga (ativos criados por si, batidas de ponto, RT, auditoria, etc.).
  *
@@ -173,7 +173,7 @@ async function main() {
   const args = parseArgs(process.argv);
   const legacyTenantId = await resolveAppDefaultTenantId();
   if (!legacyTenantId) {
-    console.error('[migrate] Não foi possível resolver a tenant master (APP_DEFAULT_TENANT_ID / slug brspark).');
+    console.error('[migrate] Não foi possível resolver a tenant master (APP_DEFAULT_TENANT_ID / slug aria).');
     process.exit(1);
   }
 

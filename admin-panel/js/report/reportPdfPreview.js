@@ -1147,7 +1147,7 @@ function buildPatrolSvgOverlay(refLatLng, traversedLatLng, cx, cy, z, zoneType) 
   } else {
     const refLine = coordsToSvgPolyline(refLatLng, b);
     if (refLine) {
-      const stroke = zt === 'segment' ? '#9333ea' : '#ea580c';
+      const stroke = zt === 'segment' ? '#9333ea' : '#0d9488';
       refSvg = `<polyline fill="none" stroke="${stroke}" stroke-width="0.65" stroke-linecap="round" stroke-linejoin="round" points="${refLine}"/>`;
     }
   }
@@ -1499,7 +1499,7 @@ function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
           ? 'polígono de serviço (KML) e trilha GPS sobre os tiles OSM.'
           : zt === 'segment'
             ? 'trecho A–B (KML), trilha GPS e início/fim sobre os tiles OSM.'
-            : 'rota de referência (laranja), trilha GPS (azul) e início/fim sobre os tiles OSM.'
+            : 'rota de referência (ciano), trilha GPS (azul) e início/fim sobre os tiles OSM.'
       }</div>
     </div>`;
   } else if (!p) {
@@ -1515,7 +1515,7 @@ function buildPatrolRoutePdfBlockPreview(th, task, endGPS) {
   return `
     <div style="margin-top:14px;padding:12px 14px;border:1px solid #fed7aa;border-radius:10px;background:linear-gradient(135deg,#fff7ed 0%,#fff 100%);box-sizing:border-box">
       <div style="font-size:11px;font-weight:900;color:#9a3412;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <ion-icon name="git-network-outline" style="font-size:18px;color:#ea580c"></ion-icon>
+        <ion-icon name="git-network-outline" style="font-size:18px;color:#0d9488"></ion-icon>
         ${esc(title)}
         ${badge}
       </div>
@@ -1942,11 +1942,11 @@ function renderPhotoPdfBlock(val, f, th, t, responses, row, fieldTimeIso) {
         const showFooter = !!(stampTypes || singleVal.includes('live'));
         const imgInner = `<img src="${imgSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block" alt=""${OPS_IMG_ATTR_FB_300} decoding="async" />`;
         block = `
-          <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#EA580C;border:1px solid #c2410c;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+          <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#0d9488;border:1px solid #115e59;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
             ${imgInner}
             ${
               showFooter
-                ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${esc(stampTs)}${esc(idxLine)}</div>`
+                ? `<div style="background:#0d9488;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${esc(stampTs)}${esc(idxLine)}</div>`
                 : ''
             }
           </div>`;
@@ -1957,11 +1957,11 @@ function renderPhotoPdfBlock(val, f, th, t, responses, row, fieldTimeIso) {
               <div style="text-align:center;color:#9a3412;font-size:10px;font-weight:700">Mídia ainda em arquivo local — após sincronizar, a imagem aparece aqui no PDF.</div>
             </div>`;
           block = `
-          <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#EA580C;border:1px solid #c2410c;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+          <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#0d9488;border:1px solid #115e59;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
             ${body}
             ${
               showFooter
-                ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${esc(stampTs)}${esc(idxLine)}</div>`
+                ? `<div style="background:#0d9488;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${esc(stampTs)}${esc(idxLine)}</div>`
                 : ''
             }
           </div>`;
@@ -2166,7 +2166,7 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
   } else if (rawAvatar.startsWith('/') && typeof window !== 'undefined' && window.location) {
     avatarUrl = `${window.location.origin}${rawAvatar}`;
   } else {
-    avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent((t.ownerEmail || 'T').split('@')[0])}&background=EA580C&color=fff&size=100&bold=true`;
+    avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent((t.ownerEmail || 'T').split('@')[0])}&background=0d9488&color=fff&size=100&bold=true`;
   }
 
   const bannerTitle = esc(cfg.reportTitle || 'RELATÓRIO DA ATIVIDADE');
@@ -2379,8 +2379,8 @@ export function buildReportPreviewHtml(cfg, task, schemaFields) {
 
   const pieceFooter = m.footer
     ? `<div class="pdf-footer" style="margin-top:50px; border-top:1px solid ${th.colorBorder}; padding-top:15px; display:flex; justify-content:space-between; color:${th.colorMuted}; font-size:10px;">
-       <div>Gerado pela <strong>BrSpark Admin Central de Operações</strong> — pré-visualização</div>
-       <div>www.brspark.com</div>
+       <div>Gerado pela <strong>Aria Admin Central de Operações</strong> — pré-visualização</div>
+       <div>www.aria.com</div>
     </div>`
     : '';
 

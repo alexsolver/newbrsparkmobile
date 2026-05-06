@@ -11,7 +11,7 @@ const {
 } = require('../safeServerSideMediaFetch');
 
 test('readFileUnderPublicRoot: lê ficheiro dentro da raiz', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brspark-public-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aria-public-'));
   const rel = 'uploads/demo.txt';
   const sub = path.join(dir, 'uploads');
   fs.mkdirSync(sub, { recursive: true });
@@ -22,7 +22,7 @@ test('readFileUnderPublicRoot: lê ficheiro dentro da raiz', async () => {
 });
 
 test('readFileUnderPublicRoot: rejeita .. no path', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brspark-public-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aria-public-'));
   await assert.rejects(
     () => readFileUnderPublicRoot(dir, '/../etc/passwd'),
     /Caminho inválido|traversal/i,
@@ -31,7 +31,7 @@ test('readFileUnderPublicRoot: rejeita .. no path', async () => {
 });
 
 test('readFileUnderPublicRoot: ficheiro inexistente — erro', async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'brspark-public-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aria-public-'));
   await assert.rejects(() => readFileUnderPublicRoot(dir, '/nao-existe-12345.txt'));
   fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -137,7 +137,7 @@ async function cloudTaskRefId(taskId: string): Promise<string | null> {
 
 async function loadMergedResponses(taskId: string): Promise<Record<string, any>> {
   let responses: Record<string, any> = {};
-  const ek = `@brspark_execution_${taskId}`;
+  const ek = `@aria_execution_${taskId}`;
   const exRaw = await AsyncStorage.getItem(ek);
   if (exRaw) {
     try {
@@ -162,7 +162,7 @@ async function loadMergedResponses(taskId: string): Promise<Record<string, any>>
     }
   }
   try {
-    const obRaw = await AsyncStorage.getItem('@brspark_outbox');
+    const obRaw = await AsyncStorage.getItem('@aria_outbox');
     const ob = obRaw ? JSON.parse(obRaw) : [];
     if (Array.isArray(ob)) {
       const item = ob.find((o: any) => o && String(o.taskId) === String(taskId));
@@ -240,7 +240,7 @@ function applyRemoveLineToResponses(responses: Record<string, any>, target: Fina
 
 async function persistTaskResponses(taskId: string, responses: Record<string, any>) {
   await AsyncStorage.setItem(`@draft_tsk_${taskId}`, JSON.stringify(responses));
-  const ek = `@brspark_execution_${taskId}`;
+  const ek = `@aria_execution_${taskId}`;
   const exRaw = await AsyncStorage.getItem(ek);
   if (exRaw) {
     try {
@@ -251,7 +251,7 @@ async function persistTaskResponses(taskId: string, responses: Record<string, an
       /* ignore */
     }
   }
-  await updateStoredJsonArray<any>('@brspark_outbox', (ob) => {
+  await updateStoredJsonArray<any>('@aria_outbox', (ob) => {
     const ix = ob.findIndex((o) => o && String(o.taskId) === String(taskId));
     if (ix < 0) return ob;
     const next = [...ob];

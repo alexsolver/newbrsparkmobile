@@ -103,7 +103,7 @@ export const ProviderService = {
 
       if (!res.ok) throw new Error(`API error ${res.status}`);
       const json = await res.json();
-      const dirSrc = (res.headers.get('X-BrSpark-Directory-Source') || '').trim();
+      const dirSrc = (res.headers.get('X-Aria-Directory-Source') || '').trim();
       // Defesa: BFF deve usar 4xx/5xx quando o CMS falha; se algum proxy devolver 200 + erro lógico, cai no cache local.
       if (dirSrc === 'laravel-error' || dirSrc === 'cms-not-configured') {
         return applyFilteredCache(true);
@@ -144,7 +144,7 @@ export class ApiService {
 
   /** Sync completo: assets (auth) + config (público). Providers removidos do sync em massa. */
   static async sync(ownerEmail?: string): Promise<boolean> {
-    console.log('[SYNC] Iniciando sincronização com BrSpark Cloud...');
+    console.log('[SYNC] Iniciando sincronização com Aria Cloud...');
     let success = true;
 
     // 1. Push and Pull modular data (costs, insurance, vault, media) via SyncService

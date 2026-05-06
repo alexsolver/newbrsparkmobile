@@ -1,13 +1,13 @@
 /**
  * Textos do Forms Builder (painel admin), pt-BR, en-US, es-ES e de-DE.
- * Preferência: `getAdminUiLocale()` (localStorage `brspark_admin_ui_locale`; padrão pt-BR).
+ * Preferência: `getAdminUiLocale()` (localStorage `aria_admin_ui_locale`; padrão pt-BR).
  * O seletor «Rótulos (edição)» (`window.__formSchemaEditLocale`) afeta só textos do **canvas**
  * via `fbTCanvas` — o chrome do painel continua no idioma do admin.
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
 
-const LS_LOCALE = 'brspark_admin_ui_locale';
+const LS_LOCALE = 'aria_admin_ui_locale';
 
 const FB_CHECKLISTS_SYNC_LOCALES = new Set(['pt-BR', 'en-US', 'es-ES', 'de-DE']);
 
@@ -26,7 +26,7 @@ function formBuilderCanvasUiLocale() {
 
 const M = {
   'pt-BR': {
-    fb_pageTitle: 'BrSpark Admin, Forms Builder',
+    fb_pageTitle: 'Aria Admin, Forms Builder',
     fb_bc_panel: 'Painel',
     fb_bc_builder: 'Forms Builder',
     fb_hero_title: 'Forms Builder',
@@ -269,7 +269,7 @@ const M = {
     fb_prop_vision_title_detection_html:
       '<ion-icon name="videocam-outline"></ion-icon> Visão de IA, detecção',
     fb_prop_vision_body_analysis_html:
-      'No app, o técnico usa <b>só a câmera</b>, sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta traz nota de 0 a 10 em <code>answers[0].value</code> (string), confiança e racional. Com «Classificação 0–10» ativada (recomendado), a raiz do JSON inclui também <code>rating0To10</code>.',
+      'No app, o técnico usa <b>só a câmera</b>, sem galeria nem escolha de arquivo. O servidor Aria chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta traz nota de 0 a 10 em <code>answers[0].value</code> (string), confiança e racional. Com «Classificação 0–10» ativada (recomendado), a raiz do JSON inclui também <code>rating0To10</code>.',
     fb_prop_vision_body_detection_html:
       'No app, o técnico usa <b>só a câmera</b>, sem galeria nem escolha de arquivo. O servidor chama a integração <b>Visão IA - Moondream</b> (API de pergunta sobre imagem) ou encaminha ao proxy <b>Visão IA - YOLO</b>, conforme a preferência do tenant em Integrações / conta. Abaixo define-se <b>um único critério</b> em linguagem natural (estilo semelhante à «Visão de IA, análise»); a resposta normalizada traz <code>answers[0].value</code> (<code>yes</code> / <code>no</code> / <code>unknown</code>), confiança e racional.',
     fb_prop_vision_detection_prompt_lbl: 'Prompt (sim/não)',
@@ -492,7 +492,7 @@ const M = {
     mdl_field_props_title: 'Propriedades do campo',
     mdl_field_props_close: 'Fechar',
     mdl_field_props_ok: 'OK',
-    mdl_mobile_preview_app: 'App BrSpark',
+    mdl_mobile_preview_app: 'App Aria',
     mdl_mobile_preview_sim_nav: 'Simular navegação (só pré-visualização)',
     mdl_mobile_preview_list: 'Lista',
     mdl_mobile_preview_wizard: 'Um a um',
@@ -751,7 +751,7 @@ const M = {
     fb_alert_matrix_none: 'Nenhuma coluna válida. Ex.: [{"id":"c1","label":"Item","cellType":"text"}]',
     fb_alert_export_needs_field: 'Adicione pelo menos um campo de pergunta ao canvas (a primeira seção já existe).',
     fb_alert_import_ok: "Formulário importado com sucesso. Clique em «Salvar formulário» para persistir no catálogo local e na API.",
-    fb_alert_import_bad: 'O arquivo não é compatível com o BrSpark Builder.',
+    fb_alert_import_bad: 'O arquivo não é compatível com o Aria Builder.',
     fb_alert_import_corrupt: 'Arquivo corrompido: {detail}',
     fb_alert_dup_title_folder: 'Já existe um formulário com este nome nesta pasta (catálogo local). Escolha outro título ou pasta.',
     fb_alert_dup_title_api: 'Já existe um formulário ativo com este nome nesta pasta.',
@@ -796,7 +796,7 @@ const M = {
     fb_alert_copilot_analyze_none: 'Nenhum arquivo foi analisado.',
   },
   'en-US': {
-    fb_pageTitle: 'BrSpark Admin, Forms Builder',
+    fb_pageTitle: 'Aria Admin, Forms Builder',
     fb_bc_panel: 'Home',
     fb_bc_builder: 'Forms Builder',
     fb_hero_title: 'Forms Builder',
@@ -1039,7 +1039,7 @@ const M = {
     fb_prop_vision_title_detection_html:
       '<ion-icon name="videocam-outline"></ion-icon> AI vision, detection',
     fb_prop_vision_body_analysis_html:
-      'In the app, the technician uses <b>camera only</b>, no gallery or file picker. The BrSpark server calls the <b>Gemini</b> API with the <b>Google AI Studio</b> integration (key and model under Integrations). The text below is a <b>single structured prompt</b>; the response includes a 0–10 score in <code>answers[0].value</code> (string), confidence, and rationale. With <b>0–10 rating</b> enabled (recommended), the JSON root also includes <code>rating0To10</code>.',
+      'In the app, the technician uses <b>camera only</b>, no gallery or file picker. The Aria server calls the <b>Gemini</b> API with the <b>Google AI Studio</b> integration (key and model under Integrations). The text below is a <b>single structured prompt</b>; the response includes a 0–10 score in <code>answers[0].value</code> (string), confidence, and rationale. With <b>0–10 rating</b> enabled (recommended), the JSON root also includes <code>rating0To10</code>.',
     fb_prop_vision_body_detection_html:
       'In the app, the technician uses <b>camera only</b>, no gallery or file picker. The server calls the <b>Vision AI - Moondream</b> integration (image Q&amp;A API) or forwards to the <b>Vision AI - YOLO</b> proxy, depending on tenant settings under Integrations / account. Below you define <b>one criterion</b> in natural language (similar to <b>AI vision, analysis</b>); the normalized response includes <code>answers[0].value</code> (<code>yes</code> / <code>no</code> / <code>unknown</code>), confidence, and rationale.',
     fb_prop_vision_detection_prompt_lbl: 'Prompt (yes/no)',
@@ -1262,7 +1262,7 @@ const M = {
     mdl_field_props_title: 'Field properties',
     mdl_field_props_close: 'Close',
     mdl_field_props_ok: 'OK',
-    mdl_mobile_preview_app: 'BrSpark app',
+    mdl_mobile_preview_app: 'Aria app',
     mdl_mobile_preview_sim_nav: 'Simulate navigation (preview only)',
     mdl_mobile_preview_list: 'List',
     mdl_mobile_preview_wizard: 'One by one',
@@ -1521,7 +1521,7 @@ const M = {
     fb_alert_matrix_none: 'No valid columns. e.g. [{"id":"c1","label":"Item","cellType":"text"}]',
     fb_alert_export_needs_field: 'Add at least one question field on the canvas (the first section already exists).',
     fb_alert_import_ok: 'Form imported successfully. Click Save form to persist to local catalog and API.',
-    fb_alert_import_bad: 'This file is not compatible with the BrSpark builder.',
+    fb_alert_import_bad: 'This file is not compatible with the Aria builder.',
     fb_alert_import_corrupt: 'Corrupt file: {detail}',
     fb_alert_dup_title_folder: 'A form with this name already exists in this folder (local catalog). Choose another title or folder.',
     fb_alert_dup_title_api: 'An active form with this name already exists in this folder.',
@@ -1606,7 +1606,7 @@ Object.assign(M['es-ES'], {
   fb_prop_vision_detection_prompt_hint:
     'Un <b>único</b> criterio por envío de medios (hasta <b>{maxSingle}</b> caracteres), en texto libre como en el campo de análisis. El backend devuelve el mismo sobre JSON (<code>answers</code> con <code>q1</code>, <code>value</code>, <code>confidence</code>, <code>rationale</code>) con valor <code>yes</code>, <code>no</code> o <code>unknown</code>.',
   fb_prop_vision_body_analysis_html:
-    'En la app, el técnico usa <b>solo la cámara</b>, sin galería ni selector de archivos. El servidor BrSpark llama a la API <b>Gemini</b> con la integración <b>Google AI Studio</b> (clave y modelo en Integraciones). El texto de abajo es un <b>único prompt estructurado</b>; la respuesta incluye una nota de 0 a 10 en <code>answers[0].value</code> (cadena), confianza y racional. Con la «Clasificación 0–10» activada (recomendado), la raíz del JSON incluye también <code>rating0To10</code>.',
+    'En la app, el técnico usa <b>solo la cámara</b>, sin galería ni selector de archivos. El servidor Aria llama a la API <b>Gemini</b> con la integración <b>Google AI Studio</b> (clave y modelo en Integraciones). El texto de abajo es un <b>único prompt estructurado</b>; la respuesta incluye una nota de 0 a 10 en <code>answers[0].value</code> (cadena), confianza y racional. Con la «Clasificación 0–10» activada (recomendado), la raíz del JSON incluye también <code>rating0To10</code>.',
   fb_prop_vision_ai_structured_prompt_hint:
     'Describa criterios de su operación, qué cuenta como buena o mala evidencia y qué debe observar la IA en el medio. Límite aproximado: {max} caracteres. La API devuelve JSON con <code>answers</code> (p. ej. <code>q1</code>); la plantilla predeterminada usa <code>value</code> como cadena de "0" a "10" o <code>unknown</code>. Con la clasificación 0–10 activada arriba, la raíz incluye también <code>rating0To10</code> (entero alineado con la misma nota).',
   fb_prop_vision_default_structured_prompt:
@@ -1720,7 +1720,7 @@ Object.assign(M['de-DE'], {
     'Übersetzung sofort für die gewählte Sprache ausführen (hilfreich, wenn Beschriftungen weiterhin Portugiesisch sind).',
   fb_forms_list_locales_tip: 'Sprachen mit Beschriftungen in dieser Vorlage: {list}',
   fb_locale_lbl: 'Admin-Sprache',
-  fb_pageTitle: 'BrSpark Admin, Formular-Editor',
+  fb_pageTitle: 'Aria Admin, Formular-Editor',
   fb_bc_panel: 'Start',
   fb_bc_builder: 'Formular-Editor',
   fb_hero_title: 'Formular-Editor',
@@ -2207,7 +2207,7 @@ export function bindChecklistsBuilderLocaleHotReload() {
   });
 }
 
-const FB_TOOLBOX_TAB_LS = 'brspark_fb_toolbox_tab';
+const FB_TOOLBOX_TAB_LS = 'aria_fb_toolbox_tab';
 const FB_VALID_TOOLBOX_TABS = new Set(['basic', 'premium', 'wfm', 'audit', 'launches', 'ai']);
 
 function readSavedToolboxTab() {

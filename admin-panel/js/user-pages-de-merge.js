@@ -6,7 +6,7 @@ export const USER_PAGES_DE_MERGE = {
   localeEn: 'Englisch (USA)',
   localeEs: 'Spanisch',
   localeDe: 'Deutsch',
-  nav_home_title: 'BrSpark — Start',
+  nav_home_title: 'Aria — Start',
   nav_sidebar_expand: 'Menü ausklappen',
   nav_sidebar_collapse: 'Menü einklappen',
   nav_panel_tenant_scope: 'Organisation (Kontext)',

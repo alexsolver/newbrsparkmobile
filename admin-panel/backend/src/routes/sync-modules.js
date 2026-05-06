@@ -84,7 +84,7 @@ function pullHandler(module) {
            const allowList = sharesByOwner[sharedRow.ownerEmail] || [];
            const elements = sharedRow.data || [];
            // Filtrar para incluir apenas itens que contêm o assetId liberado (ou parentId/rootId dependendo do módulo)
-           // Na estrutura do BrSpark, a maioria das entidades tem 'assetId', 'parentId' ou 'rootId' atrelada.
+           // Na estrutura do Aria, a maioria das entidades tem 'assetId', 'parentId' ou 'rootId' atrelada.
            const grantedElements = elements.filter(el => {
               const aId = el.assetId || el.parentId || el.rootId;
               return allowList.includes(aId);
@@ -168,7 +168,7 @@ function pushHandler(module) {
                let ownerData = ownerRow?.data || [];
                
                // Mesclar (Atualizar e Inserir)
-               // Em BrSpark JSON arrays, usamos 'id' como chave forte
+               // Em Aria JSON arrays, usamos 'id' como chave forte
                for (const vi of validItems) {
                   // Limpar tags injetadas para não sujar o banco original
                   const cleanItem = { ...vi };

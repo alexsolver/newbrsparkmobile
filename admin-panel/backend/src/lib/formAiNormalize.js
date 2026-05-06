@@ -38,7 +38,7 @@ const DEFAULT_VISION_COMPARISON_PROMPT =
 const MAX_VISION_COMPARISON_REFERENCE_DATA_URL_CHARS = 9 * 1024 * 1024;
 
 /**
- * Garante que cada campo tem uma paleta completa de tipos (IA + catálogo BrSpark), sem duplicar por `type`.
+ * Garante que cada campo tem uma paleta completa de tipos (IA + catálogo Aria), sem duplicar por `type`.
  * @param {string} itemKey
  * @param {object[]} options — já normalizados
  * @param {Record<string, unknown>} [formContext]
@@ -935,7 +935,7 @@ function normalizeProposalsFromLlm(parsed, formContext) {
       options = mergeFieldOptionsWithAnalyzePalette(key, options, ctx);
       if (thin) {
         warnings.push(
-          `Campo "${label}": a IA sugeriu poucos tipos — o menu foi alargado com os tipos habituais do BrSpark (pode escolher outro).`
+          `Campo "${label}": a IA sugeriu poucos tipos — o menu foi alargado com os tipos habituais do Aria (pode escolher outro).`
         );
       }
     }

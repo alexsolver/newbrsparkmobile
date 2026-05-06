@@ -61,7 +61,7 @@ function asHexColor(v) {
 function asLiveActivityBadgeKey(v) {
   const s = asTrimmedString(v, 80);
   if (!s) return '';
-  return s === 'brspark-badge' ? s : '';
+  return s === 'aria-badge' ? s : '';
 }
 
 function brandingValidationIssues(branding, permissions) {
@@ -140,9 +140,9 @@ function forceHttpsOnPublicAssetUrl(url) {
 /**
  * O app móvel (App Store) junta URLs relativas a `API_BASE` (API Node, ex. api.*).
  * Ficheiros em `/storage/*` vivem no CMS Laravel (outro host). Sem origem absoluta o iOS pede
- * `https://api…/storage/…` e recebe 404 — o logo cai no fallback BrSpark.
+ * `https://api…/storage/…` e recebe 404 — o logo cai no fallback Aria.
  *
- * Defina no .env da API Node (produção): `BRSPARK_CMS_PUBLIC_URL` ou `LARAVEL_APP_URL` = origem
+ * Defina no .env da API Node (produção): `ARIA_CMS_PUBLIC_URL` ou `LARAVEL_APP_URL` = origem
  * pública do Laravel (ex. https://app.cliente.com), sem barra no fim.
  */
 function absolutizePublicMediaUrlForMobile(raw) {
@@ -152,9 +152,9 @@ function absolutizePublicMediaUrlForMobile(raw) {
   if (s.startsWith('//')) return forceHttpsOnPublicAssetUrl(`https:${s}`);
   if (s.startsWith('/storage/')) {
     const origin = String(
-      process.env.BRSPARK_CMS_PUBLIC_URL ||
+      process.env.ARIA_CMS_PUBLIC_URL ||
         process.env.LARAVEL_APP_URL ||
-        process.env.BRSPARK_LARAVEL_BASE_URL ||
+        process.env.ARIA_LARAVEL_BASE_URL ||
         process.env.CMS_DIRECTORY_BASE_URL ||
         process.env.CMS_PUBLIC_URL ||
         process.env.APP_URL ||

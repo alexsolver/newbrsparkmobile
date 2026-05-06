@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Forms Builder</title>
+  <title>Aria Admin — Forms Builder</title>
   
   <!-- WebFonts para o Icon Picker! -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@6.9.96/css/materialdesignicons.min.css" />
   <!-- Universal React Native Vector Icons Map -->
   <link rel="stylesheet" href="css/vector-icons.css" />
-  <link rel="stylesheet" href="css/brspark-tokens.css" />
+  <link rel="stylesheet" href="css/aria-tokens.css" />
   <link rel="stylesheet" href="css/main.css" />
   <!-- Quill / Sortable / jsPDF: cópias em vendor/ (mesma origem que o painel Node) — evita falha se CDN pública estiver bloqueada -->
   <link href="vendor/quill/1.3.7/quill.snow.css" rel="stylesheet" />
@@ -2013,7 +2013,7 @@
      
      <!-- Simulator Header -->
      <div style="background: var(--primary); color: white; padding: 40px 20px 20px; text-align:center; font-weight:700; font-size:16px;">
-        <div id="mobile-preview-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px; margin:0 auto;">App BrSpark</div>
+        <div id="mobile-preview-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:280px; margin:0 auto;">App Aria</div>
         <div style="position:absolute; top: 38px; left: 20px; font-size:24px; cursor:pointer;" data-fb-cmd="toggleMobilePreview">&times;</div>
      </div>
      <div id="mobile-preview-fill-toolbar" style="display:none; flex-shrink:0; background:#1e293b; color:var(--color-border); padding:10px 12px; font-size:10px; border-bottom:1px solid #334155;">
@@ -2293,8 +2293,8 @@
       <div id="copilot-focus-chip" class="copilot-canvas-focus-chip ai-copilot-focus-chip-head" style="display:none;" aria-label="Campo em foco para o Composer"></div>
     </div>
     <div class="ai-copilot-head-actions">
-      <button type="button" class="btn btn-ghost btn-sm" id="ai-copilot-undo-btn" data-fb-cmd="brsparkCopilotUndo" disabled title="Desfazer última alteração do Composer no canvas"><ion-icon name="arrow-undo-outline" style="font-size:20px"></ion-icon></button>
-      <button type="button" class="btn btn-ghost btn-sm" id="ai-copilot-clear-btn" data-fb-cmd="brsparkCopilotClear" title="Limpar conversa"><ion-icon name="trash-outline" style="font-size:20px"></ion-icon></button>
+      <button type="button" class="btn btn-ghost btn-sm" id="ai-copilot-undo-btn" data-fb-cmd="ariaCopilotUndo" disabled title="Desfazer última alteração do Composer no canvas"><ion-icon name="arrow-undo-outline" style="font-size:20px"></ion-icon></button>
+      <button type="button" class="btn btn-ghost btn-sm" id="ai-copilot-clear-btn" data-fb-cmd="ariaCopilotClear" title="Limpar conversa"><ion-icon name="trash-outline" style="font-size:20px"></ion-icon></button>
       <button type="button" id="ai-copilot-close-btn" class="btn btn-ghost btn-sm" data-fb-cmd="toggleAiCopilotPanel" aria-label="Fechar Composer"><ion-icon name="close-outline" style="font-size:22px"></ion-icon></button>
     </div>
   </div>
@@ -2319,7 +2319,7 @@
             type="button"
             class="ai-copilot-attach-fab"
             id="ai-copilot-attach-fab"
-            data-fb-cmd="brsparkCopilotPickExcelFile"
+            data-fb-cmd="ariaCopilotPickExcelFile"
             title="Anexar ficheiros"
             aria-label="Anexar ficheiros"
           >
@@ -2327,7 +2327,7 @@
           </button>
           <div class="ai-copilot-input-wrap">
             <textarea id="ai-copilot-input" rows="2" placeholder="Escreva a mensagem ou cole links https://… (Enter envia, Shift+Enter nova linha)" style="font-size:14px;"></textarea>
-            <button type="button" class="ai-copilot-send-fab" id="ai-copilot-send-fab" data-fb-cmd="brsparkCopilotSend" title="Enviar" aria-label="Enviar mensagem"><ion-icon name="arrow-up"></ion-icon></button>
+            <button type="button" class="ai-copilot-send-fab" id="ai-copilot-send-fab" data-fb-cmd="ariaCopilotSend" title="Enviar" aria-label="Enviar mensagem"><ion-icon name="arrow-up"></ion-icon></button>
           </div>
         </div>
       </div>
@@ -2360,17 +2360,17 @@
       </select>
       <label for="copilot-ts-detail">O que observa (obrigatório)</label>
       <textarea id="copilot-ts-detail" rows="3" maxlength="4000" placeholder="Descreva o sintoma…"></textarea>
-      <button type="button" class="btn btn-primary btn-sm" id="copilot-ts-send-btn" data-fb-cmd="brsparkCopilotSendTroubleshootBundle">Pedir diagnóstico ao Composer</button>
+      <button type="button" class="btn btn-primary btn-sm" id="copilot-ts-send-btn" data-fb-cmd="ariaCopilotSendTroubleshootBundle">Pedir diagnóstico ao Composer</button>
     </div>
     <label><input type="checkbox" id="copilot-follow-canvas" checked tabindex="-1" /> <span id="mdl-copilot-follow-txt">Canvas</span></label>
-    <button type="button" id="copilot-pin-selection-btn" data-fb-cmd="brsparkCopilotSyncFocusFromCanvasSelection" tabindex="-1">Fixar seleção</button>
-    <button type="button" id="copilot-clear-focus-btn" data-fb-cmd="brsparkCopilotClearFocusedField" tabindex="-1">Limpar foco</button>
+    <button type="button" id="copilot-pin-selection-btn" data-fb-cmd="ariaCopilotSyncFocusFromCanvasSelection" tabindex="-1">Fixar seleção</button>
+    <button type="button" id="copilot-clear-focus-btn" data-fb-cmd="ariaCopilotClearFocusedField" tabindex="-1">Limpar foco</button>
     <textarea id="copilot-ctx-objective" tabindex="-1" aria-hidden="true"></textarea>
     <textarea id="copilot-ctx-ref-urls" tabindex="-1" aria-hidden="true" spellcheck="false" autocomplete="off"></textarea>
     <textarea id="copilot-excel-hint" tabindex="-1" aria-hidden="true"></textarea>
     <input type="file" id="copilot-excel-file" multiple accept=".xlsx,.xlsm,.docx,.pdf,.png,.jpg,.jpeg,.webp,.json,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,image/png,image/jpeg,image/webp" tabindex="-1" />
-    <button type="button" id="copilot-excel-pick-btn" data-fb-cmd="brsparkCopilotPickExcelFile" tabindex="-1">Ficheiros</button>
-    <button type="button" id="copilot-excel-clear-btn" data-fb-cmd="brsparkCopilotClearSpreadsheet" tabindex="-1">Remover arquivos</button>
+    <button type="button" id="copilot-excel-pick-btn" data-fb-cmd="ariaCopilotPickExcelFile" tabindex="-1">Ficheiros</button>
+    <button type="button" id="copilot-excel-clear-btn" data-fb-cmd="ariaCopilotClearSpreadsheet" tabindex="-1">Remover arquivos</button>
   </div>
   <!-- Campos ocultos para chamadas programáticas (ex.: rota só de lógica) -->
   <textarea id="ai-copilot-logic-goal" style="display:none;" aria-hidden="true"></textarea>
@@ -2405,10 +2405,10 @@
       <textarea id="copilot-schema-preview-general-note" placeholder="Ex.: reduzir campos da etapa «Avaliação nutricional»; todos os textos em tom formal; adicionar campo de consentimento LGPD…"></textarea>
     </div>
     <div class="copilot-preview-foot">
-      <button type="button" id="copilot-preview-mark-optional" class="btn btn-ghost btn-sm" data-fb-cmd="brsparkCopilotPreviewMarkAllOptional">Tornar todos opcionais</button>
-      <button type="button" id="copilot-preview-cancel" class="btn btn-ghost" data-fb-cmd="brsparkCopilotCloseSchemaPreview" data-fb-arg="false">Cancelar</button>
-      <button type="button" id="copilot-preview-reprocess" class="btn btn-outline" data-fb-cmd="brsparkCopilotReprocessSchemaPreview"><ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Reprocessar com instruções</button>
-      <button type="button" id="copilot-preview-apply" class="btn btn-primary" data-fb-cmd="brsparkCopilotCloseSchemaPreview" data-fb-arg="true"><ion-icon name="checkmark-done-outline" style="vertical-align:-2px"></ion-icon> Aplicar no canvas</button>
+      <button type="button" id="copilot-preview-mark-optional" class="btn btn-ghost btn-sm" data-fb-cmd="ariaCopilotPreviewMarkAllOptional">Tornar todos opcionais</button>
+      <button type="button" id="copilot-preview-cancel" class="btn btn-ghost" data-fb-cmd="ariaCopilotCloseSchemaPreview" data-fb-arg="false">Cancelar</button>
+      <button type="button" id="copilot-preview-reprocess" class="btn btn-outline" data-fb-cmd="ariaCopilotReprocessSchemaPreview"><ion-icon name="refresh-outline" style="vertical-align:-2px"></ion-icon> Reprocessar com instruções</button>
+      <button type="button" id="copilot-preview-apply" class="btn btn-primary" data-fb-cmd="ariaCopilotCloseSchemaPreview" data-fb-arg="true"><ion-icon name="checkmark-done-outline" style="vertical-align:-2px"></ion-icon> Aplicar no canvas</button>
     </div>
   </div>
 </div>
@@ -2459,7 +2459,7 @@
   import { getAdminUiLocale } from './js/user-pages-i18n.js';
   import { initFbMarkupDelegation } from './js/fb-markup-delegation.js';
   await ensureAdminApiDetected();
-  window.__BRSPARK_API_BASE__ = resolveApiBase();
+  window.__ARIA_API_BASE__ = resolveApiBase();
   await new Promise((resolve, reject) => {
     const s1 = document.createElement('script');
     s1.src = 'js/schemaLocale.js?v=' + Date.now();

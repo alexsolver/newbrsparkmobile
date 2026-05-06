@@ -26,15 +26,15 @@ LogBox.ignoreLogs(['expo-notifications: Android Push notifications']);
 /** Canais Android usados pelos pushes remotos (idempotente). */
 async function ensureAndroidPushChannels(): Promise<void> {
   if (Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync('brspark-alerts', {
-    name: 'BrSpark Alertas',
+  await Notifications.setNotificationChannelAsync('aria-alerts', {
+    name: 'Aria Alertas',
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#2563EB',
     sound: 'default',
   });
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_TECH, {
-    name: 'BrSpark, Atividades (prestador)',
+    name: 'Aria, Atividades (prestador)',
     /** MAX: cabeçalho / som com app em segundo plano (oferta e despacho); HIGH podia cair em fila silenciosa. */
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
@@ -42,13 +42,13 @@ async function ensureAndroidPushChannels(): Promise<void> {
     sound: 'default',
   });
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_CLIENT, {
-    name: 'BrSpark, Deslocamento (cliente)',
+    name: 'Aria, Deslocamento (cliente)',
     importance: Notifications.AndroidImportance.DEFAULT,
     lightColor: '#059669',
     sound: 'default',
   });
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_TRACKING_CLIENT_CHAT, {
-    name: 'BrSpark · Mensagem no chat (deslocamento)',
+    name: 'Aria · Mensagem no chat (deslocamento)',
     importance: Notifications.AndroidImportance.DEFAULT,
     lightColor: '#EF4444',
     sound: 'default',
@@ -105,7 +105,7 @@ export async function registerInteractivePushCategories(): Promise<void> {
       { showTitle: true, showSubtitle: false }
     );
   } catch (e) {
-    console.warn('[BrSpark] Falha ao registar categorias de notificação:', e);
+    console.warn('[Aria] Falha ao registar categorias de notificação:', e);
   }
 }
 
@@ -161,8 +161,8 @@ export interface AppNotification {
   providerAffiliationId?: string;
 }
 
-const READ_NOTIFICATIONS_LEGACY_KEY = '@brspark_read_notifications';
-const READ_NOTIFICATIONS_V2_KEY = '@brspark_read_notifications_v2';
+const READ_NOTIFICATIONS_LEGACY_KEY = '@aria_read_notifications';
+const READ_NOTIFICATIONS_V2_KEY = '@aria_read_notifications_v2';
 
 // ─── Storage local em memória (vazio por padrão) ───────────────────────
 let _notifications: AppNotification[] = [];
@@ -485,7 +485,7 @@ export const NotificationService = {
     // Expo Go no Android: push remoto não suportado (SDK 53+; continua em SDK 54)
     const isExpoGo = Constants.appOwnership === 'expo';
     if (Platform.OS === 'android' && isExpoGo) {
-      console.log('[BrSpark] Push remoto não disponível no Expo Go Android (use dev/production build com EAS).');
+      console.log('[Aria] Push remoto não disponível no Expo Go Android (use dev/production build com EAS).');
       return null;
     }
 
@@ -507,7 +507,7 @@ export const NotificationService = {
 
     if (finalStatus !== 'granted') {
       console.warn(
-        '[BrSpark] Permissão de push negada. iOS: Ajustes → BrSpark → Notificações → Permitir alertas.',
+        '[Aria] Permissão de push negada. iOS: Ajustes → Aria → Notificações → Permitir alertas.',
       );
       return null;
     }
@@ -518,12 +518,12 @@ export const NotificationService = {
         (Constants as any).easConfig?.projectId;
       if (!projectId || String(projectId).trim() === '') {
         console.warn(
-          '[BrSpark] Push: falta extra.eas.projectId no manifest. Corra `npx eas init` na raiz do projeto (ou defina EAS_PROJECT_ID / EXPO_PUBLIC_EAS_PROJECT_ID no .env) e faça nova build iOS.'
+          '[Aria] Push: falta extra.eas.projectId no manifest. Corra `npx eas init` na raiz do projeto (ou defina EAS_PROJECT_ID / EXPO_PUBLIC_EAS_PROJECT_ID no .env) e faça nova build iOS.'
         );
         return null;
       }
       const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-      console.log('[BrSpark] Expo Push Token:', tokenData.data);
+      console.log('[Aria] Expo Push Token:', tokenData.data);
       try {
         const res = await apiFetch('/api/sync/push_token', {
           method: 'POST',
@@ -531,22 +531,22 @@ export const NotificationService = {
         });
         if (!res.ok) {
           const txt = await res.text().catch(() => '');
-          console.warn('[BrSpark] push_token HTTP', res.status, txt.slice(0, 200));
+          console.warn('[Aria] push_token HTTP', res.status, txt.slice(0, 200));
         } else {
-          console.log('[BrSpark] push_token registrado no servidor (OK)');
+          console.log('[Aria] push_token registrado no servidor (OK)');
         }
       } catch (err) {
-        console.log('[BrSpark] Falha ao sincronizar token push no backend', err);
+        console.log('[Aria] Falha ao sincronizar token push no backend', err);
       }
       return tokenData.data;
     } catch (e: unknown) {
       const code = typeof e === 'object' && e !== null && 'code' in e ? (e as { code?: string }).code : '';
       if (code === 'ERR_NOTIFICATIONS_NO_EXPERIENCE_ID') {
         console.warn(
-          '[BrSpark] Push sem projectId EAS. `npx eas init` + credenciais iOS em `eas credentials` (chave APNs).'
+          '[Aria] Push sem projectId EAS. `npx eas init` + credenciais iOS em `eas credentials` (chave APNs).'
         );
       } else {
-        console.log('[BrSpark] Erro ao obter push token:', e);
+        console.log('[Aria] Erro ao obter push token:', e);
       }
       return null;
     }

@@ -5,7 +5,7 @@ export interface ChatMessage {
   content: string;
 }
 
-const SYSTEM_PROMPT = `Você é o Consultor AI do BrSpark, um assistente especializado em gestão de bens e propriedades.
+const SYSTEM_PROMPT = `Você é o Consultor AI do Aria, um assistente especializado em gestão de bens e propriedades.
 
 Seu papel:
 - Analisar dados de bens (imóveis, veículos, propriedades)

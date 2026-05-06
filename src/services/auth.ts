@@ -327,11 +327,11 @@ async function refreshAccessTokenOnce(): Promise<boolean> {
   return refreshAccessTokenInFlight;
 }
 /** Branding efectivo da última sessão — ecrã de login sem JWT ainda mostra logo/cores até novo login. */
-export const GUEST_LOGIN_BRANDING_KEY = '@brspark:guest_login_branding_v1';
+export const GUEST_LOGIN_BRANDING_KEY = '@aria:guest_login_branding_v1';
 /** Não apagar no purge — evita re-disparar migração nuclear em `_layout` a cada login. */
-const ISOLATION_VERSION_KEY = '@brspark:isolation_v';
+const ISOLATION_VERSION_KEY = '@aria:isolation_v';
 /** Marcador temporário quando a sessão expira/sessão invalidada para reter dados offline até novo login da mesma conta. */
-const PRESERVED_LOCAL_OWNER_KEY = '@brspark_preserved_local_owner_v1';
+const PRESERVED_LOCAL_OWNER_KEY = '@aria_preserved_local_owner_v1';
 
 type PreservedLocalOwner = {
   id: string;
@@ -353,10 +353,10 @@ function userIdentityFingerprint(u: Partial<User> | null | undefined): string {
 }
 
 /**
- * Remove caches BrSpark em AsyncStorage (OS, rascunhos, filas, dados por e-mail, etc.) e SQLite local.
+ * Remove caches Aria em AsyncStorage (OS, rascunhos, filas, dados por e-mail, etc.) e SQLite local.
  * Preserva apenas `ISOLATION_VERSION_KEY` (controle de migração de isolamento no arranque).
  */
-export async function purgeAllBrSparkLocalCaches(): Promise<void> {
+export async function purgeAllAriaLocalCaches(): Promise<void> {
   let isolation: string | null = null;
   try {
     isolation = await AsyncStorage.getItem(ISOLATION_VERSION_KEY);
@@ -377,8 +377,8 @@ export async function purgeAllBrSparkLocalCaches(): Promise<void> {
     if (k === ISOLATION_VERSION_KEY) return false;
     if (k === OPS_CHAT_ACK_LOGOUT_BACKUP_KEY) return false;
     if (k === TOKEN_KEY || k === USER_KEY) return true;
-    if (k.startsWith('@brspark')) return true;
-    if (k.startsWith('brspark_')) return true;
+    if (k.startsWith('@aria')) return true;
+    if (k.startsWith('aria_')) return true;
     if (k.startsWith('@draft_tsk_')) return true;
     if (k === '@user_profile' || k === '@pref_push_enabled') return true;
     return false;
@@ -514,7 +514,7 @@ export class AuthService {
       }
     }
     await AuthService.clearPreservedLocalOwner();
-    await purgeAllBrSparkLocalCaches();
+    await purgeAllAriaLocalCaches();
   }
 
   /** Login — POST /api/login */
@@ -862,7 +862,7 @@ export class AuthService {
     return d.user;
   }
 
-  /** Registro — POST /api/register (utilizador USER na tenant master BrSpark) */
+  /** Registro — POST /api/register (utilizador USER na tenant master Aria) */
   static async register(params: {
     name: string;
     email: string;
@@ -1023,7 +1023,7 @@ export class AuthService {
         /* ignore */
       }
     }
-    await purgeAllBrSparkLocalCaches();
+    await purgeAllAriaLocalCaches();
     try {
       const b = existing?.tenant?.branding;
       if (b && b.enabled) {
@@ -1164,7 +1164,7 @@ export class AuthService {
       }
     }
     /** Igual ao logout: SQLite + caches; preserva chave de isolamento (evita re-purge total no arranque). */
-    await purgeAllBrSparkLocalCaches();
+    await purgeAllAriaLocalCaches();
   }
 
   /** Alterar senha — POST /api/auth/change-password */
@@ -1208,7 +1208,7 @@ export class AuthService {
 
   /** Sugestão de utilitário para chaves isoladas */
   static getUserKey(subKey: string, email: string) {
-    return `@brspark:${email}:${subKey}`;
+    return `@aria:${email}:${subKey}`;
   }
 
   // ─── 2FA ──────────────────────────────────────────────────────────────

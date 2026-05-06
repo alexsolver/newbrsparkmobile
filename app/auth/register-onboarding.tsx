@@ -42,7 +42,7 @@ import {
   buildE164Phone,
 } from '../../src/constants/phoneDialCodes';
 
-const REGION_KEY = '@brspark_region';
+const REGION_KEY = '@aria_region';
 
 const COUNTRIES = [
   { code: 'BR', label: 'Brasil', lang: 'pt-BR' as const },
@@ -534,7 +534,7 @@ export default function RegisterOnboardingScreen() {
       if (techRegToken) {
         goToTechRegistrationAfterAuth();
       } else {
-        const done = await AsyncStorage.getItem('@brspark_onboarding_done');
+        const done = await AsyncStorage.getItem('@aria_onboarding_done');
         router.replace((done ? getPersonaHomeHref('client') : '/auth/onboarding') as any);
       }
     } catch (e: unknown) {

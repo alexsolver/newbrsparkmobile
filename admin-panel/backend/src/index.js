@@ -7,12 +7,12 @@ require('dotenv').config({
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('[BrSpark] uncaughtException — o processo vai encerrar. Detalhe:', err);
+  console.error('[Aria] uncaughtException — o processo vai encerrar. Detalhe:', err);
   if (err && err.stack) console.error(err.stack);
   process.exit(1);
 });
 process.on('unhandledRejection', (reason) => {
-  console.error('[BrSpark] unhandledRejection:', reason);
+  console.error('[Aria] unhandledRejection:', reason);
   if (reason && reason.stack) console.error(reason.stack);
 });
 
@@ -363,7 +363,7 @@ app.get('/api/providers', async (req, res) => {
       try {
         const json = await fetchProvidersFromCms(qs);
         res.set('Cache-Control', 'no-store');
-        res.set('X-BrSpark-Directory-Source', 'laravel');
+        res.set('X-Aria-Directory-Source', 'laravel');
         return res.json({
           data:       json.data || [],
           total:      json.total ?? 0,
@@ -375,17 +375,17 @@ app.get('/api/providers', async (req, res) => {
         console.warn('[api/providers] CMS directory falhou:', cmsErr.message);
         if (!pgFallback) {
           res.set('Cache-Control', 'no-store');
-          res.set('X-BrSpark-Directory-Source', 'laravel-error');
+          res.set('X-Aria-Directory-Source', 'laravel-error');
           // 503: clientes móveis tratam como falha e podem usar cache SQLite (ver ProviderService.search).
           return res.status(503).json(emptyPayload('CMS_DIRECTORY_UNAVAILABLE'));
         }
         console.warn('[api/providers] Fallback PostgreSQL (DIRECTORY_POSTGRES_FALLBACK=1).');
-        res.set('X-BrSpark-Directory-Fallback', '1');
-        res.set('X-BrSpark-Directory-Source', 'laravel-error-postgres');
+        res.set('X-Aria-Directory-Fallback', '1');
+        res.set('X-Aria-Directory-Source', 'laravel-error-postgres');
       }
     } else if (!pgFallback) {
       res.set('Cache-Control', 'no-store');
-      res.set('X-BrSpark-Directory-Source', 'cms-not-configured');
+      res.set('X-Aria-Directory-Source', 'cms-not-configured');
       return res.status(503).json(emptyPayload('CMS_DIRECTORY_NOT_CONFIGURED'));
     }
 
@@ -439,8 +439,8 @@ app.get('/api/providers', async (req, res) => {
     });
 
     res.set('Cache-Control', 'no-store');
-    if (!res.get('X-BrSpark-Directory-Source')) {
-      res.set('X-BrSpark-Directory-Source', 'postgresql');
+    if (!res.get('X-Aria-Directory-Source')) {
+      res.set('X-Aria-Directory-Source', 'postgresql');
     }
     res.json({
       data:       formatted,
@@ -465,7 +465,7 @@ app.get('/api/public/directory/providers/:id', async (req, res) => {
     const cmsBase = (process.env.CMS_DIRECTORY_BASE_URL || '').replace(/\/$/, '');
     if (!cmsBase) {
       res.set('Cache-Control', 'no-store');
-      res.set('X-BrSpark-Directory-Source', 'cms-not-configured');
+      res.set('X-Aria-Directory-Source', 'cms-not-configured');
       return res.status(503).json({ error: 'CMS_DIRECTORY_BASE_URL não configurado.' });
     }
     const json = await fetchProviderDetailFromCms(id);
@@ -473,13 +473,13 @@ app.get('/api/public/directory/providers/:id', async (req, res) => {
       return res.status(502).json({ error: 'Resposta inválida do CMS.' });
     }
     res.set('Cache-Control', 'no-store');
-    res.set('X-BrSpark-Directory-Source', 'laravel');
+    res.set('X-Aria-Directory-Source', 'laravel');
     return res.json(json);
   } catch (err) {
     const status = Number(err.status) || 502;
     console.warn('[api/public/directory/providers/:id]', err.message);
     res.set('Cache-Control', 'no-store');
-    res.set('X-BrSpark-Directory-Source', 'laravel-error');
+    res.set('X-Aria-Directory-Source', 'laravel-error');
     if (status === 404) {
       return res.status(404).json({ error: 'Empresa não encontrada.' });
     }
@@ -547,11 +547,11 @@ app.get('/api/directory/categories', async (_req, res) => {
     const json = await fetchCategoriesFromCms();
     const data = mapLaravelCategoriesForApp(json);
     res.set('Cache-Control', 'public, max-age=300');
-    res.set('X-BrSpark-Category-Source', 'laravel');
+    res.set('X-Aria-Category-Source', 'laravel');
     return res.json({ data });
   } catch (err) {
     console.warn('[api/directory/categories]', err.message);
-    res.set('X-BrSpark-Category-Source', 'laravel-error');
+    res.set('X-Aria-Category-Source', 'laravel-error');
     return res.status(502).json({ error: err.message || 'Falha ao obter categorias do CMS.', data: [] });
   }
 });
@@ -704,7 +704,7 @@ app.use((err, _req, res, _next) => {
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🚀 BrSpark Admin API running on http://0.0.0.0:${PORT} (LAN: use o IP da máquina na mesma porta)`);
+    console.log(`\n🚀 Aria Admin API running on http://0.0.0.0:${PORT} (LAN: use o IP da máquina na mesma porta)`);
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`   Database:    ${process.env.DATABASE_URL?.split('@')[1] || 'Not configured'}\n`);
 
@@ -754,7 +754,7 @@ app.use((err, _req, res, _next) => {
   server.on('error', (err) => {
     if (/** @type {NodeJS.ErrnoException} */ (err).code === 'EADDRINUSE') {
       console.error(
-        `\n[BrSpark] Porta ${PORT} já está em uso — provavelmente outro \`node src/index.js\` ou \`npm run dev\` nesta máquina.\n` +
+        `\n[Aria] Porta ${PORT} já está em uso — provavelmente outro \`node src/index.js\` ou \`npm run dev\` nesta máquina.\n` +
           `  • Ver o processo:  lsof -nP -iTCP:${PORT} -sTCP:LISTEN\n` +
           `  • Libertar:        kill <PID>   (feche o outro terminal se for o caso)\n` +
           `  • Outra porta:     PORT=3002 npm run dev   (ajuste EXPO_PUBLIC_API_BASE no app para …:3002)\n`,
@@ -762,7 +762,7 @@ app.use((err, _req, res, _next) => {
       process.exit(1);
       return;
     }
-    console.error('[BrSpark] Erro ao escutar HTTP:', err);
+    console.error('[Aria] Erro ao escutar HTTP:', err);
     process.exit(1);
   });
 })().catch((e) => {

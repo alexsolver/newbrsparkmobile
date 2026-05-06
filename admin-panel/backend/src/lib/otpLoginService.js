@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('./brsparkSyncWebhook');
+const { deliverAriaLaravelEvent, EVENT_TYPES } = require('./ariaSyncWebhook');
 
 /** JWT de curta duração após OTP válido no registo — troca por sessão em `register-complete`. */
 const OTP_REG_SETUP_PURPOSE = 'OTP_REG_SETUP_V1';
@@ -33,7 +33,7 @@ async function tombstoneUserRowFully(prisma, userId) {
   const id = String(userId || '').trim();
   if (!id) return;
   const passHash = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
-  const tombstone = `deleted_${id}@brspark.com`;
+  const tombstone = `deleted_${id}@aria.com`;
   await prisma.$transaction([
     prisma.pushToken.deleteMany({ where: { userId: id } }),
     prisma.user.update({
@@ -64,7 +64,7 @@ async function tombstoneUserRowFully(prisma, userId) {
 
 /** Tenants onde o registo app pode «limpar» e-mails/telefones inactivos: espaços CLIENT e tenant master legada. */
 function registerCleanupTenantWhere() {
-  const slugSet = new Set(['brspark', 'master', 'brspark-app']);
+  const slugSet = new Set(['aria', 'master', 'aria-app']);
   const envSlug = String(process.env.APP_DEFAULT_TENANT_SLUG || '').trim().toLowerCase();
   if (envSlug) slugSet.add(envSlug);
   const slugOr = [...slugSet].map((slug) => ({ slug: { equals: slug, mode: 'insensitive' } }));
@@ -146,7 +146,7 @@ function parseIdentifier(raw) {
       type: 'phone',
       key: e164,
       e164,
-      displayEmail: `u${digits}@p.brspark.app`,
+      displayEmail: `u${digits}@p.aria.app`,
       phoneForDb: e164,
     };
   }
@@ -164,7 +164,7 @@ function parseIdentifier(raw) {
     type: 'phone',
     key: e164,
     e164,
-    displayEmail: `u${d}@p.brspark.app`,
+    displayEmail: `u${d}@p.aria.app`,
     phoneForDb: e164,
   };
 }
@@ -238,7 +238,7 @@ async function sendOtpToChannel(prisma, { channel, target, code, isE164Phone }) 
 }
 
 function i18nBrCodeMsg(code) {
-  return `BrSpark: seu código é ${code}. Não compartilhe. Expira em ${String(process.env.OTP_TTL_MINUTES || 10)} min.`;
+  return `Aria: seu código é ${code}. Não compartilhe. Expira em ${String(process.env.OTP_TTL_MINUTES || 10)} min.`;
 }
 function i18nBrCodeMsgPlain(code) {
   return i18nBrCodeMsg(code);
@@ -401,7 +401,7 @@ async function verifyChallenge(
   const nameFromMeta = registerName != null && String(registerName).trim() ? String(registerName).trim() : meta.nameIfRegister;
 
   const isEmail = ch.target.includes('@');
-  const displayEmail = isEmail ? ch.target : `u${ch.target.replace(/\D/g, '')}@p.brspark.app`;
+  const displayEmail = isEmail ? ch.target : `u${ch.target.replace(/\D/g, '')}@p.aria.app`;
   const phoneVal = isEmail ? null : ch.target;
   const purposeStr = String(ch.purpose || 'login').toLowerCase();
 
@@ -498,7 +498,7 @@ async function verifyChallenge(
       include: { tenant: true, technicianProfile: true },
     });
     const roleHint = hydrated?.technicianProfile ? 'TECHNICIAN' : hydrated?.role;
-    deliverBrsparkLaravelEvent({
+    deliverAriaLaravelEvent({
       type: EVENT_TYPES.USER_CREATED,
       idempotencyKey: `user-${user.id}-created`,
       payload: {
@@ -535,7 +535,7 @@ async function verifyChallenge(
     return { ok: false, error: 'Conta de organização suspensa.', status: 403 };
   }
   if (phoneVal) {
-    deliverBrsparkLaravelEvent({
+    deliverAriaLaravelEvent({
       type: EVENT_TYPES.USER_PHONE_VERIFIED,
       idempotencyKey: `user-${user.id}-phonever-${Date.now()}`,
       payload: { userId: user.id, tenantId: user.tenantId, phone: phoneVal },
@@ -582,7 +582,7 @@ async function verifyRegisterOtpPhase1(prisma, { challengeId, code, registerName
   }
 
   const isEmail = ch.target.includes('@');
-  const displayEmail = isEmail ? ch.target : `u${ch.target.replace(/\D/g, '')}@p.brspark.app`;
+  const displayEmail = isEmail ? ch.target : `u${ch.target.replace(/\D/g, '')}@p.aria.app`;
   const phoneE164 =
     meta.phoneIfRegister != null && String(meta.phoneIfRegister).trim()
       ? String(meta.phoneIfRegister).trim()
@@ -732,7 +732,7 @@ async function completeRegisterFromSetupToken(
     throw e;
   }
 
-  deliverBrsparkLaravelEvent({
+  deliverAriaLaravelEvent({
     type: EVENT_TYPES.USER_CREATED,
     idempotencyKey: `user-${user.id}-register-otp-pwd`,
     payload: { userId: user.id, tenantId: user.tenantId, email: user.email, phone: user.phone, source: 'otp_password' },
@@ -751,9 +751,9 @@ async function completeRegisterFromSetupToken(
 }
 
 const TWO_FA_EMAIL_SUBJECTS = {
-  two_factor_login: 'BrSpark: código para concluir o login',
-  two_factor_enable: 'BrSpark: código para ativar verificação em duas etapas',
-  two_factor_disable: 'BrSpark: código para desativar verificação em duas etapas',
+  two_factor_login: 'Aria: código para concluir o login',
+  two_factor_enable: 'Aria: código para ativar verificação em duas etapas',
+  two_factor_disable: 'Aria: código para desativar verificação em duas etapas',
 };
 
 /**
@@ -792,7 +792,7 @@ async function startEmailPurposeChallenge(prisma, { emailNorm, purpose, metadata
     },
   });
   const { sendOtpTransactionalEmail } = require('./transactionalEmailSend');
-  const subject = TWO_FA_EMAIL_SUBJECTS[purposeStr] || 'BrSpark: seu código de verificação';
+  const subject = TWO_FA_EMAIL_SUBJECTS[purposeStr] || 'Aria: seu código de verificação';
   const { send, provider } = await sendOtpTransactionalEmail({
     to: key,
     subject,

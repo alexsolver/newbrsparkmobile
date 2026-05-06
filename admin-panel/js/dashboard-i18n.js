@@ -1,13 +1,13 @@
 /**
  * Textos do dashboard admin, pt-BR, en-US e es-ES.
- * Preferência: `getAdminUiLocale()` (localStorage `brspark_admin_ui_locale`; padrão pt-BR).
+ * Preferência: `getAdminUiLocale()` (localStorage `aria_admin_ui_locale`; padrão pt-BR).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
 
 const M = {
   'pt-BR': {
-    dash_pageTitle: 'BrSpark Admin, Dashboard',
+    dash_pageTitle: 'Aria Admin, Dashboard',
     dash_bc_panel: 'Painel',
     dash_bc_summary: 'Resumo',
     dash_hero_title: 'Dashboard',
@@ -72,7 +72,7 @@ const M = {
     st_CANCELLED: 'Cancelado',
   },
   'en-US': {
-    dash_pageTitle: 'BrSpark Admin, Dashboard',
+    dash_pageTitle: 'Aria Admin, Dashboard',
     dash_bc_panel: 'Home',
     dash_bc_summary: 'Overview',
     dash_hero_title: 'Dashboard',
@@ -137,7 +137,7 @@ const M = {
     st_CANCELLED: 'Cancelled',
   },
   'es-ES': {
-    dash_pageTitle: 'BrSpark Admin, Panel',
+    dash_pageTitle: 'Aria Admin, Panel',
     dash_bc_panel: 'Inicio',
     dash_bc_summary: 'Resumen',
     dash_hero_title: 'Panel',

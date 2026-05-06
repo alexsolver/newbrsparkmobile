@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Central de Operações</title>
+  <title>Aria Admin — Central de Operações</title>
   <link rel="stylesheet" href="css/main.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -477,7 +477,7 @@
     }
     .bg-blue { background: #3b82f6; }
     .bg-green { background: #22c55e; }
-    .bg-orange { background: #EA580C; }
+    .bg-orange { background: #0d9488; }
     .pdf-timeline-label { font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 2px; }
     .pdf-timeline-date { font-size: 9px; color: #475569; }
     .pdf-timeline-rev-hint {
@@ -517,7 +517,7 @@
     }
     .pdf-form-num {
        position: absolute; left: -44px; top: 14px; width: 26px; height: 26px; border-radius: 50%;
-       background: #F97316; color: white; display: flex; align-items: center; justify-content: center;
+       background: #14b8a6; color: white; display: flex; align-items: center; justify-content: center;
        font-size: 11px; font-weight: 900; z-index: 2; border: 3px solid white;
        box-shadow: none;
        -webkit-print-color-adjust: exact;
@@ -1078,7 +1078,7 @@
           <div id="ops-geo-route-import-title" style="font-size:11px; font-weight:700; color:var(--text2); margin-bottom:8px;"><ion-icon name="folder-open-outline" style="vertical-align:-2px"></ion-icon> Importar KML de Rota (Google Earth / Maps)</div>
           <label for="d-kml-route-file" style="display:flex; align-items:center; gap:8px; cursor:pointer;">
             <div style="flex:1; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:8px 12px; font-size:12px; color:var(--text3);" id="d-kml-route-label">Nenhum arquivo selecionado...</div>
-            <div id="d-kml-route-choose-btn" style="background:#f97316; color:#fff; padding:8px 14px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap;"><ion-icon name="folder-outline" style="vertical-align:-2px"></ion-icon> Escolher KML</div>
+            <div id="d-kml-route-choose-btn" style="background:#14b8a6; color:#fff; padding:8px 14px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap;"><ion-icon name="folder-outline" style="vertical-align:-2px"></ion-icon> Escolher KML</div>
           </label>
           <input type="file" id="d-kml-route-file" accept=".kml,.kmz" style="display:none;" />
           <div id="d-kml-route-status" style="font-size:10px; color:var(--text3); margin-top:6px;">Suporta arquivos .kml com <strong>LineString</strong> (trajeto) exportados do Google Earth ou Maps.</div>
@@ -1091,7 +1091,7 @@
         </div>
         <!-- Hidden storage for route coords -->
         <textarea id="d-route" style="display:none;"></textarea>
-        <div style="font-size:10px;color:var(--text3);margin:8px 0 4px;line-height:1.4;"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Pré-visualização: linha <strong style="color:#ea580c">laranja</strong> = KML; marcador <strong style="color:#059669">D</strong> = destino de navegação (digitado acima).</div>
+        <div style="font-size:10px;color:var(--text3);margin:8px 0 4px;line-height:1.4;"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Pré-visualização: linha <strong style="color:#0d9488">ciano (marca)</strong> = KML; marcador <strong style="color:#059669">D</strong> = destino de navegação (digitado acima).</div>
         <div id="dispatch-map-route" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9; margin-top:8px;"></div>
       </div>
 
@@ -1178,7 +1178,7 @@
           <label class="form-label" style="font-size:11px;" for="d-polygon">Ou cole manualmente (JSON)</label>
           <textarea class="form-control" id="d-polygon" rows="3" placeholder='[[lat,lng],[lat,lng],[lat,lng]]&#10;Ex: [[-23.55,-46.63],[-23.56,-46.63],[-23.56,-46.62]]'></textarea>
         </div>
-        <div style="font-size:10px;color:var(--text3);margin:8px 0 4px;line-height:1.4;"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Pré-visualização: área/linha <strong style="color:#2563eb">azul</strong> ou <strong style="color:#ea580c">laranja</strong> = KML; marcador <strong style="color:#059669">D</strong> = destino de navegação (bloco «Destino para navegação»).</div>
+        <div style="font-size:10px;color:var(--text3);margin:8px 0 4px;line-height:1.4;"><ion-icon name="map-outline" style="vertical-align:-2px"></ion-icon> Pré-visualização: área/linha <strong style="color:#2563eb">azul</strong> ou <strong style="color:#0d9488">ciano (marca)</strong> = KML; marcador <strong style="color:#059669">D</strong> = destino de navegação (bloco «Destino para navegação»).</div>
         <div id="dispatch-map-polygon" style="height:200px; border-radius:8px; border:1px solid var(--border); background:#f1f5f9;"></div>
         <button type="button" id="ops-geo-polygon-preview-btn" class="btn btn-outline btn-sm" data-ops-dispatch-action="polygon-preview" style="margin-top:8px; width:100%; font-size:11px;"><ion-icon name="shapes-outline" style="vertical-align:-2px"></ion-icon> Visualizar Polígono no Mapa</button>
       </div>
@@ -1264,7 +1264,7 @@ function initOpsListLimitControl() {
   if (!sel) return;
   let v = '200';
   try {
-    const ls = sessionStorage.getItem('brspark_ops_list_limit');
+    const ls = sessionStorage.getItem('aria_ops_list_limit');
     if (ls === '100' || ls === '200' || ls === '500') v = ls;
   } catch {
     /* ignore */
@@ -1272,7 +1272,7 @@ function initOpsListLimitControl() {
   sel.value = v;
   sel.addEventListener('change', () => {
     try {
-      sessionStorage.setItem('brspark_ops_list_limit', sel.value);
+      sessionStorage.setItem('aria_ops_list_limit', sel.value);
     } catch {
       /* ignore */
     }
@@ -1416,7 +1416,7 @@ async function refreshReportPresetsDropdown() {
     const r = await fetch(`${CONFIG.API_BASE}/reports/presets`, { headers: CONFIG.headers() });
     if (!r.ok) return;
     _reportPresetListCache = await r.json();
-    const saved = localStorage.getItem('brspark_report_preset_id');
+    const saved = localStorage.getItem('aria_report_preset_id');
     sel.innerHTML = '';
     const opt0 = document.createElement('option');
     opt0.value = '';
@@ -1434,8 +1434,8 @@ async function refreshReportPresetsDropdown() {
       const id = sel.value;
       const row = _reportPresetListCache.find((x) => x.id === id);
       window.__reportActivePresetConfig = row ? mergePresetConfig(row.config) : mergePresetConfig(null);
-      if (id) localStorage.setItem('brspark_report_preset_id', id);
-      else localStorage.removeItem('brspark_report_preset_id');
+      if (id) localStorage.setItem('aria_report_preset_id', id);
+      else localStorage.removeItem('aria_report_preset_id');
     };
     if (!sel.dataset.opsReportPresetChangeBound) {
       sel.dataset.opsReportPresetChangeBound = '1';
@@ -1523,9 +1523,9 @@ function canonicalEmailForOpsUser(u) {
   return String((u && u.email) || '').trim();
 }
 
-/** `User.email` sintético para o mesmo AppAccount (ex.: `+brspark.ws.…`, `+brspark.…`). */
-function isSyntheticBrsparkAffiliationEmail(em) {
-  return /\+brspark\./i.test(String(em || ''));
+/** `User.email` sintético para o mesmo AppAccount (ex.: `+aria.ws.…`, `+aria.…`). */
+function isSyntheticAriaAffiliationEmail(em) {
+  return /\+aria\./i.test(String(em || ''));
 }
 
 function opsActiveUserDedupeKey(u) {
@@ -1542,7 +1542,7 @@ function pickRepresentativeOpsUserRow(group) {
   const canon = canonicalEmailForOpsUser(group[0]).toLowerCase();
   const exact = group.find((x) => String(x.email || '').trim().toLowerCase() === canon);
   if (exact) return exact;
-  const plain = group.find((x) => !isSyntheticBrsparkAffiliationEmail(x.email));
+  const plain = group.find((x) => !isSyntheticAriaAffiliationEmail(x.email));
   if (plain) return plain;
   return [...group].sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')))[0];
 }
@@ -1601,7 +1601,7 @@ function escDispatchSuggest(s) {
 /** SAAS sem tenant no JWT: reutiliza tenant seleccionado no painel (sessionStorage). */
 function opsDispatchSuggestionsTenantParam() {
   try {
-    const raw = sessionStorage.getItem('brspark_panel_tenant');
+    const raw = sessionStorage.getItem('aria_panel_tenant');
     if (!raw || raw === 'null') return '';
     const o = JSON.parse(raw);
     const id = o && (o.id || o.tenantId);
@@ -2358,14 +2358,14 @@ window.submitReopenRevision = async function () {
 // ── Load Board ────────────────────────────────────────────────
 function getOpsScopeForApi() {
   const sel = document.getElementById('filter-scope');
-  let v = sessionStorage.getItem('brspark_ops_scope');
+  let v = sessionStorage.getItem('aria_ops_scope');
   if (!v || !['os', 'rt', 'all'].includes(v)) {
     v = sel && ['os', 'rt', 'all'].includes(sel.value) ? sel.value : 'os';
   }
   if (!['os', 'rt', 'all'].includes(v)) v = 'os';
   if (sel) sel.value = v;
   try {
-    sessionStorage.setItem('brspark_ops_scope', v);
+    sessionStorage.setItem('aria_ops_scope', v);
   } catch {
     /* ignore */
   }
@@ -2376,7 +2376,7 @@ window.onOpsScopeFilterChange = function () {
   const sel = document.getElementById('filter-scope');
   const v = sel && ['os', 'rt', 'all'].includes(sel.value) ? sel.value : 'os';
   try {
-    sessionStorage.setItem('brspark_ops_scope', v);
+    sessionStorage.setItem('aria_ops_scope', v);
   } catch {
     /* ignore */
   }
@@ -2736,7 +2736,7 @@ function buildCard(task, colClass) {
   const formDisplayName = String(task.metadata?.templateTitle || task.template?.title || '').trim();
   const osLabelEsc = String(displayOsLabel(task)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const ftRtPillStyle = isRt
-    ? 'background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);color:#fff;border:1px solid #9a3412;box-shadow:0 2px 8px rgba(234,88,12,0.35)'
+    ? 'background:linear-gradient(135deg,#14b8a6 0%,#115e59 100%);color:#fff;border:1px solid #0f766e;box-shadow:0 2px 8px rgba(13,148,136,0.35)'
     : 'background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%);color:#fff;border:1px solid #1e40af;box-shadow:0 2px 8px rgba(37,99,235,0.35)';
   const ftRtBadgeHtml = `<span style="display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:8px 12px;border-radius:10px;font-size:12px;font-weight:900;letter-spacing:0.02em;${ftRtPillStyle}"><ion-icon name="${isRt ? 'reader-outline' : 'pricetag-outline'}" style="font-size:16px;vertical-align:-2px;opacity:0.95"></ion-icon><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace">#${osLabelEsc}</span></span>`;
   const formNameHtml = formDisplayName
@@ -2878,8 +2878,8 @@ function buildCard(task, colClass) {
         </div>
         ${trackingTok ? `
         <div data-ops-track-panel="1" style="background:#FFF7ED; border:1px dashed #FDBA74; border-radius:4px; padding:4px 6px; display:flex; gap:4px; align-items:center">
-          <ion-icon name="location-outline" style="color:#EA580C; font-size:12px"></ion-icon>
-          <a href="/track.html?t=${encodeURIComponent(trackingTok)}" target="_blank" rel="noopener noreferrer" style="color:#EA580C; font-size:9px; font-weight:700; flex:1; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
+          <ion-icon name="location-outline" style="color:#0d9488; font-size:12px"></ion-icon>
+          <a href="/track.html?t=${encodeURIComponent(trackingTok)}" target="_blank" rel="noopener noreferrer" style="color:#0d9488; font-size:9px; font-weight:700; flex:1; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
             Acompanhar
           </a>
           <button type="button" class="ops-copy-track-url" data-ops-copy-url="${safeTrackCopyUrlAttr}" style="background:none; border:none; color:#2563EB; font-size:9px; font-weight:700; cursor:pointer; padding:0">
@@ -2906,7 +2906,7 @@ function buildTransitTechMapIcons(task) {
   } else if (rawAvatar.startsWith('/')) {
     avatarUrl = `${window.location.origin}${rawAvatar}`;
   } else {
-    avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(t.ownerEmail?.split('@')[0] || 'T')}&background=EA580C&color=fff&size=100&bold=true`;
+    avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(t.ownerEmail?.split('@')[0] || 'T')}&background=0d9488&color=fff&size=100&bold=true`;
   }
   const safe = String(avatarUrl).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   const makeIcon = (borderColor) =>
@@ -3125,7 +3125,7 @@ function tryInitReportTransitMap(t, mapElementId, setMapRef, getPreviousMap) {
           );
         } else if (zt === 'route') {
           layers.push(
-            L.polyline(refLL, { color: '#f97316', weight: 4, dashArray: '10 6' }).addTo(map),
+            L.polyline(refLL, { color: '#14b8a6', weight: 4, dashArray: '10 6' }).addTo(map),
           );
         }
       }
@@ -4055,7 +4055,7 @@ function buildPatrolSvgOverlayOps(refLatLng, traversedLatLng, cx, cy, z, zoneTyp
   } else {
     var refLine = coordsToSvgPolylineOps(refLatLng, b);
     if (refLine) {
-      var stroke = zt === 'segment' ? '#9333ea' : '#ea580c';
+      var stroke = zt === 'segment' ? '#9333ea' : '#0d9488';
       refSvg =
         '<polyline fill="none" stroke="' +
         stroke +
@@ -4385,7 +4385,7 @@ function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
           ? 'polígono de serviço (KML) e trilha GPS sobre os tiles OSM.'
           : zt === 'segment'
             ? 'trecho A–B (KML), trilha GPS e início/fim sobre os tiles OSM.'
-            : 'rota de referência (laranja), trilha GPS (azul) e início/fim sobre os tiles OSM.'
+            : 'rota de referência (ciano), trilha GPS (azul) e início/fim sobre os tiles OSM.'
       }</div>
     </div>`;
   } else if (!p) {
@@ -4401,7 +4401,7 @@ function buildPatrolRoutePdfBlockOps(th, task, endGPS, escPdfFn) {
   return `
     <div style="margin-top:14px;padding:12px 14px;border:1px solid #fed7aa;border-radius:10px;background:linear-gradient(135deg,#fff7ed 0%,#fff 100%);box-sizing:border-box">
       <div style="font-size:11px;font-weight:900;color:#9a3412;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <ion-icon name="git-network-outline" style="font-size:18px;color:#ea580c"></ion-icon>
+        <ion-icon name="git-network-outline" style="font-size:18px;color:#0d9488"></ion-icon>
         ${escPdf(title)}
         ${badge}
       </div>
@@ -5435,10 +5435,10 @@ function buildReportTab(t) {
           <div style="text-align:center;color:#9a3412;font-size:11px;font-weight:700;line-height:1.45">Mídia ainda em arquivo local — após sincronizar, a imagem aparece aqui.</div>
         </div>`;
       return (
-        `<div style="margin-top:8px;max-width:350px;background:#EA580C;border-radius:10px;border:1px solid #c2410c;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,0.06)">` +
+        `<div style="margin-top:8px;max-width:350px;background:#0d9488;border-radius:10px;border:1px solid #115e59;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,0.06)">` +
         body +
         (showFooter
-          ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:9px;font-weight:700;line-height:1.45;box-sizing:border-box;font-family:ui-monospace,monospace">🕒 ${escHtml(
+          ? `<div style="background:#0d9488;color:#fff;padding:10px 12px;font-size:9px;font-weight:700;line-height:1.45;box-sizing:border-box;font-family:ui-monospace,monospace">🕒 ${escHtml(
               stampTs + idxLine,
             )}</div>`
           : '') +
@@ -5451,10 +5451,10 @@ function buildReportTab(t) {
     const hrefAttr = escapeHtmlAttr(singleVal);
     const imgInner = `<img src="${srcEsc}" alt="" style="border-radius:0;width:100%;height:auto;min-height:180px;max-height:320px;object-fit:cover;display:block"${OPS_IMG_ATTR_FB_300} decoding="async"/>`;
     return (
-      `<div style="margin-top:8px;max-width:350px;margin-left:0;margin-right:auto;background:#EA580C;border-radius:10px;border:1px solid #c2410c;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,0.06)">` +
+      `<div style="margin-top:8px;max-width:350px;margin-left:0;margin-right:auto;background:#0d9488;border-radius:10px;border:1px solid #115e59;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(0,0,0,0.06)">` +
       imgInner +
       (showFooter
-        ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:9px;font-weight:700;line-height:1.45;box-sizing:border-box;font-family:ui-monospace,monospace">🕒 ${escHtml(
+        ? `<div style="background:#0d9488;color:#fff;padding:10px 12px;font-size:9px;font-weight:700;line-height:1.45;box-sizing:border-box;font-family:ui-monospace,monospace">🕒 ${escHtml(
             stampTs + idxLine,
           )}${gpsComplement}</div>`
         : '') +
@@ -6988,7 +6988,7 @@ window.printReport = async function() {
       return {
         kind: 'pending',
         border: '#b45309',
-        footer: '#c2410c',
+        footer: '#115e59',
         title: 'RECONHECIMENTO FACIAL — PENDENTE',
         message: '',
       };
@@ -7012,7 +7012,7 @@ window.printReport = async function() {
       return {
         kind: 'pending',
         border: '#b45309',
-        footer: '#c2410c',
+        footer: '#115e59',
         title: 'RECONHECIMENTO FACIAL — PENDENTE',
         message: '',
       };
@@ -7494,11 +7494,11 @@ window.printReport = async function() {
                       </div>`;
                     return (
                       `
-                    <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#EA580C;border-radius:8px;border:1px solid #c2410c;overflow:hidden;display:flex;flex-direction:column;">
+                    <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#0d9488;border-radius:8px;border:1px solid #115e59;overflow:hidden;display:flex;flex-direction:column;">
                       ${body}
                       ${
                         showFooter
-                          ? `<div style="background:#EA580C;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${stampTs}${idxLine}</div>`
+                          ? `<div style="background:#0d9488;color:#fff;padding:10px 12px;font-size:8px;font-weight:700;line-height:1.4;box-sizing:border-box;font-family:monospace">🕒 ${stampTs}${idxLine}</div>`
                           : ''
                       }
                     </div>` + pdfMediaCapHtml(id, capIdx, row)
@@ -7546,10 +7546,10 @@ window.printReport = async function() {
                 const imgInner = `<img src="${imgSrc}" class="pdf-photo-img" style="border-radius:0;width:100%;height:auto;min-height:180px;object-fit:cover;display:block"${OPS_IMG_ATTR_FB_300} decoding="async"/>`;
                 return (
                   `
-                <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#EA580C;border-radius:8px;border:1px solid #c2410c;overflow:hidden;display:flex;flex-direction:column;">
+                <div class="pdf-photo-card" style="margin-top:8px;max-width:350px;margin-left:auto;margin-right:auto;background:#0d9488;border-radius:8px;border:1px solid #115e59;overflow:hidden;display:flex;flex-direction:column;">
                    ${imgInner}
                    ${showFooter ? `
-                   <div style="background: #EA580C; color: #fff; padding: 10px 12px; font-size: 8px; font-weight: 700; line-height: 1.4; box-sizing: border-box; font-family: monospace;">
+                   <div style="background: #0d9488; color: #fff; padding: 10px 12px; font-size: 8px; font-weight: 700; line-height: 1.4; box-sizing: border-box; font-family: monospace;">
                       🕒 ${stampTs}${idxLine}
                       ${gpsComplement}
                    </div>` : ''}
@@ -7857,7 +7857,7 @@ window.printReport = async function() {
   } else if (rawAvatar.startsWith('/')) {
       avatarUrl = `${window.location.origin}${rawAvatar}`;
   } else {
-      avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(t.ownerEmail?.split('@')[0] || 'T')}&background=EA580C&color=fff&size=100&bold=true`;
+      avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(t.ownerEmail?.split('@')[0] || 'T')}&background=0d9488&color=fff&size=100&bold=true`;
   }
 
   const transitSecProd = computeTransitSecondsFromEndpoints(startGPS, endGPS);
@@ -8120,8 +8120,8 @@ window.printReport = async function() {
 
   const pieceFooter = mod.footer
     ? `<div class="pdf-footer" style="margin-top:50px; border-top:1px solid ${th.colorBorder}; padding-top:15px; display:flex; justify-content:space-between; color:${th.colorMuted}; font-size:10px;">
-       <div>Gerado pela <strong>BrSpark Admin Central de Operações</strong></div>
-       <div>www.brspark.com</div>
+       <div>Gerado pela <strong>Aria Admin Central de Operações</strong></div>
+       <div>www.aria.com</div>
     </div>`
     : '';
 
@@ -8653,7 +8653,7 @@ window.switchGeoTab = function(mode) {
   window._geoMode = mode;
   const TAB_COLORS = {
     radius:  { bg: '#0f172a',        color: '#fff' },
-    route:   { bg: '#f97316',        color: '#fff' },
+    route:   { bg: '#14b8a6',        color: '#fff' },
     segment: { bg: '#eab308',        color: '#fff' },
     polygon: { bg: '#3b82f6',        color: '#fff' },
     none:    { bg: '#64748b',        color: '#fff' },
@@ -8927,7 +8927,7 @@ window.renderRoutePreview = function(opts) {
     if (!Array.isArray(coords) || coords.length < 2) throw new Error('Mínimo 2 pontos necessários.');
     window._clearRoutePreviewOverlays();
     const latlngs = coords.map(function(c) { return [c[0], c[1]]; });
-    window._routePolyline = L.polyline(latlngs, { color: '#f97316', weight: 4, dashArray: '8,4' })
+    window._routePolyline = L.polyline(latlngs, { color: '#14b8a6', weight: 4, dashArray: '8,4' })
       .addTo(window._dispatchMapRoute);
     window._routePreviewLayers.push(window._routePolyline);
     const nav = window.parseDispatchNavCoords && window.parseDispatchNavCoords();
@@ -9220,7 +9220,7 @@ window.renderPolygonPreview = function(opts) {
   const latlngs = coords.map(function(c) { return [c[0], c[1]]; });
   const isRoute = (window._kmlZoneType === 'route') || (coords.length === 2);
   if (isRoute) {
-    window._polyLayer = L.polyline(latlngs, { color: '#f97316', weight: 4, dashArray: '8,4' }).addTo(map);
+    window._polyLayer = L.polyline(latlngs, { color: '#14b8a6', weight: 4, dashArray: '8,4' }).addTo(map);
   } else {
     window._polyLayer = L.polygon(latlngs, { color: '#3b82f6', fillOpacity: 0.15, weight: 2 }).addTo(map);
   }

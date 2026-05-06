@@ -2,7 +2,7 @@ const prisma = require('./src/db');
 const { allocateNextFtOsNumber } = require('./src/lib/ftOsNumber');
 
 async function main() {
-  const email = 'alex@brspark.com';
+  const email = 'alex@aria.com';
   
   // Coordenadas base (Centro de SP, por exemplo)
   const baseLat = -23.5505; 

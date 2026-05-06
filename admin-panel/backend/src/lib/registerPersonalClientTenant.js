@@ -16,9 +16,9 @@ function syntheticTenantOwnerEmailForClientSpace(userEmail) {
   if (at > 0) {
     const local = e.slice(0, at);
     const domain = e.slice(at + 1);
-    return `${local}+brspark.${tail}@${domain}`;
+    return `${local}+aria.${tail}@${domain}`;
   }
-  return `cliente-${tail}@brspark.internal.invalid`;
+  return `cliente-${tail}@aria.internal.invalid`;
 }
 
 /**

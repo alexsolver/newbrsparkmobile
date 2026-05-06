@@ -2,9 +2,9 @@
 #
 # Deploy por rsync + SSH → produção. Não envia .env do repositório.
 #
-#   export BRSPARK_SSH_KEY="$HOME/Downloads/alex.pem"
+#   export ARIA_SSH_KEY="$HOME/Downloads/alex.pem"
 #   ./scripts/deploy-production.sh api          # só painel Node (admin-panel)
-#   ./scripts/deploy-production.sh web          # só Laravel (requer pasta BrsparkWeb)
+#   ./scripts/deploy-production.sh web          # só Laravel (requer pasta AriaWeb)
 #   ./scripts/deploy-production.sh all          # api + web
 #   SKIP_LARAVEL_MIGRATE=1 ... web   # não corre php artisan migrate --force
 #   SKIP_PRISMA_MIGRATE=1 ... api    # emergência: não corre Prisma migrate
@@ -17,26 +17,26 @@ set -euo pipefail
 SKIP_PRISMA_MIGRATE="${SKIP_PRISMA_MIGRATE:-0}"
 # Laravel: por omissão aplica migrações em produção
 RUN_LARAVEL_MIGRATE="${RUN_LARAVEL_MIGRATE:-1}"
-# BrsparkWeb: por omissão faz vite build e copia dist → backend/public (index.html + assets)
+# AriaWeb: por omissão faz vite build e copia dist → backend/public (index.html + assets)
 SKIP_FRONTEND_BUILD="${SKIP_FRONTEND_BUILD:-0}"
 if [[ "${SKIP_FRONTEND_BUILD}" == "1" ]]; then
-  echo "[deploy] SKIP_FRONTEND_BUILD=1 ativo: o build Vite (BrsparkWeb/frontend) será ignorado." >&2
+  echo "[deploy] SKIP_FRONTEND_BUILD=1 ativo: o build Vite (AriaWeb/frontend) será ignorado." >&2
   echo "[deploy] Se foi involuntário: cancela, \`unset SKIP_FRONTEND_BUILD\` ou \`env -u SKIP_FRONTEND_BUILD $0 web\` (ou all)." >&2
 fi
 
 TARGET="${1:-all}"
-SSH_KEY="${BRSPARK_SSH_KEY:-$HOME/Downloads/alex.pem}"
-SSH_HOST="${BRSPARK_SSH_HOST:-3.149.14.138}"
-SSH_USER="${BRSPARK_SSH_USER:-ubuntu}"
-REMOTE_API="${BRSPARK_REMOTE_API:-/var/www/brspark-api}"
-REMOTE_WEB="${BRSPARK_REMOTE_WEB:-/var/www/brspark-web}"
+SSH_KEY="${ARIA_SSH_KEY:-$HOME/Downloads/alex.pem}"
+SSH_HOST="${ARIA_SSH_HOST:-3.149.14.138}"
+SSH_USER="${ARIA_SSH_USER:-ubuntu}"
+REMOTE_API="${ARIA_REMOTE_API:-/var/www/aria-api}"
+REMOTE_WEB="${ARIA_REMOTE_WEB:-/var/www/aria-web}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOBILE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ADMIN_LOCAL="$MOBILE_ROOT/admin-panel"
-WEB_LOCAL="${BRSPARK_WEB_LOCAL:-"$(cd "$MOBILE_ROOT/../BrsparkWeb/backend" 2>/dev/null && pwd || echo "")"}"
+WEB_LOCAL="${ARIA_WEB_LOCAL:-"$(cd "$MOBILE_ROOT/../AriaWeb/backend" 2>/dev/null && pwd || echo "")"}"
 
-[[ -f "$SSH_KEY" ]] || { echo "[deploy] Defina BRSPARK_SSH_KEY" >&2; exit 1; }
+[[ -f "$SSH_KEY" ]] || { echo "[deploy] Defina ARIA_SSH_KEY" >&2; exit 1; }
 
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=accept-new)
 RSYNC_RSH="ssh ${SSH_OPTS[*]}"
@@ -83,14 +83,14 @@ else
   echo "[deploy] SKIP_PRISMA_MIGRATE=1 — Prisma migrate ignorado"
 fi
 npx prisma generate
-pm2 restart brspark-api
+pm2 restart aria-api
 exit "${PR_EC:-0}"
 REMOTE
   echo "[deploy] API concluído."
 }
 
-# Garante public/index.html e assets do React (BrsparkWeb/frontend) antes do rsync — sem isto o Laravel serve resources/views/welcome.
-build_brspark_web_frontend() {
+# Garante public/index.html e assets do React (AriaWeb/frontend) antes do rsync — sem isto o Laravel serve resources/views/welcome.
+build_aria_web_frontend() {
   local FRONTEND_LOCAL
   local BUILD_DIR
   FRONTEND_LOCAL="$(cd "$WEB_LOCAL/../frontend" 2>/dev/null && pwd)" || FRONTEND_LOCAL=""
@@ -99,13 +99,13 @@ build_brspark_web_frontend() {
     return 0
   fi
   if [[ ! -d "$FRONTEND_LOCAL" || ! -f "$FRONTEND_LOCAL/package.json" ]]; then
-    echo "[deploy] Aviso: pasta BrsparkWeb/frontend em falta — public/index.html não será gerado aqui." >&2
+    echo "[deploy] Aviso: pasta AriaWeb/frontend em falta — public/index.html não será gerado aqui." >&2
     return 0
   fi
-  echo "[deploy] npm ci + npm run build (BrsparkWeb frontend)…"
+  echo "[deploy] npm ci + npm run build (AriaWeb frontend)…"
   # Build em diretório temporário para evitar interferência de sync (Dropbox) no node_modules.
   # Também garante devDependencies (tsc/vite/@types) durante o build.
-  BUILD_DIR="$(mktemp -d "/tmp/brsparkweb-frontend-build.XXXXXX")"
+  BUILD_DIR="$(mktemp -d "/tmp/ariaweb-frontend-build.XXXXXX")"
   rsync -a --delete --exclude 'node_modules' --exclude 'dist' --exclude '.git' "$FRONTEND_LOCAL/" "$BUILD_DIR/"
   (cd "$BUILD_DIR" && NPM_CONFIG_PRODUCTION=false NODE_ENV=development npm ci --production=false && npm run build)
   echo "[deploy] Copiar frontend/dist → ${WEB_LOCAL}/public/ (SPA)…"
@@ -121,8 +121,8 @@ build_brspark_web_frontend() {
 }
 
 deploy_web() {
-  [[ -n "$WEB_LOCAL" && -d "$WEB_LOCAL" ]] || { echo "[deploy] Falta BrsparkWeb/backend (defina BRSPARK_WEB_LOCAL)." >&2; exit 1; }
-  build_brspark_web_frontend
+  [[ -n "$WEB_LOCAL" && -d "$WEB_LOCAL" ]] || { echo "[deploy] Falta AriaWeb/backend (defina ARIA_WEB_LOCAL)." >&2; exit 1; }
+  build_aria_web_frontend
   echo "[deploy] Rsync Laravel → ${SSH_USER}@${SSH_HOST}:${REMOTE_WEB}/"
   rsync "${RSYNC_LARAVEL[@]}" -e "$RSYNC_RSH" \
     "$WEB_LOCAL/" "${SSH_USER}@${SSH_HOST}:${REMOTE_WEB}/"

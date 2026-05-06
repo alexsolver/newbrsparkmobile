@@ -28,7 +28,7 @@ Este documento complementa o **cockpit móvel** (`Perfil → Cockpit de sincroni
 ## 5. Cliente móvel (referência)
 
 - Coalescing de `pushSyncQueue` quando um segundo pedido chega durante um ciclo ativo.
-- Lock por chave na outbox de checklist (`@brspark_outbox`) durante o envio, com escritas auxiliares via `updateStoredJsonArrayWhileLockHeld` quando já sob lock.
+- Lock por chave na outbox de checklist (`@aria_outbox`) durante o envio, com escritas auxiliares via `updateStoredJsonArrayWhileLockHeld` quando já sob lock.
 - Registo de `LAST_SUCCESSFUL_FULL_SYNC_AT_MS_KEY` ao concluir `fullSync` (timestamp local do último ciclo completo).
 
 ## 6. O que não substitui o APM

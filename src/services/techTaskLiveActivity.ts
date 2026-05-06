@@ -2,12 +2,12 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requireOptionalNativeModule } from 'expo';
 
-const STORAGE_KEY = '@brspark_tech_live_activity_slot';
+const STORAGE_KEY = '@aria_tech_live_activity_slot';
 
 type Slot = { activityId: string; taskId: string };
 
-/** Cartão Live Activity: sempre identidade BrSpark (não segue branding do tenant no tema nem no push). */
-const LA_BADGE_ASSET = 'brspark-badge';
+/** Cartão Live Activity: sempre identidade Aria (não segue branding do tenant no tema nem no push). */
+const LA_BADGE_ASSET = 'aria-badge';
 const LA_BACKGROUND = '#0f172a';
 const LA_ACCENT = '#2563eb';
 
@@ -65,7 +65,7 @@ function getContrastText(hex: string, dark = '#0F172A', light = '#F8FAFC'): stri
  * Live Activity estilo «cartão em baixo» no Lock Screen (iOS 16.2+).
  * Só funciona em build com `expo-live-activity` (dev client / EAS); no Expo Go não há módulo nativo.
  *
- * Cores, ícone e nome curto de encerramento são **fixos BrSpark** — não usam `ThemeContext` nem
+ * Cores, ícone e nome curto de encerramento são **fixos Aria** — não usam `ThemeContext` nem
  * `appDisplayName` / `liveActivityBadgeKey` do push (evita cartão distinto por tenant).
  */
 export async function startTechTaskLiveActivity(params: {
@@ -83,7 +83,7 @@ export async function startTechTaskLiveActivity(params: {
     if (prev && prev.taskId !== taskId) {
       try {
         LiveActivity.stopActivity(prev.activityId, {
-          title: 'BrSpark',
+          title: 'Aria',
           subtitle: 'Atualizado.',
         });
       } catch {
@@ -124,7 +124,7 @@ export async function startTechTaskLiveActivity(params: {
 
     if (activityId) await writeSlot({ activityId, taskId });
   } catch (e) {
-    console.warn('[BrSpark LiveActivity] start:', e);
+    console.warn('[Aria LiveActivity] start:', e);
   }
 }
 
@@ -140,11 +140,11 @@ export async function stopTechTaskLiveActivityForTask(taskId: string): Promise<v
   try {
     const LiveActivity = await import('expo-live-activity');
     LiveActivity.stopActivity(slot.activityId, {
-      title: 'BrSpark',
+      title: 'Aria',
       subtitle: 'Concluído.',
     });
   } catch (e) {
-    console.warn('[BrSpark LiveActivity] stop:', e);
+    console.warn('[Aria LiveActivity] stop:', e);
   } finally {
     await writeSlot(null);
   }

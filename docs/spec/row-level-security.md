@@ -6,7 +6,7 @@ Reforçar o isolamento por **tenant** (empresa / workspace) no PostgreSQL, em co
 
 ## Mecanismo
 
-1. **Funções SQL** `public._brspark_rls_privileged()`, `_brspark_rls_tenant_allowed(text)`, `_brspark_rls_tenant_or_global(text)` (migration `20260429180000_row_level_security_brspark`).
+1. **Funções SQL** `public._aria_rls_privileged()`, `_aria_rls_tenant_allowed(text)`, `_aria_rls_tenant_or_global(text)` (migration `20260429180000_row_level_security_aria`).
 2. **Variáveis de sessão** (GUCs com `set_config(..., true)` = escopo da transacção):
    - `app.admin_is_platform` — admin SaaS / legado sem filtro de tenant no painel.
    - `app.admin_panel_tenant_id` — tenant efectiva do painel (TENANT_ADMIN / MANAGER ou filtro de contexto SaaS).
@@ -17,7 +17,7 @@ Reforçar o isolamento por **tenant** (empresa / workspace) no PostgreSQL, em co
 
 ## Desactivar (emergência / testes)
 
-`BRSPARK_RLS_DISABLE=1` — o middleware deixa de abrir a transacção; as políticas continuam definidas no Postgres mas o processo Node não fixa GUCs por pedido (em geral o **dono das tabelas** ignora RLS; não confiar para segurança real).
+`ARIA_RLS_DISABLE=1` — o middleware deixa de abrir a transacção; as políticas continuam definidas no Postgres mas o processo Node não fixa GUCs por pedido (em geral o **dono das tabelas** ignora RLS; não confiar para segurança real).
 
 ## Tabelas cobertas
 
@@ -27,8 +27,8 @@ Ver o ficheiro SQL da migration: `Asset`, `Location`, `Tenant`, `Subscription`, 
 
 ## Operações longas
 
-Uploads ou pedidos muito longos partilham o **timeout** da transacção (`BRSPARK_RLS_TX_TIMEOUT_MS`, predefinido 300000 ms). Ajustar se necessário.
+Uploads ou pedidos muito longos partilham o **timeout** da transacção (`ARIA_RLS_TX_TIMEOUT_MS`, predefinido 300000 ms). Ajustar se necessário.
 
-## BrsparkWeb (Laravel)
+## AriaWeb (Laravel)
 
-Esta camada aplica-se **só** ao backend Node do BrsparkMobile. O CRM Laravel, se usar o mesmo Postgres, deve definir os mesmos GUCs por sessão ou usar um role com políticas alinhadas.
+Esta camada aplica-se **só** ao backend Node do AriaMobile. O CRM Laravel, se usar o mesmo Postgres, deve definir os mesmos GUCs por sessão ou usar um role com políticas alinhadas.

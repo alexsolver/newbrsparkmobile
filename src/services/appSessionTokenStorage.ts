@@ -2,12 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 /** JWT legacy no AsyncStorage (migração automática para SecureStore). */
-export const TOKEN_KEY = 'brspark_jwt';
-export const USER_KEY = 'brspark_user';
+export const TOKEN_KEY = 'aria_jwt';
+export const USER_KEY = 'aria_user';
 
-const REFRESH_TOKEN_SECURE_KEY = 'brspark_refresh_token_v1';
-const REFRESH_TOKEN_ASYNC_FALLBACK_KEY = 'brspark_refresh_token_fb';
-const ACCESS_TOKEN_SECURE_KEY = 'brspark_jwt_secure_v1';
+const REFRESH_TOKEN_SECURE_KEY = 'aria_refresh_token_v1';
+const REFRESH_TOKEN_ASYNC_FALLBACK_KEY = 'aria_refresh_token_fb';
+const ACCESS_TOKEN_SECURE_KEY = 'aria_jwt_secure_v1';
 
 export async function clearAccessTokenStorage(): Promise<void> {
   try {

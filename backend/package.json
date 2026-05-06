@@ -1,5 +1,5 @@
 {
-  "name": "brspark-api",
+  "name": "aria-api",
   "version": "2.0.0",
   "private": true,
   "description": "API única: PostgreSQL via admin-panel/backend (Prisma). SQLite foi removido.",

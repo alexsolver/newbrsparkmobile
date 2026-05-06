@@ -1,13 +1,13 @@
 /**
  * Textos da Central de Operações (painel admin), pt-BR, en-US e es-ES.
- * Preferência: `getAdminUiLocale()` (localStorage `brspark_admin_ui_locale`; padrão pt-BR).
+ * Preferência: `getAdminUiLocale()` (localStorage `aria_admin_ui_locale`; padrão pt-BR).
  */
 import { getAdminUiLocale } from './user-pages-i18n.js';
 import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-resolve.js';
 
 const M = {
   'pt-BR': {
-    ops_pageTitle: 'BrSpark Admin, Central de Operações',
+    ops_pageTitle: 'Aria Admin, Central de Operações',
     ops_bc_panel: 'Painel',
     ops_bc_current: 'Central de operações',
     ops_hero_title: 'Central de operações',
@@ -227,7 +227,7 @@ const M = {
     ops_geo_polygon_preview: 'Visualizar polígono no mapa',
   },
   'en-US': {
-    ops_pageTitle: 'BrSpark Admin, Operations Center',
+    ops_pageTitle: 'Aria Admin, Operations Center',
     ops_bc_panel: 'Home',
     ops_bc_current: 'Operations center',
     ops_hero_title: 'Operations center',
@@ -581,7 +581,7 @@ function opsRefreshGeoTabChrome() {
     typeof window !== 'undefined' && window._geoMode ? String(window._geoMode) : 'radius';
   const TAB_COLORS = {
     radius: { bg: '#0f172a', color: '#fff' },
-    route: { bg: '#f97316', color: '#fff' },
+    route: { bg: '#14b8a6', color: '#fff' },
     segment: { bg: '#eab308', color: '#fff' },
     polygon: { bg: '#3b82f6', color: '#fff' },
     none: { bg: '#64748b', color: '#fff' },
@@ -856,11 +856,11 @@ export function applyOperationsModalsStaticI18n() {
 export function refreshOpsTenantChip() {
   const chip = document.getElementById('ops-tenant-chip');
   if (!chip) return;
-  const panelMode = sessionStorage.getItem('brspark_panel_mode') || '';
+  const panelMode = sessionStorage.getItem('aria_panel_mode') || '';
   let show = false;
   let text = '';
   try {
-    const raw = sessionStorage.getItem('brspark_panel_tenant');
+    const raw = sessionStorage.getItem('aria_panel_tenant');
     if (raw && panelMode === 'tenant') {
       const t = JSON.parse(raw);
       const name = (t && t.name) || '';

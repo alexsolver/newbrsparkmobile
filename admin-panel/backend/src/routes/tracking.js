@@ -210,7 +210,7 @@ function readForceSend(req) {
 }
 
 /** ID fixo: execuções antigas sem banner gravado recebem um virtual em cada GET; id aleatório quebrava keys do FlatList no app a cada poll. */
-const TRACKING_CONDUCT_BANNER_ID = 'brspark_tracking_conduct_banner_v1';
+const TRACKING_CONDUCT_BANNER_ID = 'aria_tracking_conduct_banner_v1';
 
 function conductBannerMessage() {
   return {

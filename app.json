@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "BrsparkMobile",
-    "slug": "BrsparkMobile",
-    "scheme": "brsparkmobile",
+    "name": "AriaMobile",
+    "slug": "AriaMobile",
+    "scheme": "ariamobile",
     "version": "1.0.1",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -37,7 +37,7 @@
           "remote-notification"
         ]
       },
-      "bundleIdentifier": "com.brspark",
+      "bundleIdentifier": "com.aria",
       "buildNumber": "7"
     },
     "android": {
@@ -64,7 +64,7 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_LOCATION"
       ],
-      "package": "com.brspark",
+      "package": "com.aria",
       "versionCode": 5
     },
     "extra": {

@@ -1,4 +1,4 @@
-// BrSpark Admin — Prisma Schema (PostgreSQL)
+// Aria Admin — Prisma Schema (PostgreSQL)
 // Run: npx prisma migrate dev --name init
 
 generator client {
@@ -75,7 +75,7 @@ model Tenant {
   features     Json     @default("{}")
   /// COMPANY = inventário partilhado na organização; CLIENT = espaço pessoal; PROVIDER = modo prestador (só partilhas + bens próprios criados aqui).
   kind         TenantKind @default(COMPANY)
-  /// UUID do tenant no CMS Laravel (BrsparkWeb) — provisionamento empresa↔app.
+  /// UUID do tenant no CMS Laravel (AriaWeb) — provisionamento empresa↔app.
   laravelTenantId String? @unique @map("laravel_tenant_id")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

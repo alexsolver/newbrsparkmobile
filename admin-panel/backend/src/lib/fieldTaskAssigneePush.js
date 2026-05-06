@@ -89,10 +89,10 @@ function buildFieldTaskActivityPushPayload(opts, appDisplayName, liveActivityBad
     return {
         title: String(opts.pushTitle || `Nova atividade · ${appDisplayName}`).slice(0, 120),
         body,
-        categoryId: 'BRSPARK_TECH_ACTIVITY',
+        categoryId: 'ARIA_TECH_ACTIVITY',
         /** Canal só em `android` (Expo: `channelId` de raiz é Android-only e não deve ir no payload APNs). */
         android: {
-            channelId: 'brspark-tecnico',
+            channelId: 'aria-tecnico',
             sound: 'default',
         },
         ios: {
@@ -134,8 +134,8 @@ async function sendFieldTaskActivityPushToAssignees(prisma, opts) {
     const assigneeTid = opts.assigneeTenantId || null;
 
     const [appDisplayName, liveActivityBadgeKey] = await Promise.all([
-        resolveTenantAppDisplayName(prisma, assigneeTid || templateTid || null, 'BrSpark'),
-        resolveGlobalLiveActivityBadgeKey(prisma, 'brspark-badge'),
+        resolveTenantAppDisplayName(prisma, assigneeTid || templateTid || null, 'Aria'),
+        resolveGlobalLiveActivityBadgeKey(prisma, 'aria-badge'),
     ]);
 
     const tokenLists = await Promise.all(

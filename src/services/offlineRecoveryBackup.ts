@@ -9,43 +9,43 @@ import { parseJsonOrNull, safeJsonParse } from '../utils/safeJsonParse';
 import type { User } from './auth';
 import { OPERATIONAL_TRANSIT_LOCK_STORAGE_KEY } from './operationalTransitLock';
 
-const RECOVERY_DIR_NAME = 'brspark-offline-recovery';
+const RECOVERY_DIR_NAME = 'aria-offline-recovery';
 const RECOVERY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RECOVERY_VERSION = 1;
-const RECOVERY_KEY_SECURESTORE_KEY = 'brspark_offline_recovery_aes256gcm_key_v1';
+const RECOVERY_KEY_SECURESTORE_KEY = 'aria_offline_recovery_aes256gcm_key_v1';
 const RECOVERY_ENC_VERSION = 1;
 
 const EXACT_KEYS = new Set<string>([
-  '@brspark_outbox',
-  '@brspark_execution_status_outbox',
-  '@brspark_tracking_sync_queue',
-  '@brspark_work_time_punch_outbox',
-  '@brspark_cloud_tasks',
-  '@brspark_rt_cloud_tasks',
-  '@brspark_inprogress_tasks',
-  '@brspark_accepted_tasks',
-  '@brspark_rejected_tasks',
-  '@brspark_executed_tasks',
-  '@brspark_templates',
-  '@brspark_rt_assignments_cache_v1',
+  '@aria_outbox',
+  '@aria_execution_status_outbox',
+  '@aria_tracking_sync_queue',
+  '@aria_work_time_punch_outbox',
+  '@aria_cloud_tasks',
+  '@aria_rt_cloud_tasks',
+  '@aria_inprogress_tasks',
+  '@aria_accepted_tasks',
+  '@aria_rejected_tasks',
+  '@aria_executed_tasks',
+  '@aria_templates',
+  '@aria_rt_assignments_cache_v1',
   OPERATIONAL_TRANSIT_LOCK_STORAGE_KEY,
 ]);
 
-const PREFIX_KEYS = ['@draft_tsk_', '@brspark_execution_'];
+const PREFIX_KEYS = ['@draft_tsk_', '@aria_execution_'];
 
 const ARRAY_MERGE_KEYS = new Set<string>([
-  '@brspark_outbox',
-  '@brspark_execution_status_outbox',
-  '@brspark_tracking_sync_queue',
-  '@brspark_work_time_punch_outbox',
-  '@brspark_cloud_tasks',
-  '@brspark_rt_cloud_tasks',
-  '@brspark_inprogress_tasks',
-  '@brspark_accepted_tasks',
-  '@brspark_rejected_tasks',
-  '@brspark_executed_tasks',
-  '@brspark_templates',
-  '@brspark_rt_assignments_cache_v1',
+  '@aria_outbox',
+  '@aria_execution_status_outbox',
+  '@aria_tracking_sync_queue',
+  '@aria_work_time_punch_outbox',
+  '@aria_cloud_tasks',
+  '@aria_rt_cloud_tasks',
+  '@aria_inprogress_tasks',
+  '@aria_accepted_tasks',
+  '@aria_rejected_tasks',
+  '@aria_executed_tasks',
+  '@aria_templates',
+  '@aria_rt_assignments_cache_v1',
 ]);
 
 type RecoverySyncQueueRow = {
@@ -238,7 +238,7 @@ function mergeUniqueArrayForKey(key: string, currentRaw: string | null, incoming
   if (current.length === 0) return incomingRaw;
   if (incoming.length === 0) return JSON.stringify(current);
 
-  if (key === '@brspark_outbox') {
+  if (key === '@aria_outbox') {
     const map = new Map<string, unknown>();
     for (const item of current) map.set(checklistOutboxIdentityKey(item), item);
     for (const item of incoming) map.set(checklistOutboxIdentityKey(item), item);

@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Tenants</title>
+  <title>Aria Admin — Tenants</title>
   <link rel="stylesheet" href="css/main.css" />
   <style>
     #save-tenant-btn.is-loading { pointer-events: none; opacity: 0.88; }
@@ -186,10 +186,10 @@
       <div class="form-group tenant-branding-modal__field" id="tenant-branding-live-activity-box" style="display:none;">
         <label class="form-label">Ícone global da Live Activity (iOS)</label>
         <select class="form-control" id="tenant-branding-live-activity-badge">
-          <option value="brspark-badge">Ícone padrão do app (Live Activity)</option>
+          <option value="aria-badge">Ícone padrão do app (Live Activity)</option>
         </select>
         <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.45;">
-          Configuração global do app compartilhado BrSpark. Esse ícone vale para as Live Activities do iOS e usa assets embarcados no build.
+          Configuração global do app compartilhado Aria. Esse ícone vale para as Live Activities do iOS e usa assets embarcados no build.
         </div>
       </div>
       <div class="grid-2 tenant-branding-modal__grid">
@@ -284,7 +284,7 @@
                 <div id="tenant-branding-preview-login-hero" class="tenant-branding-preview-login-hero">
                   <img id="tenant-branding-preview-login-logo" alt="" class="tenant-branding-preview-login-logo-img" />
                   <div id="tenant-branding-preview-login-logo-ph" class="tenant-branding-preview-login-logo-ph" aria-hidden="true">Logo</div>
-                  <div id="tenant-branding-preview-name" class="tenant-branding-preview-login-name">BrSpark</div>
+                  <div id="tenant-branding-preview-name" class="tenant-branding-preview-login-name">Aria</div>
                   <div id="tenant-branding-preview-tagline" class="tenant-branding-preview-login-tag">Precisou, resolveu.</div>
                 </div>
                 <div class="tenant-branding-preview-login-body">
@@ -322,7 +322,7 @@
                 <div class="tenant-branding-preview-mini-header-left">
                   <div id="tenant-branding-preview-logo-dot" class="tenant-branding-preview-mini-dot"></div>
                   <div>
-                    <div id="tenant-branding-preview-eyebrow" class="tenant-branding-preview-mini-eyebrow">BrSpark</div>
+                    <div id="tenant-branding-preview-eyebrow" class="tenant-branding-preview-mini-eyebrow">Aria</div>
                     <div id="tenant-branding-preview-header-title" class="tenant-branding-preview-mini-title">Início</div>
                   </div>
                 </div>
@@ -700,8 +700,8 @@
    * Replica `resolveTenantPalette` (C.primary / C.accent) para o preview alinhar ao app.
    */
   function brandingPreviewResolvePrimaryAccent(primaryRaw, accentRaw) {
-    const BASE_PRIMARY = '#F97316';
-    const BASE_ACCENT = '#EA580C';
+    const BASE_PRIMARY = '#0d9488';
+    const BASE_ACCENT = '#0f766e';
     const p = String(primaryRaw || '').trim();
     const a = String(accentRaw || '').trim();
     let resolvedPrimary = p || BASE_PRIMARY;
@@ -721,7 +721,7 @@
     const a = String(accentRaw || '').trim();
     if (p && !a) return p;
     if (a) return a;
-    return '#EA580C';
+    return '#0f766e';
   }
 
   /** Mesmo que `filledButtonBg` em `ThemeContext.resolveTenantPalette` (ex.: Guardar em formulários). */
@@ -1037,7 +1037,7 @@
   }
 
   function setBrandingPreview() {
-    const name = document.getElementById('tenant-branding-app-name').value.trim() || 'BrSpark';
+    const name = document.getElementById('tenant-branding-app-name').value.trim() || 'Aria';
     const tagline = document.getElementById('tenant-branding-tagline').value.trim() || 'Precisou, resolveu.';
     const primaryRaw = document.getElementById('tenant-branding-primary').value.trim();
     const accentRaw = document.getElementById('tenant-branding-accent').value.trim();
@@ -1197,7 +1197,7 @@
     return /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(String(value || '').trim());
   }
 
-  function normalizeHexForColorPicker(value, fallback = '#F97316') {
+  function normalizeHexForColorPicker(value, fallback = '#0d9488') {
     const raw = String(value || '').trim();
     if (!raw) return fallback;
     if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toUpperCase();
@@ -1424,7 +1424,7 @@
       document.getElementById('tenant-branding-login-hero').value = branding.loginBackgroundColor || '';
       document.getElementById('tenant-branding-login-page-logo').value = branding.loginPageLogoUrl || '';
       document.getElementById('tenant-branding-app-header-bg').value = branding.appHeaderBackgroundColor || '';
-      document.getElementById('tenant-branding-live-activity-badge').value = branding.liveActivityBadgeKey || 'brspark-badge';
+      document.getElementById('tenant-branding-live-activity-badge').value = branding.liveActivityBadgeKey || 'aria-badge';
       document.getElementById('tenant-branding-primary').value = branding.primaryColor || '';
       document.getElementById('tenant-branding-accent').value = branding.accentColor || '';
       document.getElementById('tenant-branding-secondary').value = branding.secondaryColor || '';

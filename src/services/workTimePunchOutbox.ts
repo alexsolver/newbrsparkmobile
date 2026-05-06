@@ -13,7 +13,7 @@ import {
 } from './workTimeService';
 import { emitWorkTimeJourneyChanged } from '../lib/workTimeJourneyEvents';
 
-const OUTBOX_KEY = '@brspark_work_time_punch_outbox';
+const OUTBOX_KEY = '@aria_work_time_punch_outbox';
 const SUBDIR = 'work-time-outbox/';
 
 function docBase(): string {

@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Auditoria</title>
+  <title>Aria Admin — Auditoria</title>
   <link rel="stylesheet" href="css/main.css" />
 </head>
 <body>
@@ -220,7 +220,7 @@
     const blobUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = blobUrl;
-    link.download = `brspark_audit_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `aria_audit_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(blobUrl);
   });

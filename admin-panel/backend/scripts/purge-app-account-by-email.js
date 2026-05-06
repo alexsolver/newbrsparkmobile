@@ -33,7 +33,7 @@ function buildUserWhereForLoginEmail(emailRaw) {
   if (!norm || !norm.includes('@')) return null;
   const at = norm.indexOf('@');
   const local = norm.slice(0, at);
-  const synthFrag = `${local}+brspark.ws.`;
+  const synthFrag = `${local}+aria.ws.`;
   return {
     OR: [
       { email: { equals: norm, mode: 'insensitive' } },

@@ -4,13 +4,13 @@ import { CHAT_UNREAD_CHANGED_EVENT } from './chatUnreadEvents';
 import { loadRoomListCache } from '../services/chatOfflineStorage';
 
 /** Deve coincidir com o prefixo usado em `getOpsChatAckStorageKey`. */
-const OPS_CHAT_ACK_KEY_PREFIX = '@brspark_ops_chat_ack_';
+const OPS_CHAT_ACK_KEY_PREFIX = '@aria_ops_chat_ack_';
 
 /**
- * Chave fora do prefixo `@brspark` / `brspark_` para sobreviver ao `purgeAllBrSparkLocalCaches`
+ * Chave fora do prefixo `@aria` / `aria_` para sobreviver ao `purgeAllAriaLocalCaches`
  * e repor leituras após logout+login da mesma conta.
  */
-export const OPS_CHAT_ACK_LOGOUT_BACKUP_KEY = 'BRSPARK_OPS_CHAT_ACK_LOGOUT_BACKUP_V1';
+export const OPS_CHAT_ACK_LOGOUT_BACKUP_KEY = 'ARIA_OPS_CHAT_ACK_LOGOUT_BACKUP_V1';
 
 export function getOpsChatAckStorageKey(executionId: string): string {
   return `${OPS_CHAT_ACK_KEY_PREFIX}${String(executionId || '').trim()}`;

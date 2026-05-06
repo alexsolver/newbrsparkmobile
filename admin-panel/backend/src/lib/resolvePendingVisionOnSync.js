@@ -352,7 +352,7 @@ async function resolvePendingVisionAnalysisOnSync(prisma, { responses, templateI
         const baseUrl = String(integration.baseUrl).trim().replace(/\/+$/, '');
         const apiKey = integration.apiKey != null ? String(integration.apiKey).trim() : '';
         const isVideo = String(mime).toLowerCase().startsWith('video/');
-        const boundary = '----BrSparkVisionSync' + Date.now().toString(36);
+        const boundary = '----AriaVisionSync' + Date.now().toString(36);
         const bodyBuf = buildMultipartBuffer(boundary, [
           {
             name: 'media',

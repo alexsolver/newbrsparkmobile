@@ -215,7 +215,7 @@ async function askDocsAssistant(input) {
   const context = buildDocsAssistantContext();
 
   const systemPrompt =
-    'Você é o especialista técnico-operacional do BrSpark. ' +
+    'Você é o especialista técnico-operacional do Aria. ' +
     'Responda dúvidas de arquitetura, API, banco de dados, segurança, fluxos e automações com objetividade técnica. ' +
     'Use SOMENTE as informações do contexto fornecido; quando algo não estiver no contexto, diga explicitamente que não foi encontrado. ' +
     'Sempre devolva resposta em português do Brasil, incluindo: (1) resposta direta, (2) principais evidências, (3) riscos/limitações se houver. ' +
@@ -233,7 +233,7 @@ async function askDocsAssistant(input) {
       temperature: 0.15,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'system', content: `### CONTEXTO TÉCNICO BRSPARK\n${context.text}` },
+        { role: 'system', content: `### CONTEXTO TÉCNICO ARIA\n${context.text}` },
         ...messages,
       ],
     }),

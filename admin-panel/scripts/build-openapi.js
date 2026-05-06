@@ -61,7 +61,7 @@ const ROUTES = [
     description:
       'Inclui `tenant` / `tenantId` da organização efectiva (ex.: empresa com vínculo dedicado). ' +
       '`clientTenantBranding`: (1) se `homeTenantId` ≠ `tenantId`, marca da piscina/registo (BD se faltar snapshot); ' +
-      '(2) se papel `USER` e a tenant da linha não é a piscina partilhada, marca BrSpark derivada da tenant de registo partilhada. ' +
+      '(2) se papel `USER` e a tenant da linha não é a piscina partilhada, marca Aria derivada da tenant de registo partilhada. ' +
       'Na app, persona cliente usa `clientTenantBranding` / piscina mascarada; modo prestador usa `tenant.branding`.',
   })],
   ['put', '/api/me', op('Atualizar perfil (app)', ['App — Conta'], bearerApp)],
@@ -552,10 +552,10 @@ for (const [method, p, spec] of ROUTES) {
 const doc = {
   openapi: '3.0.3',
   info: {
-    title: 'BrSpark API',
+    title: 'Aria API',
     version: '1.0.0',
     description:
-      'API HTTP do BrSpark (painel admin + app móvel). Todas as rotas usam o prefixo `/api` no mesmo host que serve o painel estático (ex.: `http://localhost:3001`).\n\n' +
+      'API HTTP do Aria (painel admin + app móvel). Todas as rotas usam o prefixo `/api` no mesmo host que serve o painel estático (ex.: `http://localhost:3001`).\n\n' +
       '**Autenticação admin:** `POST /api/auth/login` → header `Authorization: Bearer <jwt>`. O JWT de admin **não** inclui `tenantId`.\n\n' +
       '**Autenticação app:** `POST /api/login` ou `POST /api/register` → `Authorization: Bearer <jwt>`. O JWT de usuário **deve** incluir `tenantId` e `sessionId` válidos (rotas protegidas por `authUser`).\n\n' +
       'Rotas marcadas como públicas não exigem JWT; ainda assim podem exigir query/body específicos.\n\n' +

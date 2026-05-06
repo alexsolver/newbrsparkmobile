@@ -24,13 +24,13 @@ Conduzir uma varredura rigorosa e estruturada em toda a infraestrutura (Mobile F
 - [ ] Corrigir qualquer problema gramatical ou ícones faltando (já substituídos em Login e Profile, verificar os outros componentes que acessam traduções locais). → Verify: Garantir que não existam logs the renderização de SVG / Emojis falhando.
 
 ### 5. Execução de Scripts de Saúde
-- [x] `npx tsc --noEmit` na raiz do BrsparkMobile — **sem erros** (2026-04-28).
+- [x] `npx tsc --noEmit` na raiz do AriaMobile — **sem erros** (2026-04-28).
 - [x] `python3 .agent/skills/lint-and-validate/scripts/lint_runner.py .` — executa `tsc` no projecto Node; **PASS** (2026-04-28).
 - [x] `python3 .agent/skills/vulnerability-scanner/scripts/security_scan.py . --scan-type patterns` — executado; devolveu alertas de padrões (ex.: `innerHTML` no painel) para triagem futura — **não** “checagem limpa” global.
 - [ ] `npm audit` / scan de dependências com remediação — backlog.
 
 ### 6. Catálogo de prestadores (alinhado a `docs/plano-correcao-bugs-2026-04-15.md`)
-- [x] Backend `GET /api/providers`: com CMS configurado e falha upstream **sem** `DIRECTORY_POSTGRES_FALLBACK`, resposta **503** + `X-BrSpark-Directory-Source: laravel-error` + payload com `error` (já estava implementado).
+- [x] Backend `GET /api/providers`: com CMS configurado e falha upstream **sem** `DIRECTORY_POSTGRES_FALLBACK`, resposta **503** + `X-Aria-Directory-Source: laravel-error` + payload com `error` (já estava implementado).
 - [x] App `ProviderService.search`: se a resposta for **200** mas o header indicar `laravel-error` ou `cms-not-configured`, usar cache SQLite local (defesa em profundidade).
 
 ## Done When

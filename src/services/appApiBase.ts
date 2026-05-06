@@ -80,7 +80,7 @@ function normalizeProductionApiBase(raw: string | undefined): string | undefined
   return u.length > 0 ? u : undefined;
 }
 
-const PRODUCTION_API_DEFAULT = 'https://api.brspark.com';
+const PRODUCTION_API_DEFAULT = 'https://api.aria.com';
 
 const fromEnvRaw = normalizeProductionApiBase(process.env.EXPO_PUBLIC_API_BASE);
 /** Em dev, permite forçar produção: `EXPO_PUBLIC_USE_PRODUCTION_API=1` no .env (e `EXPO_PUBLIC_API_BASE` se quiser outro host). */
@@ -109,7 +109,7 @@ function rewriteDevLoopbackApiBaseIfNeeded(apiBase: string): string {
     const next = `${u.protocol}//${lanHost}${portPart}`.replace(/\/+$/, '');
     const prev = apiBase.replace(/\/+$/, '');
     if (next !== prev) {
-      console.warn('[BrSpark] API_BASE em loopback no dispositivo — redirecionado para o host LAN:', prev, '→', next);
+      console.warn('[Aria] API_BASE em loopback no dispositivo — redirecionado para o host LAN:', prev, '→', next);
     }
     return next;
   } catch {
@@ -140,7 +140,7 @@ const RESOLVED_API_BASE: string = (() => {
       (MAC_IP === '127.0.0.1' || MAC_IP === 'localhost')
     ) {
       console.warn(
-        '[BrSpark] Dispositivo físico sem EXPO_PUBLIC_API_BASE / EXPO_PUBLIC_DEV_API_HOST nem host do Metro — API em loopback provavelmente não alcança o PC. Defina EXPO_PUBLIC_DEV_API_HOST com o IP/hostname da sua máquina.',
+        '[Aria] Dispositivo físico sem EXPO_PUBLIC_API_BASE / EXPO_PUBLIC_DEV_API_HOST nem host do Metro — API em loopback provavelmente não alcança o PC. Defina EXPO_PUBLIC_DEV_API_HOST com o IP/hostname da sua máquina.',
       );
     }
     return rewriteDevLoopbackApiBaseIfNeeded(`http://${MAC_IP}:${DEV_API_PORT}`);
@@ -151,5 +151,5 @@ const RESOLVED_API_BASE: string = (() => {
 export const API_BASE = RESOLVED_API_BASE;
 
 if (__DEV__) {
-  console.log('[BrSpark] API_BASE →', API_BASE);
+  console.log('[Aria] API_BASE →', API_BASE);
 }

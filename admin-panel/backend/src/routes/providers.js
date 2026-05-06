@@ -7,7 +7,7 @@ const prisma = require('../db');
 const authUser = require('../middleware/authUser');
 const { auditActor, auditContextMetadata } = require('../lib/auditActor');
 const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
-const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
+const { deliverAriaLaravelEvent, EVENT_TYPES } = require('../lib/ariaSyncWebhook');
 const {
   assertTenantAccess,
   hasCapability,
@@ -48,9 +48,9 @@ const adminRouter = express.Router();
 const GLOBAL_INVITE_PURPOSE = 'PROVIDER_GLOBAL_ONBOARDING_INVITE';
 const GLOBAL_INVITE_TTL = Number(process.env.PROVIDER_GLOBAL_INVITE_TTL_SECONDS || 14 * 24 * 3600);
 const AFFILIATION_ACCEPT_BASE_URL =
-  String(process.env.PROVIDER_AFFILIATION_ACCEPT_URL_BASE || 'brsparkmobile://provider-affiliation/accept').trim();
+  String(process.env.PROVIDER_AFFILIATION_ACCEPT_URL_BASE || 'ariamobile://provider-affiliation/accept').trim();
 const ONBOARDING_INVITE_BASE_URL =
-  String(process.env.PROVIDER_GLOBAL_ONBOARDING_URL_BASE || 'brsparkmobile://provider-onboarding').trim();
+  String(process.env.PROVIDER_GLOBAL_ONBOARDING_URL_BASE || 'ariamobile://provider-onboarding').trim();
 
 const AFFILIATION_RELATIONSHIP_TYPES = new Set(['DEDICATED']);
 
@@ -697,7 +697,7 @@ publicRouter.post('/me/onboarding/submit', authUser, express.json(), async (req,
     });
 
     await afterTrustedProviderKycVerified(req.user.id);
-    deliverBrsparkLaravelEvent({
+    deliverAriaLaravelEvent({
       type: EVENT_TYPES.ONBOARDING_SUBMITTED,
       idempotencyKey: `onboarding-${updated.id}-self-service-approved`,
       payload: {
@@ -1021,9 +1021,9 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
       pushFirstError: null,
     };
     try {
-      const subject = `Convite BrSpark — ${tenantLabel}`;
-      const text = `Olá,\n\nA empresa «${tenantLabel}» convidou-o para ${relPt} na rede BrSpark.\n\nAbra o link no telemóvel com a app BrSpark instalada:\n${acceptUrl}\n\nNo app: Perfil → Organizações e parcerias — o convite aparece como «Convite recebido» até aceitar.\n\nSe não esperava este convite, ignore.\n`;
-      const html = `<p>Olá,</p><p>A empresa <strong>${escapeHtmlEmailFragment(tenantLabel)}</strong> convidou-o para <strong>${escapeHtmlEmailFragment(relPt)}</strong> na rede BrSpark.</p><p><a href="${escapeHtmlEmailFragment(acceptUrl)}">Abrir no app / aceitar convite</a></p><p style="font-size:13px;color:#555">Na app: <strong>Perfil</strong> → <strong>Organizações e parcerias</strong> — o estado aparece como «Convite recebido» até aceitar.</p><p style="font-size:12px;color:#888">Se o link não abrir, copie o endereço acima ou abra a app e atualize esse separador.</p>`;
+      const subject = `Convite Aria — ${tenantLabel}`;
+      const text = `Olá,\n\nA empresa «${tenantLabel}» convidou-o para ${relPt} na rede Aria.\n\nAbra o link no telemóvel com a app Aria instalada:\n${acceptUrl}\n\nNo app: Perfil → Organizações e parcerias — o convite aparece como «Convite recebido» até aceitar.\n\nSe não esperava este convite, ignore.\n`;
+      const html = `<p>Olá,</p><p>A empresa <strong>${escapeHtmlEmailFragment(tenantLabel)}</strong> convidou-o para <strong>${escapeHtmlEmailFragment(relPt)}</strong> na rede Aria.</p><p><a href="${escapeHtmlEmailFragment(acceptUrl)}">Abrir no app / aceitar convite</a></p><p style="font-size:13px;color:#555">Na app: <strong>Perfil</strong> → <strong>Organizações e parcerias</strong> — o estado aparece como «Convite recebido» até aceitar.</p><p style="font-size:12px;color:#888">Se o link não abrir, copie o endereço acima ou abra a app e atualize esse separador.</p>`;
       const { send, provider: emailProviderUsed } = await sendTransactionalEmailWithFallback({
         to: provider.user.email,
         subject,
@@ -1050,7 +1050,7 @@ adminRouter.post('/affiliations/invite', express.json(), async (req, res) => {
         const pushRes = await sendExpoPushToMany(tokens, {
           title: 'Convite — organizações e parcerias',
           body: `${tenantLabel}: novo convite (dedicado). Abra a app.`,
-          android: { channelId: 'brspark-tecnico', sound: 'default' },
+          android: { channelId: 'aria-tecnico', sound: 'default' },
           data: {
             type: 'PROVIDER_AFFILIATION_INVITED',
             tenantId: String(tenantId),
@@ -1196,9 +1196,9 @@ adminRouter.post('/affiliations/:id/activate', express.json(), async (req, res) 
         notify.pushTokenCount = tokens.length;
         if (tokens.length) {
           const pushRes = await sendExpoPushToMany(tokens, {
-            title: 'Vínculo ativo — BrSpark',
+            title: 'Vínculo ativo — Aria',
             body: `${tenantLabel}: a empresa ativou o seu vínculo dedicado. Abra a app para ver em Organizações e parcerias.`,
-            android: { channelId: 'brspark-tecnico', sound: 'default' },
+            android: { channelId: 'aria-tecnico', sound: 'default' },
             data: {
               type: 'PROVIDER_AFFILIATION_ACTIVATED',
               tenantId: String(row.tenantId),

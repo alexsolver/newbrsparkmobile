@@ -986,7 +986,7 @@ export default function AssetDetailScreen() {
              if (dataURL.includes('base64,')) {
                 base64Code = dataURL.split('base64,')[1];
              }
-             const filepath = (FileSystem as any).documentDirectory + `brspark_qr_${id}.png`;
+             const filepath = (FileSystem as any).documentDirectory + `aria_qr_${id}.png`;
              await (FileSystem as any).writeAsStringAsync(filepath, base64Code, { encoding: 'base64' });
              await Sharing.shareAsync(filepath);
           } catch(e) {

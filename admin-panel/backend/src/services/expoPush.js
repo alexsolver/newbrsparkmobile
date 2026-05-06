@@ -3,12 +3,12 @@
 /**
  * Envio via Expo Push API (HTTPS).
  * No Android 8+, o channelId deve coincidir com o criado no app (notifications.ts):
- * brspark-alerts (geral), brspark-tecnico (OS / prestador), brspark-cliente (deslocamento).
+ * aria-alerts (geral), aria-tecnico (OS / prestador), aria-cliente (deslocamento).
  */
 /** API actual da Expo (CDN); `exp.host` redireciona mas costuma ser mais lento em lote. */
 const EXPO_PUSH_URL = 'https://api.expo.dev/v2/push/send';
 
-const ANDROID_CHANNEL_ID = 'brspark-alerts';
+const ANDROID_CHANNEL_ID = 'aria-alerts';
 const MAX_MESSAGES_PER_REQUEST = 100;
 
 /**

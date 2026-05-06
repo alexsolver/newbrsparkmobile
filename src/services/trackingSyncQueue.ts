@@ -5,7 +5,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch } from './auth';
 
-const KEY = '@brspark_tracking_sync_queue';
+const KEY = '@aria_tracking_sync_queue';
 
 export type TrackingSyncAction = 'pause' | 'resume' | 'end';
 

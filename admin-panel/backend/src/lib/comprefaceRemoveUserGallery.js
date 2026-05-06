@@ -4,12 +4,12 @@ const {
   buildComprefaceApiRoots,
   comprefaceSubjectName,
   deleteFacesForSubject,
-  deleteStaleBrsparkSubjectFacesForUser,
+  deleteStaleAriaSubjectFacesForUser,
 } = require('./comprefaceClient');
 const { findActiveComprefaceForTenant } = require('./comprefaceSync');
 
 /**
- * Remove todas as faces do subject BrSpark `homeTenantId:userId` no FaceMatch (Recognition)
+ * Remove todas as faces do subject Aria `homeTenantId:userId` no FaceMatch (Recognition)
  * e subjects obsoletos `outroTenantId:userId` para o mesmo utilizador.
  *
  * @param {import('@prisma/client').PrismaClient} prisma
@@ -42,7 +42,7 @@ async function removeComprefaceGalleryForUser(prisma, homeTenantId, userId, opts
     rootsTried += 1;
     try {
       await deleteFacesForSubject(root, apiKey, subject);
-      await deleteStaleBrsparkSubjectFacesForUser(root, apiKey, tid, uid);
+      await deleteStaleAriaSubjectFacesForUser(root, apiKey, tid, uid);
       if (updateUserRow) {
         const msg = String(opts.reason || 'Faces removidas no FaceMatch.').slice(0, 240);
         try {

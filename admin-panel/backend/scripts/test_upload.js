@@ -24,5 +24,5 @@ const req = http.request('http://localhost:3001/api/login', {
     req2.end();
   });
 });
-req.write(JSON.stringify({ email: 'alex@brspark.com', password: 'password123' })); // Adjust password if needed, or use a known one. Actually wait, I can just issue a Prisma update.
+req.write(JSON.stringify({ email: 'alex@aria.com', password: 'password123' })); // Adjust password if needed, or use a known one. Actually wait, I can just issue a Prisma update.
 req.end();

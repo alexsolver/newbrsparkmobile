@@ -4,16 +4,16 @@
 # depois corre o nodemon. Ao sair (Ctrl+C ou erro), termina o processo ssh do túnel.
 #
 # Sobrescrever comportamento:
-#   BRSPARK_SKIP_DEV_TUNNEL=1     — não abre túnel (ex.: Postgres já local ou túnel manual noutro terminal)
-#   BRSPARK_SSH_KEY, BRSPARK_SSH_HOST, BRSPARK_SSH_USER — igual a scripts/prod-postgres-tunnel.sh (ubuntu + .pem)
-#   BRSPARK_USE_DB_TUNNEL_USER=1  — usa utilizador dbtunnel + BRSPARK_DB_TUNNEL_KEY (~/.ssh/id_ed25519)
+#   ARIA_SKIP_DEV_TUNNEL=1     — não abre túnel (ex.: Postgres já local ou túnel manual noutro terminal)
+#   ARIA_SSH_KEY, ARIA_SSH_HOST, ARIA_SSH_USER — igual a scripts/prod-postgres-tunnel.sh (ubuntu + .pem)
+#   ARIA_USE_DB_TUNNEL_USER=1  — usa utilizador dbtunnel + ARIA_DB_TUNNEL_KEY (~/.ssh/id_ed25519)
 #
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 export PATH="$ROOT/node_modules/.bin:$PATH"
 
-if [[ "${BRSPARK_SKIP_DEV_TUNNEL:-}" == "1" ]]; then
+if [[ "${ARIA_SKIP_DEV_TUNNEL:-}" == "1" ]]; then
   # Sem `exec` no primeiro comando — senão o processo termina após o check e o nodemon nunca corre.
   node scripts/checkLocalDbReachable.js && exec nodemon src/index.js
 fi
@@ -56,21 +56,21 @@ fi
 if command -v nc >/dev/null 2>&1 && nc -z 127.0.0.1 "$LOCAL_PORT" 2>/dev/null; then
   echo "[dev] Porta local ${LOCAL_PORT} já está aberta — reutilizando (túnel existente)."
 else
-  SSH_HOST="${BRSPARK_SSH_HOST:-3.149.14.138}"
+  SSH_HOST="${ARIA_SSH_HOST:-3.149.14.138}"
 
-  if [[ "${BRSPARK_USE_DB_TUNNEL_USER:-}" == "1" ]]; then
-    SSH_USER="${BRSPARK_DB_TUNNEL_USER:-dbtunnel}"
-    SSH_KEY="${BRSPARK_DB_TUNNEL_KEY:-$HOME/.ssh/id_ed25519}"
+  if [[ "${ARIA_USE_DB_TUNNEL_USER:-}" == "1" ]]; then
+    SSH_USER="${ARIA_DB_TUNNEL_USER:-dbtunnel}"
+    SSH_KEY="${ARIA_DB_TUNNEL_KEY:-$HOME/.ssh/id_ed25519}"
     SSH_EXTRA=( -o IdentitiesOnly=yes -i "$SSH_KEY" )
   else
-    SSH_USER="${BRSPARK_SSH_USER:-ubuntu}"
-    SSH_KEY="${BRSPARK_SSH_KEY:-$HOME/Downloads/alex.pem}"
+    SSH_USER="${ARIA_SSH_USER:-ubuntu}"
+    SSH_KEY="${ARIA_SSH_KEY:-$HOME/Downloads/alex.pem}"
     SSH_EXTRA=( -i "$SSH_KEY" )
   fi
 
   if [[ ! -f "$SSH_KEY" ]]; then
     echo "[dev] Chave SSH não encontrada: $SSH_KEY" >&2
-    echo "      Defina BRSPARK_SSH_KEY (ubuntu) ou BRSPARK_DB_TUNNEL_KEY / BRSPARK_USE_DB_TUNNEL_USER=1" >&2
+    echo "      Defina ARIA_SSH_KEY (ubuntu) ou ARIA_DB_TUNNEL_KEY / ARIA_USE_DB_TUNNEL_USER=1" >&2
     exit 1
   fi
 

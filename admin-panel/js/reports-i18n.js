@@ -5,7 +5,7 @@ import { getAdminUiLocale } from './user-pages-i18n.js';
 
 const M = {
   'pt-BR': {
-    rep_pageTitle: 'BrSpark Admin, Construtor de relatório PDF',
+    rep_pageTitle: 'Aria Admin, Construtor de relatório PDF',
     rep_bc_panel: 'Painel',
     rep_bc_page: 'Relatórios PDF',
     rep_hero_title: 'Construtor de relatório PDF',
@@ -94,7 +94,7 @@ const M = {
     rep_mock_reset: 'Exemplo padrão.',
   },
   'en-US': {
-    rep_pageTitle: 'BrSpark Admin, PDF report builder',
+    rep_pageTitle: 'Aria Admin, PDF report builder',
     rep_bc_panel: 'Home',
     rep_bc_page: 'PDF reports',
     rep_hero_title: 'PDF report builder',

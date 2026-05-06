@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { WorkTimePunchRow } from './workTimeService';
 
-const KEY = '@brspark_work_time_punches_snapshot_v1';
+const KEY = '@aria_work_time_punches_snapshot_v1';
 const MAX_ROWS = 400;
 
 type Snapshot = {

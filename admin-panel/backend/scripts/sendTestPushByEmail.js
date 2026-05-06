@@ -13,7 +13,7 @@ const { sendExpoPushToMany } = require('../src/services/expoPush');
 const { resolveGlobalLiveActivityBadgeKey, resolveTenantAppDisplayName } = require('../src/lib/mobileTenantBranding');
 const { resolveActiveUsersForDispatchOwnerEmail } = require('../src/lib/userEmailUnique');
 
-const ANDROID_CHANNEL_TECH = 'brspark-tecnico';
+const ANDROID_CHANNEL_TECH = 'aria-tecnico';
 
 function parseArgs() {
   const rest = process.argv.slice(2).filter(Boolean);
@@ -52,7 +52,7 @@ async function main() {
     const tokens = await prisma.pushToken.findMany({ where: { userId: { in: userIds } } });
     if (!tokens.length) {
       console.error(
-        'Utilizador(es) encontrado(s) mas sem token Expo (iPhone: abrir app com login, Ajustes → BrSpark → Notificações):',
+        'Utilizador(es) encontrado(s) mas sem token Expo (iPhone: abrir app com login, Ajustes → Aria → Notificações):',
         user.email,
         '| userIds:',
         userIds.join(',')
@@ -62,14 +62,14 @@ async function main() {
 
     let res;
     if (mode === 'la') {
-      const appDisplayName = await resolveTenantAppDisplayName(prisma, user.tenantId, 'BrSpark');
-      const liveActivityBadgeKey = await resolveGlobalLiveActivityBadgeKey(prisma, 'brspark-badge');
+      const appDisplayName = await resolveTenantAppDisplayName(prisma, user.tenantId, 'Aria');
+      const liveActivityBadgeKey = await resolveGlobalLiveActivityBadgeKey(prisma, 'aria-badge');
       const taskId = `test-logo-la-${Date.now()}`;
       res = await sendExpoPushToMany(tokens, {
         title: 'Teste ícone · Live Activity',
         body:
           'Abrindo o cartão de técnico: verifique se o logo aparece à esquerda. FT de teste (não abrir OS).\n\nDeslize para expandir. Ações: Aceitar, Recusar ou OK.',
-        categoryId: 'BRSPARK_TECH_ACTIVITY',
+        categoryId: 'ARIA_TECH_ACTIVITY',
         android: { channelId: ANDROID_CHANNEL_TECH, sound: 'default' },
         data: {
           taskId,
@@ -81,7 +81,7 @@ async function main() {
       console.log('Modo: live-activity (os_reopened_revision) taskId=', taskId, 'liveActivityBadgeKey=', liveActivityBadgeKey);
     } else {
       res = await sendExpoPushToMany(tokens, {
-        title: 'Teste BrSpark',
+        title: 'Teste Aria',
         body: 'Push de teste do backend do painel. Se vê isto, o canal está OK.',
         android: { channelId: ANDROID_CHANNEL_TECH, sound: 'default' },
         data: { type: 'admin_test_push', at: new Date().toISOString() },

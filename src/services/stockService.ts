@@ -103,7 +103,7 @@ export const StockService = {
         csv += `"${name}","${i.sku}","${cat}",${i.currentStock},"${i.unit}","${loc}","${sub}"\n`;
       });
       
-      const fileUri = `${(FileSystem as any).cacheDirectory}inventario_brspark.csv`;
+      const fileUri = `${(FileSystem as any).cacheDirectory}inventario_aria.csv`;
       await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: 'utf8' });
       
       if (!(await Sharing.isAvailableAsync())) {

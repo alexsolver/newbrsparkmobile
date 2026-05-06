@@ -174,7 +174,7 @@ async function issueTechRegSubmitOtpChallenge({ app, reqUser }) {
 
   await sendOtpTransactionalEmail({
     to: email,
-    subject: 'BrSpark — código de confirmação do cadastro',
+    subject: 'Aria — código de confirmação do cadastro',
     text,
     html,
   }).catch((e) => {
@@ -260,7 +260,7 @@ function techRegStatusCopy(status, ctx) {
       pushBody: tenantName
         ? `Recebemos sua candidatura para ${tenantName}.`
         : 'Recebemos sua candidatura de prestador.',
-      emailSubject: `BrSpark — candidatura de prestador recebida${tenantName ? ` (${tenantName})` : ''}`,
+      emailSubject: `Aria — candidatura de prestador recebida${tenantName ? ` (${tenantName})` : ''}`,
       emailText:
         `Olá,\n\nRecebemos sua candidatura de prestador${tenantName ? ` para ${tenantName}` : ''}. ` +
         'Nossa equipe fará a análise e você será avisado quando houver atualização de status.\n',
@@ -275,30 +275,30 @@ function techRegStatusCopy(status, ctx) {
       pushBody: revisionNote
         ? `Ajustes solicitados: ${revisionNote.slice(0, 120)}${revisionNote.length > 120 ? '…' : ''}`
         : 'A equipe solicitou ajustes na sua candidatura.',
-      emailSubject: 'BrSpark — ajustes solicitados no cadastro de prestador',
+      emailSubject: 'Aria — ajustes solicitados no cadastro de prestador',
       emailText:
         `Olá,\n\nA equipe solicitou ajustes na sua candidatura de prestador${tenantName ? ` (${tenantName})` : ''}.\n\n` +
         `${revisionNote ? `Mensagem da revisão:\n${revisionNote}\n\n` : ''}` +
-        'Abra o app BrSpark para corrigir e reenviar.\n',
+        'Abra o app Aria para corrigir e reenviar.\n',
       emailHtml:
         `<p>Olá,</p><p>A equipe solicitou <strong>ajustes</strong> na sua candidatura de prestador${tenantName ? ` (${escapeHtml(tenantName)})` : ''}.</p>` +
         (revisionNote
           ? `<p><strong>Mensagem da revisão:</strong><br>${escapeHtml(revisionNote)}</p>`
           : '') +
-        '<p>Abra o app BrSpark para corrigir e reenviar.</p>',
+        '<p>Abra o app Aria para corrigir e reenviar.</p>',
     };
   }
   if (status === 'APPROVED') {
     return {
       pushTitle: 'Cadastro aprovado',
       pushBody: 'Seu cadastro de prestador foi aprovado. O modo Prestador já está disponível no app.',
-      emailSubject: 'BrSpark — cadastro de prestador aprovado',
+      emailSubject: 'Aria — cadastro de prestador aprovado',
       emailText:
         `Olá,\n\nSeu cadastro de prestador foi aprovado${tenantName ? ` para ${tenantName}` : ''}.\n` +
-        'Você já pode usar o modo Prestador no app BrSpark.\n',
+        'Você já pode usar o modo Prestador no app Aria.\n',
       emailHtml:
         `<p>Olá,</p><p>Seu cadastro de prestador foi <strong>aprovado</strong>${tenantName ? ` para <strong>${escapeHtml(tenantName)}</strong>` : ''}.</p>` +
-        '<p>Você já pode usar o modo Prestador no app BrSpark.</p>',
+        '<p>Você já pode usar o modo Prestador no app Aria.</p>',
     };
   }
   if (status === 'REJECTED') {
@@ -307,7 +307,7 @@ function techRegStatusCopy(status, ctx) {
       pushBody: reason
         ? `Motivo: ${reason.slice(0, 120)}${reason.length > 120 ? '…' : ''}`
         : 'Sua candidatura de prestador foi encerrada sem aprovação.',
-      emailSubject: 'BrSpark — cadastro de prestador não aprovado',
+      emailSubject: 'Aria — cadastro de prestador não aprovado',
       emailText:
         `Olá,\n\nSua candidatura de prestador${tenantName ? ` (${tenantName})` : ''} foi encerrada sem aprovação.\n` +
         `${reason ? `\nMotivo informado:\n${reason}\n` : ''}`,
@@ -546,7 +546,7 @@ function normTechRegEmail(s) {
 
 /**
  * Candidatura de prestador: `invitedEmail` costuma ser o e-mail canónico (JWT / pedido no perfil),
- * mas `User.email` na BD pode ser sintético em workspaces (ex. +brspark.ws.). Exige tenant da sessão
+ * mas `User.email` na BD pode ser sintético em workspaces (ex. +aria.ws.). Exige tenant da sessão
  * alinhado ao da candidatura.
  */
 async function techRegSessionMatchesInvite(prisma, appUser, app, jwtTenantId) {
@@ -617,7 +617,7 @@ async function bindTechRegistrationCandidate(req, res, next) {
     const ok = await techRegSessionMatchesInvite(prisma, dbUser, app, req.user.tenantId);
     if (!ok) {
       return res.status(403).json({
-        error: 'Este convite foi enviado para outro e-mail ou outra organização. Use a conta BrSpark com o mesmo e-mail do convite e o espaço Prestador correto.',
+        error: 'Este convite foi enviado para outro e-mail ou outra organização. Use a conta Aria com o mesmo e-mail do convite e o espaço Prestador correto.',
       });
     }
     req.techRegApp = app;
@@ -1895,20 +1895,20 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
       })
       .catch(() => {});
 
-    const deepLinkHint = `brspark://auth/tech-registration?token=${token}`;
+    const deepLinkHint = `aria://auth/tech-registration?token=${token}`;
     const textBody = [
       'Olá,',
       '',
-      `${tenant.name} convidou você a concluir o cadastro de prestador no BrSpark.`,
-      `Utilize a conta BrSpark já registada com o e-mail ${em} e abra o convite no app.`,
+      `${tenant.name} convidou você a concluir o cadastro de prestador no Aria.`,
+      `Utilize a conta Aria já registada com o e-mail ${em} e abra o convite no app.`,
       '',
       `Abrir no app: ${deepLinkHint}`,
       '',
-      'Se o link não abrir, abra o BrSpark, inicie sessão com este e-mail e utilize o fluxo de cadastro por convite com o token fornecido pelo gestor.',
+      'Se o link não abrir, abra o Aria, inicie sessão com este e-mail e utilize o fluxo de cadastro por convite com o token fornecido pelo gestor.',
     ].join('\n');
 
     const htmlBody = `<p>Olá,</p>
-<p><strong>${escapeHtml(tenant.name)}</strong> convidou você a concluir o <strong>cadastro de prestador</strong> no BrSpark.</p>
+<p><strong>${escapeHtml(tenant.name)}</strong> convidou você a concluir o <strong>cadastro de prestador</strong> no Aria.</p>
 <p>Utilize a conta já registada com o e-mail <strong>${escapeHtml(em)}</strong> e abra o convite no app.</p>
 <p><a href="${escapeHtml(deepLinkHint)}">Abrir convite no app</a></p>
 <p style="font-size:12px;color:#555">Se o botão não funcionar, copie o link acima para o navegador ou abra o app manualmente após iniciar sessão.</p>`;
@@ -1917,7 +1917,7 @@ adminRouter.post('/invite', express.json(), async (req, res) => {
     try {
       const { send, provider } = await sendTransactionalEmailWithFallback({
         to: { email: em },
-        subject: `Convite BrSpark — cadastro de prestador (${tenant.name})`,
+        subject: `Convite Aria — cadastro de prestador (${tenant.name})`,
         text: textBody,
         html: htmlBody,
       });

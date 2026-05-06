@@ -46,16 +46,16 @@ socket.on('error', fail);
 
 function fail() {
   console.error('');
-  console.error('  [BrSpark] DATABASE_URL usa %s:%s mas nada responde aqui.', host, port);
+  console.error('  [Aria] DATABASE_URL usa %s:%s mas nada responde aqui.', host, port);
   console.error('  Provável causa: túnel SSH para o Postgres de produção não está ativo.');
   console.error('');
-  console.error('  Terminal separado (raiz do repo BrsparkMobile):');
-  console.error('    export BRSPARK_SSH_KEY="$HOME/Downloads/alex.pem"');
+  console.error('  Terminal separado (raiz do repo AriaMobile):');
+  console.error('    export ARIA_SSH_KEY="$HOME/Downloads/alex.pem"');
   console.error('    ./scripts/prod-postgres-tunnel.sh');
   console.error('  (porta local 5433 por defeito — tem de coincidir com a porta no DATABASE_URL.)');
   console.error('');
   console.error('  Alternativa: Postgres local — ajuste DATABASE_URL em admin-panel/backend/.env');
-  console.error('    (ex.: postgresql://postgres:postgres@127.0.0.1:5432/brspark_admin?schema=public)');
+  console.error('    (ex.: postgresql://postgres:postgres@127.0.0.1:5432/aria_admin?schema=public)');
   console.error('');
   process.exit(1);
 }

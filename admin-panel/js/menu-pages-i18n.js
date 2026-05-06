@@ -17,7 +17,7 @@ const M = {
     common_breadcrumb_trail: 'Trilha',
 
     /* Tenants */
-    ten_pageTitle: 'BrSpark Admin, Tenants',
+    ten_pageTitle: 'Aria Admin, Tenants',
     ten_bc_here: 'Tenants',
     ten_hero_title: 'Gestão de tenants',
     ten_hero_sub:
@@ -74,7 +74,7 @@ const M = {
     ten_plan_per_mo: '/mês',
 
     /* Subscriptions */
-    sub_pageTitle: 'BrSpark Admin, Assinaturas',
+    sub_pageTitle: 'Aria Admin, Assinaturas',
     sub_bc_here: 'Assinaturas',
     sub_hero_title: 'Planos e assinaturas',
     sub_hero_sub:
@@ -144,7 +144,7 @@ const M = {
     sub_tmpl_count_many: '{n} templates',
 
     /* Plans */
-    pln_pageTitle: 'BrSpark Admin, Planos (pacotes)',
+    pln_pageTitle: 'Aria Admin, Planos (pacotes)',
     pln_bc_here: 'Planos (pacotes)',
     pln_hero_title: 'Catálogo de planos',
     pln_hero_sub_html:
@@ -233,7 +233,7 @@ const M = {
     pln_alert_save_err: 'Erro: {detail}',
 
     /* System */
-    sys_pageTitle: 'BrSpark Admin, Sistema',
+    sys_pageTitle: 'Aria Admin, Sistema',
     sys_bc_here: 'Sistema',
     sys_hero_title: 'Configurações do sistema',
     sys_hero_sub:
@@ -257,7 +257,7 @@ const M = {
     sys_alert_saved: 'Configurações salvas (persistência em desenvolvimento).',
 
     /* API docs */
-    apidoc_pageTitle: 'BrSpark Admin, API Docs',
+    apidoc_pageTitle: 'Aria Admin, API Docs',
     apidoc_bc_here: 'Documentação da API',
     apidoc_hero_title: 'Documentação da API',
     apidoc_hero_sub:
@@ -333,17 +333,17 @@ const M = {
       'Manter títulos/tags legíveis para operações críticas (Conta, Sync, Operações, Compliance, Tracking).',
     apidoc_doc_govern_item_4:
       'Revisão recomendada por release: autenticação, rotas públicas, contratos de erro e endpoints de upload.',
-    apidoc_ai_title: 'Help IA Técnico-Operacional BrSpark',
+    apidoc_ai_title: 'Help IA Técnico-Operacional Aria',
     apidoc_ai_sub:
       'Assistente alimentado com OpenAPI, estrutura de rotas, schema Prisma e documentação técnica para dúvidas de arquitetura, APIs, banco e automações.',
     apidoc_ai_welcome:
-      'Sou o especialista técnico-operacional do BrSpark. Pergunte sobre endpoints, modelos de dados, fluxos e integrações.',
+      'Sou o especialista técnico-operacional do Aria. Pergunte sobre endpoints, modelos de dados, fluxos e integrações.',
     apidoc_ai_input_placeholder:
       'Ex.: Quais endpoints do fluxo de operações e quais models do Prisma esse fluxo usa?',
     apidoc_ai_send: 'Perguntar',
     apidoc_ai_clear: 'Limpar conversa',
     apidoc_ai_you: 'Você',
-    apidoc_ai_assistant: 'Especialista BrSpark',
+    apidoc_ai_assistant: 'Especialista Aria',
     apidoc_ai_status_ready: 'Pronto para responder.',
     apidoc_ai_status_loading: 'Consultando a base técnica e gerando resposta…',
     apidoc_ai_status_error: 'Falha ao gerar resposta.',
@@ -355,7 +355,7 @@ const M = {
     apidoc_ai_quick_title: 'Perguntas rápidas',
     apidoc_ai_quick_1_label: 'Mapa de autenticação',
     apidoc_ai_quick_1_question:
-      'Mapeie a autenticação do BrSpark: quais endpoints geram JWT, quais esquemas de segurança existem e em quais fluxos usar bearerAdmin vs bearerApp.',
+      'Mapeie a autenticação do Aria: quais endpoints geram JWT, quais esquemas de segurança existem e em quais fluxos usar bearerAdmin vs bearerApp.',
     apidoc_ai_quick_2_label: 'Fluxo de operações',
     apidoc_ai_quick_2_question:
       'Explique o fluxo técnico de operações/OS no backend: endpoints principais, sequência típica e pontos de integração com chat e tracking.',
@@ -364,12 +364,12 @@ const M = {
       'Quais são os principais models do Prisma para API, operações e formulários? Resuma a responsabilidade de cada um e relações críticas.',
     apidoc_ai_quick_4_label: 'Automações API',
     apidoc_ai_quick_4_question:
-      'Quais automações com API já são suportadas no BrSpark (ex.: API_FETCH, API_VALIDATION, IA visão/voz)? Liste limites e boas práticas.',
+      'Quais automações com API já são suportadas no Aria (ex.: API_FETCH, API_VALIDATION, IA visão/voz)? Liste limites e boas práticas.',
     apidoc_err_load: 'Falha ao carregar: {src}',
     apidoc_err_swagger: 'Não foi possível carregar o Swagger UI (rede ou CDN).',
 
     /* Notifications */
-    notif_pageTitle: 'BrSpark Admin, Notificações',
+    notif_pageTitle: 'Aria Admin, Notificações',
     notif_bc_here: 'Notificações',
     notif_hero_title: 'Notificações',
     notif_hero_sub:
@@ -405,7 +405,7 @@ const M = {
     notif_tmpl_count_many: '{n} templates',
 
     /* Locations */
-    loc_pageTitle: 'BrSpark Admin, Multi-location (países e idiomas)',
+    loc_pageTitle: 'Aria Admin, Multi-location (países e idiomas)',
     loc_bc_here: 'Multi-location',
     loc_hero_title: 'Países, regiões e idiomas',
     loc_hero_sub:
@@ -440,7 +440,7 @@ const M = {
     loc_alert_country_stub: 'País «{name}» ({code}) será adicionado. Implemente a rota /api/regions para persistência.',
 
     /* Compliance */
-    cmp_pageTitle: 'BrSpark Admin, Compliance LGPD',
+    cmp_pageTitle: 'Aria Admin, Compliance LGPD',
     cmp_bc_here: 'Compliance',
     cmp_hero_title: 'Compliance e LGPD',
     cmp_hero_sub:
@@ -595,7 +595,7 @@ const M = {
     cmp_rev_APPROVED: 'Aprovado',
 
     /* Metatags */
-    mt_pageTitle: 'BrSpark Admin, Metatags & Categorias',
+    mt_pageTitle: 'Aria Admin, Metatags & Categorias',
     mt_bc_here: 'Metatags',
     mt_hero_title: 'Metatags e categorias',
     mt_hero_sub:
@@ -634,7 +634,7 @@ const M = {
     mt_alert_save_err: 'Erro: {detail}',
 
     /* i18n admin page */
-    trl_pageTitle: 'BrSpark Admin, Traduções e regionais',
+    trl_pageTitle: 'Aria Admin, Traduções e regionais',
     trl_bc_here: 'Traduções e regionais',
     trl_hero_title: 'Traduções e configurações regionais',
     trl_hero_sub:
@@ -670,7 +670,7 @@ const M = {
     trl_alert_no_empty: 'Nenhum campo vazio encontrado nos resultados visíveis.',
 
     /* Work time, chrome */
-    wt_pageTitle: 'BrSpark Admin, Registro de horas',
+    wt_pageTitle: 'Aria Admin, Registro de horas',
     wt_bc_here: 'Registro de horas',
     wt_hero_title: 'Registro de horas trabalhadas',
     wt_hero_sub:
@@ -683,7 +683,7 @@ const M = {
     wt_shared_pool_save_blocked: 'Não é possível guardar: política de ponto não está disponível para a piscina partilhada da app.',
 
     /* Telemetry */
-    tel_pageTitle: 'BrSpark Admin, Monitoramento de Telemetria',
+    tel_pageTitle: 'Aria Admin, Monitoramento de Telemetria',
     tel_bc_here: 'Telemetria',
     tel_hero_title: 'Rastreamento de telemetria',
     tel_hero_sub:
@@ -715,7 +715,7 @@ const M = {
     tel_det_ts_srv: 'Hora de recebimento (servidor)',
 
     /* Data collection */
-    dc_pageTitle: 'BrSpark Admin, Coleta de Dados',
+    dc_pageTitle: 'Aria Admin, Coleta de Dados',
     dc_bc_here: 'Coleta de Dados',
     dc_hero_title: 'Coleta de dados e privacidade',
     dc_hero_sub:
@@ -727,7 +727,7 @@ const M = {
     dc_btn_save: 'Salvar',
 
     /* Tracking chat moderation */
-    tcm_pageTitle: 'BrSpark Admin, Segurança do chat (visita)',
+    tcm_pageTitle: 'Aria Admin, Segurança do chat (visita)',
     tcm_bc_here: 'Chat de acompanhamento',
     tcm_hero_title: 'Segurança do chat de acompanhamento',
     tcm_hero_sub_html:
@@ -750,7 +750,7 @@ M['en-US'] = {
   common_unlimited: 'Unlimited',
   common_breadcrumb_trail: 'Breadcrumb',
 
-  ten_pageTitle: 'BrSpark Admin, Tenants',
+  ten_pageTitle: 'Aria Admin, Tenants',
   ten_bc_here: 'Tenants',
   ten_hero_title: 'Tenant management',
   ten_hero_sub:
@@ -806,7 +806,7 @@ M['en-US'] = {
     ten_alert_create_fail: 'Could not create the tenant. Check the console (F12) or try again.',
   ten_plan_per_mo: '/mo',
 
-  sub_pageTitle: 'BrSpark Admin, Subscriptions',
+  sub_pageTitle: 'Aria Admin, Subscriptions',
   sub_bc_here: 'Subscriptions',
   sub_hero_title: 'Plans and subscriptions',
   sub_hero_sub:
@@ -875,7 +875,7 @@ M['en-US'] = {
   sub_tmpl_count_one: '1 template',
   sub_tmpl_count_many: '{n} templates',
 
-  pln_pageTitle: 'BrSpark Admin, Plans (packages)',
+  pln_pageTitle: 'Aria Admin, Plans (packages)',
   pln_bc_here: 'Plans (packages)',
   pln_hero_title: 'Plan catalog',
   pln_hero_sub_html:
@@ -962,7 +962,7 @@ M['en-US'] = {
   pln_alert_name: 'Name is required.',
   pln_alert_save_err: 'Error: {detail}',
 
-  sys_pageTitle: 'BrSpark Admin, System',
+  sys_pageTitle: 'Aria Admin, System',
   sys_bc_here: 'System',
   sys_hero_title: 'System settings',
   sys_hero_sub:
@@ -985,7 +985,7 @@ M['en-US'] = {
   sys_flags_count: '{n} flags',
   sys_alert_saved: 'Settings saved (persistence in development).',
 
-  apidoc_pageTitle: 'BrSpark Admin, API Docs',
+  apidoc_pageTitle: 'Aria Admin, API Docs',
   apidoc_bc_here: 'API documentation',
   apidoc_hero_title: 'API documentation',
   apidoc_hero_sub:
@@ -1061,17 +1061,17 @@ M['en-US'] = {
     'Keep readable titles/tags for critical operations (Account, Sync, Operations, Compliance, Tracking).',
   apidoc_doc_govern_item_4:
     'Recommended release review: auth, public routes, error contracts, and upload endpoints.',
-  apidoc_ai_title: 'BrSpark Technical AI Help',
+  apidoc_ai_title: 'Aria Technical AI Help',
   apidoc_ai_sub:
     'Assistant fed with OpenAPI, route structure, Prisma schema, and technical docs for architecture, API, database, and automation questions.',
   apidoc_ai_welcome:
-    'I am BrSpark’s technical operations specialist. Ask about endpoints, data models, flows, and integrations.',
+    'I am Aria’s technical operations specialist. Ask about endpoints, data models, flows, and integrations.',
   apidoc_ai_input_placeholder:
     'Example: Which operations-flow endpoints exist and which Prisma models are involved?',
   apidoc_ai_send: 'Ask',
   apidoc_ai_clear: 'Clear chat',
   apidoc_ai_you: 'You',
-  apidoc_ai_assistant: 'BrSpark Specialist',
+  apidoc_ai_assistant: 'Aria Specialist',
   apidoc_ai_status_ready: 'Ready to answer.',
   apidoc_ai_status_loading: 'Consulting technical context and generating answer…',
   apidoc_ai_status_error: 'Could not generate answer.',
@@ -1083,7 +1083,7 @@ M['en-US'] = {
   apidoc_ai_quick_title: 'Quick prompts',
   apidoc_ai_quick_1_label: 'Auth map',
   apidoc_ai_quick_1_question:
-    'Map BrSpark authentication: which endpoints issue JWTs, which security schemes exist, and when to use bearerAdmin vs bearerApp.',
+    'Map Aria authentication: which endpoints issue JWTs, which security schemes exist, and when to use bearerAdmin vs bearerApp.',
   apidoc_ai_quick_2_label: 'Operations flow',
   apidoc_ai_quick_2_question:
     'Explain the backend operations/work-order technical flow: key endpoints, typical sequence, and integration points with chat and tracking.',
@@ -1092,11 +1092,11 @@ M['en-US'] = {
     'What are the main Prisma models for API, operations, and forms? Summarize each responsibility and critical relationships.',
   apidoc_ai_quick_4_label: 'API automations',
   apidoc_ai_quick_4_question:
-    'Which API-based automations are already supported in BrSpark (e.g., API_FETCH, API_VALIDATION, vision/voice AI)? List limits and best practices.',
+    'Which API-based automations are already supported in Aria (e.g., API_FETCH, API_VALIDATION, vision/voice AI)? List limits and best practices.',
   apidoc_err_load: 'Failed to load: {src}',
   apidoc_err_swagger: 'Could not load Swagger UI (network or CDN).',
 
-  notif_pageTitle: 'BrSpark Admin, Notifications',
+  notif_pageTitle: 'Aria Admin, Notifications',
   notif_bc_here: 'Notifications',
   notif_hero_title: 'Notifications',
   notif_hero_sub:
@@ -1131,7 +1131,7 @@ M['en-US'] = {
   notif_tmpl_count_one: '1 template',
   notif_tmpl_count_many: '{n} templates',
 
-  loc_pageTitle: 'BrSpark Admin, Multi-location',
+  loc_pageTitle: 'Aria Admin, Multi-location',
   loc_bc_here: 'Multi-location',
   loc_hero_title: 'Countries, regions and languages',
   loc_hero_sub:
@@ -1165,7 +1165,7 @@ M['en-US'] = {
   loc_alert_country_required: 'Country name and code are required.',
   loc_alert_country_stub: 'Country «{name}» ({code}) will be added. Implement /api/regions for persistence.',
 
-  cmp_pageTitle: 'BrSpark Admin, LGPD & Compliance',
+  cmp_pageTitle: 'Aria Admin, LGPD & Compliance',
   cmp_bc_here: 'Compliance',
   cmp_hero_title: 'Compliance & LGPD',
   cmp_hero_sub:
@@ -1319,7 +1319,7 @@ M['en-US'] = {
     cmp_rev_LEGAL_REVIEW: 'Legal review',
     cmp_rev_APPROVED: 'Approved',
 
-  mt_pageTitle: 'BrSpark Admin, Metatags & categories',
+  mt_pageTitle: 'Aria Admin, Metatags & categories',
   mt_bc_here: 'Metatags',
   mt_hero_title: 'Metatags and categories',
   mt_hero_sub:
@@ -1357,7 +1357,7 @@ M['en-US'] = {
   mt_alert_key_pt: 'Key and pt-BR name are required.',
   mt_alert_save_err: 'Error: {detail}',
 
-  trl_pageTitle: 'BrSpark Admin, Translations & locale',
+  trl_pageTitle: 'Aria Admin, Translations & locale',
   trl_bc_here: 'Translations & locale',
   trl_hero_title: 'Translations and regional settings',
   trl_hero_sub:
@@ -1392,7 +1392,7 @@ M['en-US'] = {
   trl_alert_no_val: 'Nothing to translate on this row.',
   trl_alert_no_empty: 'No empty fields in the visible results.',
 
-  wt_pageTitle: 'BrSpark Admin, Work time',
+  wt_pageTitle: 'Aria Admin, Work time',
   wt_bc_here: 'Work time',
   wt_hero_title: 'Work time tracking',
   wt_hero_sub:
@@ -1404,7 +1404,7 @@ M['en-US'] = {
     'This organization is the app’s shared sign-up pool. Organization-wide work time policy does not apply here — configure it on the employers’ tenants.',
   wt_shared_pool_save_blocked: 'Cannot save: work time policy is not available for the app shared pool tenant.',
 
-  tel_pageTitle: 'BrSpark Admin, Telemetry',
+  tel_pageTitle: 'Aria Admin, Telemetry',
   tel_bc_here: 'Telemetry',
   tel_hero_title: 'Telemetry tracking',
   tel_hero_sub:
@@ -1435,7 +1435,7 @@ M['en-US'] = {
   tel_det_ts_dev: 'Collection time (device)',
   tel_det_ts_srv: 'Received time (server)',
 
-  dc_pageTitle: 'BrSpark Admin, Data collection',
+  dc_pageTitle: 'Aria Admin, Data collection',
   dc_bc_here: 'Data collection',
   dc_hero_title: 'Data collection and privacy',
   dc_hero_sub:
@@ -1446,7 +1446,7 @@ M['en-US'] = {
   dc_tab_retention: 'Data retention',
   dc_btn_save: 'Save',
 
-  tcm_pageTitle: 'BrSpark Admin, Visit chat safety',
+  tcm_pageTitle: 'Aria Admin, Visit chat safety',
   tcm_bc_here: 'Visit chat',
   tcm_hero_title: 'Visit tracking chat safety',
   tcm_hero_sub_html:
@@ -1456,7 +1456,7 @@ M['en-US'] = {
 
 M['es-ES'] = {
   ...M['en-US'],
-  cmp_pageTitle: 'BrSpark Admin, Cumplimiento (LGPD/RGPD)',
+  cmp_pageTitle: 'Aria Admin, Cumplimiento (LGPD/RGPD)',
   cmp_bc_here: 'Cumplimiento',
   cmp_hero_title: 'Cumplimiento y protección de datos',
   cmp_hero_sub:
@@ -1615,7 +1615,7 @@ M['es-ES'] = {
 
 M['de-DE'] = {
   ...M['en-US'],
-  cmp_pageTitle: 'BrSpark Admin, Compliance (DSGVO/LGPD)',
+  cmp_pageTitle: 'Aria Admin, Compliance (DSGVO/LGPD)',
   cmp_bc_here: 'Compliance',
   cmp_hero_title: 'Compliance & Datenschutz',
   cmp_hero_sub:

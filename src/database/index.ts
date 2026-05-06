@@ -23,7 +23,7 @@ function filterAssetsForList<T extends Asset>(assets: T[], opts?: LocalAssetRead
   return assets;
 }
 
-const db = SQLite.openDatabaseSync('brspark.db');
+const db = SQLite.openDatabaseSync('aria.db');
 
 export function initDatabase() {
   db.execSync(`
@@ -1394,7 +1394,7 @@ export interface MediaItem {
   stampedDatetime: boolean;
   createdAt: string;
   ownerEmail?: string;
-  remoteUrl?: string;  // URL no BrSpark Cloud Storage após upload
+  remoteUrl?: string;  // URL no Aria Cloud Storage após upload
 }
 
 export function saveMediaItem(item: MediaItem) {

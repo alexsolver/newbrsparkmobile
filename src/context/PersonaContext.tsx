@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { canUseProviderMode, type User } from '../services/auth';
 
-export const BRSPARK_PERSONA_STORAGE_KEY = '@brspark_active_persona_v1';
+export const ARIA_PERSONA_STORAGE_KEY = '@aria_active_persona_v1';
 
 export type MobilePersona = 'client' | 'provider';
 

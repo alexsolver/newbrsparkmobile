@@ -9,23 +9,23 @@ const { VERSION, legalDocsPtBr } = require('./compliancePtBrLegalDocs');
 
 const BANNER = {
   'en-US': [
-    '> **Draft for legal review.** This document is an operational baseline for BrSpark and must be reviewed by qualified counsel before publication to the public, customers, employees or contractors.',
+    '> **Draft for legal review.** This document is an operational baseline for Aria and must be reviewed by qualified counsel before publication to the public, customers, employees or contractors.',
     '',
   ].join('\n'),
   'es-ES': [
-    '> **Borrador para revisión jurídica.** Este documento es una base operativa para BrSpark y debe ser revisado por abogado colegiado antes de su publicación al público, clientes, empleados o contratistas.',
+    '> **Borrador para revisión jurídica.** Este documento es una base operativa para Aria y debe ser revisado por abogado colegiado antes de su publicación al público, clientes, empleados o contratistas.',
     '',
   ].join('\n'),
   'de-DE': [
-    '> **Entwurf zur juristischen Prüfung.** Dieses Dokument ist eine operative Vorlage für BrSpark und muss vor Veröffentlichung gegenüber Öffentlichkeit, Kunden, Arbeitnehmern oder Auftragnehmern von qualifizierten Rechtsanwälten geprüft werden.',
+    '> **Entwurf zur juristischen Prüfung.** Dieses Dokument ist eine operative Vorlage für Aria und muss vor Veröffentlichung gegenüber Öffentlichkeit, Kunden, Arbeitnehmern oder Auftragnehmern von qualifizierten Rechtsanwälten geprüft werden.',
     '',
   ].join('\n'),
 };
 
 const FOOTER = {
-  'en-US': '**Legal & privacy contact:** dpo@brspark.com',
-  'es-ES': '**Contacto jurídico y privacidad:** dpo@brspark.com',
-  'de-DE': '**Juristischer Datenschutzkontakt:** dpo@brspark.com',
+  'en-US': '**Legal & privacy contact:** dpo@aria.com',
+  'es-ES': '**Contacto jurídico y privacidad:** dpo@aria.com',
+  'de-DE': '**Juristischer Datenschutzkontakt:** dpo@aria.com',
 };
 
 const LABEL = {
@@ -56,20 +56,20 @@ function md(locale, title, sections) {
 
 const commonController = {
   'en-US':
-    'BrSpark Tecnologia Ltda., its affiliates, successors or operational entities indicated in the applicable agreement.',
+    'Aria Tecnologia Ltda., its affiliates, successors or operational entities indicated in the applicable agreement.',
   'es-ES':
-    'BrSpark Tecnologia Ltda., sus filiales, sucesoras o entidades operativas indicadas en el contrato aplicable.',
+    'Aria Tecnologia Ltda., sus filiales, sucesoras o entidades operativas indicadas en el contrato aplicable.',
   'de-DE':
-    'BrSpark Tecnologia Ltda., deren verbundene Unternehmen, Rechtsnachfolger oder im Vertrag genannte Betriebseinheiten.',
+    'Aria Tecnologia Ltda., deren verbundene Unternehmen, Rechtsnachfolger oder im Vertrag genannte Betriebseinheiten.',
 };
 
 const commonScope = {
   'en-US':
-    'website, admin console, APIs, mobile app, field modules, integrations, transactional communications and related BrSpark platform services.',
+    'website, admin console, APIs, mobile app, field modules, integrations, transactional communications and related Aria platform services.',
   'es-ES':
-    'sitio web, consola de administración, APIs, app móvil, módulos de campo, integraciones, comunicaciones transaccionales y servicios relacionados de la plataforma BrSpark.',
+    'sitio web, consola de administración, APIs, app móvil, módulos de campo, integraciones, comunicaciones transaccionales y servicios relacionados de la plataforma Aria.',
   'de-DE':
-    'Website, Admin-Konsole, APIs, mobile App, Feldmodule, Integrationen, transaktionale Kommunikation und zugehörige Dienste der BrSpark-Plattform.',
+    'Website, Admin-Konsole, APIs, mobile App, Feldmodule, Integrationen, transaktionale Kommunikation und zugehörige Dienste der Aria-Plattform.',
 };
 
 /** @type {Array<{ type: string, titles: Record<string,string>, summaries: Record<string,string>, sections: Array<{ title: Record<string,string>, body: Record<string,string|string[]>}>}>} */
@@ -77,9 +77,9 @@ const I18N_SPECS = [
   {
     type: 'TERMS_OF_USE',
     titles: {
-      'en-US': 'BrSpark Platform Terms of Use',
-      'es-ES': 'Términos de uso de la plataforma BrSpark',
-      'de-DE': 'Nutzungsbedingungen der BrSpark-Plattform',
+      'en-US': 'Aria Platform Terms of Use',
+      'es-ES': 'Términos de uso de la plataforma Aria',
+      'de-DE': 'Nutzungsbedingungen der Aria-Plattform',
     },
     summaries: {
       'en-US':
@@ -97,9 +97,9 @@ const I18N_SPECS = [
           'de-DE': '1. Identifikation und Geltungsbereich',
         },
         body: {
-          'en-US': `These Terms govern access to and use of the BrSpark platform, including ${commonScope['en-US']} Subscription or continued use indicates acknowledgement and agreement to these Terms, supplementary policies and any commercial terms accepted by the Customer.`,
-          'es-ES': `Estos Términos regulan el acceso y uso de la plataforma BrSpark, incluido ${commonScope['es-ES']} La contratación o el uso continuado implica conocimiento y aceptación de estos Términos, políticas complementarias y condiciones comerciales aceptadas por el Cliente.`,
-          'de-DE': `Diese Bedingungen regeln den Zugang zur und die Nutzung der BrSpark-Plattform, einschließlich ${commonScope['de-DE']} Vertragsschluss oder fortgesetzte Nutzung bedeuten die Anerkennung und Zustimmung zu diesen Bedingungen, ergänzenden Richtlinien und allen vom Kunden akzeptierten kommerziellen Bedingungen.`,
+          'en-US': `These Terms govern access to and use of the Aria platform, including ${commonScope['en-US']} Subscription or continued use indicates acknowledgement and agreement to these Terms, supplementary policies and any commercial terms accepted by the Customer.`,
+          'es-ES': `Estos Términos regulan el acceso y uso de la plataforma Aria, incluido ${commonScope['es-ES']} La contratación o el uso continuado implica conocimiento y aceptación de estos Términos, políticas complementarias y condiciones comerciales aceptadas por el Cliente.`,
+          'de-DE': `Diese Bedingungen regeln den Zugang zur und die Nutzung der Aria-Plattform, einschließlich ${commonScope['de-DE']} Vertragsschluss oder fortgesetzte Nutzung bedeuten die Anerkennung und Zustimmung zu diesen Bedingungen, ergänzenden Richtlinien und allen vom Kunden akzeptierten kommerziellen Bedingungen.`,
         },
       },
       {
@@ -110,13 +110,13 @@ const I18N_SPECS = [
         },
         body: {
           'en-US': [
-            '**BrSpark**: the platform provider. **Customer or Tenant**: a legal entity or business account that manages users, technicians, assets, work orders and data. **User**: a person authorized by the Customer. **Contractor**: a professional invited, registered or affiliated with a tenant. **Customer Data**: content, documents, records, photos, checklists, operational data and information entered or generated through the platform.',
+            '**Aria**: the platform provider. **Customer or Tenant**: a legal entity or business account that manages users, technicians, assets, work orders and data. **User**: a person authorized by the Customer. **Contractor**: a professional invited, registered or affiliated with a tenant. **Customer Data**: content, documents, records, photos, checklists, operational data and information entered or generated through the platform.',
           ],
           'es-ES': [
-            '**BrSpark**: proveedora de la plataforma. **Cliente o Tenant**: persona jurídica o cuenta empresarial que administra usuarios, técnicos, activos, órdenes de servicio y datos. **Usuario**: persona autorizada por el Cliente. **Contratista**: profesional invitado, registrado o afiliado a un tenant. **Datos del Cliente**: contenido, documentos, registros, fotos, checklists, datos operativos e información introducida o generada en el uso de la plataforma.',
+            '**Aria**: proveedora de la plataforma. **Cliente o Tenant**: persona jurídica o cuenta empresarial que administra usuarios, técnicos, activos, órdenes de servicio y datos. **Usuario**: persona autorizada por el Cliente. **Contratista**: profesional invitado, registrado o afiliado a un tenant. **Datos del Cliente**: contenido, documentos, registros, fotos, checklists, datos operativos e información introducida o generada en el uso de la plataforma.',
           ],
           'de-DE': [
-            '**BrSpark**: Anbieterin der Plattform. **Kunde oder Tenant**: juristische Person oder Geschäftskonto, das Benutzer, Techniker, Vermögenswerte, Arbeitsaufträge und Daten verwaltet. **Nutzer**: vom Kunden autorisierte Person. **Auftragnehmer**: eingeladener, registrierter oder einem Tenant zugeordneter Dienstleister. **Kundendaten**: Inhalte, Dokumente, Aufzeichnungen, Fotos, Checklisten, Betriebsdaten und Informationen, die bei Nutzung der Plattform eingegeben oder erzeugt werden.',
+            '**Aria**: Anbieterin der Plattform. **Kunde oder Tenant**: juristische Person oder Geschäftskonto, das Benutzer, Techniker, Vermögenswerte, Arbeitsaufträge und Daten verwaltet. **Nutzer**: vom Kunden autorisierte Person. **Auftragnehmer**: eingeladener, registrierter oder einem Tenant zugeordneter Dienstleister. **Kundendaten**: Inhalte, Dokumente, Aufzeichnungen, Fotos, Checklisten, Betriebsdaten und Informationen, die bei Nutzung der Plattform eingegeben oder erzeugt werden.',
           ],
         },
       },
@@ -128,11 +128,11 @@ const I18N_SPECS = [
         },
         body: {
           'en-US':
-            'The Customer must provide accurate information, keep credentials secure, assign appropriate access profiles and remove users who should no longer access the platform. Actions taken with valid credentials will be attributed to the corresponding account, except where exclusive fault of BrSpark is proven.',
+            'The Customer must provide accurate information, keep credentials secure, assign appropriate access profiles and remove users who should no longer access the platform. Actions taken with valid credentials will be attributed to the corresponding account, except where exclusive fault of Aria is proven.',
           'es-ES':
-            'El Cliente debe proporcionar datos veraces, mantener las credenciales seguras, definir perfiles de acceso adecuados y eliminar usuarios que ya no deban acceder a la plataforma. Los actos realizados con credenciales válidas se atribuirán a la cuenta correspondiente, salvo prueba de fallo exclusivo de BrSpark.',
+            'El Cliente debe proporcionar datos veraces, mantener las credenciales seguras, definir perfiles de acceso adecuados y eliminar usuarios que ya no deban acceder a la plataforma. Los actos realizados con credenciales válidas se atribuirán a la cuenta correspondiente, salvo prueba de fallo exclusivo de Aria.',
           'de-DE':
-            'Der Kunde muss wahre Angaben machen, Zugangsdaten schützen, angemessene Zugriffsprofile vergeben und Nutzer entfernen, die keinen Zugang mehr haben sollen. Handlungen mit gültigen Zugangsdaten werden dem jeweiligen Konto zugerechnet, sofern nicht ausschließliches Verschulden von BrSpark nachgewiesen wird.',
+            'Der Kunde muss wahre Angaben machen, Zugangsdaten schützen, angemessene Zugriffsprofile vergeben und Nutzer entfernen, die keinen Zugang mehr haben sollen. Handlungen mit gültigen Zugangsdaten werden dem jeweiligen Konto zugerechnet, sofern nicht ausschließliches Verschulden von Aria nachgewiesen wird.',
         },
       },
       {
@@ -143,11 +143,11 @@ const I18N_SPECS = [
         },
         body: {
           'en-US':
-            'BrSpark may offer modules for asset management, inventory, documents, checklists, work orders, location, time tracking, biometrics, AI, reports, integrations, ratings, notifications and billing. Modules may depend on the subscribed plan, permissions, technical limits, third-party availability or tenant configuration.',
+            'Aria may offer modules for asset management, inventory, documents, checklists, work orders, location, time tracking, biometrics, AI, reports, integrations, ratings, notifications and billing. Modules may depend on the subscribed plan, permissions, technical limits, third-party availability or tenant configuration.',
           'es-ES':
-            'BrSpark puede ofrecer módulos de gestión de activos, inventario, documentos, checklists, órdenes de servicio, ubicación, jornada, biometría, IA, informes, integraciones, evaluaciones, notificaciones y facturación. Los módulos pueden depender del plan contratado, permisos, límites técnicos, disponibilidad de terceros o configuración del tenant.',
+            'Aria puede ofrecer módulos de gestión de activos, inventario, documentos, checklists, órdenes de servicio, ubicación, jornada, biometría, IA, informes, integraciones, evaluaciones, notificaciones y facturación. Los módulos pueden depender del plan contratado, permisos, límites técnicos, disponibilidad de terceros o configuración del tenant.',
           'de-DE':
-            'BrSpark kann Module für Vermögensverwaltung, Bestand, Dokumente, Checklisten, Arbeitsaufträge, Standort, Zeiterfassung, Biometrie, KI, Berichte, Integrationen, Bewertungen, Benachrichtigungen und Abrechnung anbieten. Module können vom gebuchten Plan, Berechtigungen, technischen Grenzen, Drittanbieter-Verfügbarkeit oder Tenant-Konfiguration abhängen.',
+            'Aria kann Module für Vermögensverwaltung, Bestand, Dokumente, Checklisten, Arbeitsaufträge, Standort, Zeiterfassung, Biometrie, KI, Berichte, Integrationen, Bewertungen, Benachrichtigungen und Abrechnung anbieten. Module können vom gebuchten Plan, Berechtigungen, technischen Grenzen, Drittanbieter-Verfügbarkeit oder Tenant-Konfiguration abhängen.',
         },
       },
       {
@@ -158,11 +158,11 @@ const I18N_SPECS = [
         },
         body: {
           'en-US':
-            'Plans may include limits on users, technicians, assets, storage, AI calls, maps, routines, templates, integrations and support. BrSpark may change future plans, preserve contracted conditions for the current cycle where applicable, and notify material changes with reasonable advance notice.',
+            'Plans may include limits on users, technicians, assets, storage, AI calls, maps, routines, templates, integrations and support. Aria may change future plans, preserve contracted conditions for the current cycle where applicable, and notify material changes with reasonable advance notice.',
           'es-ES':
-            'Los planes pueden incluir límites de usuarios, técnicos, activos, almacenamiento, llamadas de IA, mapas, rutinas, plantillas, integraciones y soporte. BrSpark puede cambiar planes futuros, preservar condiciones contratadas durante el ciclo vigente cuando aplique y comunicar cambios materiales con antelación razonable.',
+            'Los planes pueden incluir límites de usuarios, técnicos, activos, almacenamiento, llamadas de IA, mapas, rutinas, plantillas, integraciones y soporte. Aria puede cambiar planes futuros, preservar condiciones contratadas durante el ciclo vigente cuando aplique y comunicar cambios materiales con antelación razonable.',
           'de-DE':
-            'Pläne können Grenzen für Nutzer, Techniker, Vermögenswerte, Speicher, KI-Aufrufe, Karten, Routinen, Vorlagen, Integrationen und Support enthalten. BrSpark darf künftige Pläne ändern, vertragliche Konditionen für den laufenden Zyklus wahren, soweit anwendbar, und wesentliche Änderungen mit angemessener Vorankündigung mitteilen.',
+            'Pläne können Grenzen für Nutzer, Techniker, Vermögenswerte, Speicher, KI-Aufrufe, Karten, Routinen, Vorlagen, Integrationen und Support enthalten. Aria darf künftige Pläne ändern, vertragliche Konditionen für den laufenden Zyklus wahren, soweit anwendbar, und wesentliche Änderungen mit angemessener Vorankündigung mitteilen.',
         },
       },
       {
@@ -203,11 +203,11 @@ const I18N_SPECS = [
         },
         body: {
           'en-US':
-            'Customer Data remains owned by the Customer or the respective data subjects. The Customer grants BrSpark a limited licence to host, process, transmit, display, analyse and protect such data solely to operate, maintain, audit, improve and support the contracted services.',
+            'Customer Data remains owned by the Customer or the respective data subjects. The Customer grants Aria a limited licence to host, process, transmit, display, analyse and protect such data solely to operate, maintain, audit, improve and support the contracted services.',
           'es-ES':
-            'Los Datos del Cliente siguen siendo propiedad del Cliente o de los titulares correspondientes. El Cliente concede a BrSpark una licencia limitada para alojar, procesar, transmitir, mostrar, analizar y proteger dichos datos solo para operar, mantener, auditar, mejorar y dar soporte a los servicios contratados.',
+            'Los Datos del Cliente siguen siendo propiedad del Cliente o de los titulares correspondientes. El Cliente concede a Aria una licencia limitada para alojar, procesar, transmitir, mostrar, analizar y proteger dichos datos solo para operar, mantener, auditar, mejorar y dar soporte a los servicios contratados.',
           'de-DE':
-            'Kundendaten verbleiben im Eigentum des Kunden oder der betroffenen Personen. Der Kunde erteilt BrSpark eine beschränkte Lizenz zum Hosten, Verarbeiten, Übertragen, Anzeigen, Analysieren und Schützen dieser Daten ausschließlich zum Betrieb, zur Wartung, Prüfung, Verbesserung und zum Support der beauftragten Dienste.',
+            'Kundendaten verbleiben im Eigentum des Kunden oder der betroffenen Personen. Der Kunde erteilt Aria eine beschränkte Lizenz zum Hosten, Verarbeiten, Übertragen, Anzeigen, Analysieren und Schützen dieser Daten ausschließlich zum Betrieb, zur Wartung, Prüfung, Verbesserung und zum Support der beauftragten Dienste.',
         },
       },
       {
@@ -218,11 +218,11 @@ const I18N_SPECS = [
         },
         body: {
           'en-US':
-            'The platform may integrate cloud, maps, email, push, storage, AI, biometrics, payments, e-signature and external APIs. BrSpark is not liable for unavailability, changes or failures of third parties outside its reasonable control, without prejudice to contractually available mitigation.',
+            'The platform may integrate cloud, maps, email, push, storage, AI, biometrics, payments, e-signature and external APIs. Aria is not liable for unavailability, changes or failures of third parties outside its reasonable control, without prejudice to contractually available mitigation.',
           'es-ES':
-            'La plataforma puede integrar servicios de nube, mapas, correo, push, almacenamiento, IA, biometría, pagos, firma electrónica y APIs externas. BrSpark no responde por indisponibilidad, cambios o fallos de terceros fuera de su control razonable, sin perjuicio de mitigaciones contractualmente aplicables.',
+            'La plataforma puede integrar servicios de nube, mapas, correo, push, almacenamiento, IA, biometría, pagos, firma electrónica y APIs externas. Aria no responde por indisponibilidad, cambios o fallos de terceros fuera de su control razonable, sin perjuicio de mitigaciones contractualmente aplicables.',
           'de-DE':
-            'Die Plattform kann Cloud-, Karten-, E-Mail-, Push-, Speicher-, KI-, Biometrie-, Zahlungs-, E-Signatur-Dienste und externe APIs einbinden. BrSpark haftet nicht für Nichtverfügbarkeit, Änderungen oder Ausfälle von Dritten außerhalb angemessener Kontrolle, vorbehaltlich vertraglicher Minderung.',
+            'Die Plattform kann Cloud-, Karten-, E-Mail-, Push-, Speicher-, KI-, Biometrie-, Zahlungs-, E-Signatur-Dienste und externe APIs einbinden. Aria haftet nicht für Nichtverfügbarkeit, Änderungen oder Ausfälle von Dritten außerhalb angemessener Kontrolle, vorbehaltlich vertraglicher Minderung.',
         },
       },
       {
@@ -233,11 +233,11 @@ const I18N_SPECS = [
         },
         body: {
           'en-US':
-            'BrSpark implements technical and organisational measures proportionate to risk and may perform maintenance, updates and preventive blocks. The Customer must govern devices, networks, users and permissions appropriately.',
+            'Aria implements technical and organisational measures proportionate to risk and may perform maintenance, updates and preventive blocks. The Customer must govern devices, networks, users and permissions appropriately.',
           'es-ES':
-            'BrSpark aplica medidas técnicas y organizativas proporcionales al riesgo y puede realizar mantenimientos, actualizaciones y bloqueos preventivos. El Cliente debe gobernar dispositivos, redes, usuarios y permisos adecuadamente.',
+            'Aria aplica medidas técnicas y organizativas proporcionales al riesgo y puede realizar mantenimientos, actualizaciones y bloqueos preventivos. El Cliente debe gobernar dispositivos, redes, usuarios y permisos adecuadamente.',
           'de-DE':
-            'BrSpark setzt dem Risiko angemessene technische und organisatorische Maßnahmen um und kann Wartung, Updates und präventive Sperren durchführen. Der Kunde muss Geräte, Netze, Nutzer und Berechtigungen angemessen steuern.',
+            'Aria setzt dem Risiko angemessene technische und organisatorische Maßnahmen um und kann Wartung, Updates und präventive Sperren durchführen. Der Kunde muss Geräte, Netze, Nutzer und Berechtigungen angemessen steuern.',
         },
       },
       {
@@ -248,11 +248,11 @@ const I18N_SPECS = [
         },
         body: {
           'en-US':
-            'BrSpark may suspend access for non-payment, security risk, abuse, legal order, breach of these Terms or to protect the platform. After termination, data may be exported, retained or deleted according to contract, law and the Data Retention Policy.',
+            'Aria may suspend access for non-payment, security risk, abuse, legal order, breach of these Terms or to protect the platform. After termination, data may be exported, retained or deleted according to contract, law and the Data Retention Policy.',
           'es-ES':
-            'BrSpark puede suspender el acceso por impago, riesgo de seguridad, uso abusivo, orden legal, incumplimiento de estos Términos o para proteger la plataforma. Tras la terminación, los datos pueden exportarse, conservarse o eliminarse según contrato, ley y Política de Retención.',
+            'Aria puede suspender el acceso por impago, riesgo de seguridad, uso abusivo, orden legal, incumplimiento de estos Términos o para proteger la plataforma. Tras la terminación, los datos pueden exportarse, conservarse o eliminarse según contrato, ley y Política de Retención.',
           'de-DE':
-            'BrSpark kann den Zugang bei Zahlungsverzug, Sicherheitsrisiko, Missbrauch, behördlicher Anordnung, Verstoß gegen diese Bedingungen oder zum Schutz der Plattform sperren. Nach Beendigung können Daten gemäß Vertrag, Gesetz und Aufbewahrungsrichtlinie exportiert, aufbewahrt oder gelöscht werden.',
+            'Aria kann den Zugang bei Zahlungsverzug, Sicherheitsrisiko, Missbrauch, behördlicher Anordnung, Verstoß gegen diese Bedingungen oder zum Schutz der Plattform sperren. Nach Beendigung können Daten gemäß Vertrag, Gesetz und Aufbewahrungsrichtlinie exportiert, aufbewahrt oder gelöscht werden.',
         },
       },
       {
@@ -263,11 +263,11 @@ const I18N_SPECS = [
         },
         body: {
           'en-US':
-            'To the fullest extent permitted by law, BrSpark’s total liability is limited to amounts paid by the Customer in the 12 months preceding the event, except for wilful misconduct, intentional breach, non-waivable legal duties or specific contractual provisions.',
+            'To the fullest extent permitted by law, Aria’s total liability is limited to amounts paid by the Customer in the 12 months preceding the event, except for wilful misconduct, intentional breach, non-waivable legal duties or specific contractual provisions.',
           'es-ES':
-            'En la máxima medida permitida por la ley, la responsabilidad total de BrSpark se limitará a los importes pagados por el Cliente en los 12 meses anteriores al evento, salvo dolo, incumplimiento intencional, obligaciones legales inderogables o disposición contractual específica.',
+            'En la máxima medida permitida por la ley, la responsabilidad total de Aria se limitará a los importes pagados por el Cliente en los 12 meses anteriores al evento, salvo dolo, incumplimiento intencional, obligaciones legales inderogables o disposición contractual específica.',
           'de-DE':
-            'Soweit gesetzlich zulässig, ist die Gesamthaftung von BrSpark auf die vom Kunden in den 12 Monaten vor dem Ereignis gezahlten Beträge begrenzt, außer bei Vorsatz, vorsätzlichem Verstoß, zwingenden gesetzlichen Pflichten oder ausdrücklichen Vertragsregelungen.',
+            'Soweit gesetzlich zulässig, ist die Gesamthaftung von Aria auf die vom Kunden in den 12 Monaten vor dem Ereignis gezahlten Beträge begrenzt, außer bei Vorsatz, vorsätzlichem Verstoß, zwingenden gesetzlichen Pflichten oder ausdrücklichen Vertragsregelungen.',
         },
       },
       {
@@ -290,9 +290,9 @@ const I18N_SPECS = [
   {
     type: 'PRIVACY_POLICY',
     titles: {
-      'en-US': 'BrSpark Privacy Policy',
-      'es-ES': 'Política de privacidad BrSpark',
-      'de-DE': 'BrSpark-Datenschutzerklärung',
+      'en-US': 'Aria Privacy Policy',
+      'es-ES': 'Política de privacidad Aria',
+      'de-DE': 'Aria-Datenschutzerklärung',
     },
     summaries: {
       'en-US':
@@ -312,19 +312,19 @@ const I18N_SPECS = [
         body: {
           'en-US': `This Policy describes how ${commonController['en-US'].replace(/\.\s*$/, '')} processes personal data in the context of ${commonScope['en-US']}
 
-In **B2B** relationships, the **Customer (tenant)** is generally the **controller** of data relating to its users, employees, field contractors and end customers recorded or monitored through the platform. **BrSpark** predominantly acts as a **processor**, carrying out processing necessary to deliver the contracted service based on instructions compatible with law and console settings.
+In **B2B** relationships, the **Customer (tenant)** is generally the **controller** of data relating to its users, employees, field contractors and end customers recorded or monitored through the platform. **Aria** predominantly acts as a **processor**, carrying out processing necessary to deliver the contracted service based on instructions compatible with law and console settings.
 
-BrSpark may act as an **independent controller** where it processes data for **its own purposes**, such as billing, fraud prevention, information security, legal compliance, commercial relationship, product improvement in aggregated or anonymised form where feasible, and responses to authorities.`,
+Aria may act as an **independent controller** where it processes data for **its own purposes**, such as billing, fraud prevention, information security, legal compliance, commercial relationship, product improvement in aggregated or anonymised form where feasible, and responses to authorities.`,
           'es-ES': `Esta Política describe cómo ${commonController['es-ES'].replace(/\.\s*$/, '')} realiza el tratamiento de datos personales en el marco de ${commonScope['es-ES']}
 
-En relaciones **B2B**, por regla general el **Cliente (tenant)** es el **responsable** del tratamiento de datos relativos a sus usuarios, empleados, contratistas de campo y clientes finales registrados o supervisados en la plataforma. **BrSpark** actúa predominantemente como **encargado**, ejecutando tratamientos necesarios para la prestación del servicio contratado, con base en instrucciones compatibles con la ley y la configuración del panel.
+En relaciones **B2B**, por regla general el **Cliente (tenant)** es el **responsable** del tratamiento de datos relativos a sus usuarios, empleados, contratistas de campo y clientes finales registrados o supervisados en la plataforma. **Aria** actúa predominantemente como **encargado**, ejecutando tratamientos necesarios para la prestación del servicio contratado, con base en instrucciones compatibles con la ley y la configuración del panel.
 
-BrSpark podrá actuar como **responsable independiente** cuando trate datos para **fines propios**, como facturación, prevención de fraudes, seguridad de la información, cumplimiento legal, relación comercial, mejora de producto de forma agregada o anonimizada cuando sea posible y respuesta a autoridades.`,
+Aria podrá actuar como **responsable independiente** cuando trate datos para **fines propios**, como facturación, prevención de fraudes, seguridad de la información, cumplimiento legal, relación comercial, mejora de producto de forma agregada o anonimizada cuando sea posible y respuesta a autoridades.`,
           'de-DE': `Diese Erklärung beschreibt, wie ${commonController['de-DE'].replace(/\.\s*$/, '')} personenbezogene Daten im Rahmen von ${commonScope['de-DE']} verarbeitet.
 
-In **B2B**-Beziehungen ist der **Kunde (Tenant)** in der Regel **Verantwortlicher** für Daten zu seinen Nutzern, Arbeitnehmern, Außendienst-Auftragnehmern und Endkunden, die über die Plattform erfasst oder überwacht werden. **BrSpark** handelt überwiegend als **Auftragsverarbeiter** und führt Verarbeitungen durch, die zur Erbringung des vertraglich geschuldeten Dienstes erforderlich sind, gestützt auf Anweisungen, die mit dem Recht und den Konsoleneinstellungen vereinbar sind.
+In **B2B**-Beziehungen ist der **Kunde (Tenant)** in der Regel **Verantwortlicher** für Daten zu seinen Nutzern, Arbeitnehmern, Außendienst-Auftragnehmern und Endkunden, die über die Plattform erfasst oder überwacht werden. **Aria** handelt überwiegend als **Auftragsverarbeiter** und führt Verarbeitungen durch, die zur Erbringung des vertraglich geschuldeten Dienstes erforderlich sind, gestützt auf Anweisungen, die mit dem Recht und den Konsoleneinstellungen vereinbar sind.
 
-BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eigene Zwecke** verarbeitet, etwa Abrechnung, Betrugsprävention, Informationssicherheit, gesetzliche Compliance, Geschäftsbeziehung, Produktverbesserung in aggregierter oder anonymisierter Form soweit möglich sowie Beantwortung behördlicher Anfragen.`,
+Aria kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eigene Zwecke** verarbeitet, etwa Abrechnung, Betrugsprävention, Informationssicherheit, gesetzliche Compliance, Geschäftsbeziehung, Produktverbesserung in aggregierter oder anonymisierter Form soweit möglich sowie Beantwortung behördlicher Anfragen.`,
         },
       },
       {
@@ -377,11 +377,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         },
         body: {
           'en-US':
-            'Certain forms or flows may capture **sensitive data** (including, in some scenarios, health or occupational safety data) **by decision and configuration of the Customer**. In those cases the Customer is responsible for informing data subjects, applying applicable legal bases (including LGPD Art. 11 hypotheses), minimisation and retention periods. BrSpark restricts internal access to what is strictly necessary and enforces logical segregation between tenants.',
+            'Certain forms or flows may capture **sensitive data** (including, in some scenarios, health or occupational safety data) **by decision and configuration of the Customer**. In those cases the Customer is responsible for informing data subjects, applying applicable legal bases (including LGPD Art. 11 hypotheses), minimisation and retention periods. Aria restricts internal access to what is strictly necessary and enforces logical segregation between tenants.',
           'es-ES':
-            'Determinados formularios o flujos pueden capturar **datos sensibles** (incluidos, en algunos escenarios, datos de salud o seguridad ocupacional) **por decisión y configuración del Cliente**. En esos casos, el Cliente es responsable de informar a los titulares, aplicar bases legales aplicables (incluidas hipótesis del art. 11 de la LGPD), minimización y plazos de retención. BrSpark limita el acceso interno a lo estrictamente necesario y exige segregación lógica entre tenants.',
+            'Determinados formularios o flujos pueden capturar **datos sensibles** (incluidos, en algunos escenarios, datos de salud o seguridad ocupacional) **por decisión y configuración del Cliente**. En esos casos, el Cliente es responsable de informar a los titulares, aplicar bases legales aplicables (incluidas hipótesis del art. 11 de la LGPD), minimización y plazos de retención. Aria limita el acceso interno a lo estrictamente necesario y exige segregación lógica entre tenants.',
           'de-DE':
-            'Bestimmte Formulare oder Abläufe können **besonders schützenswerte Daten** (einschließlich Gesundheits- oder Arbeitssicherheitsdaten in einigen Szenarien) **auf Entscheidung und Konfiguration des Kunden** erfassen. In diesen Fällen informiert der Kunde Betroffene, wendet anwendbare Rechtsgrundlagen (einschließlich Tatbestände des Art. 11 LGPD) an und setzt Minimierung und Aufbewahrungsfristen um. BrSpark beschränkt internen Zugriff auf das strikt Erforderliche und setzt logische Mandantentrennung durch.',
+            'Bestimmte Formulare oder Abläufe können **besonders schützenswerte Daten** (einschließlich Gesundheits- oder Arbeitssicherheitsdaten in einigen Szenarien) **auf Entscheidung und Konfiguration des Kunden** erfassen. In diesen Fällen informiert der Kunde Betroffene, wendet anwendbare Rechtsgrundlagen (einschließlich Tatbestände des Art. 11 LGPD) an und setzt Minimierung und Aufbewahrungsfristen um. Aria beschränkt internen Zugriff auf das strikt Erforderliche und setzt logische Mandantentrennung durch.',
         },
       },
       {
@@ -482,11 +482,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         },
         body: {
           'en-US':
-            'Under the LGPD, data subjects may request confirmation of processing, access, correction, anonymisation, blocking or deletion, portability (where applicable), information on sharing, information on the possibility of not providing consent and consequences, withdrawal of consent and review of automated decisions (where applicable). In **B2B** contexts many requests must be handled by the **Customer controller**; BrSpark will provide reasonable assistance to the Customer within legal timeframes. BrSpark channel: **dpo@brspark.com**. Data subjects may also contact the **Brazilian National Data Protection Authority (ANPD)** as provided by law.',
+            'Under the LGPD, data subjects may request confirmation of processing, access, correction, anonymisation, blocking or deletion, portability (where applicable), information on sharing, information on the possibility of not providing consent and consequences, withdrawal of consent and review of automated decisions (where applicable). In **B2B** contexts many requests must be handled by the **Customer controller**; Aria will provide reasonable assistance to the Customer within legal timeframes. Aria channel: **dpo@aria.com**. Data subjects may also contact the **Brazilian National Data Protection Authority (ANPD)** as provided by law.',
           'es-ES':
-            'Conforme a la LGPD, los titulares pueden solicitar confirmación de tratamiento, acceso, rectificación, anonimización, bloqueo o eliminación, portabilidad (cuando proceda), información sobre comparticiones, información sobre la posibilidad de no otorgar consentimiento y sus consecuencias, revocación del consentimiento y revisión de decisiones automatizadas (cuando corresponda). En contexto **B2B**, muchas solicitudes deben ser atendidas por el **Cliente responsable**; BrSpark prestará apoyo razonable al Cliente dentro de los plazos legales. Canal BrSpark: **dpo@brspark.com**. Los titulares también pueden contactar a la **Autoridad Nacional de Protección de Datos (ANPD)** según la ley.',
+            'Conforme a la LGPD, los titulares pueden solicitar confirmación de tratamiento, acceso, rectificación, anonimización, bloqueo o eliminación, portabilidad (cuando proceda), información sobre comparticiones, información sobre la posibilidad de no otorgar consentimiento y sus consecuencias, revocación del consentimiento y revisión de decisiones automatizadas (cuando corresponda). En contexto **B2B**, muchas solicitudes deben ser atendidas por el **Cliente responsable**; Aria prestará apoyo razonable al Cliente dentro de los plazos legales. Canal Aria: **dpo@aria.com**. Los titulares también pueden contactar a la **Autoridad Nacional de Protección de Datos (ANPD)** según la ley.',
           'de-DE':
-            'Nach LGPD können Betroffene Bestätigung der Verarbeitung, Auskunft, Berichtigung, Anonymisierung, Sperrung oder Löschung, Datenübertragbarkeit (soweit anwendbar), Auskunft über Weitergaben, Information über die Möglichkeit, keine Einwilligung zu erteilen, und deren Folgen, Widerruf der Einwilligung und Prüfung automatisierter Entscheidungen (soweit anwendbar) verlangen. In **B2B**-Kontexten bearbeitet viele Anfragen der **Kunde als Verantwortlicher**; BrSpark leistet angemessene Unterstützung innerhalb gesetzlicher Fristen. BrSpark-Kanal: **dpo@brspark.com**. Betroffene können sich auch an die **nationale Datenschutzbehörde Brasiliens (ANPD)** wenden, wie das Gesetz vorsieht.',
+            'Nach LGPD können Betroffene Bestätigung der Verarbeitung, Auskunft, Berichtigung, Anonymisierung, Sperrung oder Löschung, Datenübertragbarkeit (soweit anwendbar), Auskunft über Weitergaben, Information über die Möglichkeit, keine Einwilligung zu erteilen, und deren Folgen, Widerruf der Einwilligung und Prüfung automatisierter Entscheidungen (soweit anwendbar) verlangen. In **B2B**-Kontexten bearbeitet viele Anfragen der **Kunde als Verantwortlicher**; Aria leistet angemessene Unterstützung innerhalb gesetzlicher Fristen. Aria-Kanal: **dpo@aria.com**. Betroffene können sich auch an die **nationale Datenschutzbehörde Brasiliens (ANPD)** wenden, wie das Gesetz vorsieht.',
         },
       },
       {
@@ -560,44 +560,44 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
     },
     summaries: {
       'en-US':
-        'B2B DPA draft with BrSpark as processor, including subprocessors, incidents, audit and termination.',
+        'B2B DPA draft with Aria as processor, including subprocessors, incidents, audit and termination.',
       'es-ES':
-        'Borrador de DPA B2B con BrSpark como encargado, incluyendo suboperadores, incidentes, auditoría y terminación.',
+        'Borrador de DPA B2B con Aria como encargado, incluyendo suboperadores, incidentes, auditoría y terminación.',
       'de-DE':
-        'B2B-AVV-Entwurf mit BrSpark als Auftragsverarbeiter, inkl. Subprozessoren, Vorfällen, Prüfung und Beendigung.',
+        'B2B-AVV-Entwurf mit Aria als Auftragsverarbeiter, inkl. Subprozessoren, Vorfällen, Prüfung und Beendigung.',
     },
     sections: [
       {
         title: { 'en-US': '1. Subject matter', 'es-ES': '1. Objeto', 'de-DE': '1. Gegenstand' },
         body: {
           'en-US':
-            'This Data Processing Agreement (“DPA”) supplements the agreement between BrSpark and the Customer and governs processing of personal data that BrSpark performs on behalf of the Customer as a processor under the LGPD and, where applicable, concepts aligned with GDPR Article 28.',
+            'This Data Processing Agreement (“DPA”) supplements the agreement between Aria and the Customer and governs processing of personal data that Aria performs on behalf of the Customer as a processor under the LGPD and, where applicable, concepts aligned with GDPR Article 28.',
           'es-ES':
-            'Este Acuerdo de tratamiento de datos (“DPA”) complementa el contrato entre BrSpark y el Cliente y regula el tratamiento de datos personales que BrSpark realiza por cuenta del Cliente como encargado, conforme a la LGPD y, cuando aplique, conceptos alineados con el art. 28 del RGPD.',
+            'Este Acuerdo de tratamiento de datos (“DPA”) complementa el contrato entre Aria y el Cliente y regula el tratamiento de datos personales que Aria realiza por cuenta del Cliente como encargado, conforme a la LGPD y, cuando aplique, conceptos alineados con el art. 28 del RGPD.',
           'de-DE':
-            'Dieser Auftragsverarbeitungsvertrag („AVV“) ergänzt die Vereinbarung zwischen BrSpark und dem Kunden und regelt die Verarbeitung personenbezogener Daten, die BrSpark im Auftrag des Kunden als Auftragsverarbeiter unter der LGPD und – soweit anwendbar – in Anlehnung an Art. 28 DSGVO vornimmt.',
+            'Dieser Auftragsverarbeitungsvertrag („AVV“) ergänzt die Vereinbarung zwischen Aria und dem Kunden und regelt die Verarbeitung personenbezogener Daten, die Aria im Auftrag des Kunden als Auftragsverarbeiter unter der LGPD und – soweit anwendbar – in Anlehnung an Art. 28 DSGVO vornimmt.',
         },
       },
       {
         title: { 'en-US': '2. Roles of the parties', 'es-ES': '2. Papeles de las partes', 'de-DE': '2. Rollen der Parteien' },
         body: {
           'en-US':
-            'The Customer is the controller for data relating to its users, employees, contractors, end customers and other data subjects recorded in the platform. BrSpark is a processor when it processes such data under the Customer’s instructions. BrSpark may act as an independent controller for administrative, billing, security, legal compliance and commercial relationship data.',
+            'The Customer is the controller for data relating to its users, employees, contractors, end customers and other data subjects recorded in the platform. Aria is a processor when it processes such data under the Customer’s instructions. Aria may act as an independent controller for administrative, billing, security, legal compliance and commercial relationship data.',
           'es-ES':
-            'El Cliente es responsable del tratamiento de los datos relativos a sus usuarios, empleados, contratistas, clientes finales y demás titulares registrados en la plataforma. BrSpark es encargada cuando trata dichos datos según instrucciones del Cliente. BrSpark puede ser responsable independiente para datos administrativos, facturación, seguridad, cumplimiento legal y relación comercial.',
+            'El Cliente es responsable del tratamiento de los datos relativos a sus usuarios, empleados, contratistas, clientes finales y demás titulares registrados en la plataforma. Aria es encargada cuando trata dichos datos según instrucciones del Cliente. Aria puede ser responsable independiente para datos administrativos, facturación, seguridad, cumplimiento legal y relación comercial.',
           'de-DE':
-            'Der Kunde ist Verantwortlicher für Daten zu seinen Nutzern, Arbeitnehmern, Auftragnehmern, Endkunden und sonstigen in der Plattform erfassten Betroffenen. BrSpark ist Auftragsverarbeiter, wenn sie diese Daten nach Weisung des Kunden verarbeitet. BrSpark kann eigenständige Verantwortliche für administrative, Abrechnungs-, Sicherheits-, Compliance- und Geschäftsbeziehungsdaten sein.',
+            'Der Kunde ist Verantwortlicher für Daten zu seinen Nutzern, Arbeitnehmern, Auftragnehmern, Endkunden und sonstigen in der Plattform erfassten Betroffenen. Aria ist Auftragsverarbeiter, wenn sie diese Daten nach Weisung des Kunden verarbeitet. Aria kann eigenständige Verantwortliche für administrative, Abrechnungs-, Sicherheits-, Compliance- und Geschäftsbeziehungsdaten sein.',
         },
       },
       {
         title: { 'en-US': '3. Documented instructions', 'es-ES': '3. Instrucciones documentadas', 'de-DE': '3. Dokumentierte Weisungen' },
         body: {
           'en-US':
-            'BrSpark will process data in accordance with the agreement, tenant settings, published policies, documented Customer instructions and legal obligations. If an instruction appears to violate applicable law, BrSpark may alert the Customer or suspend execution until clarified.',
+            'Aria will process data in accordance with the agreement, tenant settings, published policies, documented Customer instructions and legal obligations. If an instruction appears to violate applicable law, Aria may alert the Customer or suspend execution until clarified.',
           'es-ES':
-            'BrSpark tratará los datos conforme al contrato, configuración del tenant, políticas publicadas, instrucciones documentadas del Cliente y obligaciones legales. Si una instrucción parece violar la ley aplicable, BrSpark podrá alertar al Cliente o suspender la ejecución hasta aclararlo.',
+            'Aria tratará los datos conforme al contrato, configuración del tenant, políticas publicadas, instrucciones documentadas del Cliente y obligaciones legales. Si una instrucción parece violar la ley aplicable, Aria podrá alertar al Cliente o suspender la ejecución hasta aclararlo.',
           'de-DE':
-            'BrSpark verarbeitet Daten gemäß Vertrag, Tenant-Einstellungen, veröffentlichten Richtlinien, dokumentierten Weisungen des Kunden und gesetzlichen Pflichten. Erscheint eine Weisung rechtswidrig, kann BrSpark den Kunden informieren oder die Ausführung bis zur Klärung aussetzen.',
+            'Aria verarbeitet Daten gemäß Vertrag, Tenant-Einstellungen, veröffentlichten Richtlinien, dokumentierten Weisungen des Kunden und gesetzlichen Pflichten. Erscheint eine Weisung rechtswidrig, kann Aria den Kunden informieren oder die Ausführung bis zur Klärung aussetzen.',
         },
       },
       {
@@ -615,77 +615,77 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '5. Security measures', 'es-ES': '5. Medidas de seguridad', 'de-DE': '5. Sicherheitsmaßnahmen' },
         body: {
           'en-US':
-            'BrSpark maintains technical and organisational measures proportionate to risk, including access controls, logical tenant segregation, logs, backups, encryption in transit, incident handling and restriction of internal access on a need-to-know basis.',
+            'Aria maintains technical and organisational measures proportionate to risk, including access controls, logical tenant segregation, logs, backups, encryption in transit, incident handling and restriction of internal access on a need-to-know basis.',
           'es-ES':
-            'BrSpark mantiene medidas técnicas y organizativas proporcionales al riesgo, incluidos controles de acceso, segregación lógica por tenant, registros, copias de seguridad, cifrado en tránsito, gestión de incidentes y restricción de acceso interno según necesidad.',
+            'Aria mantiene medidas técnicas y organizativas proporcionales al riesgo, incluidos controles de acceso, segregación lógica por tenant, registros, copias de seguridad, cifrado en tránsito, gestión de incidentes y restricción de acceso interno según necesidad.',
           'de-DE':
-            'BrSpark unterhält dem Risiko angemessene technische und organisatorische Maßnahmen, einschließlich Zugriffskontrollen, logischer Mandantentrennung, Protokollen, Backups, Verschlüsselung während der Übertragung, Incident-Management und eingeschränktem internen Zugriff nach Need-to-know.',
+            'Aria unterhält dem Risiko angemessene technische und organisatorische Maßnahmen, einschließlich Zugriffskontrollen, logischer Mandantentrennung, Protokollen, Backups, Verschlüsselung während der Übertragung, Incident-Management und eingeschränktem internen Zugriff nach Need-to-know.',
         },
       },
       {
         title: { 'en-US': '6. Subprocessors', 'es-ES': '6. Suboperadores', 'de-DE': '6. Subprozessoren' },
         body: {
           'en-US':
-            'The Customer authorises use of subprocessors necessary to deliver the services, including infrastructure, cloud, maps, AI, biometrics, email, push, payments, e-signature and observability providers. BrSpark will maintain a subprocessor list and require compatible data protection obligations.',
+            'The Customer authorises use of subprocessors necessary to deliver the services, including infrastructure, cloud, maps, AI, biometrics, email, push, payments, e-signature and observability providers. Aria will maintain a subprocessor list and require compatible data protection obligations.',
           'es-ES':
-            'El Cliente autoriza el uso de suboperadores necesarios para prestar los servicios, incluidos proveedores de infraestructura, nube, mapas, IA, biometría, correo, push, pagos, firma electrónica y observabilidad. BrSpark mantendrá una lista de suboperadores y exigirá obligaciones compatibles de protección de datos.',
+            'El Cliente autoriza el uso de suboperadores necesarios para prestar los servicios, incluidos proveedores de infraestructura, nube, mapas, IA, biometría, correo, push, pagos, firma electrónica y observabilidad. Aria mantendrá una lista de suboperadores y exigirá obligaciones compatibles de protección de datos.',
           'de-DE':
-            'Der Kunde erlaubt den Einsatz erforderlicher Subprozessoren zur Erbringung der Dienste, einschließlich Infrastruktur-, Cloud-, Karten-, KI-, Biometrie-, E-Mail-, Push-, Zahlungs-, E-Signatur- und Observability-Anbietern. BrSpark führt eine Subprozessorliste und verlangt vereinbare Datenschutzpflichten.',
+            'Der Kunde erlaubt den Einsatz erforderlicher Subprozessoren zur Erbringung der Dienste, einschließlich Infrastruktur-, Cloud-, Karten-, KI-, Biometrie-, E-Mail-, Push-, Zahlungs-, E-Signatur- und Observability-Anbietern. Aria führt eine Subprozessorliste und verlangt vereinbare Datenschutzpflichten.',
         },
       },
       {
         title: { 'en-US': '7. International transfers', 'es-ES': '7. Transferencias internacionales', 'de-DE': '7. Internationale Übermittlungen' },
         body: {
           'en-US':
-            'Where subprocessors are located outside Brazil, BrSpark will adopt appropriate transfer mechanisms, contractual clauses, security controls and risk assessments compatible with LGPD and, where applicable, GDPR.',
+            'Where subprocessors are located outside Brazil, Aria will adopt appropriate transfer mechanisms, contractual clauses, security controls and risk assessments compatible with LGPD and, where applicable, GDPR.',
           'es-ES':
-            'Cuando los suboperadores estén fuera de Brasil, BrSpark adoptará mecanismos adecuados de transferencia, cláusulas contractuales, controles de seguridad y evaluación de riesgos compatibles con la LGPD y, cuando aplique, el RGPD.',
+            'Cuando los suboperadores estén fuera de Brasil, Aria adoptará mecanismos adecuados de transferencia, cláusulas contractuales, controles de seguridad y evaluación de riesgos compatibles con la LGPD y, cuando aplique, el RGPD.',
           'de-DE':
-            'Befinden sich Subprozessoren außerhalb Brasiliens, setzt BrSpark angemessene Übermittlungsmechanismen, Vertragsklauseln, Sicherheitskontrollen und Risikobewertungen um, die LGPD und gegebenenfalls DSGVO entsprechen.',
+            'Befinden sich Subprozessoren außerhalb Brasiliens, setzt Aria angemessene Übermittlungsmechanismen, Vertragsklauseln, Sicherheitskontrollen und Risikobewertungen um, die LGPD und gegebenenfalls DSGVO entsprechen.',
         },
       },
       {
         title: { 'en-US': '8. Security incidents', 'es-ES': '8. Incidentes de seguridad', 'de-DE': '8. Sicherheitsvorfälle' },
         body: {
           'en-US':
-            'BrSpark will notify the Customer without undue delay after becoming aware of a security incident likely to materially affect data subjects, providing reasonably available information to support assessment and response.',
+            'Aria will notify the Customer without undue delay after becoming aware of a security incident likely to materially affect data subjects, providing reasonably available information to support assessment and response.',
           'es-ES':
-            'BrSpark notificará al Cliente sin demora indebida tras tener conocimiento de un incidente de seguridad que pueda afectar materialmente a los titulares, proporcionando información razonablemente disponible para evaluación y respuesta.',
+            'Aria notificará al Cliente sin demora indebida tras tener conocimiento de un incidente de seguridad que pueda afectar materialmente a los titulares, proporcionando información razonablemente disponible para evaluación y respuesta.',
           'de-DE':
-            'BrSpark informiert den Kunden unverzüglich, nachdem ihr ein Sicherheitsvorfall bekannt wird, der voraussichtlich erhebliche Auswirkungen auf Betroffene haben kann, und stellt zumutbar verfügbare Informationen zur Bewertung und Reaktion bereit.',
+            'Aria informiert den Kunden unverzüglich, nachdem ihr ein Sicherheitsvorfall bekannt wird, der voraussichtlich erhebliche Auswirkungen auf Betroffene haben kann, und stellt zumutbar verfügbare Informationen zur Bewertung und Reaktion bereit.',
         },
       },
       {
         title: { 'en-US': '9. Data subjects and authorities', 'es-ES': '9. Titulares y autoridades', 'de-DE': '9. Betroffene und Behörden' },
         body: {
           'en-US':
-            'BrSpark will assist the Customer, in a reasonable manner and as agreed, with data subject requests and authority enquiries. Requests received directly by BrSpark in a B2B context may be forwarded to the Customer as controller.',
+            'Aria will assist the Customer, in a reasonable manner and as agreed, with data subject requests and authority enquiries. Requests received directly by Aria in a B2B context may be forwarded to the Customer as controller.',
           'es-ES':
-            'BrSpark auxiliará al Cliente, de forma razonable y según lo acordado, en solicitudes de titulares y requerimientos de autoridades. Las solicitudes recibidas directamente por BrSpark en contexto B2B podrán remitirse al Cliente como responsable.',
+            'Aria auxiliará al Cliente, de forma razonable y según lo acordado, en solicitudes de titulares y requerimientos de autoridades. Las solicitudes recibidas directamente por Aria en contexto B2B podrán remitirse al Cliente como responsable.',
           'de-DE':
-            'BrSpark unterstützt den Kunden in angemessenem Umfang und gemäß Vereinbarung bei Betroffenenanfragen und behördlichen Anfragen. In B2B-Kontexten können direkt an BrSpark gerichtete Anfragen an den Kunden als Verantwortlichen weitergeleitet werden.',
+            'Aria unterstützt den Kunden in angemessenem Umfang und gemäß Vereinbarung bei Betroffenenanfragen und behördlichen Anfragen. In B2B-Kontexten können direkt an Aria gerichtete Anfragen an den Kunden als Verantwortlichen weitergeleitet werden.',
         },
       },
       {
         title: { 'en-US': '10. Deletion, return and retention', 'es-ES': '10. Eliminación, devolución y retención', 'de-DE': '10. Löschung, Rückgabe und Aufbewahrung' },
         body: {
           'en-US':
-            'Upon termination, BrSpark will delete, anonymise or return data in accordance with Customer instructions, the agreement, the Data Retention Policy and legal obligations or legitimate defence needs.',
+            'Upon termination, Aria will delete, anonymise or return data in accordance with Customer instructions, the agreement, the Data Retention Policy and legal obligations or legitimate defence needs.',
           'es-ES':
-            'Al término, BrSpark eliminará, anonimizará o devolverá los datos conforme a instrucciones del Cliente, contrato, Política de Retención y obligaciones legales o defensa de derechos.',
+            'Al término, Aria eliminará, anonimizará o devolverá los datos conforme a instrucciones del Cliente, contrato, Política de Retención y obligaciones legales o defensa de derechos.',
           'de-DE':
-            'Nach Vertragsende löscht, anonymisiert oder gibt BrSpark Daten gemäß Weisungen des Kunden, Vertrag, Aufbewahrungsrichtlinie sowie gesetzlichen Pflichten oder berechtigter Rechtsverteidigung zurück.',
+            'Nach Vertragsende löscht, anonymisiert oder gibt Aria Daten gemäß Weisungen des Kunden, Vertrag, Aufbewahrungsrichtlinie sowie gesetzlichen Pflichten oder berechtigter Rechtsverteidigung zurück.',
         },
       },
       {
         title: { 'en-US': '11. Audit', 'es-ES': '11. Auditoría', 'de-DE': '11. Prüfung (Audit)' },
         body: {
           'en-US':
-            'Upon reasonable request, confidentiality and operational limits, BrSpark may provide information, reports, evidence or security questionnaires to demonstrate compliance.',
+            'Upon reasonable request, confidentiality and operational limits, Aria may provide information, reports, evidence or security questionnaires to demonstrate compliance.',
           'es-ES':
-            'Mediante solicitud razonable, confidencialidad y límites operativos, BrSpark podrá proporcionar información, informes, evidencias o cuestionarios de seguridad para demostrar el cumplimiento.',
+            'Mediante solicitud razonable, confidencialidad y límites operativos, Aria podrá proporcionar información, informes, evidencias o cuestionarios de seguridad para demostrar el cumplimiento.',
           'de-DE':
-            'Auf angemessene Anfrage unter Wahrung von Vertraulichkeit und betrieblichen Grenzen kann BrSpark Informationen, Berichte, Nachweise oder Sicherheitsfragebögen zur Nachweisführung bereitstellen.',
+            'Auf angemessene Anfrage unter Wahrung von Vertraulichkeit und betrieblichen Grenzen kann Aria Informationen, Berichte, Nachweise oder Sicherheitsfragebögen zur Nachweisführung bereitstellen.',
         },
       },
       {
@@ -720,11 +720,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Scope', 'es-ES': '1. Alcance', 'de-DE': '1. Geltungsbereich' },
         body: {
           'en-US':
-            'This Policy explains the use of cookies, localStorage, sessionStorage, pixels, SDKs and similar technologies on BrSpark websites, admin console and web interfaces.',
+            'This Policy explains the use of cookies, localStorage, sessionStorage, pixels, SDKs and similar technologies on Aria websites, admin console and web interfaces.',
           'es-ES':
-            'Esta Política explica el uso de cookies, localStorage, sessionStorage, píxeles, SDKs y tecnologías similares en el sitio web, panel administrativo e interfaces web de BrSpark.',
+            'Esta Política explica el uso de cookies, localStorage, sessionStorage, píxeles, SDKs y tecnologías similares en el sitio web, panel administrativo e interfaces web de Aria.',
           'de-DE':
-            'Diese Richtlinie erläutert den Einsatz von Cookies, localStorage, sessionStorage, Pixeln, SDKs und ähnlichen Technologien auf BrSpark-Websites, der Admin-Konsole und Web-Oberflächen.',
+            'Diese Richtlinie erläutert den Einsatz von Cookies, localStorage, sessionStorage, Pixeln, SDKs und ähnlichen Technologien auf Aria-Websites, der Admin-Konsole und Web-Oberflächen.',
         },
       },
       {
@@ -809,9 +809,9 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
   {
     type: 'MOBILE_EULA',
     titles: {
-      'en-US': 'BrSpark Mobile App EULA',
-      'es-ES': 'EULA y términos de la app móvil BrSpark',
-      'de-DE': 'EULA / Nutzungsbedingungen der BrSpark-Mobile-App',
+      'en-US': 'Aria Mobile App EULA',
+      'es-ES': 'EULA y términos de la app móvil Aria',
+      'de-DE': 'EULA / Nutzungsbedingungen der Aria-Mobile-App',
     },
     summaries: {
       'en-US':
@@ -826,22 +826,22 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Licence', 'es-ES': '1. Licencia', 'de-DE': '1. Lizenz' },
         body: {
           'en-US':
-            'BrSpark grants a limited, revocable, non-exclusive, non-transferable licence to install and use the BrSpark mobile app under these terms, applicable policies and permissions granted by the Customer/tenant.',
+            'Aria grants a limited, revocable, non-exclusive, non-transferable licence to install and use the Aria mobile app under these terms, applicable policies and permissions granted by the Customer/tenant.',
           'es-ES':
-            'BrSpark concede una licencia limitada, revocable, no exclusiva e intransferible para instalar y usar la app móvil BrSpark conforme a estos términos, políticas aplicables y permisos concedidos por el Cliente/tenant.',
+            'Aria concede una licencia limitada, revocable, no exclusiva e intransferible para instalar y usar la app móvil Aria conforme a estos términos, políticas aplicables y permisos concedidos por el Cliente/tenant.',
           'de-DE':
-            'BrSpark erteilt eine beschränkte, widerrufliche, nicht ausschließliche, nicht übertragbare Lizenz zur Installation und Nutzung der BrSpark-App gemäß diesen Bedingungen, anwendbaren Richtlinien und vom Kunden/Tenant erteilten Berechtigungen.',
+            'Aria erteilt eine beschränkte, widerrufliche, nicht ausschließliche, nicht übertragbare Lizenz zur Installation und Nutzung der Aria-App gemäß diesen Bedingungen, anwendbaren Richtlinien und vom Kunden/Tenant erteilten Berechtigungen.',
         },
       },
       {
         title: { 'en-US': '2. App stores', 'es-ES': '2. Tiendas de aplicaciones', 'de-DE': '2. App-Stores' },
         body: {
           'en-US':
-            'The app may be distributed via Apple App Store, Google Play or authorised channels; store rules also apply. Apple and Google are not responsible for BrSpark content, support or operation except for their own store obligations.',
+            'The app may be distributed via Apple App Store, Google Play or authorised channels; store rules also apply. Apple and Google are not responsible for Aria content, support or operation except for their own store obligations.',
           'es-ES':
-            'La app puede distribuirse por Apple App Store, Google Play o canales autorizados; también aplican las reglas de las tiendas. Apple y Google no son responsables del contenido, soporte u operación de BrSpark, salvo obligaciones propias de la tienda.',
+            'La app puede distribuirse por Apple App Store, Google Play o canales autorizados; también aplican las reglas de las tiendas. Apple y Google no son responsables del contenido, soporte u operación de Aria, salvo obligaciones propias de la tienda.',
           'de-DE':
-            'Die App kann über den Apple App Store, Google Play oder autorisierte Kanäle verteilt werden; Store-Regeln gelten ebenfalls. Apple und Google sind nicht für Inhalte, Support oder Betrieb von BrSpark verantwortlich, außer nach eigenen Store-Pflichten.',
+            'Die App kann über den Apple App Store, Google Play oder autorisierte Kanäle verteilt werden; Store-Regeln gelten ebenfalls. Apple und Google sind nicht für Inhalte, Support oder Betrieb von Aria verantwortlich, außer nach eigenen Store-Pflichten.',
         },
       },
       {
@@ -951,11 +951,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Purpose', 'es-ES': '1. Finalidad', 'de-DE': '1. Zweck' },
         body: {
           'en-US':
-            'This Notice explains when and why the BrSpark app may collect device location, including in the background, depending on tenant configuration and OS permissions.',
+            'This Notice explains when and why the Aria app may collect device location, including in the background, depending on tenant configuration and OS permissions.',
           'es-ES':
-            'Este Aviso explica cuándo y por qué la app BrSpark puede recoger la ubicación del dispositivo, incluso en segundo plano, según la configuración del tenant y los permisos del sistema operativo.',
+            'Este Aviso explica cuándo y por qué la app Aria puede recoger la ubicación del dispositivo, incluso en segundo plano, según la configuración del tenant y los permisos del sistema operativo.',
           'de-DE':
-            'Dieser Hinweis erläutert, wann und warum die BrSpark-App den Gerätestandort erfassen kann, einschließlich im Hintergrund, abhängig von Tenant-Konfiguration und OS-Berechtigungen.',
+            'Dieser Hinweis erläutert, wann und warum die Aria-App den Gerätestandort erfassen kann, einschließlich im Hintergrund, abhängig von Tenant-Konfiguration und OS-Berechtigungen.',
         },
       },
       {
@@ -995,11 +995,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '5. Who can access', 'es-ES': '5. Quién puede acceder', 'de-DE': '5. Wer Zugriff hat' },
         body: {
           'en-US':
-            'Authorised tenant administrators, operational managers, BrSpark support and necessary subprocessors may access data according to role, purpose and need.',
+            'Authorised tenant administrators, operational managers, Aria support and necessary subprocessors may access data according to role, purpose and need.',
           'es-ES':
-            'Administradores autorizados del tenant, gestores operativos, soporte de BrSpark y suboperadores necesarios pueden acceder a los datos según perfil, finalidad y necesidad.',
+            'Administradores autorizados del tenant, gestores operativos, soporte de Aria y suboperadores necesarios pueden acceder a los datos según perfil, finalidad y necesidad.',
           'de-DE':
-            'Autorisierte Tenant-Administratoren, operative Manager, BrSpark-Support und erforderliche Subprozessoren können je nach Rolle, Zweck und Bedarf zugreifen.',
+            'Autorisierte Tenant-Administratoren, operative Manager, Aria-Support und erforderliche Subprozessoren können je nach Rolle, Zweck und Bedarf zugreifen.',
         },
       },
       {
@@ -1028,11 +1028,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '8. Prohibition of abusive tracking', 'es-ES': '8. Prohibición de rastreo abusivo', 'de-DE': '8. Verbot missbräuchlicher Überwachung' },
         body: {
           'en-US':
-            'The tenant should avoid unnecessary, permanent or disproportionate tracking incompatible with the stated purpose. BrSpark recommends proportionality and legal review for employment or contractor relationships.',
+            'The tenant should avoid unnecessary, permanent or disproportionate tracking incompatible with the stated purpose. Aria recommends proportionality and legal review for employment or contractor relationships.',
           'es-ES':
-            'El tenant debe evitar rastreo innecesario, permanente o desproporcionado incompatible con la finalidad informada. BrSpark recomienda proporcionalidad y revisión jurídica en relaciones laborales o de prestación de servicios.',
+            'El tenant debe evitar rastreo innecesario, permanente o desproporcionado incompatible con la finalidad informada. Aria recomienda proporcionalidad y revisión jurídica en relaciones laborales o de prestación de servicios.',
           'de-DE':
-            'Der Tenant soll unnötiges, dauerhaftes oder unverhältnismäßiges Tracking vermeiden, das mit dem angegebenen Zweck unvereinbar ist. BrSpark empfiehlt Verhältnismäßigkeit und juristische Prüfung bei Arbeits- oder Dienstleistungsverhältnissen.',
+            'Der Tenant soll unnötiges, dauerhaftes oder unverhältnismäßiges Tracking vermeiden, das mit dem angegebenen Zweck unvereinbar ist. Aria empfiehlt Verhältnismäßigkeit und juristische Prüfung bei Arbeits- oder Dienstleistungsverhältnissen.',
         },
       },
       {
@@ -1067,11 +1067,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Scope', 'es-ES': '1. Alcance', 'de-DE': '1. Geltungsbereich' },
         body: {
           'en-US':
-            'This Notice governs capture and use of facial images and biometric templates in the BrSpark app and admin console when the tenant enables facial recognition, time tracking, check-in, KYC or identity validation modules.',
+            'This Notice governs capture and use of facial images and biometric templates in the Aria app and admin console when the tenant enables facial recognition, time tracking, check-in, KYC or identity validation modules.',
           'es-ES':
-            'Este Aviso regula la captura y uso de imágenes faciales y plantillas biométricas en la app y el panel BrSpark cuando el tenant habilite reconocimiento facial, puesto, check-in, KYC o validación de identidad.',
+            'Este Aviso regula la captura y uso de imágenes faciales y plantillas biométricas en la app y el panel Aria cuando el tenant habilite reconocimiento facial, puesto, check-in, KYC o validación de identidad.',
           'de-DE':
-            'Dieser Hinweis regelt Erfassung und Nutzung von Gesichtsbildern und Biometrietemplates in der BrSpark-App und Admin-Konsole, wenn der Tenant Gesichtserkennung, Zeiterfassung, Check-in, KYC oder Identitätsprüfung aktiviert.',
+            'Dieser Hinweis regelt Erfassung und Nutzung von Gesichtsbildern und Biometrietemplates in der Aria-App und Admin-Konsole, wenn der Tenant Gesichtserkennung, Zeiterfassung, Check-in, KYC oder Identitätsprüfung aktiviert.',
         },
       },
       {
@@ -1181,22 +1181,22 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Purpose', 'es-ES': '1. Objetivo', 'de-DE': '1. Zweck' },
         body: {
           'en-US':
-            'This Policy governs use of hours, attendance and time tracking modules in the BrSpark app according to tenant configuration and applicable law.',
+            'This Policy governs use of hours, attendance and time tracking modules in the Aria app according to tenant configuration and applicable law.',
           'es-ES':
-            'Esta Política disciplina el uso de los módulos de registro de horas, presencia y jornada en la app BrSpark según la configuración del tenant y la legislación aplicable.',
+            'Esta Política disciplina el uso de los módulos de registro de horas, presencia y jornada en la app Aria según la configuración del tenant y la legislación aplicable.',
           'de-DE':
-            'Diese Richtlinie regelt die Nutzung von Stunden-, Anwesenheits- und Zeiterfassungsmodulen in der BrSpark-App gemäß Tenant-Konfiguration und anwendbarem Recht.',
+            'Diese Richtlinie regelt die Nutzung von Stunden-, Anwesenheits- und Zeiterfassungsmodulen in der Aria-App gemäß Tenant-Konfiguration und anwendbarem Recht.',
         },
       },
       {
         title: { 'en-US': '2. Employment regimes', 'es-ES': '2. Regímenes laborales', 'de-DE': '2. Beschäftigungsmodelle' },
         body: {
           'en-US':
-            'The tenant must correctly classify users as CLT employees, independent contractors (PJ), third parties or other regimes. BrSpark provides tooling and does not determine employment relationships.',
+            'The tenant must correctly classify users as CLT employees, independent contractors (PJ), third parties or other regimes. Aria provides tooling and does not determine employment relationships.',
           'es-ES':
-            'El tenant debe clasificar correctamente a los usuarios como empleados CLT, contratistas independientes (PJ), terceros u otros regímenes. BrSpark provee herramientas y no define vínculos laborales.',
+            'El tenant debe clasificar correctamente a los usuarios como empleados CLT, contratistas independientes (PJ), terceros u otros regímenes. Aria provee herramientas y no define vínculos laborales.',
           'de-DE':
-            'Der Tenant muss Nutzer korrekt als CLT-Arbeitnehmer, selbstständige Auftragnehmer (PJ), Dritte oder andere Modelle einordnen. BrSpark stellt Werkzeuge bereit und bestimmt keine Arbeitsverhältnisse.',
+            'Der Tenant muss Nutzer korrekt als CLT-Arbeitnehmer, selbstständige Auftragnehmer (PJ), Dritte oder andere Modelle einordnen. Aria stellt Werkzeuge bereit und bestimmt keine Arbeitsverhältnisse.',
         },
       },
       {
@@ -1273,11 +1273,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         },
         body: {
           'en-US':
-            'BrSpark does not replace the Customer’s legal, accounting or HR advisors. Settings must be validated by the Customer’s specialists.',
+            'Aria does not replace the Customer’s legal, accounting or HR advisors. Settings must be validated by the Customer’s specialists.',
           'es-ES':
-            'BrSpark no sustituye asesoría jurídica, contable o laboral del Cliente. Las configuraciones deben ser validadas por especialistas del Cliente.',
+            'Aria no sustituye asesoría jurídica, contable o laboral del Cliente. Las configuraciones deben ser validadas por especialistas del Cliente.',
           'de-DE':
-            'BrSpark ersetzt keine juristische, steuerliche oder HR-Beratung des Kunden. Einstellungen müssen von Fachleuten des Kunden validiert werden.',
+            'Aria ersetzt keine juristische, steuerliche oder HR-Beratung des Kunden. Einstellungen müssen von Fachleuten des Kunden validiert werden.',
         },
       },
     ],
@@ -1299,11 +1299,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Scope', 'es-ES': '1. Alcance', 'de-DE': '1. Geltungsbereich' },
         body: {
           'en-US':
-            'BrSpark may use AI, machine learning, computer vision, OCR, image analysis, classification, recommendations and language assistants to support platform features.',
+            'Aria may use AI, machine learning, computer vision, OCR, image analysis, classification, recommendations and language assistants to support platform features.',
           'es-ES':
-            'BrSpark puede usar IA, aprendizaje automático, visión por computador, OCR, análisis de imágenes, clasificación, recomendaciones y asistentes de lenguaje para apoyar funcionalidades de la plataforma.',
+            'Aria puede usar IA, aprendizaje automático, visión por computador, OCR, análisis de imágenes, clasificación, recomendaciones y asistentes de lenguaje para apoyar funcionalidades de la plataforma.',
           'de-DE':
-            'BrSpark kann KI, maschinelles Lernen, Computer Vision, OCR, Bildanalyse, Klassifikation, Empfehlungen und Sprachassistenten zur Unterstützung von Plattformfunktionen einsetzen.',
+            'Aria kann KI, maschinelles Lernen, Computer Vision, OCR, Bildanalyse, Klassifikation, Empfehlungen und Sprachassistenten zur Unterstützung von Plattformfunktionen einsetzen.',
         },
       },
       {
@@ -1343,11 +1343,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '5. AI subprocessors', 'es-ES': '5. Suboperadores de IA', 'de-DE': '5. KI-Subprozessoren' },
         body: {
           'en-US':
-            'BrSpark may use first-party or third-party AI providers, including models hosted on BrSpark infrastructure or external APIs. The subprocessor list should name relevant providers where applicable.',
+            'Aria may use first-party or third-party AI providers, including models hosted on Aria infrastructure or external APIs. The subprocessor list should name relevant providers where applicable.',
           'es-ES':
-            'BrSpark puede usar proveedores de IA propios o terceros, incluidos modelos alojados en infraestructura BrSpark o APIs externas. La lista de suboperadores debe indicar proveedores relevantes cuando aplique.',
+            'Aria puede usar proveedores de IA propios o terceros, incluidos modelos alojados en infraestructura Aria o APIs externas. La lista de suboperadores debe indicar proveedores relevantes cuando aplique.',
           'de-DE':
-            'BrSpark kann eigene oder Drittanbieter-KI nutzen, einschließlich Modelle auf BrSpark-Infrastruktur oder externe APIs. Die Subprozessorliste soll relevante Anbieter benennen, soweit anwendbar.',
+            'Aria kann eigene oder Drittanbieter-KI nutzen, einschließlich Modelle auf Aria-Infrastruktur oder externe APIs. Die Subprozessorliste soll relevante Anbieter benennen, soweit anwendbar.',
         },
       },
       {
@@ -1413,11 +1413,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Purpose', 'es-ES': '1. Objetivo', 'de-DE': '1. Zweck' },
         body: {
           'en-US':
-            'This Policy sets principles and reference periods for retention, archiving, anonymisation and deletion of data processed by BrSpark.',
+            'This Policy sets principles and reference periods for retention, archiving, anonymisation and deletion of data processed by Aria.',
           'es-ES':
-            'Esta Política define principios y plazos referenciales para retención, archivo, anonimización y eliminación de datos tratados por BrSpark.',
+            'Esta Política define principios y plazos referenciales para retención, archivo, anonimización y eliminación de datos tratados por Aria.',
           'de-DE':
-            'Diese Richtlinie legt Grundsätze und Referenzfristen für Aufbewahrung, Archivierung, Anonymisierung und Löschung durch BrSpark verarbeiteter Daten fest.',
+            'Diese Richtlinie legt Grundsätze und Referenzfristen für Aufbewahrung, Archivierung, Anonymisierung und Löschung durch Aria verarbeiteter Daten fest.',
         },
       },
       {
@@ -1501,11 +1501,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '9. Erasure requests', 'es-ES': '9. Solicitudes de supresión', 'de-DE': '9. Löschanfragen' },
         body: {
           'en-US':
-            'Erasure requests are assessed according to BrSpark’s role, controller instructions, legal duties, rights exercise and technical feasibility.',
+            'Erasure requests are assessed according to Aria’s role, controller instructions, legal duties, rights exercise and technical feasibility.',
           'es-ES':
-            'Las solicitudes de eliminación se evaluarán según el papel de BrSpark, instrucciones del responsable, obligación legal, ejercicio de derechos y viabilidad técnica.',
+            'Las solicitudes de eliminación se evaluarán según el papel de Aria, instrucciones del responsable, obligación legal, ejercicio de derechos y viabilidad técnica.',
           'de-DE':
-            'Löschanfragen werden nach Rolle von BrSpark, Weisungen des Verantwortlichen, gesetzlichen Pflichten, Rechtsausübung und technischer Machbarkeit bewertet.',
+            'Löschanfragen werden nach Rolle von Aria, Weisungen des Verantwortlichen, gesetzlichen Pflichten, Rechtsausübung und technischer Machbarkeit bewertet.',
         },
       },
     ],
@@ -1527,11 +1527,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Purpose', 'es-ES': '1. Objetivo', 'de-DE': '1. Zweck' },
         body: {
           'en-US':
-            'This list describes categories of third parties that may process personal data on behalf of BrSpark or the Customer to operate the platform.',
+            'This list describes categories of third parties that may process personal data on behalf of Aria or the Customer to operate the platform.',
           'es-ES':
-            'Esta lista describe categorías de terceros que pueden tratar datos personales en nombre de BrSpark o del Cliente para operar la plataforma.',
+            'Esta lista describe categorías de terceros que pueden tratar datos personales en nombre de Aria o del Cliente para operar la plataforma.',
           'de-DE':
-            'Diese Liste beschreibt Kategorien von Dritten, die personenbezogene Daten im Auftrag von BrSpark oder dem Kunden zur Plattformbetreibung verarbeiten können.',
+            'Diese Liste beschreibt Kategorien von Dritten, die personenbezogene Daten im Auftrag von Aria oder dem Kunden zur Plattformbetreibung verarbeiten können.',
         },
       },
       {
@@ -1604,11 +1604,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '8. Changes', 'es-ES': '8. Cambios', 'de-DE': '8. Änderungen' },
         body: {
           'en-US':
-            'BrSpark may update this list when adding, replacing or removing relevant vendors. Customers may request additional information through contractual channels.',
+            'Aria may update this list when adding, replacing or removing relevant vendors. Customers may request additional information through contractual channels.',
           'es-ES':
-            'BrSpark puede actualizar esta lista al añadir, sustituir o eliminar proveedores relevantes. Los clientes pueden solicitar información adicional por los canales contractuales.',
+            'Aria puede actualizar esta lista al añadir, sustituir o eliminar proveedores relevantes. Los clientes pueden solicitar información adicional por los canales contractuales.',
           'de-DE':
-            'BrSpark kann diese Liste bei Hinzufügen, Ersetzen oder Entfernen relevanter Anbieter aktualisieren. Kunden können weitere Informationen über vertragliche Kanäle anfordern.',
+            'Aria kann diese Liste bei Hinzufügen, Ersetzen oder Entfernen relevanter Anbieter aktualisieren. Kunden können weitere Informationen über vertragliche Kanäle anfordern.',
         },
       },
       {
@@ -1641,11 +1641,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Scope', 'es-ES': '1. Alcance', 'de-DE': '1. Geltungsbereich' },
         body: {
           'en-US':
-            'This Policy sets support, maintenance and availability parameters for BrSpark, unless a proposal or agreement states otherwise.',
+            'This Policy sets support, maintenance and availability parameters for Aria, unless a proposal or agreement states otherwise.',
           'es-ES':
-            'Esta Política define parámetros de soporte, mantenimiento y disponibilidad de BrSpark, salvo condiciones específicas en propuesta o contrato.',
+            'Esta Política define parámetros de soporte, mantenimiento y disponibilidad de Aria, salvo condiciones específicas en propuesta o contrato.',
           'de-DE':
-            'Diese Richtlinie definiert Support-, Wartungs- und Verfügbarkeitsparameter für BrSpark, sofern Angebot oder Vertrag nichts anderes regelt.',
+            'Diese Richtlinie definiert Support-, Wartungs- und Verfügbarkeitsparameter für Aria, sofern Angebot oder Vertrag nichts anderes regelt.',
         },
       },
       {
@@ -1685,11 +1685,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '5. Availability', 'es-ES': '5. Disponibilidad', 'de-DE': '5. Verfügbarkeit' },
         body: {
           'en-US':
-            'BrSpark targets commercially reasonable high availability. Measurements may exclude scheduled maintenance, third-party failures, internet, devices, Customer misconfiguration, force majeure and misuse.',
+            'Aria targets commercially reasonable high availability. Measurements may exclude scheduled maintenance, third-party failures, internet, devices, Customer misconfiguration, force majeure and misuse.',
           'es-ES':
-            'BrSpark busca alta disponibilidad comercialmente razonable. Las mediciones pueden excluir mantenimientos programados, fallos de terceros, internet, dispositivos, mala configuración del Cliente, fuerza mayor y uso indebido.',
+            'Aria busca alta disponibilidad comercialmente razonable. Las mediciones pueden excluir mantenimientos programados, fallos de terceros, internet, dispositivos, mala configuración del Cliente, fuerza mayor y uso indebido.',
           'de-DE':
-            'BrSpark strebt eine wirtschaftlich angemessene hohe Verfügbarkeit an. Messungen können geplante Wartung, Drittfehler, Internet, Geräte, Fehlkonfiguration des Kunden, höhere Gewalt und Missbrauch ausschließen.',
+            'Aria strebt eine wirtschaftlich angemessene hohe Verfügbarkeit an. Messungen können geplante Wartung, Drittfehler, Internet, Geräte, Fehlkonfiguration des Kunden, höhere Gewalt und Missbrauch ausschließen.',
         },
       },
       {
@@ -1707,11 +1707,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '7. Backups and restore', 'es-ES': '7. Copias y restauración', 'de-DE': '7. Backups und Wiederherstellung' },
         body: {
           'en-US':
-            'Backups follow BrSpark’s operational policy. Restore feasibility depends on technical scope, recovery point and impact on recent data.',
+            'Backups follow Aria’s operational policy. Restore feasibility depends on technical scope, recovery point and impact on recent data.',
           'es-ES':
-            'Las copias siguen la política operativa de BrSpark. La viabilidad de restauración depende del alcance técnico, punto de recuperación e impacto en datos recientes.',
+            'Las copias siguen la política operativa de Aria. La viabilidad de restauración depende del alcance técnico, punto de recuperación e impacto en datos recientes.',
           'de-DE':
-            'Backups folgen der operativen Richtlinie von BrSpark. Die Machbarkeit einer Wiederherstellung hängt von technischem Umfang, Recovery Point und Auswirkungen auf aktuelle Daten ab.',
+            'Backups folgen der operativen Richtlinie von Aria. Die Machbarkeit einer Wiederherstellung hängt von technischem Umfang, Recovery Point und Auswirkungen auf aktuelle Daten ab.',
         },
       },
       {
@@ -1755,11 +1755,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Plans and billing', 'es-ES': '1. Planes y facturación', 'de-DE': '1. Pläne und Abrechnung' },
         body: {
           'en-US':
-            'BrSpark may offer free, trial, monthly, annual, enterprise or customised plans. Prices, limits, taxes, currency and payment methods are defined at purchase or in the console.',
+            'Aria may offer free, trial, monthly, annual, enterprise or customised plans. Prices, limits, taxes, currency and payment methods are defined at purchase or in the console.',
           'es-ES':
-            'BrSpark puede ofrecer planes gratuitos, trial, mensuales, anuales, enterprise o personalizados. Precios, límites, impuestos, moneda y forma de pago se definen en la contratación o en el panel.',
+            'Aria puede ofrecer planes gratuitos, trial, mensuales, anuales, enterprise o personalizados. Precios, límites, impuestos, moneda y forma de pago se definen en la contratación o en el panel.',
           'de-DE':
-            'BrSpark kann kostenlose, Test-, Monats-, Jahres-, Enterprise- oder maßgeschneiderte Pläne anbieten. Preise, Limits, Steuern, Währung und Zahlungsarten werden beim Kauf oder in der Konsole festgelegt.',
+            'Aria kann kostenlose, Test-, Monats-, Jahres-, Enterprise- oder maßgeschneiderte Pläne anbieten. Preise, Limits, Steuern, Währung und Zahlungsarten werden beim Kauf oder in der Konsole festgelegt.',
         },
       },
       {
@@ -1869,22 +1869,22 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Scope', 'es-ES': '1. Alcance', 'de-DE': '1. Geltungsbereich' },
         body: {
           'en-US':
-            'These Terms govern registration and use of BrSpark by contractors, independent technicians, third-party companies and professionals invited by tenants to perform services.',
+            'These Terms govern registration and use of Aria by contractors, independent technicians, third-party companies and professionals invited by tenants to perform services.',
           'es-ES':
-            'Estos Términos regulan el registro y uso de BrSpark por contratistas, técnicos autónomos, empresas terceras y profesionales invitados por tenants para ejecutar servicios.',
+            'Estos Términos regulan el registro y uso de Aria por contratistas, técnicos autónomos, empresas terceras y profesionales invitados por tenants para ejecutar servicios.',
           'de-DE':
-            'Diese Bedingungen regeln Registrierung und Nutzung von BrSpark durch Auftragnehmer, selbstständige Techniker, Drittunternehmen und von Tenants eingeladene Fachkräfte zur Leistungserbringung.',
+            'Diese Bedingungen regeln Registrierung und Nutzung von Aria durch Auftragnehmer, selbstständige Techniker, Drittunternehmen und von Tenants eingeladene Fachkräfte zur Leistungserbringung.',
         },
       },
       {
         title: { 'en-US': '2. Independence', 'es-ES': '2. Independencia', 'de-DE': '2. Unabhängigkeit' },
         body: {
           'en-US':
-            'Unless expressly agreed otherwise, BrSpark is a technology platform and is not the employer, direct principal or guarantor of services between contractor and tenant/end customer.',
+            'Unless expressly agreed otherwise, Aria is a technology platform and is not the employer, direct principal or guarantor of services between contractor and tenant/end customer.',
           'es-ES':
-            'Salvo acuerdo expreso en contrario, BrSpark es una plataforma tecnológica y no es empleadora, tomadora directa ni garante de los servicios entre contratista y tenant/cliente final.',
+            'Salvo acuerdo expreso en contrario, Aria es una plataforma tecnológica y no es empleadora, tomadora directa ni garante de los servicios entre contratista y tenant/cliente final.',
           'de-DE':
-            'Sofern nicht ausdrücklich anders vereinbart, ist BrSpark eine Technologieplattform und weder Arbeitgeber, direkter Auftraggeber noch Garant für Leistungen zwischen Auftragnehmer und Tenant/Endkunde.',
+            'Sofern nicht ausdrücklich anders vereinbart, ist Aria eine Technologieplattform und weder Arbeitgeber, direkter Auftraggeber noch Garant für Leistungen zwischen Auftragnehmer und Tenant/Endkunde.',
         },
       },
       {
@@ -1902,11 +1902,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '4. Invitations and affiliations', 'es-ES': '4. Invitaciones y afiliaciones', 'de-DE': '4. Einladungen und Zuordnung' },
         body: {
           'en-US':
-            'Tenants may invite, approve, suspend or remove contractors from their operation. Global status in BrSpark does not guarantee engagement, minimum demand or exclusivity.',
+            'Tenants may invite, approve, suspend or remove contractors from their operation. Global status in Aria does not guarantee engagement, minimum demand or exclusivity.',
           'es-ES':
-            'Los tenants pueden invitar, aprobar, suspender o eliminar contratistas de su operación. El estado global en BrSpark no garantiza contratación, demanda mínima ni exclusividad.',
+            'Los tenants pueden invitar, aprobar, suspender o eliminar contratistas de su operación. El estado global en Aria no garantiza contratación, demanda mínima ni exclusividad.',
           'de-DE':
-            'Tenants können Auftragnehmer einladen, freigeben, sperren oder aus ihrem Betrieb entfernen. Ein globaler Status in BrSpark garantiert weder Einsatz, Mindestnachfrage noch Exklusivität.',
+            'Tenants können Auftragnehmer einladen, freigeben, sperren oder aus ihrem Betrieb entfernen. Ein globaler Status in Aria garantiert weder Einsatz, Mindestnachfrage noch Exklusivität.',
         },
       },
       {
@@ -1946,11 +1946,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '8. Payments', 'es-ES': '8. Pagos', 'de-DE': '8. Zahlungen' },
         body: {
           'en-US':
-            'Payments for services, reimbursements, pass-through fees or commissions depend on agreements between contractor and tenant, and are not guaranteed by BrSpark unless expressly assumed.',
+            'Payments for services, reimbursements, pass-through fees or commissions depend on agreements between contractor and tenant, and are not guaranteed by Aria unless expressly assumed.',
           'es-ES':
-            'Los pagos por servicios, reembolsos, repases o comisiones dependen del acuerdo entre contratista y tenant, y no están garantizados por BrSpark salvo asunción expresa.',
+            'Los pagos por servicios, reembolsos, repases o comisiones dependen del acuerdo entre contratista y tenant, y no están garantizados por Aria salvo asunción expresa.',
           'de-DE':
-            'Vergütungen für Leistungen, Erstattungen, Weiterbelastungen oder Provisionen richten sich nach Vereinbarungen zwischen Auftragnehmer und Tenant und sind von BrSpark nicht garantiert, außer ausdrücklich übernommen.',
+            'Vergütungen für Leistungen, Erstattungen, Weiterbelastungen oder Provisionen richten sich nach Vereinbarungen zwischen Auftragnehmer und Tenant und sind von Aria nicht garantiert, außer ausdrücklich übernommen.',
         },
       },
       {
@@ -1994,11 +1994,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Purpose', 'es-ES': '1. Finalidad', 'de-DE': '1. Zweck' },
         body: {
           'en-US':
-            'This Notice explains processing of data for registration, identity verification, professional enablement, anti-fraud, security and approval of contractors in BrSpark.',
+            'This Notice explains processing of data for registration, identity verification, professional enablement, anti-fraud, security and approval of contractors in Aria.',
           'es-ES':
-            'Este Aviso explica el tratamiento de datos para registro, verificación de identidad, habilitación profesional, antifraude, seguridad y aprobación de contratistas en BrSpark.',
+            'Este Aviso explica el tratamiento de datos para registro, verificación de identidad, habilitación profesional, antifraude, seguridad y aprobación de contratistas en Aria.',
           'de-DE':
-            'Dieser Hinweis erläutert die Verarbeitung von Daten zur Registrierung, Identitätsprüfung, fachlichen Freigabe, Betrugsprävention, Sicherheit und Freigabe von Auftragnehmern bei BrSpark.',
+            'Dieser Hinweis erläutert die Verarbeitung von Daten zur Registrierung, Identitätsprüfung, fachlichen Freigabe, Betrugsprävention, Sicherheit und Freigabe von Auftragnehmern bei Aria.',
         },
       },
       {
@@ -2016,11 +2016,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '3. Verification', 'es-ES': '3. Verificaciones', 'de-DE': '3. Prüfungen' },
         body: {
           'en-US':
-            'BrSpark or the tenant may verify document consistency, certification validity, identity, duplication, risk, operational history and information provided by the contractor.',
+            'Aria or the tenant may verify document consistency, certification validity, identity, duplication, risk, operational history and information provided by the contractor.',
           'es-ES':
-            'BrSpark o el tenant pueden verificar consistencia documental, validez de certificaciones, identidad, duplicidad, riesgo, historial operativo e información proporcionada por el contratista.',
+            'Aria o el tenant pueden verificar consistencia documental, validez de certificaciones, identidad, duplicidad, riesgo, historial operativo e información proporcionada por el contratista.',
           'de-DE':
-            'BrSpark oder der Tenant können Dokumentenkonsistenz, Gültigkeit von Nachweisen, Identität, Duplikate, Risiko, Betriebshistorie und Angaben des Auftragnehmers prüfen.',
+            'Aria oder der Tenant können Dokumentenkonsistenz, Gültigkeit von Nachweisen, Identität, Duplikate, Risiko, Betriebshistorie und Angaben des Auftragnehmers prüfen.',
         },
       },
       {
@@ -2097,11 +2097,11 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Purpose', 'es-ES': '1. Objetivo', 'de-DE': '1. Zweck' },
         body: {
           'en-US':
-            'This Policy sets minimum acceptable use rules to protect BrSpark, customers, users, contractors, data subjects and third parties.',
+            'This Policy sets minimum acceptable use rules to protect Aria, customers, users, contractors, data subjects and third parties.',
           'es-ES':
-            'Esta Política define reglas mínimas de uso aceptable para proteger a BrSpark, sus clientes, usuarios, contratistas, titulares de datos y terceros.',
+            'Esta Política define reglas mínimas de uso aceptable para proteger a Aria, sus clientes, usuarios, contratistas, titulares de datos y terceros.',
           'de-DE':
-            'Diese Richtlinie legt Mindestregeln für eine zulässige Nutzung fest, um BrSpark, Kunden, Nutzer, Auftragnehmer, Betroffene und Dritte zu schützen.',
+            'Diese Richtlinie legt Mindestregeln für eine zulässige Nutzung fest, um Aria, Kunden, Nutzer, Auftragnehmer, Betroffene und Dritte zu schützen.',
         },
       },
       {
@@ -2200,22 +2200,22 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '1. Purpose', 'es-ES': '1. Objetivo', 'de-DE': '1. Zweck' },
         body: {
           'en-US':
-            'This Policy describes BrSpark security practices and responsibilities shared with Customers and users.',
+            'This Policy describes Aria security practices and responsibilities shared with Customers and users.',
           'es-ES':
-            'Esta Política describe prácticas de seguridad de BrSpark y responsabilidades compartidas con Clientes y usuarios.',
+            'Esta Política describe prácticas de seguridad de Aria y responsabilidades compartidas con Clientes y usuarios.',
           'de-DE':
-            'Diese Richtlinie beschreibt Sicherheitspraktiken von BrSpark und die gemeinsame Verantwortung mit Kunden und Nutzern.',
+            'Diese Richtlinie beschreibt Sicherheitspraktiken von Aria und die gemeinsame Verantwortung mit Kunden und Nutzern.',
         },
       },
       {
         title: { 'en-US': '2. Technical controls', 'es-ES': '2. Controles técnicos', 'de-DE': '2. Technische Kontrollen' },
         body: {
           'en-US':
-            'BrSpark uses authentication, role-based authorisation, logical tenant segregation, logs, encryption in transit, backups, secrets management, hardening, monitoring and periodic access reviews as needed.',
+            'Aria uses authentication, role-based authorisation, logical tenant segregation, logs, encryption in transit, backups, secrets management, hardening, monitoring and periodic access reviews as needed.',
           'es-ES':
-            'BrSpark utiliza autenticación, autorización por roles, segregación lógica por tenant, registros, cifrado en tránsito, copias, gestión de secretos, hardening, monitorización y revisiones periódicas de acceso según necesidad.',
+            'Aria utiliza autenticación, autorización por roles, segregación lógica por tenant, registros, cifrado en tránsito, copias, gestión de secretos, hardening, monitorización y revisiones periódicas de acceso según necesidad.',
           'de-DE':
-            'BrSpark nutzt Authentifizierung, rollenbasierte Autorisierung, logische Mandantentrennung, Protokolle, Verschlüsselung während der Übertragung, Backups, Secrets-Management, Hardening, Monitoring und periodische Zugriffsprüfungen nach Bedarf.',
+            'Aria nutzt Authentifizierung, rollenbasierte Autorisierung, logische Mandantentrennung, Protokolle, Verschlüsselung während der Übertragung, Backups, Secrets-Management, Hardening, Monitoring und periodische Zugriffsprüfungen nach Bedarf.',
         },
       },
       {
@@ -2277,22 +2277,22 @@ BrSpark kann **eigenständige Verantwortliche** sein, wenn sie Daten für **eige
         title: { 'en-US': '8. Internal access', 'es-ES': '8. Acceso interno', 'de-DE': '8. Interner Zugriff' },
         body: {
           'en-US':
-            'BrSpark personnel and contractors may access customer data only as needed for support, security, operations or legal duties, subject to confidentiality.',
+            'Aria personnel and contractors may access customer data only as needed for support, security, operations or legal duties, subject to confidentiality.',
           'es-ES':
-            'El personal y contratistas de BrSpark solo pueden acceder a datos del cliente según necesidad de soporte, seguridad, operación u obligación legal, con confidencialidad.',
+            'El personal y contratistas de Aria solo pueden acceder a datos del cliente según necesidad de soporte, seguridad, operación u obligación legal, con confidencialidad.',
           'de-DE':
-            'BrSpark-Mitarbeiter und -Auftragnehmer dürfen nur bei Bedarf für Support, Sicherheit, Betrieb oder gesetzliche Pflichten auf Kundendaten zugreifen, unter Wahrung der Vertraulichkeit.',
+            'Aria-Mitarbeiter und -Auftragnehmer dürfen nur bei Bedarf für Support, Sicherheit, Betrieb oder gesetzliche Pflichten auf Kundendaten zugreifen, unter Wahrung der Vertraulichkeit.',
         },
       },
       {
         title: { 'en-US': '9. Limits', 'es-ES': '9. Límites', 'de-DE': '9. Grenzen' },
         body: {
           'en-US':
-            'No policy eliminates all risk; security depends on cooperation among BrSpark, Customers, users, cloud providers and connected third parties.',
+            'No policy eliminates all risk; security depends on cooperation among Aria, Customers, users, cloud providers and connected third parties.',
           'es-ES':
-            'Ninguna política elimina todo riesgo; la seguridad depende de la cooperación entre BrSpark, Clientes, usuarios, proveedores de nube y terceros conectados.',
+            'Ninguna política elimina todo riesgo; la seguridad depende de la cooperación entre Aria, Clientes, usuarios, proveedores de nube y terceros conectados.',
           'de-DE':
-            'Keine Richtlinie beseitigt alle Risiken; Sicherheit hängt von der Zusammenarbeit zwischen BrSpark, Kunden, Nutzern, Cloud-Anbietern und verbundenen Dritten ab.',
+            'Keine Richtlinie beseitigt alle Risiken; Sicherheit hängt von der Zusammenarbeit zwischen Aria, Kunden, Nutzern, Cloud-Anbietern und verbundenen Dritten ab.',
         },
       },
     ],

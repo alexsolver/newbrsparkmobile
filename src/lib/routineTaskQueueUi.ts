@@ -1,5 +1,5 @@
 /**
- * RT no aparelho: cache em `@brspark_rt_cloud_tasks` (ver `cloudTasksBuckets.ts`).
+ * RT no aparelho: cache em `@aria_rt_cloud_tasks` (ver `cloudTasksBuckets.ts`).
  * Não entram na lista «Pendentes» do prestador nem na agenda unificada de FT — abertura só pelo menu radial.
  */
 
@@ -99,7 +99,7 @@ export function isRoutineTaskQueueHeadForWorklist(task: any, allTasks: any[]): b
 }
 
 /**
- * Quantas execuções RT não terminais existem no cache local (`@brspark_rt_cloud_tasks`) para o modelo (`templateId` / refId).
+ * Quantas execuções RT não terminais existem no cache local (`@aria_rt_cloud_tasks`) para o modelo (`templateId` / refId).
  */
 export function countRoutineTasksInLocalRtCacheForTemplate(rows: any[], templateId: string): number {
   let n = 0;

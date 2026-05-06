@@ -6,7 +6,7 @@ import { adminResolve, adminDocumentLang, adminIntlLocale } from './admin-i18n-r
 
 const M = {
   'pt-BR': {
-    au_pageTitle: 'BrSpark Admin, Auditoria',
+    au_pageTitle: 'Aria Admin, Auditoria',
     au_bc_panel: 'Painel',
     au_bc_here: 'Auditoria',
     au_hero_title: 'Log de auditoria',
@@ -43,7 +43,7 @@ const M = {
     au_csv_category: 'Categoria',
   },
   'en-US': {
-    au_pageTitle: 'BrSpark Admin, Audit log',
+    au_pageTitle: 'Aria Admin, Audit log',
     au_bc_panel: 'Home',
     au_bc_here: 'Audit',
     au_hero_title: 'Audit log',
@@ -80,7 +80,7 @@ const M = {
     au_csv_category: 'Category',
   },
   'es-ES': {
-    au_pageTitle: 'BrSpark Admin, Registro de auditoría',
+    au_pageTitle: 'Aria Admin, Registro de auditoría',
     au_bc_panel: 'Inicio',
     au_bc_here: 'Auditoría',
     au_hero_title: 'Registro de auditoría',

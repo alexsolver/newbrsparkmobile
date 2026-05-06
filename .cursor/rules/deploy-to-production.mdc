@@ -3,20 +3,20 @@ description: Quando o utilizador pedir deploy/commit para produção, executar o
 alwaysApply: false
 ---
 
-# Deploy para produção (BrsparkMobile)
+# Deploy para produção (AriaMobile)
 
 Quando o pedido for para **colocar código em produção**, **commit para produção**, **deploy**, **subir para o servidor**, ou equivalente:
 
-1. Na raiz do repositório **BrsparkMobile**, executar (ajustar `BRSPARK_SSH_KEY` se a chave não estiver em `~/Downloads/alex.pem`):
+1. Na raiz do repositório **AriaMobile**, executar (ajustar `ARIA_SSH_KEY` se a chave não estiver em `~/Downloads/alex.pem`):
 
    ```bash
-   export BRSPARK_SSH_KEY="${HOME}/Downloads/alex.pem"
+   export ARIA_SSH_KEY="${HOME}/Downloads/alex.pem"
    env -u SKIP_FRONTEND_BUILD ./scripts/deploy-production.sh all
    ```
 
    Usar **`env -u SKIP_FRONTEND_BUILD`** evita herdar um `export SKIP_FRONTEND_BUILD=1` deixado noutro terminal (deploy *web* sem `vite build` por engano). Não deixar `SKIP_FRONTEND_BUILD=1` no `.zshrc` / perfil.
 
-2. O script já faz: rsync do **admin-panel** e **Laravel (BrsparkWeb/backend)**; no alvo `web`/`all` corre **`npm ci` + `npm run build`** em **BrsparkWeb/frontend** e copia **`dist/`** para **`backend/public/`** (SPA em `www.brspark.com`). No Node: `npm ci`, **Prisma migrate** (P3009), `php artisan migrate --force`, caches e **PM2 restart**. **Emergência só PHP/SPA antigo (sem novo build Vite), na mesma linha:** `SKIP_FRONTEND_BUILD=1 ./scripts/deploy-production.sh web` — não usar `export` global.
+2. O script já faz: rsync do **admin-panel** e **Laravel (AriaWeb/backend)**; no alvo `web`/`all` corre **`npm ci` + `npm run build`** em **AriaWeb/frontend** e copia **`dist/`** para **`backend/public/`** (SPA em `www.aria.com`). No Node: `npm ci`, **Prisma migrate** (P3009), `php artisan migrate --force`, caches e **PM2 restart**. **Emergência só PHP/SPA antigo (sem novo build Vite), na mesma linha:** `SKIP_FRONTEND_BUILD=1 ./scripts/deploy-production.sh web` — não usar `export` global.
 
 3. Se o comando falhar, analisar a saída (SSH, Prisma, Artisan) e propor correção; não deixar o utilizador com passos manuais salvo migração SQL impossível de reaplicar sem intervenção na BD.
 

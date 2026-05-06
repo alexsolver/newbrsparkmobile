@@ -5,7 +5,7 @@
 import { API_BASE } from './appApiBase';
 import { getOsrmBaseUrl, getOsrmRoutingBaseCandidates } from './osrmConfig';
 
-const UA = 'BrsparkMobile/1.0';
+const UA = 'AriaMobile/1.0';
 
 /** Segundos na primeira rota (alguns proxies devolvem duration como string) */
 export function routeDurationSeconds(j: any): number | null {
@@ -383,7 +383,7 @@ function capGeometryPoints(ring: number[][]): number[][] {
 }
 
 /**
- * Geometria via backend Brspark: o celular fala com a API (Wi‑Fi/LAN/produção);
+ * Geometria via backend Aria: o celular fala com a API (Wi‑Fi/LAN/produção);
  * o servidor fala com o OSRM (rede interna, VPN, URL inacessível no 5G).
  */
 async function fetchDrivingGeometryViaBackend(
@@ -444,7 +444,7 @@ export async function fetchDrivingGeometryLatLng(
   const polyTimeoutMs = options?.timeoutMs ?? 120000;
   const geojsonTimeoutMs = Math.max(polyTimeoutMs, 150000);
 
-  // 1) Proxy no backend primeiro: o app fala com a API BrSpark; o servidor fala com o OSRM (LAN/VPN).
+  // 1) Proxy no backend primeiro: o app fala com a API Aria; o servidor fala com o OSRM (LAN/VPN).
   // Se tentarmos antes o `osrmBaseUrl` da integração no celular, costuma falhar (IP interno) e o mapa
   // fica só com a linha reta até esgotar dezenas de timeouts.
   const backendMs = Math.min(90000, Math.max(15000, polyTimeoutMs));

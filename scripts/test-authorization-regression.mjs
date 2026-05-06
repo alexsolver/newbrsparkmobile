@@ -29,7 +29,7 @@ function run() {
   const legacyAdmin = buildAdminAuthorization({
     panelUser: false,
     id: 'adm-1',
-    email: 'ops@brspark.com',
+    email: 'ops@aria.com',
   });
   assert.equal(legacyAdmin.scope, PLATFORM_SCOPE);
   assert.equal(isPlatformAdmin(legacyAdmin), true);

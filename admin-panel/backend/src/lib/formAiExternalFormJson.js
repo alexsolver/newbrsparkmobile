@@ -85,7 +85,7 @@ function linesForGoogleQuestion(idx, itemTitle, questionItem) {
     lines.push('- **Tipo original:** grelha / linha (matrix)');
     return lines;
   }
-  lines.push('- **Tipo original:** (outro — inferir no BrSpark)');
+  lines.push('- **Tipo original:** (outro — inferir no Aria)');
   return lines;
 }
 
@@ -117,7 +117,7 @@ function googleFormsJsonToMarkdown(root) {
   parts.push('## JSON de formulário externo (Google Forms / API compatível)\n');
   parts.push(`**Título:** ${formTitle}`);
   if (formDesc) parts.push(`**Descrição (origem):** ${formDesc}`);
-  parts.push('\n> Use cada bloco abaixo como um campo candidato no BrSpark. Quebras de página viram etapas (`section_break`).\n');
+  parts.push('\n> Use cada bloco abaixo como um campo candidato no Aria. Quebras de página viram etapas (`section_break`).\n');
 
   let qIdx = 0;
   for (const it of items) {

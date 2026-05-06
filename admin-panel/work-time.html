@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Registro de horas</title>
+  <title>Aria Admin — Registro de horas</title>
   <link rel="stylesheet" href="css/main.css" />
   <style>
     .wt-panel { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 14px; }
@@ -268,7 +268,7 @@
 
   function panelTenantId() {
     try {
-      const raw = sessionStorage.getItem('brspark_panel_tenant');
+      const raw = sessionStorage.getItem('aria_panel_tenant');
       if (!raw) return null;
       const t = JSON.parse(raw);
       return t?.id || null;

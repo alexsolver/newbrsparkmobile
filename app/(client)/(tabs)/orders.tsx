@@ -81,7 +81,7 @@ export default function OrdersScreen() {
         try {
           const [events, executedRaw] = await Promise.all([
             AgendaService.getUnifiedAgenda(user.email, agendaScope),
-            AsyncStorage.getItem('@brspark_executed_tasks'),
+            AsyncStorage.getItem('@aria_executed_tasks'),
           ]);
           let executedParsed: unknown = [];
           try {
@@ -104,7 +104,7 @@ export default function OrdersScreen() {
                 service: t.title || 'Serviço',
                 status: orderUiStatus(t, executedIds),
                 date: `${day}/${month}/${year}`,
-                provider: t.ownerEmail || 'BrSpark Cloud',
+                provider: t.ownerEmail || 'Aria Cloud',
                 color: t.color || MEDIA_TAG_COLORS.DURING,
                 refId: t.refId
              };

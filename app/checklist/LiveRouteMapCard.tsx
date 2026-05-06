@@ -47,7 +47,7 @@ import { useResolvedAvatarUri } from '../../src/hooks/useResolvedAvatarUri';
 import { useTransitMapExpanded } from '../../src/context/TransitMapExpandedContext';
 import { subscribeTrackingClientChatPing } from '../../src/lib/trackingClientChatPing';
 
-const TRANSIT_MAP_HINTS_KEY = '@brspark_transit_map_hints_v1';
+const TRANSIT_MAP_HINTS_KEY = '@aria_transit_map_hints_v1';
 
 type TrackingChatRow = {
   id: string;
@@ -788,7 +788,7 @@ export default function LiveRouteMapCard({
   /** `expo-keep-awake` não exporta componente `<KeepAwake />` — usar activate/deactivate por tag. */
   useEffect(() => {
     if (!visible || !keepScreenAwake) return;
-    const tag = 'brspark-live-route-map';
+    const tag = 'aria-live-route-map';
     void activateKeepAwakeAsync(tag);
     return () => {
       void deactivateKeepAwake(tag);

@@ -127,7 +127,7 @@ async function canReceiveFieldTasksForAppSession(db, opts) {
 
   /**
    * O JWT do app usa `AppAccount.emailNorm` (canónico); a linha `User` pode ter e-mail sintético
-   * (`+brspark.ws.…`) noutro workspace. Não exigir `User.email === ownerEmail` — validar contra
+   * (`+aria.ws.…`) noutro workspace. Não exigir `User.email === ownerEmail` — validar contra
    * candidatos de sync (`resolveFieldTaskOwnerEmailCandidatesForAppUser`).
    */
   const u = await db.user.findFirst({

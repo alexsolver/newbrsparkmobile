@@ -1,14 +1,14 @@
 /**
- * auth.js — BrSpark Admin Panel Authentication
+ * auth.js — Aria Admin Panel Authentication
  * Simple session-based auth guard using sessionStorage.
  */
 
 const ADMIN_CREDENTIALS = {
-  email: 'admin@brspark.com',
+  email: 'admin@aria.com',
   password: 'admin123',
 };
 
-const SESSION_KEY = 'brspark_admin_session';
+const SESSION_KEY = 'aria_admin_session';
 
 export const Auth = {
   /** Check if admin is logged in */
@@ -23,7 +23,7 @@ export const Auth = {
       password === ADMIN_CREDENTIALS.password
     ) {
       sessionStorage.setItem(SESSION_KEY, 'true');
-      sessionStorage.setItem('brspark_admin_email', email);
+      sessionStorage.setItem('aria_admin_email', email);
       return true;
     }
     return false;
@@ -32,13 +32,13 @@ export const Auth = {
   /** Log out and redirect to login */
   logout() {
     sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem('brspark_admin_email');
+    sessionStorage.removeItem('aria_admin_email');
     window.location.href = 'index.html';
   },
 
   /** Get admin email */
   getEmail() {
-    return sessionStorage.getItem('brspark_admin_email') || 'admin@brspark.com';
+    return sessionStorage.getItem('aria_admin_email') || 'admin@aria.com';
   },
 
   /**

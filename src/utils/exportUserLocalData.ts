@@ -10,19 +10,19 @@ import { TOKEN_KEY as JWT_STORAGE_KEY } from '../services/appSessionTokenStorage
  * modelos/checklists, chat em cache, telemetria, filas de sync operacionais, etc.
  */
 const LGPD_EXPORT_ALLOWLIST_EXACT = new Set([
-  'brspark_user',
-  '@brspark_email',
-  '@brspark_region',
-  '@brspark_language',
-  '@brspark_active_role',
-  '@brspark_onboarding_done',
-  '@brspark_onboarding_provider_done',
+  'aria_user',
+  '@aria_email',
+  '@aria_region',
+  '@aria_language',
+  '@aria_active_role',
+  '@aria_onboarding_done',
+  '@aria_onboarding_provider_done',
   '@pref_push_enabled',
   '@pref_dark_mode',
   '@user_profile',
-  '@brspark_units',
-  '@brspark_number_format',
-  '@brspark_device_id',
+  '@aria_units',
+  '@aria_number_format',
+  '@aria_device_id',
 ]);
 
 function shouldIncludeAsyncStorageKey(key: string): boolean {
@@ -79,12 +79,12 @@ export type ShareUserLocalDataOptions = {
 export async function shareUserLocalDataJson(options?: ShareUserLocalDataOptions): Promise<void> {
   const payload = await buildLocalUserDataExportPayload();
   const json = JSON.stringify(payload, null, 2);
-  const userObj = payload.asyncStorage['brspark_user'];
+  const userObj = payload.asyncStorage['aria_user'];
   const emailFromUser =
     userObj && typeof userObj === 'object' && userObj !== null && 'email' in userObj
       ? String((userObj as { email?: string }).email || '')
       : '';
-  const emailRaw = payload.asyncStorage['@brspark_email'] ?? emailFromUser;
+  const emailRaw = payload.asyncStorage['@aria_email'] ?? emailFromUser;
   const emailSlug =
     typeof emailRaw === 'string'
       ? emailRaw.replace(/[^a-z0-9@._-]+/gi, '_').slice(0, 48)
@@ -93,7 +93,7 @@ export async function shareUserLocalDataJson(options?: ShareUserLocalDataOptions
   if (!cacheDir) {
     throw new Error('cacheDirectory unavailable');
   }
-  const uri = `${cacheDir}brspark_export_${emailSlug}_${Date.now()}.json`;
+  const uri = `${cacheDir}aria_export_${emailSlug}_${Date.now()}.json`;
   await FileSystem.writeAsStringAsync(uri, json, { encoding: 'utf8' });
   if (!(await Sharing.isAvailableAsync())) {
     throw new Error('sharing not available on this device');

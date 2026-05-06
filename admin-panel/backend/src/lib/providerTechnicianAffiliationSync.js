@@ -214,10 +214,10 @@ async function downsyncAffiliationsForSingleUserTechnician(client, userId, techn
 
 /**
  * Parcerias **entre tenants** (convite + mesma AppAccount): a linha `ProviderTenantAffiliation`
- * pode estar na PI do User «casa» (ex. Lan) com `tenantId` = outra empresa (ex. BrSpark).
- * O `TechnicianProfile` relevante para «estar ativo na BrSpark» é o do User cuja home tenant
- * é BrSpark — não o dono da PI. Sem este passo, com Lan ACTIVE e BrSpark INACTIVE no painel,
- * a app continuava a mostrar BrSpark «Ativo».
+ * pode estar na PI do User «casa» (ex. Lan) com `tenantId` = outra empresa (ex. Aria).
+ * O `TechnicianProfile` relevante para «estar ativo na Aria» é o do User cuja home tenant
+ * é Aria — não o dono da PI. Sem este passo, com Lan ACTIVE e Aria INACTIVE no painel,
+ * a app continuava a mostrar Aria «Ativo».
  *
  * @param {import('@prisma/client').PrismaClient} client
  * @param {string} sessionUserId

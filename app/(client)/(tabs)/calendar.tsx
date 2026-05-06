@@ -53,7 +53,7 @@ export default function CalendarScreen() {
         id: 'm1',
         date: new Date().toISOString().split('T')[0],
         title: 'Revisão Motor de Popa',
-        assetName: 'Lancha Brspark',
+        assetName: 'Lancha Aria',
         type: 'MAINT',
         color: C.success.text,
         tag: 'MANUTENÇÃO',

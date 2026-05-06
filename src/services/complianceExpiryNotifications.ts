@@ -2,14 +2,14 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import type { ComplianceDocument } from '../types/assetExtensions';
 
-const ANDROID_CHANNEL = 'brspark-compliance-expiry';
+const ANDROID_CHANNEL = 'aria-compliance-expiry';
 
 let channelReady = false;
 
 async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android' || channelReady) return;
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL, {
-    name: 'BrSpark — Conformidade',
+    name: 'Aria — Conformidade',
     importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#2563EB',

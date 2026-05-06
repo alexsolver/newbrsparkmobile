@@ -3,7 +3,7 @@
  * Mantém paridade com `admin-panel/js/checklists-builder.js` (operadores e IDs especiais).
  */
 
-export const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
+export const FORM_CLOCK_COND_ID = '__aria_form_clock__';
 
 export type RuleSchemaField = { id?: string; type?: string; visionRating0To10Enabled?: boolean };
 

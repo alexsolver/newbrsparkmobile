@@ -1,5 +1,5 @@
 {
-  "name": "brsparkmobile",
+  "name": "ariamobile",
   "version": "1.0.1",
   "main": "expo-router/entry",
   "scripts": {
@@ -41,8 +41,8 @@
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/drawer": "^7.9.8",
     "ajv": "^8.18.0",
-    "brspark-automatic-time": "file:./modules/brspark-automatic-time",
-    "brspark-location-integrity": "file:./modules/brspark-location-integrity",
+    "aria-automatic-time": "file:./modules/aria-automatic-time",
+    "aria-location-integrity": "file:./modules/aria-location-integrity",
     "expo": "~54.0.0",
     "expo-apple-authentication": "~8.0.8",
     "expo-application": "~7.0.8",

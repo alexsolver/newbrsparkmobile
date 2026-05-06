@@ -3,12 +3,12 @@
  * O painel precisa da API Prisma + PostgreSQL (pasta admin-panel/backend).
  * A API oficial é admin-panel/backend (PostgreSQL). A pasta backend/ só repassa npm start → mesma API.
  */
-const LS_API_ORIGIN = 'brspark_admin_api_origin';
+const LS_API_ORIGIN = 'aria_admin_api_origin';
 
 /** Cópia da sessão do painel (JWT + metadados) — compartilhada entre abas; limpa no logout e em 401. */
-const LS_ADMIN_SESSION_BUNDLE = 'brspark_admin_session_bundle';
-const SS_ADMIN_CONTEXT = 'brspark_admin_context';
-const SS_ADMIN_CAPABILITIES = 'brspark_admin_capabilities';
+const LS_ADMIN_SESSION_BUNDLE = 'aria_admin_session_bundle';
+const SS_ADMIN_CONTEXT = 'aria_admin_context';
+const SS_ADMIN_CAPABILITIES = 'aria_admin_capabilities';
 
 /**
  * Grava no `localStorage` o mesmo conteúdo relevante do `sessionStorage` (login válido).
@@ -17,19 +17,19 @@ const SS_ADMIN_CAPABILITIES = 'brspark_admin_capabilities';
 export function persistAdminSessionBundleFromSessionStorage() {
   if (typeof window === 'undefined' || !window.sessionStorage || !window.localStorage) return;
   try {
-    const token = sessionStorage.getItem('brspark_admin_token');
+    const token = sessionStorage.getItem('aria_admin_token');
     if (!token) {
       localStorage.removeItem(LS_ADMIN_SESSION_BUNDLE);
       return;
     }
     const bundle = {
       token,
-      email: sessionStorage.getItem('brspark_admin_email') || '',
-      name: sessionStorage.getItem('brspark_admin_name') || '',
-      role: sessionStorage.getItem('brspark_admin_role') || '',
-      panelMode: sessionStorage.getItem('brspark_panel_mode') || '',
-      panelTenant: sessionStorage.getItem('brspark_panel_tenant') || '',
-      panelTenantListKind: sessionStorage.getItem('brspark_panel_tenant_list_kind') || '',
+      email: sessionStorage.getItem('aria_admin_email') || '',
+      name: sessionStorage.getItem('aria_admin_name') || '',
+      role: sessionStorage.getItem('aria_admin_role') || '',
+      panelMode: sessionStorage.getItem('aria_panel_mode') || '',
+      panelTenant: sessionStorage.getItem('aria_panel_tenant') || '',
+      panelTenantListKind: sessionStorage.getItem('aria_panel_tenant_list_kind') || '',
       adminContext: sessionStorage.getItem(SS_ADMIN_CONTEXT) || '',
       adminCapabilities: sessionStorage.getItem(SS_ADMIN_CAPABILITIES) || '',
     };
@@ -43,22 +43,22 @@ export function persistAdminSessionBundleFromSessionStorage() {
 export function restoreAdminSessionBundleIfNeeded() {
   if (typeof window === 'undefined' || !window.sessionStorage || !window.localStorage) return;
   try {
-    if (sessionStorage.getItem('brspark_admin_token')) return;
+    if (sessionStorage.getItem('aria_admin_token')) return;
     const raw = localStorage.getItem(LS_ADMIN_SESSION_BUNDLE);
     if (!raw) return;
     const b = JSON.parse(raw);
     if (!b || typeof b !== 'object' || !b.token) return;
-    sessionStorage.setItem('brspark_admin_token', String(b.token));
-    if (b.email) sessionStorage.setItem('brspark_admin_email', String(b.email));
-    if (b.name != null) sessionStorage.setItem('brspark_admin_name', String(b.name));
-    if (b.role != null) sessionStorage.setItem('brspark_admin_role', String(b.role));
-    if (b.panelMode != null) sessionStorage.setItem('brspark_panel_mode', String(b.panelMode));
+    sessionStorage.setItem('aria_admin_token', String(b.token));
+    if (b.email) sessionStorage.setItem('aria_admin_email', String(b.email));
+    if (b.name != null) sessionStorage.setItem('aria_admin_name', String(b.name));
+    if (b.role != null) sessionStorage.setItem('aria_admin_role', String(b.role));
+    if (b.panelMode != null) sessionStorage.setItem('aria_panel_mode', String(b.panelMode));
     if (b.panelTenant != null && String(b.panelTenant).trim() !== '') {
-      sessionStorage.setItem('brspark_panel_tenant', String(b.panelTenant));
+      sessionStorage.setItem('aria_panel_tenant', String(b.panelTenant));
     }
     if (b.panelTenantListKind != null && String(b.panelTenantListKind).trim() !== '') {
       // Lista do seletor de plataforma é só tenants empresa; ignora valores antigos (ALL / CLIENT / …).
-      sessionStorage.setItem('brspark_panel_tenant_list_kind', 'COMPANY');
+      sessionStorage.setItem('aria_panel_tenant_list_kind', 'COMPANY');
     }
     if (b.adminContext != null && String(b.adminContext).trim() !== '') {
       sessionStorage.setItem(SS_ADMIN_CONTEXT, String(b.adminContext));
@@ -125,7 +125,7 @@ export function getPanelCapabilities() {
 }
 
 /**
- * Capabilities do painel + inferência mínima quando `brspark_admin_capabilities` falta no sessionStorage
+ * Capabilities do painel + inferência mínima quando `aria_admin_capabilities` falta no sessionStorage
  * (ex.: nova aba via `opener`, bundle antigo): Admin legado (`panel:false`+`id`) e SaaS admin (`panel:true`+`role=SAAS_ADMIN`).
  * O servidor continua a ser a fonte de verdade; isto evita UI sem permissões aparentes.
  */
@@ -133,7 +133,7 @@ export function getEffectivePanelCapabilities() {
   const base = getPanelCapabilities();
   const extra = [];
   try {
-    const token = sessionStorage.getItem('brspark_admin_token');
+    const token = sessionStorage.getItem('aria_admin_token');
     if (!token) return base;
     const parts = token.split('.');
     if (parts.length < 2) return base;
@@ -177,7 +177,7 @@ export function getEffectivePanelCapabilities() {
 
 export async function refreshPanelSessionBootstrap() {
   if (typeof window === 'undefined' || !window.sessionStorage) return null;
-  const token = sessionStorage.getItem('brspark_admin_token');
+  const token = sessionStorage.getItem('aria_admin_token');
   if (!token) return null;
   try {
     const res = await fetch(`${resolveApiBase()}/auth/me`, {
@@ -194,20 +194,20 @@ export async function refreshPanelSessionBootstrap() {
     if (!res.ok) return null;
     const data = await res.json();
     if (data?.user) {
-      sessionStorage.setItem('brspark_admin_email', data.user.email || '');
-      sessionStorage.setItem('brspark_admin_name', data.user.name || '');
-      sessionStorage.setItem('brspark_admin_role', data.user.role || '');
+      sessionStorage.setItem('aria_admin_email', data.user.email || '');
+      sessionStorage.setItem('aria_admin_name', data.user.name || '');
+      sessionStorage.setItem('aria_admin_role', data.user.role || '');
     } else if (data?.admin) {
-      sessionStorage.setItem('brspark_admin_email', data.admin.email || '');
-      sessionStorage.setItem('brspark_admin_name', data.admin.name || '');
-      sessionStorage.setItem('brspark_admin_role', '');
+      sessionStorage.setItem('aria_admin_email', data.admin.email || '');
+      sessionStorage.setItem('aria_admin_name', data.admin.name || '');
+      sessionStorage.setItem('aria_admin_role', '');
     }
     if (data?.tenant && data.tenant.id) {
-      sessionStorage.setItem('brspark_panel_mode', 'tenant');
-      sessionStorage.setItem('brspark_panel_tenant', JSON.stringify(data.tenant));
+      sessionStorage.setItem('aria_panel_mode', 'tenant');
+      sessionStorage.setItem('aria_panel_tenant', JSON.stringify(data.tenant));
     } else if (data?.mode === 'global') {
-      sessionStorage.setItem('brspark_panel_mode', 'global');
-      sessionStorage.removeItem('brspark_panel_tenant');
+      sessionStorage.setItem('aria_panel_mode', 'global');
+      sessionStorage.removeItem('aria_panel_tenant');
     }
     applyPanelSessionBootstrap(data);
     persistAdminSessionBundleFromSessionStorage();
@@ -469,7 +469,7 @@ function adminApiUnreachableMessage(method, path, err) {
     return (
       `Não foi possível contatar a API em ${base} (${method} ${path}). ` +
       'Inicie o backend (pasta admin-panel/backend: npm run dev, porta 3001). ' +
-      'Se o painel abrir em outro host/porta, defina no navegador localStorage a chave "brspark_admin_api_origin" ' +
+      'Se o painel abrir em outro host/porta, defina no navegador localStorage a chave "aria_admin_api_origin" ' +
       'com a origem do servidor (ex.: http://127.0.0.1:3001), sem /api no final.'
     );
   }
@@ -484,7 +484,7 @@ export const CONFIG = {
   /** Returns stored JWT token (repõe a partir do bundle se este separador ainda não tiver sessão). */
   getToken: () => {
     restoreAdminSessionBundleIfNeeded();
-    return sessionStorage.getItem('brspark_admin_token') || '';
+    return sessionStorage.getItem('aria_admin_token') || '';
   },
 
   /** Common headers for all fetch requests */

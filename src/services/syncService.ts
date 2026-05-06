@@ -1,5 +1,5 @@
 /**
- * SyncService — orquestrador de sincronização BrSpark Cloud
+ * SyncService — orquestrador de sincronização Aria Cloud
  *
  * Estratégia offline-first:
  *   1. Mutações → salvas no AsyncStorage local
@@ -59,7 +59,7 @@ import {
   compressLocalImageForChecklistSyncUpload,
   isProbablyVideoExt,
 } from './checklistMediaUploadPrep';
-import { BRSPARK_CLOUD_TASKS_UPDATED } from '../constants/deviceEvents';
+import { ARIA_CLOUD_TASKS_UPDATED } from '../constants/deviceEvents';
 
 // ── Push fila offline de assets ───────────────────────────────────────────────
 
@@ -68,14 +68,14 @@ let isSyncing = false;
 let pendingSyncRequested = false;
 let pendingSyncOwnerEmail: string | undefined = undefined;
 
-export const EXECUTION_STATUS_OUTBOX_KEY = '@brspark_execution_status_outbox';
-const CHECKLIST_OUTBOX_KEY = '@brspark_outbox';
-const CHECKLIST_OUTBOX_CONFLICTS_KEY = '@brspark_outbox_conflicts_v1';
+export const EXECUTION_STATUS_OUTBOX_KEY = '@aria_execution_status_outbox';
+const CHECKLIST_OUTBOX_KEY = '@aria_outbox';
+const CHECKLIST_OUTBOX_CONFLICTS_KEY = '@aria_outbox_conflicts_v1';
 /** Último ciclo `fullSync` que correu até ao fim (ms epoch); atualizado no final de `fullSync`. */
-export const LAST_SUCCESSFUL_FULL_SYNC_AT_MS_KEY = '@brspark_last_successful_full_sync_at_ms';
-const TELEMETRY_OUTBOX_KEY = '@brspark_telemetry_outbox';
+export const LAST_SUCCESSFUL_FULL_SYNC_AT_MS_KEY = '@aria_last_successful_full_sync_at_ms';
+const TELEMETRY_OUTBOX_KEY = '@aria_telemetry_outbox';
 const MEDIA_STUCK_ATTEMPT_THRESHOLD = 3;
-const REJECTED_TASKS_KEY = '@brspark_rejected_tasks';
+const REJECTED_TASKS_KEY = '@aria_rejected_tasks';
 
 function normalizeStoredId(v: unknown): string {
   const s = String(v ?? '').trim();
@@ -332,7 +332,7 @@ export async function requeueChecklistOutboxConflicts(
     const tid = checklistOutboxTaskId(c.payload);
     if (tid) {
       try {
-        await AsyncStorage.setItem(`@brspark_execution_${tid}`, JSON.stringify(c.payload));
+        await AsyncStorage.setItem(`@aria_execution_${tid}`, JSON.stringify(c.payload));
       } catch {
         /* ignore */
       }
@@ -500,7 +500,7 @@ async function preflightChecklistRevisionConflict(
 }
 
 /** Prefixo das cópias locais do corpo da execução (respostas) — OS concluídas só devem persistir após visualização e com TTL curto. */
-const EXECUTION_CACHE_PREFIX = '@brspark_execution_';
+const EXECUTION_CACHE_PREFIX = '@aria_execution_';
 
 /**
  * Tempo máximo que o técnico mantém no aparelho o corpo (respostas) de uma OS já concluída na nuvem,
@@ -522,7 +522,7 @@ const TERMINAL_EXEC_CACHE_STATUSES = new Set([
 ]);
 
 /**
- * Remove `@brspark_execution_*` de OS terminais na nuvem quando o download para visualização expirou
+ * Remove `@aria_execution_*` de OS terminais na nuvem quando o download para visualização expirou
  * ou nunca foi marcado (instalações antigas). Preserva: fila de submissão pendente e estados não terminais.
  */
 export async function purgeExpiredCompletedExecutionCaches(): Promise<void> {
@@ -711,7 +711,7 @@ async function getTaskIdsWithPendingChecklistOutbox(): Promise<Set<string>> {
 
 /**
  * Checklist concluído no aparelho com POST ainda pendente (outbox principal ou Conflitos de Sync).
- * Usar na UI da aba «Concluídas» junto com `@brspark_executed_tasks`.
+ * Usar na UI da aba «Concluídas» junto com `@aria_executed_tasks`.
  */
 export async function getTaskIdsWithCompletedChecklistPendingServerAck(): Promise<Set<string>> {
   return getTaskIdsWithPendingChecklistOutbox();
@@ -1594,8 +1594,8 @@ async function enrichFacialBiometricAddressesInOutbox(outbox: any[]): Promise<nu
 }
 
 /**
- * Envia POST /api/checklists/executions para itens em `@brspark_outbox` (ex.: OS recém-concluída).
- * Corre dentro de `withAsyncStorageKeyLock(@brspark_outbox)`; outras escritas na mesma chave devem usar
+ * Envia POST /api/checklists/executions para itens em `@aria_outbox` (ex.: OS recém-concluída).
+ * Corre dentro de `withAsyncStorageKeyLock(@aria_outbox)`; outras escritas na mesma chave devem usar
  * `updateStoredJsonArray` ou `updateStoredJsonArrayWhileLockHeld` — nunca `setItem` solto na outbox.
  * Exportado para o checklist aguardar o 1.º envio antes de fechar o ecrã.
  */
@@ -1611,7 +1611,7 @@ export async function pushChecklistOutbox() {
        outbox = JSON.parse(raw);
        if (!Array.isArray(outbox)) outbox = [];
      } catch (parseErr) {
-       const backupKey = `@brspark_outbox_corrupt_${Date.now()}`;
+       const backupKey = `@aria_outbox_corrupt_${Date.now()}`;
        try {
          await AsyncStorage.setItem(backupKey, raw);
          await AsyncStorage.removeItem(CHECKLIST_OUTBOX_KEY);
@@ -1649,7 +1649,7 @@ export async function pushChecklistOutbox() {
          const tid = checklistOutboxTaskId(p);
          if (tid) {
            try {
-             await AsyncStorage.setItem(`@brspark_execution_${tid}`, JSON.stringify(p));
+             await AsyncStorage.setItem(`@aria_execution_${tid}`, JSON.stringify(p));
            } catch {
              /* ignore */
            }
@@ -1681,7 +1681,7 @@ export async function pushChecklistOutbox() {
              if (preflight.action === 'drop_as_conflict') {
                  outboxRemovalKeys.add(checklistOutboxIdentityKey(payload));
                  const tid = checklistOutboxTaskId(payload);
-                 if (tid) await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
+                 if (tid) await AsyncStorage.removeItem(`@aria_execution_${tid}`);
                  continue;
              }
 
@@ -1756,7 +1756,7 @@ export async function pushChecklistOutbox() {
                  // Delete the heavy local payload since it's now archived in the cloud
                  const tid = checklistOutboxTaskId(payload);
                  if (tid) {
-                     await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
+                     await AsyncStorage.removeItem(`@aria_execution_${tid}`);
                  }
              } else if (res.status === 422) {
                  const tid = checklistOutboxTaskId(payload);
@@ -1796,7 +1796,7 @@ export async function pushChecklistOutbox() {
                  }
                  if (shouldDropAsDelivered) {
                      outboxRemovalKeys.add(checklistOutboxIdentityKey(payload));
-                     if (tid) await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
+                     if (tid) await AsyncStorage.removeItem(`@aria_execution_${tid}`);
                      console.warn(
                        `[SYNC] 422 revision_mismatch tratado como idempotente (task=${tid}). Servidor já terminal.`
                      );
@@ -1811,7 +1811,7 @@ export async function pushChecklistOutbox() {
                      statusCode: 422,
                  });
                  outboxRemovalKeys.add(checklistOutboxIdentityKey(payload));
-                 if (tid) await AsyncStorage.removeItem(`@brspark_execution_${tid}`);
+                 if (tid) await AsyncStorage.removeItem(`@aria_execution_${tid}`);
                  console.warn(
                    `[SYNC] Payload movido para conflitos (422 revision_mismatch) task=${tid || 'unknown'}.`
                  );
@@ -2294,14 +2294,14 @@ async function stripLocalExecutionStateForTerminalServerTasks(remoteTasks: any[]
 
   try {
     let removed = 0;
-    await updateStoredJsonArray<string>('@brspark_inprogress_tasks', (arr) => {
+    await updateStoredJsonArray<string>('@aria_inprogress_tasks', (arr) => {
       const next = arr.filter((id) => !terminalIds.has(String(id)));
       removed = arr.length - next.length;
       return next;
     });
     if (removed > 0) {
       console.log(
-        `[pullTasks] @brspark_inprogress_tasks: removidos ${removed} id(s) de OS terminal no servidor`
+        `[pullTasks] @aria_inprogress_tasks: removidos ${removed} id(s) de OS terminal no servidor`
       );
     }
   } catch (e) {
@@ -2380,13 +2380,13 @@ async function stripInProgressLocalForRevisionPendingTasks(remoteTasks: any[]): 
   if (ids.size === 0) return;
   try {
     let removed = 0;
-    await updateStoredJsonArray<string>('@brspark_inprogress_tasks', (arr) => {
+    await updateStoredJsonArray<string>('@aria_inprogress_tasks', (arr) => {
       const next = arr.filter((id) => !ids.has(String(id)));
       removed = arr.length - next.length;
       return next;
     });
     if (removed > 0) {
-      console.log(`[pullTasks] @brspark_inprogress_tasks: removidos ${removed} id(s) de ciclo de revisão`);
+      console.log(`[pullTasks] @aria_inprogress_tasks: removidos ${removed} id(s) de ciclo de revisão`);
     }
   } catch (e) {
     console.warn('[pullTasks] stripInProgressLocalForRevisionPendingTasks:', e);
@@ -2619,7 +2619,7 @@ export async function getTaskIdsWithPendingExecutionStatusOutbox(): Promise<stri
 }
 
 /**
- * OS com itens na fila que o `pushSyncQueue` envia: `@brspark_outbox`, `@brspark_execution_status_outbox`
+ * OS com itens na fila que o `pushSyncQueue` envia: `@aria_outbox`, `@aria_execution_status_outbox`
  * e payloads em **Conflitos de Sync** (ex.: mídia presa após várias tentativas — ainda não enviados).
  *
  * **Não** inclui `@draft_tsk_*`: rascunho do checklist só sobe após conclusão (entra na outbox);
@@ -2680,7 +2680,7 @@ export async function getTaskIdsWithPendingLocalSyncOverlay(): Promise<Set<strin
  * OS reaberta para revisão: o mesmo id pode ainda estar em "aceitos" do ciclo anterior.
  * Limpa só accepted_tasks para voltar a exigir "Aceitar".
  *
- * Não limpar @brspark_inprogress_tasks aqui: enquanto reopenForRevisionPending vier do GET
+ * Não limpar @aria_inprogress_tasks aqui: enquanto reopenForRevisionPending vier do GET
  * (até RECEIVED/ACCEPTED/IN_PROGRESS no servidor), apagar inprogress a cada pullTasks
  * desfaz o "Iniciar" e a OS nunca fica na aba Em andamento.
  * (revisionVisitActive mantém-se na visita; não entra nesta limpeza.)
@@ -2700,7 +2700,7 @@ async function clearLocalAcceptedTasksForRevisionReopen(tasks: any[]): Promise<v
   if (idSet.size === 0) return;
   try {
     let removedIds: string[] = [];
-    await updateStoredJsonArray<string>('@brspark_accepted_tasks', (acc) => {
+    await updateStoredJsonArray<string>('@aria_accepted_tasks', (acc) => {
       removedIds = acc.filter((id) => idSet.has(String(id)));
       return acc.filter((id) => !idSet.has(String(id)));
     });
@@ -2713,7 +2713,7 @@ async function clearLocalAcceptedTasksForRevisionReopen(tasks: any[]): Promise<v
 }
 
 /**
- * Admin reabriu a OS: tirar o id de @brspark_executed_tasks para o cartão e o checklist voltarem a editáveis.
+ * Admin reabriu a OS: tirar o id de @aria_executed_tasks para o cartão e o checklist voltarem a editáveis.
  *
  * Importante: não limpar só porque o servidor ainda devolveu estado ativo no "tick" seguinte ao push da conclusão;
  * sem sinal explícito de revisão, isso causa efeito "vai para Em andamento e depois volta para Concluídas".
@@ -2729,7 +2729,7 @@ async function removeExecutedCacheEntriesForActiveRemoteTasks(remoteTasks: any[]
   if (activeIds.size === 0) return;
   try {
     let removed = 0;
-    await updateStoredJsonArray<any>('@brspark_executed_tasks', (arr) => {
+    await updateStoredJsonArray<any>('@aria_executed_tasks', (arr) => {
       const next = arr.filter((e) => {
         const id = typeof e === 'string' ? e : e?.id;
         if (id == null) return true;
@@ -2765,7 +2765,7 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
     if (res.ok) {
         let syncReason: string | null = null;
         try {
-          syncReason = res.headers.get('X-BrSpark-Sync-Tasks-Reason');
+          syncReason = res.headers.get('X-Aria-Sync-Tasks-Reason');
         } catch {
           syncReason = null;
         }
@@ -2825,7 +2825,7 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
         const prevById = new Map(existingList.map((t: any) => [String(t.id), t]));
 
         const hadPriorTasksPull =
-          (await AsyncStorage.getItem('@brspark_pull_tasks_ever')) === '1';
+          (await AsyncStorage.getItem('@aria_pull_tasks_ever')) === '1';
 
         const remoteFt = remoteTasks.filter((t: any) => !taskRowIsRoutineTask(t));
         const remoteRt = remoteTasks.filter((t: any) => taskRowIsRoutineTask(t));
@@ -2950,10 +2950,10 @@ export async function pullTasks(ownerEmail?: string): Promise<void> {
           }
         }
 
-        await AsyncStorage.setItem('@brspark_pull_tasks_ever', '1');
+        await AsyncStorage.setItem('@aria_pull_tasks_ever', '1');
         await purgeExpiredCompletedExecutionCaches();
         console.log(`[pullTasks] 💾 Cache FT + RT (buckets separados) atualizado`);
-        DeviceEventEmitter.emit(BRSPARK_CLOUD_TASKS_UPDATED);
+        DeviceEventEmitter.emit(ARIA_CLOUD_TASKS_UPDATED);
     } else {
         const err = await res.text();
         console.warn(`[pullTasks] ❌ Servidor retornou ${res.status}: ${err}`);
@@ -3034,7 +3034,7 @@ export async function pullCollectionPolicy(tenantId?: string): Promise<void> {
     const res = await apiFetch(`/api/collection-policy/effective${qs}`);
     if (res.ok) {
       const policy = await res.json();
-      await AsyncStorage.setItem('@brspark_collection_policy', JSON.stringify(policy));
+      await AsyncStorage.setItem('@aria_collection_policy', JSON.stringify(policy));
       console.log('[SYNC] ✅ CollectionPolicy atualizada');
     }
   } catch (e) {
@@ -3057,7 +3057,7 @@ export async function pollStaleGpsReminders(): Promise<void> {
     const reminders = Array.isArray(data.reminders) ? data.reminders : [];
     for (const r of reminders) {
       if (!r?.executionId || !r?.alertAt) continue;
-      const key = `@brspark_stale_gps_shown_${r.executionId}_${r.alertAt}`;
+      const key = `@aria_stale_gps_shown_${r.executionId}_${r.alertAt}`;
       const already = await AsyncStorage.getItem(key);
       if (already) continue;
       await Notifications.scheduleNotificationAsync({

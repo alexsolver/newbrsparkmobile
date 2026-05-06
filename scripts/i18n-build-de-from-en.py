@@ -24,19 +24,19 @@ ROOT = Path(__file__).resolve().parents[1]
 EN_PATH = ROOT / "src/i18n/locales/en-US.json"
 OUT_PATH = ROOT / "src/i18n/locales/de-DE.json"
 
-BRAND_PH = "__BRSPARK__"
+BRAND_PH = "__ARIA__"
 SPLIT_RE = re.compile(r"(\{\{[^}]+\}\})")
 HAS_LETTER = re.compile(r"[A-Za-zÀ-ÿ]")
 
 
 def protect_brand(s: str) -> str:
-    return s.replace("BrSpark", BRAND_PH).replace("Brspark", BRAND_PH)
+    return s.replace("Aria", BRAND_PH)
 
 
 def restore_brand(s: str) -> str:
     if s is None:
         return s
-    return s.replace(BRAND_PH, "BrSpark")
+    return s.replace(BRAND_PH, "Aria")
 
 
 def collect_strings(node, out: list[str]) -> None:

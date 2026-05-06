@@ -7,8 +7,8 @@ import { useAppContext } from '../context/AppContext';
 import { GUEST_LOGIN_BRANDING_KEY, canUseProviderMode } from '../services/auth';
 import { API_BASE } from '../services/appApiBase';
 
-const BRANDING_CACHE_KEY = '@brspark:tenant_branding_cache';
-const BRANDING_LOGO_CACHE_KEY = '@brspark:tenant_branding_logo_cache';
+const BRANDING_CACHE_KEY = '@aria:tenant_branding_cache';
+const BRANDING_LOGO_CACHE_KEY = '@aria:tenant_branding_logo_cache';
 
 type TenantBranding = {
   enabled?: boolean;
@@ -103,7 +103,7 @@ const ThemeContext = createContext<ThemeCtx>({
   colors: lightColors,
   toggleDarkMode: async () => {},
   branding: null,
-  appDisplayName: 'BrSpark',
+  appDisplayName: 'Aria',
   appTagline: '',
   resolvedLogoUrl: null,
   loginScreenHeroBackgroundColor: null,
@@ -119,7 +119,7 @@ function resolveTenantPalette(base: ColorPalette, branding: TenantBranding | nul
   const next = { ...base };
   if (branding.primaryColor) next.primary = branding.primaryColor;
   if (branding.accentColor) next.accent = branding.accentColor;
-  /** Só `primaryColor` no painel: evitar `accent` por defeito (laranja BrSpark) em chips e ícones. */
+  /** Só `primaryColor` no painel: evitar `accent` por defeito igual ao primário em chips e ícones. */
   if (branding.primaryColor && !String(branding.accentColor || '').trim()) {
     next.accent = branding.primaryColor;
   }
@@ -157,12 +157,12 @@ function resolveTenantPalette(base: ColorPalette, branding: TenantBranding | nul
  * funcionam no simulador (loopback = Mac) mas falham no telemóvel (loopback = aparelho).
  * Reescreve só loopback → mesma origem que `API_BASE` (ex.: produção).
  */
-/** Origem pública do CMS Laravel (EAS: `EXPO_PUBLIC_BRSPARK_CMS_PUBLIC_URL`) — `/storage/*` não vive na API Node. */
+/** Origem pública do CMS Laravel (EAS: `EXPO_PUBLIC_ARIA_CMS_PUBLIC_URL`) — `/storage/*` não vive na API Node. */
 function cmsPublicOrigin(): string {
   try {
     const v =
-      typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BRSPARK_CMS_PUBLIC_URL
-        ? String(process.env.EXPO_PUBLIC_BRSPARK_CMS_PUBLIC_URL).trim()
+      typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_ARIA_CMS_PUBLIC_URL
+        ? String(process.env.EXPO_PUBLIC_ARIA_CMS_PUBLIC_URL).trim()
         : '';
     return v.replace(/\/+$/, '');
   } catch {
@@ -331,8 +331,8 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
     !!user?.tenantId &&
     String(user.homeTenantId) !== String(user.tenantId);
 
-  /** Backend mascara a piscina como nome «BrSpark» — aí o `tenant.branding` já é o da app. */
-  const poolMaskedTenantName = String(user?.tenant?.name || '').trim() === 'BrSpark';
+  /** Backend mascara a piscina como nome «Aria» — aí o `tenant.branding` já é o da app. */
+  const poolMaskedTenantName = String(user?.tenant?.name || '').trim() === 'Aria';
 
   /**
    * UI «cliente» sobre tenant que não é a piscina mascarada (ex.: empresa): não usar white-label operacional.
@@ -514,15 +514,15 @@ function ThemeProviderInner({ children }: { children: React.ReactNode }) {
   );
   const appDisplayName =
     user && enterpriseClientUi
-      ? String(user?.clientTenantBranding?.appDisplayName || '').trim() || 'BrSpark'
+      ? String(user?.clientTenantBranding?.appDisplayName || '').trim() || 'Aria'
       : user
         ? String(
             serverTenantBranding?.appDisplayName ||
               user.tenant?.ownerName ||
               user.tenant?.name ||
               '',
-          ).trim() || 'BrSpark'
-        : (branding?.enabled && String(branding.appDisplayName || '').trim()) || 'BrSpark';
+          ).trim() || 'Aria'
+        : (branding?.enabled && String(branding.appDisplayName || '').trim()) || 'Aria';
   /** Slogan só com white-label ativo; vazio no painel/CMS não mostra (evita mirror CMS + payload legado). */
   const appTagline =
     user && enterpriseClientUi

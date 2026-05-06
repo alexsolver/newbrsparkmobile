@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Integrações</title>
+  <title>Aria Admin — Integrações</title>
   <link rel="stylesheet" href="css/main.css" />
   <style>
     .int-catalog { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; margin-bottom:24px; }
@@ -131,7 +131,7 @@
           </div>
           <div class="int-desc">Envio de e-mails via conta Gmail com senha de app (OAuth ou SMTP).</div>
           <div class="int-fields" id="fields-gmail">
-            <input class="form-control" id="user-gmail" placeholder="Endereço Gmail (ex: noreply@brspark.com)" />
+            <input class="form-control" id="user-gmail" placeholder="Endereço Gmail (ex: noreply@aria.com)" />
             <input class="form-control" id="key-gmail" type="password" placeholder="Senha de App Google (16 chars)" />
           </div>
           <div class="int-actions">
@@ -201,7 +201,7 @@
             <input class="form-control" id="url-mailersend" placeholder="URL base da API (padrão: https://api.mailersend.com/v1)" value="https://api.mailersend.com/v1" />
             <input class="form-control" id="key-mailersend" type="password" placeholder="API token (Bearer) — MailerSend" />
             <input class="form-control" id="from-mailersend" placeholder="E-mail remetente (domínio verificado no MailerSend) — obrigatório para OTP e convites" autocomplete="off" />
-            <input class="form-control" id="name-mailersend" placeholder="Nome do remetente (opcional, ex: BrSpark)" autocomplete="off" />
+            <input class="form-control" id="name-mailersend" placeholder="Nome do remetente (opcional, ex: Aria)" autocomplete="off" />
           </div>
           <div class="int-actions">
             <button type="button" class="btn btn-primary btn-sm" data-integ-save="mailersend"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
@@ -233,7 +233,7 @@
             <input class="form-control" id="clientid-microsoft-graph" placeholder="ID da aplicação (Client ID)" autocomplete="off" />
             <input class="form-control" id="secret-microsoft-graph" type="password" placeholder="Valor do Client secret (Value ao criar — NÃO o Secret ID)" autocomplete="off" />
             <input class="form-control" id="sendas-microsoft-graph" placeholder="Enviar como — UPN ou e-mail da caixa (ex.: noreply@empresa.onmicrosoft.com)" autocomplete="off" />
-            <input class="form-control" id="fromname-microsoft-graph" placeholder="Nome a mostrar (opcional, ex.: BrSpark)" autocomplete="off" />
+            <input class="form-control" id="fromname-microsoft-graph" placeholder="Nome a mostrar (opcional, ex.: Aria)" autocomplete="off" />
             <input class="form-control" id="url-microsoft-graph" placeholder="Raiz Graph (padrão: https://graph.microsoft.com/v1.0)" value="https://graph.microsoft.com/v1.0" />
           </div>
           <div class="int-actions">
@@ -250,7 +250,7 @@
             <div><div class="int-name">Nylas</div><div class="int-cat">E-mail</div></div>
             <span class="int-status inactive" id="status-nylas" style="margin-left:auto">○ Desconectado</span>
           </div>
-          <div class="int-desc">Envio pela API v3: API Key da aplicação e Grant ID da conta de envio (OAuth no dashboard Nylas). Sem Grant ID, convites BrSpark não disparam e-mail automático.</div>
+          <div class="int-desc">Envio pela API v3: API Key da aplicação e Grant ID da conta de envio (OAuth no dashboard Nylas). Sem Grant ID, convites Aria não disparam e-mail automático.</div>
           <div class="int-fields" id="fields-nylas">
             <input class="form-control" id="key-nylas" type="password" placeholder="API Key Nylas (Bearer)" />
             <input class="form-control" id="url-nylas" placeholder="URI da API (ex: https://api.us.nylas.com ou https://api.eu.nylas.com)" value="https://api.us.nylas.com" />
@@ -378,7 +378,7 @@
             <input class="form-control" id="key-app-dropbox" placeholder="App Key (Client ID)" />
             <input class="form-control" id="secret-dropbox" type="password" placeholder="App Secret (Client Secret)" />
             <input class="form-control" id="refresh-dropbox" type="password" placeholder="Refresh Token" />
-            <input class="form-control" id="folder-dropbox" placeholder="Pasta raiz (ex: /BrSpark)" value="/BrSpark" />
+            <input class="form-control" id="folder-dropbox" placeholder="Pasta raiz (ex: /Aria)" value="/Aria" />
           </div>
           <div class="int-actions">
             <button type="button" class="btn btn-primary btn-sm" data-integ-save="dropbox"><ion-icon name="save-outline" style="vertical-align:-2px"></ion-icon> Salvar</button>
@@ -462,7 +462,7 @@
           </div>
           <div class="int-desc">
             Chave de API com <strong>Routes API</strong> (Compute Routes) ativa e faturação no Google Cloud.
-            O <strong>app móvel</strong> chama apenas o BrSpark (<code>POST /api/maps/google/route-metrics</code> com JWT) — a chave fica no servidor.
+            O <strong>app móvel</strong> chama apenas o Aria (<code>POST /api/maps/google/route-metrics</code> com JWT) — a chave fica no servidor.
             <strong>Cotas:</strong> limite mensal no <strong>plano</strong> (<code>quotaGoogleMapsRoutesPerMonth</code>, -1 = ilimitado, 0 = desligado) e teto opcional por organização em
             <code>PATCH /api/tenants/:id/features</code> com <code>{ "features": { "googleMaps": { "monthlyRouteRequestsMax": 5000 } } }</code> (o menor valor entre plano e tenant vence).
           </div>
@@ -524,14 +524,14 @@
           </div>
         </div>
 
-        <!-- Visão IA - YOLO — proxy no BrSpark para serviço externo (YOLO / visão) -->
+        <!-- Visão IA - YOLO — proxy no Aria para serviço externo (YOLO / visão) -->
         <div class="int-card" id="card-vision-checklist">
           <div class="int-card-header">
             <div class="int-logo" style="background:#0f172a;color:#38bdf8"><ion-icon name="videocam-outline" style="vertical-align:-2px"></ion-icon></div>
             <div><div class="int-name">Visão IA - YOLO</div><div class="int-cat">Visão IA</div></div>
             <span class="int-status inactive" id="status-vision-checklist" style="margin-left:auto">○ Desconectado</span>
           </div>
-          <div class="int-desc"><strong>Só o servidor BrSpark (Node)</strong> chama este URL — o <strong>app do técnico nunca abre</strong> este endereço diretamente; o celular fala sempre com a <strong>API BrSpark</strong> (<code>/api/checklists/vision/analyze</code>), e o Node reencaminha o multipart para o YOLO. Pode ser URL <strong>público</strong> (ex.: <code>http://vpn.lansolver.com:8001/analyze</code>) ou na LAN. O serviço deve aceitar <strong>POST multipart</strong> com <code>media</code>, <code>questions</code> (JSON) e <code>schemaVersion</code>. Se o teste devolver <strong>405</strong> com página <strong>nginx</strong>, o path não aceita POST ou falta <code>proxy_pass</code> para a API.</div>
+          <div class="int-desc"><strong>Só o servidor Aria (Node)</strong> chama este URL — o <strong>app do técnico nunca abre</strong> este endereço diretamente; o celular fala sempre com a <strong>API Aria</strong> (<code>/api/checklists/vision/analyze</code>), e o Node reencaminha o multipart para o YOLO. Pode ser URL <strong>público</strong> (ex.: <code>http://vpn.lansolver.com:8001/analyze</code>) ou na LAN. O serviço deve aceitar <strong>POST multipart</strong> com <code>media</code>, <code>questions</code> (JSON) e <code>schemaVersion</code>. Se o teste devolver <strong>405</strong> com página <strong>nginx</strong>, o path não aceita POST ou falta <code>proxy_pass</code> para a API.</div>
           <div class="int-fields" id="fields-vision-checklist">
             <input class="form-control" id="url-vision-checklist" placeholder="POST completo do YOLO (ex.: https://… ou http://vpn…:8001/analyze)" />
             <input class="form-control" id="key-vision-checklist" type="password" placeholder="Bearer token (opcional)" />
@@ -551,7 +551,7 @@
             <div><div class="int-name">Visão IA - Moondream</div><div class="int-cat">Visão IA</div></div>
             <span class="int-status inactive" id="status-vision-moondream" style="margin-left:auto">○ Desconectado</span>
           </div>
-          <div class="int-desc"><strong>Só o servidor BrSpark</strong> chama a API Moondream (<code>POST …/v1/query</code>) com a imagem em base64 e cada pergunta do checklist. Obtenha a chave em <a href="https://moondream.ai" target="_blank" rel="noopener">moondream.ai</a>. <strong>Predefinição:</strong> se Moondream e YOLO estiverem configurados e o tenant não tiver preferência em <code>tenant.features.visionDetectionEngine</code>, usa-se Moondream. Para forçar o proxy YOLO, defina <code>visionDetectionEngine: &quot;yolo&quot;</code> (<code>PATCH /api/tenants/:id/features</code>). Se só um dos dois estiver configurado, usa-se esse.</div>
+          <div class="int-desc"><strong>Só o servidor Aria</strong> chama a API Moondream (<code>POST …/v1/query</code>) com a imagem em base64 e cada pergunta do checklist. Obtenha a chave em <a href="https://moondream.ai" target="_blank" rel="noopener">moondream.ai</a>. <strong>Predefinição:</strong> se Moondream e YOLO estiverem configurados e o tenant não tiver preferência em <code>tenant.features.visionDetectionEngine</code>, usa-se Moondream. Para forçar o proxy YOLO, defina <code>visionDetectionEngine: &quot;yolo&quot;</code> (<code>PATCH /api/tenants/:id/features</code>). Se só um dos dois estiver configurado, usa-se esse.</div>
           <div class="int-fields" id="fields-vision-moondream">
             <input class="form-control" id="url-vision-moondream" placeholder="Base da API (padrão: https://api.moondream.ai/v1)" />
             <input class="form-control" id="key-vision-moondream" type="password" placeholder="API key (cabeçalho X-Moondream-Auth)" autocomplete="off" />
@@ -906,7 +906,7 @@
       status: 'ACTIVE',
       apiKey: key,
       description:
-        'Proxy BrSpark: POST /api/maps/google/route-metrics (JWT). Cota: plano + tenant.features.googleMaps.monthlyRouteRequestsMax.',
+        'Proxy Aria: POST /api/maps/google/route-metrics (JWT). Cota: plano + tenant.features.googleMaps.monthlyRouteRequestsMax.',
     };
     const res = await CONFIG.post('/integrations', body);
     if (res?.id || res?.name) {
@@ -1141,7 +1141,7 @@
       status: 'ACTIVE',
       baseUrl: 'https://api.stripe.com',
       apiKey: sk,
-      description: 'BrSpark — Stripe. Teste: GET /v1/balance com a chave secreta.',
+      description: 'Aria — Stripe. Teste: GET /v1/balance com a chave secreta.',
       ...(pk ? { metadata: { publishableKey: pk } } : {}),
       ...(wh ? { webhookUrl: wh } : {}),
     };

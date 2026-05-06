@@ -367,7 +367,7 @@ export default function LoginScreen() {
     setDocLoading(true);
     try {
       // Try tenant-specific document first, then fallback to global
-      const storedEmail = await AsyncStorage.getItem('@brspark_email');
+      const storedEmail = await AsyncStorage.getItem('@aria_email');
       const loc = encodeURIComponent(i18n.language || 'pt-BR');
       const res = await fetch(`${API_BASE}/api/compliance/active/${type}?locale=${loc}`);
       if (res.ok) {

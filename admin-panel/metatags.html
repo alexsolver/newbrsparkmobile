@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Metatags &amp; Categorias</title>
+  <title>Aria Admin — Metatags &amp; Categorias</title>
   <link rel="stylesheet" href="css/main.css" />
 </head>
 <body>
@@ -113,7 +113,7 @@
             <input class="form-control" id="tag-icon" placeholder="flash-outline" style="flex:1" />
           </div>
         </div>
-        <div class="form-group"><label class="form-label">Cor</label><input class="form-control" id="tag-color" type="color" value="#F97316" style="height:42px;padding:4px" /></div>
+        <div class="form-group"><label class="form-label">Cor</label><input class="form-control" id="tag-color" type="color" value="#14b8a6" style="height:42px;padding:4px" /></div>
       </div>
       
       <div class="form-group">
@@ -725,7 +725,7 @@
     ['tag-key','tag-ptbr','tag-icon'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     const enus = document.getElementById('tag-enus'); if (enus) enus.value = '';
     const eses = document.getElementById('tag-eses'); if (eses) eses.value = '';
-    document.getElementById('tag-color').value = '#F97316';
+    document.getElementById('tag-color').value = '#14b8a6';
     document.getElementById('tag-sort').value  = '0';
     document.getElementById('tag-type').value  = 'ASSET_TYPE';
     updateIconPreview('help-outline');
@@ -744,7 +744,7 @@
     const enus = document.getElementById('tag-enus'); if (enus) enus.value = t.enUs || '';
     const eses = document.getElementById('tag-eses'); if (eses) eses.value = t.esEs || '';
     document.getElementById('tag-icon').value  = t.icon || '';
-    document.getElementById('tag-color').value = t.color || '#F97316';
+    document.getElementById('tag-color').value = t.color || '#14b8a6';
     document.getElementById('tag-sort').value  = t.sortOrder || 0;
     updateIconPreview(t.icon);
     openModal('tag-modal');
@@ -811,7 +811,7 @@
       { key: 'planta_baixa',  ptBr: 'Planta Baixa',       icon: 'map-outline',         color: '#10B981' },
       { key: 'nota_fiscal',   ptBr: 'Nota Fiscal',        icon: 'receipt-outline',     color: '#EF4444' },
       { key: 'contrato',      ptBr: 'Contrato',           icon: 'reader-outline',      color: '#6366F1' },
-      { key: 'laudo',         ptBr: 'Laudo / Relatório',  icon: 'clipboard-outline',   color: '#F97316' },
+      { key: 'laudo',         ptBr: 'Laudo / Relatório',  icon: 'clipboard-outline',   color: '#14b8a6' },
       { key: 'manutencao',    ptBr: 'Manutenção',         icon: 'construct-outline',   color: '#64748B' },
       { key: 'seguro',        ptBr: 'Seguro',             icon: 'shield-outline',      color: '#0EA5E9' },
       { key: 'outro',         ptBr: 'Outro',              icon: 'ellipsis-horizontal-outline', color: '#9CA3AF' },
@@ -830,7 +830,7 @@
     if (existing.length > 0) return;
 
     const defaults = [
-      { key: 'combustivel', ptBr: 'Combustível', enUs: 'Fuel', esEs: 'Combustible', icon: 'flash-outline', color: '#EA580C' },
+      { key: 'combustivel', ptBr: 'Combustível', enUs: 'Fuel', esEs: 'Combustible', icon: 'flash-outline', color: '#0d9488' },
       { key: 'estacionamento', ptBr: 'Estacionamento', enUs: 'Parking', esEs: 'Estacionamiento', icon: 'business-outline', color: '#64748B' },
       { key: 'pedagio', ptBr: 'Pedágio / pedágios', enUs: 'Tolls', esEs: 'Peajes', icon: 'ticket-outline', color: '#7C3AED' },
       { key: 'transporte_publico_taxi_app', ptBr: 'Transporte público / táxi / app', enUs: 'Public transit / taxi / ride-hail', esEs: 'Transporte / taxi / app', icon: 'bus-outline', color: '#2563EB' },

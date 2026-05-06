@@ -4,7 +4,7 @@ const { applyPrismaRlsSession } = require('../lib/prismaRlsSession');
 const { resolveAppEffectiveTenantId } = require('../lib/appLoginEffectiveTenant');
 
 function rlsDisabled() {
-  const v = String(process.env.BRSPARK_RLS_DISABLE || '').trim().toLowerCase();
+  const v = String(process.env.ARIA_RLS_DISABLE || '').trim().toLowerCase();
   return v === '1' || v === 'true' || v === 'yes';
 }
 
@@ -37,9 +37,9 @@ async function continueWithRlsTransaction(req, res, next, opts = {}) {
 
   const txTimeout = Math.min(
     900_000,
-    Math.max(60_000, Number(process.env.BRSPARK_RLS_TX_TIMEOUT_MS) || 300_000),
+    Math.max(60_000, Number(process.env.ARIA_RLS_TX_TIMEOUT_MS) || 300_000),
   );
-  const txMaxWait = Math.min(120_000, Math.max(5_000, Number(process.env.BRSPARK_RLS_TX_MAXWAIT_MS) || 30_000));
+  const txMaxWait = Math.min(120_000, Math.max(5_000, Number(process.env.ARIA_RLS_TX_MAXWAIT_MS) || 30_000));
 
   try {
     await basePrisma.$transaction(

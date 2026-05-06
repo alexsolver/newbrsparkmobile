@@ -6,7 +6,7 @@ import { adminResolve, adminDocumentLang } from './admin-i18n-resolve.js';
 
 const M = {
   'pt-BR': {
-    integ_pageTitle: 'BrSpark Admin, Integrações',
+    integ_pageTitle: 'Aria Admin, Integrações',
     integ_bc_panel: 'Painel',
     integ_bc_here: 'Integrações',
     integ_hero_title: 'Integrações',
@@ -77,7 +77,7 @@ const M = {
     integ_toast_didit_saved: 'Integração Didit salva.',
   },
   'en-US': {
-    integ_pageTitle: 'BrSpark Admin, Integrations',
+    integ_pageTitle: 'Aria Admin, Integrations',
     integ_bc_panel: 'Home',
     integ_bc_here: 'Integrations',
     integ_hero_title: 'Integrations',

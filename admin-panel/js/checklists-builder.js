@@ -3,9 +3,9 @@
  * Lógica do Criador de Formulários Drag & Drop com Vanilla JS e SortableJS
  */
 
-function brsparkApiBase() {
-  if (typeof window !== 'undefined' && window.__BRSPARK_API_BASE__) {
-    let b = String(window.__BRSPARK_API_BASE__).replace(/\/+$/, '');
+function ariaApiBase() {
+  if (typeof window !== 'undefined' && window.__ARIA_API_BASE__) {
+    let b = String(window.__ARIA_API_BASE__).replace(/\/+$/, '');
     // Evita pedidos a …/api/api/checklists/… (404 "Route not found" no Express)
     while (/\/api\/api$/i.test(b)) {
       b = b.replace(/\/api$/i, '');
@@ -13,7 +13,7 @@ function brsparkApiBase() {
     return b;
   }
   try {
-    const ls = localStorage.getItem('brspark_admin_api_origin');
+    const ls = localStorage.getItem('aria_admin_api_origin');
     if (ls) return String(ls).replace(/\/$/, '') + '/api';
   } catch (e) { /* ignore */ }
   if (typeof window !== 'undefined' && window.location?.origin && window.location.protocol !== 'file:') {
@@ -23,14 +23,14 @@ function brsparkApiBase() {
 }
 
 /** Origem do servidor Node (sem /api) — imagens /uploads/… */
-function brsparkServerOrigin() {
-  return brsparkApiBase().replace(/\/api\/?$/, '');
+function ariaServerOrigin() {
+  return ariaApiBase().replace(/\/api\/?$/, '');
 }
 
 function absoluteUploadUrl(path) {
   if (!path) return path;
   if (/^https?:\/\//i.test(path)) return path;
-  return brsparkServerOrigin() + (path.startsWith('/') ? path : '/' + path);
+  return ariaServerOrigin() + (path.startsWith('/') ? path : '/' + path);
 }
 
 /** Alinhado a `admin-panel/backend/src/constants/visionSimNaoQuestions.js`. */
@@ -46,7 +46,7 @@ function helpImageDisplayUrl(pathOrUrl) {
   const path = pathOrUrl.startsWith('/') ? pathOrUrl : '/' + pathOrUrl;
   if (typeof window !== 'undefined' && window.location?.origin && window.location.protocol.startsWith('http')) {
     try {
-      const apiO = new URL(brsparkServerOrigin());
+      const apiO = new URL(ariaServerOrigin());
       const pageO = new URL(window.location.origin);
       const normPort = (u) => u.port || (u.protocol === 'https:' ? '443' : '80');
       if (normPort(apiO) === normPort(pageO)) {
@@ -73,20 +73,20 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-/** Catálogo local `brspark_checklists_db` — JSON inválido não deve quebrar o painel. */
+/** Catálogo local `aria_checklists_db` — JSON inválido não deve quebrar o painel. */
 function parseLocalChecklistsDb() {
   try {
-    const raw = localStorage.getItem('brspark_checklists_db');
+    const raw = localStorage.getItem('aria_checklists_db');
     if (raw == null || !String(raw).trim()) return {};
     const o = JSON.parse(raw);
     return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
   } catch (e) {
     console.warn(
-      '[checklists-builder] Cache brspark_checklists_db inválido ou corrompido; a repor catálogo vazio.',
+      '[checklists-builder] Cache aria_checklists_db inválido ou corrompido; a repor catálogo vazio.',
       e,
     );
     try {
-      localStorage.removeItem('brspark_checklists_db');
+      localStorage.removeItem('aria_checklists_db');
     } catch (_) {
       /* ignore */
     }
@@ -125,7 +125,7 @@ function fbAlert(key, vars, fallbackPt) {
 
 /** Helpers para rótulos por locale (`labels` + `label` legado pt-BR). Requer `schemaLocale.js`. */
 function fbSchemaLocale() {
-  return typeof window !== 'undefined' && window.BrSparkSchemaLocale ? window.BrSparkSchemaLocale : null;
+  return typeof window !== 'undefined' && window.AriaSchemaLocale ? window.AriaSchemaLocale : null;
 }
 function formEditLocaleTag() {
   return (typeof window !== 'undefined' && window.__formSchemaEditLocale) || 'pt-BR';
@@ -164,7 +164,7 @@ function translateStepLabelForCanvasDisplay(rawLabel) {
 function adminJsonHeaders() {
   const h = { 'Content-Type': 'application/json' };
   try {
-    const t = sessionStorage.getItem('brspark_admin_token');
+    const t = sessionStorage.getItem('aria_admin_token');
     if (t) h['Authorization'] = 'Bearer ' + t;
   } catch (e) { /* ignore */ }
   return h;
@@ -265,7 +265,7 @@ async function fetchWhisperLangOptionsFromSaas() {
   if (__fbWhisperLocaleOptsPromise) return __fbWhisperLocaleOptsPromise;
   __fbWhisperLocaleOptsPromise = (async () => {
     try {
-      const res = await fetch(`${brsparkApiBase()}/i18n/entries?source=locales`, { headers: adminJsonHeaders() });
+      const res = await fetch(`${ariaApiBase()}/i18n/entries?source=locales`, { headers: adminJsonHeaders() });
       const raw = await res.text();
       let data = [];
       try {
@@ -373,7 +373,7 @@ window.onFbFormActiveToggle = function (checked) {
 };
 
 async function fetchChecklistVersionHistory(id) {
-  const res = await fetch(`${brsparkApiBase()}/checklists/templates/${encodeURIComponent(id)}/history`, {
+  const res = await fetch(`${ariaApiBase()}/checklists/templates/${encodeURIComponent(id)}/history`, {
     headers: adminJsonHeaders(),
   });
   const raw = await res.text();
@@ -395,7 +395,7 @@ window.restoreChecklistVersion = async function(templateId, versionId) {
   if (!confirm('Restaurar esta versão e criar uma nova revisão do formulário atual?')) return;
   try {
     const res = await fetch(
-      `${brsparkApiBase()}/checklists/templates/${encodeURIComponent(templateId)}/restore/${encodeURIComponent(versionId)}`,
+      `${ariaApiBase()}/checklists/templates/${encodeURIComponent(templateId)}/restore/${encodeURIComponent(versionId)}`,
       { method: 'POST', headers: adminJsonHeaders() }
     );
     const raw = await res.text();
@@ -464,7 +464,7 @@ window.openChecklistVersionHistory = async function(id) {
 window.unarchiveChecklist = async function(id) {
   if (!id) return;
   try {
-    const res = await fetch(`${brsparkApiBase()}/checklists/templates/${encodeURIComponent(id)}/unarchive`, {
+    const res = await fetch(`${ariaApiBase()}/checklists/templates/${encodeURIComponent(id)}/unarchive`, {
       method: 'POST',
       headers: adminJsonHeaders(),
     });
@@ -669,7 +669,7 @@ function fieldHelpImageHandler() {
     if (!file) return;
     try {
       const fileBase64 = await fileToBase64(file);
-      const res = await fetch(`${brsparkApiBase()}/checklists/help-image`, {
+      const res = await fetch(`${ariaApiBase()}/checklists/help-image`, {
         method: 'POST',
         headers: adminJsonHeaders(),
         body: JSON.stringify({ fileBase64, mimeType: file.type || 'image/jpeg' }),
@@ -781,7 +781,7 @@ function fieldReadingImageHandler() {
       if (!file) return;
       try {
         const fileBase64 = await fileToBase64(file);
-        const res = await fetch(`${brsparkApiBase()}/checklists/help-image`, {
+        const res = await fetch(`${ariaApiBase()}/checklists/help-image`, {
           method: 'POST',
           headers: adminJsonHeaders(),
           body: JSON.stringify({ fileBase64, mimeType: file.type || 'image/jpeg' }),
@@ -862,9 +862,9 @@ function fieldReadingImageHandler() {
 }
 
 function refocusCanvasTitleInputIfRequested(field) {
-  const refocusId = window.__brsparkLabelInputRefocusId;
+  const refocusId = window.__ariaLabelInputRefocusId;
   if (!field || !refocusId || refocusId !== field.id) return;
-  window.__brsparkLabelInputRefocusId = null;
+  window.__ariaLabelInputRefocusId = null;
   requestAnimationFrame(() => {
     const row = document.querySelector('.canvas-item[data-id="' + refocusId + '"]');
     const inp = row && row.querySelector('.canvas-item-title-input');
@@ -1089,7 +1089,7 @@ let iconPickerCallback = null;
 let currentIconLib = 'Ionicons';
 let currentIconColor = '#1d4ed8';
 
-const ICON_PICKER_COLOR_LS = 'brspark_builder_last_icon_color';
+const ICON_PICKER_COLOR_LS = 'aria_builder_last_icon_color';
 /** Valor do &lt;select&gt; para mostrar amostra de todas as bibliotecas (sem pesquisa). */
 const ICON_LIB_ALL = '__ALL__';
 
@@ -1856,15 +1856,15 @@ const iconMap = {
 };
 
 /** Estado de seções colapsadas no canvas (id do grupo: __preamble__ ou id do section_break). */
-if (typeof window.__brsparkSectionCollapsed !== 'object' || window.__brsparkSectionCollapsed === null) {
-    window.__brsparkSectionCollapsed = {};
+if (typeof window.__ariaSectionCollapsed !== 'object' || window.__ariaSectionCollapsed === null) {
+    window.__ariaSectionCollapsed = {};
 }
 /** Evita que o "click" após soltar o arrasto dispare selectField e corra com o rebuild. */
-window.__brsparkCanvasDragging = false;
+window.__ariaCanvasDragging = false;
 
 window.toggleCanvasSectionCollapse = function (groupId) {
     if (!groupId) return;
-    window.__brsparkSectionCollapsed[groupId] = !window.__brsparkSectionCollapsed[groupId];
+    window.__ariaSectionCollapsed[groupId] = !window.__ariaSectionCollapsed[groupId];
     renderCanvas();
 };
 
@@ -1911,20 +1911,20 @@ function buildCanvasSectionGroups(fieldList) {
 }
 
 function destroyCanvasBodySortables() {
-    (window._brsparkBodySortables || []).forEach((s) => {
+    (window._ariaBodySortables || []).forEach((s) => {
         try {
             s.destroy();
         } catch (e) { /* ignore */ }
     });
-    window._brsparkBodySortables = [];
+    window._ariaBodySortables = [];
 }
 
 function destroyCanvasGroupsSortable() {
-    if (window._brsparkCanvasGroupsSortable) {
+    if (window._ariaCanvasGroupsSortable) {
         try {
-            window._brsparkCanvasGroupsSortable.destroy();
+            window._ariaCanvasGroupsSortable.destroy();
         } catch (e) { /* ignore */ }
-        window._brsparkCanvasGroupsSortable = null;
+        window._ariaCanvasGroupsSortable = null;
     }
 }
 
@@ -1980,7 +1980,7 @@ function initCanvasGroupsSortable() {
     const n = stack.querySelectorAll(':scope > .canvas-section-group').length;
     if (n < 2) return;
 
-    window._brsparkCanvasGroupsSortable = new Sortable(stack, {
+    window._ariaCanvasGroupsSortable = new Sortable(stack, {
         animation: 150,
         handle: '.canvas-section-head__section-drag',
         draggable: '.canvas-section-group',
@@ -1992,14 +1992,14 @@ function initCanvasGroupsSortable() {
         chosenClass: 'canvas-sortable-chosen',
         dragClass: 'canvas-sortable-drag',
         onStart() {
-            window.__brsparkCanvasDragging = true;
+            window.__ariaCanvasDragging = true;
         },
         onEnd() {
             setTimeout(() => {
                 try {
                     applySectionGroupOrderFromDom(stack);
                 } finally {
-                    window.__brsparkCanvasDragging = false;
+                    window.__ariaCanvasDragging = false;
                 }
             }, 0);
         },
@@ -2215,7 +2215,7 @@ function clearPaletteDropIndicator() {
         b.querySelectorAll(':scope > .fb-palette-drop-line').forEach((n) => n.remove());
     });
     try {
-        window.__brsparkPaletteDropInd = null;
+        window.__ariaPaletteDropInd = null;
     } catch (e) {
         /* ignore */
     }
@@ -2226,7 +2226,7 @@ function updatePaletteDropIndicator(body, clientY) {
     if (!body || !body.classList.contains('canvas-section-body')) return;
     const items = body.querySelectorAll(':scope > .canvas-item');
     const localIx = computeDropLocalIndexFromPointer(body, clientY);
-    const prev = window.__brsparkPaletteDropInd;
+    const prev = window.__ariaPaletteDropInd;
     if (prev && prev.body === body && prev.localIx === localIx) return;
 
     clearPaletteDropIndicator();
@@ -2254,39 +2254,39 @@ function updatePaletteDropIndicator(body, clientY) {
 
     body.appendChild(line);
     body.classList.add('fb-palette-drop-target');
-    window.__brsparkPaletteDropInd = { body, localIx };
+    window.__ariaPaletteDropInd = { body, localIx };
 }
 
-const BRSPARK_FIELD_MIME = 'application/x-brspark-field-type';
-const BRSPARK_FIELD_PLAIN = 'text/plain';
-const BRSPARK_FIELD_PREFIX = 'brspark-field:';
+const ARIA_FIELD_MIME = 'application/x-aria-field-type';
+const ARIA_FIELD_PLAIN = 'text/plain';
+const ARIA_FIELD_PREFIX = 'aria-field:';
 
 /** Safari / alguns browsers não expõem MIME custom em dragover — usamos payload até ao drop. */
 function setPaletteDragPayload(type, rawText) {
-    window.__brsparkPaletteDragPayload = { type, rawText: rawText || type };
+    window.__ariaPaletteDragPayload = { type, rawText: rawText || type };
 }
 
 function clearPaletteDragPayload() {
     clearPaletteDropIndicator();
     try {
-        delete window.__brsparkPaletteDragPayload;
+        delete window.__ariaPaletteDragPayload;
     } catch (e) {
-        window.__brsparkPaletteDragPayload = null;
+        window.__ariaPaletteDragPayload = null;
     }
 }
 
 function bindToolboxNativeDragSources() {
     if (!ensureBuilderToolboxEl()) return;
-    if (!window.__brsparkToolboxDragEndBound) {
-        window.__brsparkToolboxDragEndBound = true;
+    if (!window.__ariaToolboxDragEndBound) {
+        window.__ariaToolboxDragEndBound = true;
         elToolbox.addEventListener('dragend', clearPaletteDragPayload);
         document.addEventListener('dragend', (e) => {
             if (e.target && elToolbox.contains(e.target)) clearPaletteDragPayload();
         });
     }
     elToolbox.querySelectorAll('.toolbox-item').forEach((el) => {
-        if (el.dataset.brsparkDragBound === '1') return;
-        el.dataset.brsparkDragBound = '1';
+        if (el.dataset.ariaDragBound === '1') return;
+        el.dataset.ariaDragBound = '1';
         el.setAttribute('draggable', 'true');
         el.addEventListener('dragstart', (e) => {
             clearPaletteDropIndicator();
@@ -2295,11 +2295,11 @@ function bindToolboxNativeDragSources() {
             const rawText = el.textContent.trim();
             setPaletteDragPayload(type, rawText);
             try {
-                e.dataTransfer.setData(BRSPARK_FIELD_MIME, type);
-                e.dataTransfer.setData(BRSPARK_FIELD_PLAIN, BRSPARK_FIELD_PREFIX + type + ':' + encodeURIComponent(rawText));
+                e.dataTransfer.setData(ARIA_FIELD_MIME, type);
+                e.dataTransfer.setData(ARIA_FIELD_PLAIN, ARIA_FIELD_PREFIX + type + ':' + encodeURIComponent(rawText));
             } catch (err) {
                 try {
-                    e.dataTransfer.setData(BRSPARK_FIELD_PLAIN, BRSPARK_FIELD_PREFIX + type + ':' + encodeURIComponent(rawText));
+                    e.dataTransfer.setData(ARIA_FIELD_PLAIN, ARIA_FIELD_PREFIX + type + ':' + encodeURIComponent(rawText));
                 } catch (err2) { /* ignore */ }
             }
             e.dataTransfer.effectAllowed = 'copy';
@@ -2308,8 +2308,8 @@ function bindToolboxNativeDragSources() {
 }
 
 function installNativePaletteDropOnCanvas() {
-    if (!ensureBuilderCanvasEl() || window.__brsparkNativeCanvasDrop) return;
-    window.__brsparkNativeCanvasDrop = true;
+    if (!ensureBuilderCanvasEl() || window.__ariaNativeCanvasDrop) return;
+    window.__ariaNativeCanvasDrop = true;
     elCanvas.addEventListener(
         'dragover',
         (e) => {
@@ -2317,11 +2317,11 @@ function installNativePaletteDropOnCanvas() {
             if (!body) return;
             const types = e.dataTransfer && e.dataTransfer.types ? Array.from(e.dataTransfer.types) : [];
             const ok =
-                types.includes(BRSPARK_FIELD_MIME) ||
-                types.includes(BRSPARK_FIELD_PLAIN) ||
+                types.includes(ARIA_FIELD_MIME) ||
+                types.includes(ARIA_FIELD_PLAIN) ||
                 types.includes('text/plain') ||
                 types.includes('Text') ||
-                !!(window.__brsparkPaletteDragPayload && window.__brsparkPaletteDragPayload.type);
+                !!(window.__ariaPaletteDragPayload && window.__ariaPaletteDragPayload.type);
             if (!ok) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = 'copy';
@@ -2346,12 +2346,12 @@ function installNativePaletteDropOnCanvas() {
             let type = '';
             let rawText = '';
             try {
-                type = e.dataTransfer.getData(BRSPARK_FIELD_MIME) || '';
+                type = e.dataTransfer.getData(ARIA_FIELD_MIME) || '';
             } catch (err) { /* ignore */ }
             try {
-                const plain = e.dataTransfer.getData(BRSPARK_FIELD_PLAIN) || e.dataTransfer.getData('text/plain') || '';
-                if (plain.startsWith(BRSPARK_FIELD_PREFIX)) {
-                    const rest = plain.slice(BRSPARK_FIELD_PREFIX.length);
+                const plain = e.dataTransfer.getData(ARIA_FIELD_PLAIN) || e.dataTransfer.getData('text/plain') || '';
+                if (plain.startsWith(ARIA_FIELD_PREFIX)) {
+                    const rest = plain.slice(ARIA_FIELD_PREFIX.length);
                     const ci = rest.indexOf(':');
                     if (ci >= 0) {
                         if (!type) type = rest.slice(0, ci);
@@ -2363,9 +2363,9 @@ function installNativePaletteDropOnCanvas() {
                     }
                 }
             } catch (err3) { /* ignore */ }
-            if (!type && window.__brsparkPaletteDragPayload && window.__brsparkPaletteDragPayload.type) {
-                type = window.__brsparkPaletteDragPayload.type;
-                rawText = window.__brsparkPaletteDragPayload.rawText || type;
+            if (!type && window.__ariaPaletteDragPayload && window.__ariaPaletteDragPayload.type) {
+                type = window.__ariaPaletteDragPayload.type;
+                rawText = window.__ariaPaletteDragPayload.rawText || type;
             }
             clearPaletteDragPayload();
             if (!type) return;
@@ -3116,7 +3116,7 @@ function buildCanvasFieldElement(f) {
     }
 
     div.addEventListener('click', (e) => {
-        if (window.__brsparkCanvasDragging) return;
+        if (window.__ariaCanvasDragging) return;
         if (e.target.closest('.canvas-item-delete')) return;
         selectField(f.id);
     });
@@ -3130,8 +3130,8 @@ function builderFieldTypeOptionLabel(typeId) {
     if (!t) return '';
     const key = 'fb_tb_' + t;
     let fallback = t;
-    if (typeof brsparkCopilotPreviewTypeLabel === 'function') {
-        fallback = brsparkCopilotPreviewTypeLabel(t);
+    if (typeof ariaCopilotPreviewTypeLabel === 'function') {
+        fallback = ariaCopilotPreviewTypeLabel(t);
     }
     return fbCanvasStr(key, null, fallback);
 }
@@ -3194,11 +3194,11 @@ function initCanvasSectionSortables() {
         return;
     }
     if (!ensureBuilderCanvasEl()) return;
-    window._brsparkBodySortables = window._brsparkBodySortables || [];
+    window._ariaBodySortables = window._ariaBodySortables || [];
     elCanvas.querySelectorAll('.canvas-section-body').forEach((body) => {
         const s = new Sortable(body, {
             group: {
-                name: 'brspark_canvas',
+                name: 'aria_canvas',
                 pull: true,
                 put: true,
             },
@@ -3219,7 +3219,7 @@ function initCanvasSectionSortables() {
             emptyInsertThreshold: 120,
             swapThreshold: 0.65,
             onStart() {
-                window.__brsparkCanvasDragging = true;
+                window.__ariaCanvasDragging = true;
             },
             onEnd(evt) {
                 const snap = {
@@ -3234,12 +3234,12 @@ function initCanvasSectionSortables() {
                         processCanvasSortEnd(snap);
                     } finally {
                         normalizeCanvasItemLayoutForSortable();
-                        window.__brsparkCanvasDragging = false;
+                        window.__ariaCanvasDragging = false;
                     }
                 }, 0);
             },
         });
-        window._brsparkBodySortables.push(s);
+        window._ariaBodySortables.push(s);
     });
     requestAnimationFrame(() => {
         normalizeCanvasItemLayoutForSortable();
@@ -3288,7 +3288,7 @@ function renderCanvas() {
             wrap.classList.add('canvas-section-group--selected');
         }
 
-        const collapsed = !!window.__brsparkSectionCollapsed[group.id];
+        const collapsed = !!window.__ariaSectionCollapsed[group.id];
         if (collapsed) {
             wrap.classList.add('is-collapsed');
         }
@@ -3653,7 +3653,7 @@ window.selectField = function(id, opts) {
     opts = opts || {};
     const prevSelected = selectedFieldId;
     if (opts.fromCanvasTitleFocus && prevSelected !== id) {
-        window.__brsparkLabelInputRefocusId = id;
+        window.__ariaLabelInputRefocusId = id;
     }
     selectedFieldId = id;
     document.querySelectorAll('.canvas-item').forEach(el => {
@@ -3668,7 +3668,7 @@ window.selectField = function(id, opts) {
         try {
             const followEl = document.getElementById('copilot-follow-canvas');
             if (followEl && followEl.checked && id) {
-                window.brsparkCopilotPinFieldFromCanvas(id, { skipSelect: true, skipOpenPanel: true });
+                window.ariaCopilotPinFieldFromCanvas(id, { skipSelect: true, skipOpenPanel: true });
             }
         } catch (eFollow) {
             /* ignore */
@@ -4066,16 +4066,16 @@ function renderProperties() {
             <div style="font-size:12px;font-weight:800;color:#9a3412;">${escapeHtmlLogic(fbStr('fb_prop_transit_purpose_title', null, 'Finalidade deste início de deslocamento'))}</div>
             ${firstHint}
             <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
-                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isService ? 'checked' : ''} data-fb-fk="transitPurpose" data-fb-vm="lit" data-fb-fv="service" data-fb-rp="1" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isService ? 'checked' : ''} data-fb-fk="transitPurpose" data-fb-vm="lit" data-fb-fv="service" data-fb-rp="1" style="accent-color:#0d9488;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
                 <span style="font-size:12px;font-weight:700;color:#9a3412;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_dest_os_lbl', null, 'Destino: local de atendimento da OS (ETA, mapa, acompanhamento)'))}</span>
             </label>
             <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;">
-                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isReimb ? 'checked' : ''} data-fb-fk="transitPurpose" data-fb-vm="lit" data-fb-fv="reimbursement" data-fb-rp="1" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isReimb ? 'checked' : ''} data-fb-fk="transitPurpose" data-fb-vm="lit" data-fb-fv="reimbursement" data-fb-rp="1" style="accent-color:#0d9488;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
                 <span style="font-size:12px;font-weight:700;color:#9a3412;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_reimbursement_lbl', null, 'Apenas registro de deslocamento durante a atividade'))}</span>
             </label>
             <div style="font-size:10px;color:#c2410c;line-height:1.45;">${escapeHtmlLogic(fbStr('fb_prop_transit_reimbursement_help', null, 'Regista só a trilha GPS no app. Sem ETA, sem chat com o cliente e sem página de acompanhamento — use um segundo par início/fim depois do deslocamento operacional.'))}</div>
             <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-top:8px;">
-                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isPatrol ? 'checked' : ''} data-fb-fk="transitPurpose" data-fb-vm="lit" data-fb-fv="patrol" data-fb-rp="1" style="accent-color:#ea580c;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
+                <input type="radio" name="transitPurpose_${escapeHtmlAttr(f.id)}" ${isPatrol ? 'checked' : ''} data-fb-fk="transitPurpose" data-fb-vm="lit" data-fb-fv="patrol" data-fb-rp="1" style="accent-color:#0d9488;width:16px;height:16px;flex-shrink:0;margin-top:2px" />
                 <span style="font-size:12px;font-weight:700;color:#9a3412;line-height:1.4">${escapeHtmlLogic(fbStr('fb_prop_transit_patrol_lbl', null, 'Patrulhamento (trajeto KML / geometria da OS no mapa)'))}</span>
             </label>
             <div style="font-size:10px;color:#c2410c;line-height:1.45;">${escapeHtmlLogic(fbStr('fb_prop_transit_patrol_help', null, 'O mapa de deslocamento usa a polilinha ou zona enviada no despacho (ex.: KML). Indicado para seguir o percurso planeado sem assumir o destino como «serviço no cliente».'))}</div>
@@ -4202,18 +4202,18 @@ function renderProperties() {
             ? fbStr(
                   'fb_prop_vision_body_comparison_html',
                   null,
-                  'Carregue abaixo a <b>foto de referência</b> (padrão esperado). No app, o técnico vê essa referência e captura <b>só foto</b> pela câmera. O BrSpark envia as duas imagens ao <b>Gemini</b> (Google AI Studio) e devolve <b>nota 0–10</b> e texto com as <b>diferenças</b> face à referência. Com grelha 2×2, as quatro fotos compõem-se numa única imagem antes da comparação.',
+                  'Carregue abaixo a <b>foto de referência</b> (padrão esperado). No app, o técnico vê essa referência e captura <b>só foto</b> pela câmera. O Aria envia as duas imagens ao <b>Gemini</b> (Google AI Studio) e devolve <b>nota 0–10</b> e texto com as <b>diferenças</b> face à referência. Com grelha 2×2, as quatro fotos compõem-se numa única imagem antes da comparação.',
               )
             : isVisionAnalysis
               ? fbStr(
                     'fb_prop_vision_body_analysis_html',
                     null,
-                    'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor BrSpark chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança (e racional) para o conjunto.',
+                    'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O servidor Aria chama a API <b>Gemini</b> com a integração <b>Google AI Studio</b> (chave e modelo em Integrações). O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança (e racional) para o conjunto.',
                 )
               : fbStr(
                     'fb_prop_vision_body_detection_html',
                     null,
-                    'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O BrSpark reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança para o conjunto.',
+                    'No app, o técnico usa <b>só a câmera</b> — sem galeria nem escolha de arquivo. O Aria reencaminha ao URL em <b>Integrações → Visão IA - YOLO</b>. O texto abaixo é um <b>único prompt estruturado</b>; a resposta devolve sim/não + confiança para o conjunto.',
                 );
         const vBodyColor = useGeminiVision ? (isVisionComparison ? '#701a75' : '#7f1d1d') : '#0c4a6e';
         const vLabel = useGeminiVision ? (isVisionComparison ? '#a21caf' : '#b91c1c') : '#0369a1';
@@ -6043,7 +6043,7 @@ window.importJSON = function() {
                             'Formulário importado com sucesso. Clique em «Salvar formulário» para persistir no catálogo local e na API.'
                         );
                     } else {
-                        fbAlert('fb_alert_import_bad', null, 'O arquivo não é compatível com o BrSpark Builder.');
+                        fbAlert('fb_alert_import_bad', null, 'O arquivo não é compatível com o Aria Builder.');
                     }
                 } catch(err) {
                     fbAlert(
@@ -6127,14 +6127,14 @@ function applyBuilderToolboxModeUi() {
     });
 };
 
-window.brsparkCopilotSendQuickAction = async function (text) {
+window.ariaCopilotSendQuickAction = async function (text) {
     const prompt = String(text || '').trim();
     if (!prompt) return;
     const inp = document.getElementById('ai-copilot-input');
     if (inp) inp.value = '';
-    window.__brsparkCopilotShowStartScreen = false;
+    window.__ariaCopilotShowStartScreen = false;
     updateCopilotStartScreenUi();
-    await brsparkCopilotPostChatRound(prompt);
+    await ariaCopilotPostChatRound(prompt);
 };
 
 function syncCopilotTroubleshootPanel() {
@@ -6148,7 +6148,7 @@ function syncCopilotTroubleshootPanel() {
 /**
  * Envia um pedido estruturado de troubleshooting (jornada + texto obrigatório).
  */
-window.brsparkCopilotSendTroubleshootBundle = async function () {
+window.ariaCopilotSendTroubleshootBundle = async function () {
     const selSym = document.getElementById('copilot-ts-symptom');
     const ta = document.getElementById('copilot-ts-detail');
     const modeEl = document.getElementById('copilot-journey-mode');
@@ -6180,9 +6180,9 @@ window.brsparkCopilotSendTroubleshootBundle = async function () {
         '\n\n' +
         'Analise o canvas e as definições atuais. Devolva **uxLayer** com hipóteses rankeadas em `troubleshoot.hypotheses` e, se for seguro, **schemaPatch** / **logicSuggestions** / **settingsPatch**.';
     if (ta) ta.value = '';
-    window.__brsparkCopilotShowStartScreen = false;
+    window.__ariaCopilotShowStartScreen = false;
     updateCopilotStartScreenUi();
-    await brsparkCopilotPostChatRound(msg);
+    await ariaCopilotPostChatRound(msg);
 };
 
 (function initCopilotTroubleshootUi() {
@@ -6305,7 +6305,7 @@ window.saveChecklist = async function() {
             isActive: currentFormIsActive !== false,
             updatedAt: new Date().toISOString()
         };
-        localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
+        localStorage.setItem('aria_checklists_db', JSON.stringify(db));
 
         if (typeof window.syncBuilderPersistBaseline === 'function') window.syncBuilderPersistBaseline();
         setSync('local');
@@ -6330,7 +6330,7 @@ window.saveChecklist = async function() {
                 folderId: currentFormFolderId ?? null,
                 isActive: currentFormIsActive !== false,
             };
-            const res = await fetch(`${brsparkApiBase()}/checklists/templates`, {
+            const res = await fetch(`${ariaApiBase()}/checklists/templates`, {
                 method: 'POST',
                 headers: adminJsonHeaders(),
                 body: JSON.stringify(payload),
@@ -6364,7 +6364,7 @@ window.saveChecklist = async function() {
                         currentFormIsActive = saved.isActive !== false;
                         updateCurrentTemplateVersionBadge();
                         syncFbFormActiveToggleUi();
-                        localStorage.setItem('brspark_checklists_db', JSON.stringify(dbLocal));
+                        localStorage.setItem('aria_checklists_db', JSON.stringify(dbLocal));
                         if (window.renderFormsGridFromLocal) window.renderFormsGridFromLocal(dbLocal);
                     }
                 } catch (mergeErr) {
@@ -6459,7 +6459,7 @@ window.previewPDF = function() {
     // Cabeçalho
     doc.setFontSize(22);
     doc.setTextColor(30, 41, 59); // zinc-800
-    doc.text("Guia de Operação - Rascunho BrSpark", 20, 20);
+    doc.text("Guia de Operação - Rascunho Aria", 20, 20);
     
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139); // zinc-500
@@ -6574,10 +6574,10 @@ window.previewPDF = function() {
     // Rodape
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
-    doc.text("Nota: O Sistema final de PDF em Nuvem da BrSpark também compila a geolocalização exata.", 20, 285);
+    doc.text("Nota: O Sistema final de PDF em Nuvem da Aria também compila a geolocalização exata.", 20, 285);
     
     // Download Trigger
-    doc.save("roteiro_rascunho_brspark.pdf");
+    doc.save("roteiro_rascunho_aria.pdf");
 };
 
 // --- MULTI-FORM HYBRID STORAGE MANAGEMENT + PASTAS (vista em colunas estilo Finder) --- //
@@ -6586,17 +6586,17 @@ window._formsDbCache = {};
 
 async function refreshTemplateFolders() {
     try {
-        const res = await fetch(`${brsparkApiBase()}/checklists/template-folders`);
+        const res = await fetch(`${ariaApiBase()}/checklists/template-folders`);
         if (res.ok) {
             builderFolders = await res.json();
             try {
-                localStorage.setItem('brspark_checklist_folders', JSON.stringify(builderFolders));
+                localStorage.setItem('aria_checklist_folders', JSON.stringify(builderFolders));
             } catch (e) { /* ignore */ }
         }
     } catch (e) {
         console.warn('[folders] API indisponível, a usar cache local', e);
         try {
-            const raw = localStorage.getItem('brspark_checklist_folders');
+            const raw = localStorage.getItem('aria_checklist_folders');
             if (raw) builderFolders = JSON.parse(raw);
         } catch (e2) { /* ignore */ }
     }
@@ -6624,7 +6624,7 @@ function formsSidebarHideArchived() {
 window.onFormsFilterArchivedChange = function () {
     try {
         const chk = document.getElementById('forms-filter-hide-archived');
-        if (chk) localStorage.setItem('brspark_forms_list_hide_archived', chk.checked ? '1' : '0');
+        if (chk) localStorage.setItem('aria_forms_list_hide_archived', chk.checked ? '1' : '0');
     } catch (_) {}
     window.renderFormsGridFromLocal(window._formsDbCache || {});
     if (window.filterFormsList) window.filterFormsList();
@@ -6648,7 +6648,7 @@ function folderPathChain(folderId) {
 function getFormsTreeExpandedState() {
     if (!window.__formsTreeExpanded) {
         try {
-            const raw = sessionStorage.getItem('brspark_forms_tree_expanded');
+            const raw = sessionStorage.getItem('aria_forms_tree_expanded');
             window.__formsTreeExpanded = raw ? JSON.parse(raw) : {};
         } catch (_) {
             window.__formsTreeExpanded = {};
@@ -6667,7 +6667,7 @@ function setFormsTreeFolderExpanded(folderId, expanded) {
     const st = getFormsTreeExpandedState();
     st[folderId] = expanded;
     try {
-        sessionStorage.setItem('brspark_forms_tree_expanded', JSON.stringify(st));
+        sessionStorage.setItem('aria_forms_tree_expanded', JSON.stringify(st));
     } catch (_) {}
     window.__formsTreeExpanded = st;
 }
@@ -6687,8 +6687,8 @@ const FB_FORM_LIST_LOCALE_ORDER = ['pt-BR', 'en-US', 'es-ES', 'de-DE'];
 
 function normalizeFormListLocaleTag(k) {
     try {
-        if (typeof window !== 'undefined' && window.BrSparkSchemaLocale && window.BrSparkSchemaLocale.normalizeSchemaLocaleTag) {
-            return window.BrSparkSchemaLocale.normalizeSchemaLocaleTag(k);
+        if (typeof window !== 'undefined' && window.AriaSchemaLocale && window.AriaSchemaLocale.normalizeSchemaLocaleTag) {
+            return window.AriaSchemaLocale.normalizeSchemaLocaleTag(k);
         }
     } catch (_) {
         /* ignore */
@@ -7252,7 +7252,7 @@ window.submitNewTemplateFolder = async function () {
         return;
     }
     try {
-        const res = await fetch(`${brsparkApiBase()}/checklists/template-folders`, {
+        const res = await fetch(`${ariaApiBase()}/checklists/template-folders`, {
             method: 'POST',
             headers: adminJsonHeaders(),
             body: JSON.stringify({ name, parentId: builderBrowseFolderId }),
@@ -7289,7 +7289,7 @@ window.promptRenameTemplateFolder = async function (folderId) {
     const name = prompt('Novo nome da pasta:', f.name);
     if (!name || !String(name).trim()) return;
     try {
-        const res = await fetch(`${brsparkApiBase()}/checklists/template-folders/${encodeURIComponent(folderId)}`, {
+        const res = await fetch(`${ariaApiBase()}/checklists/template-folders/${encodeURIComponent(folderId)}`, {
             method: 'PATCH',
             headers: adminJsonHeaders(),
             body: JSON.stringify({ name: String(name).trim() }),
@@ -7316,7 +7316,7 @@ window.promptDeleteTemplateFolder = async function (folderId) {
     if (!f) return;
     if (!confirm(`Excluir a pasta "${f.name}" e todas as subpastas? Os formulários ficam na raiz (sem pasta).`)) return;
     try {
-        const res = await fetch(`${brsparkApiBase()}/checklists/template-folders/${encodeURIComponent(folderId)}`, {
+        const res = await fetch(`${ariaApiBase()}/checklists/template-folders/${encodeURIComponent(folderId)}`, {
             method: 'DELETE',
             headers: adminJsonHeaders(),
         });
@@ -7407,7 +7407,7 @@ window.moveChecklistToFolder = async function (formId, folderId, selectEl) {
     } catch (_) {}
     try {
         const res = await fetch(
-            `${brsparkApiBase()}/checklists/templates/${encodeURIComponent(formId)}/folder`,
+            `${ariaApiBase()}/checklists/templates/${encodeURIComponent(formId)}/folder`,
             {
                 method: 'PATCH',
                 headers: adminJsonHeaders(),
@@ -7432,7 +7432,7 @@ window.moveChecklistToFolder = async function (formId, folderId, selectEl) {
         const db = parseLocalChecklistsDb();
         if (db[formId]) {
             db[formId].folderId = targetFolderId;
-            localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
+            localStorage.setItem('aria_checklists_db', JSON.stringify(db));
         }
         window._formsDbCache = db;
         window.renderFormsGridFromLocal(db);
@@ -7453,7 +7453,7 @@ window.openFormsModal = function () {
     try {
         const chk = document.getElementById('forms-filter-hide-archived');
         if (chk) {
-            const v = localStorage.getItem('brspark_forms_list_hide_archived');
+            const v = localStorage.getItem('aria_forms_list_hide_archived');
             chk.checked = v !== '0';
         }
     } catch (_) {}
@@ -7502,7 +7502,7 @@ window.duplicateChecklist = async function(id) {
     
     // Save to local DB first
     db[newForm.id] = newForm;
-    localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
+    localStorage.setItem('aria_checklists_db', JSON.stringify(db));
     
     // Synchronize with backend API immediately
     try {
@@ -7516,8 +7516,8 @@ window.duplicateChecklist = async function(id) {
             folderId: newForm.folderId ?? null,
             isActive: true,
         };
-        const token = sessionStorage.getItem('brspark_admin_token') || '';
-        const res = await fetch(`${brsparkApiBase()}/checklists/templates`, {
+        const token = sessionStorage.getItem('aria_admin_token') || '';
+        const res = await fetch(`${ariaApiBase()}/checklists/templates`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify(payload)
@@ -7526,7 +7526,7 @@ window.duplicateChecklist = async function(id) {
         if (!res.ok) {
             const db2 = parseLocalChecklistsDb();
             delete db2[newForm.id];
-            localStorage.setItem('brspark_checklists_db', JSON.stringify(db2));
+            localStorage.setItem('aria_checklists_db', JSON.stringify(db2));
             let msg = raw;
             try {
                 msg = JSON.parse(raw).error || raw;
@@ -7556,7 +7556,7 @@ window.duplicateChecklist = async function(id) {
         console.warn('Erro ao clonar formulário na API', e);
         const db2 = parseLocalChecklistsDb();
         delete db2[newForm.id];
-        localStorage.setItem('brspark_checklists_db', JSON.stringify(db2));
+        localStorage.setItem('aria_checklists_db', JSON.stringify(db2));
         fbAlert('fb_alert_clone_net', null, 'Erro de rede ao clonar. A cópia local foi anulada.');
         window.renderFormsGridFromLocal(db2);
         return;
@@ -7615,8 +7615,8 @@ window.deleteChecklist = function(id) {
             }
 
             try {
-                const token = sessionStorage.getItem('brspark_admin_token') || '';
-                await fetch(`${brsparkApiBase()}/checklists/templates/${id}`, {
+                const token = sessionStorage.getItem('aria_admin_token') || '';
+                await fetch(`${ariaApiBase()}/checklists/templates/${id}`, {
                     method: 'DELETE',
                     headers: { Authorization: `Bearer ${token}` },
                 });
@@ -7629,7 +7629,7 @@ window.deleteChecklist = function(id) {
                 db[id].isActive = false;
                 db[id].updatedAt = new Date().toISOString();
             }
-            localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
+            localStorage.setItem('aria_checklists_db', JSON.stringify(db));
 
             if (currentFormId === id) window.createNewChecklist();
 
@@ -7649,7 +7649,7 @@ window.loadSavedFormsList = async function () {
     const prev = parseLocalChecklistsDb();
     await refreshTemplateFolders();
     try {
-        const res = await fetch(`${brsparkApiBase()}/checklists/templates?includeArchived=1`);
+        const res = await fetch(`${ariaApiBase()}/checklists/templates?includeArchived=1`);
         if (res.ok) {
             const apiForms = await res.json();
             const db = { ...prev };
@@ -7672,7 +7672,7 @@ window.loadSavedFormsList = async function () {
                     updatedAt: form.updatedAt,
                 };
             });
-            localStorage.setItem('brspark_checklists_db', JSON.stringify(db));
+            localStorage.setItem('aria_checklists_db', JSON.stringify(db));
         }
     } catch (e) {
         console.warn('Sem conexão com API Node.js. Carregando formulários locais do Cache...', e);
@@ -8089,8 +8089,8 @@ function renderMobilePreview() {
         if(f.type === 'signature') inputMock = `<div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:80px; display:flex; align-items:flex-end; padding:12px; color:#94a3b8; font-size:12px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Deslize o dedo aqui para Assinar...</div>`;
         if(f.type === 'signature_summary') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><div style="background:#ecfeff;border:1px solid #67e8f9;border-radius:10px;padding:12px;font-size:11px;color:#155e75;line-height:1.45"><b>Resumo</b> — valores só leitura dos campos marcados no painel; depois <b>assinatura</b> no final do bloco.</div><div style="background:#f8fafc; border:1px dashed #cbd5e1; border-radius:10px; height:72px; display:flex; align-items:flex-end; padding:10px; color:#94a3b8; font-size:11px;"><ion-icon name="pencil" style="margin-right:6px"></ion-icon>Zona de assinatura</div></div>`;
         
-        if(f.type === 'transit_start') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#3b82f6; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="rocket" style="font-size:20px"></ion-icon> INICIAR DESLOCAMENTO</button><div style="border:1px solid #fed7aa;border-radius:10px;background:linear-gradient(180deg,#fff7ed,#fff);padding:10px 12px;font-size:11px;color:#9a3412;line-height:1.45"><strong>OS tipo Rota (KML):</strong> no app, mapa com linha <span style="color:#ea580c;font-weight:800">laranja</span> (trajeto planejado) e <span style="color:#2563eb;font-weight:800">azul</span> (GPS). Métricas de <strong>cobertura de patrulha</strong> e desvio em relação à tolerância definida no despacho.</div><div style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc;padding:8px"><svg viewBox="0 0 200 90" width="100%" height="72" style="display:block" aria-hidden="true"><path d="M10 60 Q50 20 95 45 T180 30" fill="none" stroke="#ea580c" stroke-width="3" stroke-dasharray="6 4"/><path d="M12 58 L45 52 L78 48 L120 38 L165 32" fill="none" stroke="#2563eb" stroke-width="2.5"/><circle cx="12" cy="58" r="4" fill="#16a34a"/><circle cx="165" cy="32" r="4" fill="#dc2626"/></svg><div style="font-size:9px;color:#64748b;text-align:center;margin-top:4px">Legenda: planeado · percorrido · início / fim</div></div></div>`;
-        if(f.type === 'transit_end') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#f43f5e; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="flag" style="font-size:20px"></ion-icon> FINALIZAR DESLOCAMENTO</button><div style="font-size:10px;color:#64748b;line-height:1.45;border-left:3px solid #ea580c;padding-left:10px">Se a OS foi despachada como <strong>Rota</strong>, o PDF pode incluir <strong>mapa estático</strong> (trajeto + GPS), <strong>cobertura %</strong>, desvio máximo e comparação com a tolerância do corredor.</div></div>`;
+        if(f.type === 'transit_start') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#3b82f6; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="rocket" style="font-size:20px"></ion-icon> INICIAR DESLOCAMENTO</button><div style="border:1px solid #fed7aa;border-radius:10px;background:linear-gradient(180deg,#fff7ed,#fff);padding:10px 12px;font-size:11px;color:#9a3412;line-height:1.45"><strong>OS tipo Rota (KML):</strong> no app, mapa com linha <span style="color:#0d9488;font-weight:800">ciano (marca)</span> (trajeto planejado) e <span style="color:#2563eb;font-weight:800">azul</span> (GPS). Métricas de <strong>cobertura de patrulha</strong> e desvio em relação à tolerância definida no despacho.</div><div style="border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc;padding:8px"><svg viewBox="0 0 200 90" width="100%" height="72" style="display:block" aria-hidden="true"><path d="M10 60 Q50 20 95 45 T180 30" fill="none" stroke="#0d9488" stroke-width="3" stroke-dasharray="6 4"/><path d="M12 58 L45 52 L78 48 L120 38 L165 32" fill="none" stroke="#2563eb" stroke-width="2.5"/><circle cx="12" cy="58" r="4" fill="#16a34a"/><circle cx="165" cy="32" r="4" fill="#dc2626"/></svg><div style="font-size:9px;color:#64748b;text-align:center;margin-top:4px">Legenda: planeado · percorrido · início / fim</div></div></div>`;
+        if(f.type === 'transit_end') inputMock = `<div style="display:flex;flex-direction:column;gap:10px;width:100%"><button disabled style="background:#f43f5e; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="flag" style="font-size:20px"></ion-icon> FINALIZAR DESLOCAMENTO</button><div style="font-size:10px;color:#64748b;line-height:1.45;border-left:3px solid #0d9488;padding-left:10px">Se a OS foi despachada como <strong>Rota</strong>, o PDF pode incluir <strong>mapa estático</strong> (trajeto + GPS), <strong>cobertura %</strong>, desvio máximo e comparação com a tolerância do corredor.</div></div>`;
         if(f.type === 'geofence_check') inputMock = `<button disabled style="background:#0f172a; color:white; border:none; padding:14px; border-radius:10px; font-weight:800; display:flex; align-items:center; justify-content:center; gap:8px;"><ion-icon name="location" style="font-size:20px"></ion-icon> VALIDAR GEOLOCALIZAÇÃO<br>Raio: ${escapeHtmlLogic(String(f.geofenceRadius != null ? f.geofenceRadius : '?'))}m</button>`;
         if(f.type === 'location_pick') inputMock = `<div style="border:1px solid #bae6fd; border-radius:10px; overflow:hidden; background:#f0f9ff;"><div style="height:120px; background:linear-gradient(135deg,#e0f2fe,#f0f9ff); display:flex; align-items:center; justify-content:center; color:#0369a1; font-size:12px; font-weight:700; flex-direction:column; gap:6px;"><ion-icon name="map" style="font-size:32px"></ion-icon>Mapa + alfinete</div><div style="padding:10px; font-size:11px; color:#0c4a6e; font-weight:600;">GPS real + posição ajustada no mapa</div></div>`;
 
@@ -8173,8 +8173,8 @@ window.bindAppSectionNavRadios = function () {
 
 (function bindNewFolderButton() {
     const b = document.getElementById('btn-new-template-folder');
-    if (!b || b.dataset.brsparkBound) return;
-    b.dataset.brsparkBound = '1';
+    if (!b || b.dataset.ariaBound) return;
+    b.dataset.ariaBound = '1';
     b.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -8187,7 +8187,7 @@ window.bindAppSectionNavRadios = function () {
 // ==========================================
 
 /** Monitor virtual: tempo total do formulário (app grava __form_started_at / metadata). */
-const FORM_CLOCK_COND_ID = '__brspark_form_clock__';
+const FORM_CLOCK_COND_ID = '__aria_form_clock__';
 
 /** Paridade com `src/lib/businessRuleCondition.ts` — operadores por tipo de monitor. Segunda coluna = chave i18n (`fb_logic_op_*`). */
 const NORMAL_LOGIC_OPS = [
@@ -8965,9 +8965,9 @@ window.saveFieldLogic = function() {
     window.hideLogicModal();
 };
 
-function brsparkAdminBearerToken() {
+function ariaAdminBearerToken() {
     try {
-        return sessionStorage.getItem('brspark_admin_token') || '';
+        return sessionStorage.getItem('aria_admin_token') || '';
     } catch (e) {
         return '';
     }
@@ -8982,7 +8982,7 @@ function collectCopilotFormContext() {
         sector: '',
         formKind: 'formulario',
     };
-    const fc = window.__brsparkCopilotFocusedField;
+    const fc = window.__ariaCopilotFocusedField;
     if (fc && fc.id) {
         const still = fields.find(function (x) {
             return x.id === fc.id;
@@ -8997,7 +8997,7 @@ function collectCopilotFormContext() {
                     still.iconLibrary != null ? String(still.iconLibrary).trim().slice(0, 40) : '',
             };
         } else {
-            window.__brsparkCopilotFocusedField = null;
+            window.__ariaCopilotFocusedField = null;
             if (typeof window.refreshCopilotCanvasFocusChip === 'function') {
                 window.refreshCopilotCanvasFocusChip();
             }
@@ -9053,12 +9053,12 @@ function mergeCopilotReferenceUrlsForPayload(userLine, baseList) {
     return base.slice(0, 5);
 }
 
-if (typeof window.__brsparkCopilotFocusedField === 'undefined') window.__brsparkCopilotFocusedField = null;
+if (typeof window.__ariaCopilotFocusedField === 'undefined') window.__ariaCopilotFocusedField = null;
 
 window.refreshCopilotCanvasFocusChip = function () {
     const chip = document.getElementById('copilot-focus-chip');
     const clr = document.getElementById('copilot-clear-focus-btn');
-    const f = window.__brsparkCopilotFocusedField;
+    const f = window.__ariaCopilotFocusedField;
     if (!chip) return;
     if (!f || !f.id) {
         chip.style.display = 'none';
@@ -9074,7 +9074,7 @@ window.refreshCopilotCanvasFocusChip = function () {
     if (clr) clr.style.display = 'inline-flex';
 };
 
-window.brsparkCopilotPinFieldFromCanvas = function (id, opts) {
+window.ariaCopilotPinFieldFromCanvas = function (id, opts) {
     opts = opts || {};
     const f = fields.find(function (x) {
         return x.id === id;
@@ -9083,7 +9083,7 @@ window.brsparkCopilotPinFieldFromCanvas = function (id, opts) {
     if (!opts.skipSelect) {
         window.selectField(id);
     }
-    window.__brsparkCopilotFocusedField = {
+    window.__ariaCopilotFocusedField = {
         id: f.id,
         label: glabPrimary(f),
         type: f.type != null ? String(f.type) : '',
@@ -9097,16 +9097,16 @@ window.brsparkCopilotPinFieldFromCanvas = function (id, opts) {
     }
 };
 
-window.brsparkCopilotSyncFocusFromCanvasSelection = function () {
+window.ariaCopilotSyncFocusFromCanvasSelection = function () {
     if (!selectedFieldId) {
         fbAlert('fb_alert_select_field', null, 'Selecione um campo no canvas (clique num cartão).');
         return;
     }
-    window.brsparkCopilotPinFieldFromCanvas(selectedFieldId, { skipSelect: true, skipOpenPanel: true });
+    window.ariaCopilotPinFieldFromCanvas(selectedFieldId, { skipSelect: true, skipOpenPanel: true });
 };
 
-window.brsparkCopilotClearFocusedField = function () {
-    window.__brsparkCopilotFocusedField = null;
+window.ariaCopilotClearFocusedField = function () {
+    window.__ariaCopilotFocusedField = null;
     window.refreshCopilotCanvasFocusChip();
 };
 
@@ -9163,9 +9163,9 @@ function mergeGlobalFormSettingsFromCopilot(incoming) {
 }
 
 function pushCopilotUndoSnapshot() {
-    window.__brsparkSchemaUndoStack = window.__brsparkSchemaUndoStack || [];
+    window.__ariaSchemaUndoStack = window.__ariaSchemaUndoStack || [];
     try {
-        window.__brsparkSchemaUndoStack.push(
+        window.__ariaSchemaUndoStack.push(
             JSON.stringify({
                 v: 4,
                 fields: JSON.parse(JSON.stringify(fields)),
@@ -9178,7 +9178,7 @@ function pushCopilotUndoSnapshot() {
         );
     } catch (eSnap) {
         try {
-            window.__brsparkSchemaUndoStack.push(JSON.stringify(fields));
+            window.__ariaSchemaUndoStack.push(JSON.stringify(fields));
         } catch (e2) {
             /* ignore */
         }
@@ -9213,43 +9213,43 @@ function parseCopilotUndoEntry(raw) {
 }
 
 /* ---------- Composer IA (chat + patch + lógica) ---------- */
-if (typeof window.__brsparkCopilotMessages === 'undefined') window.__brsparkCopilotMessages = [];
-if (typeof window.__brsparkSchemaUndoStack === 'undefined') window.__brsparkSchemaUndoStack = [];
-if (typeof window.__brsparkCopilotSpreadsheetSummary === 'undefined') window.__brsparkCopilotSpreadsheetSummary = '';
-if (typeof window.__brsparkCopilotSpreadsheetFileName === 'undefined') window.__brsparkCopilotSpreadsheetFileName = '';
+if (typeof window.__ariaCopilotMessages === 'undefined') window.__ariaCopilotMessages = [];
+if (typeof window.__ariaSchemaUndoStack === 'undefined') window.__ariaSchemaUndoStack = [];
+if (typeof window.__ariaCopilotSpreadsheetSummary === 'undefined') window.__ariaCopilotSpreadsheetSummary = '';
+if (typeof window.__ariaCopilotSpreadsheetFileName === 'undefined') window.__ariaCopilotSpreadsheetFileName = '';
 /** @type {{ fileName: string, summary: string }[]} resumos por arquivo (referência acumulada no Composer) */
-if (typeof window.__brsparkCopilotReferenceSummaries === 'undefined') window.__brsparkCopilotReferenceSummaries = [];
-if (typeof window.__brsparkCopilotThinkingCount === 'undefined') window.__brsparkCopilotThinkingCount = 0;
-if (typeof window.__brsparkCopilotClarifyOptions === 'undefined') window.__brsparkCopilotClarifyOptions = [];
+if (typeof window.__ariaCopilotReferenceSummaries === 'undefined') window.__ariaCopilotReferenceSummaries = [];
+if (typeof window.__ariaCopilotThinkingCount === 'undefined') window.__ariaCopilotThinkingCount = 0;
+if (typeof window.__ariaCopilotClarifyOptions === 'undefined') window.__ariaCopilotClarifyOptions = [];
 /** @type {Record<string, { cid: string, label: string }[]>} seleções por id de pergunta (Composer — multi-opção). */
-if (typeof window.__brsparkCopilotClarifySelections === 'undefined') window.__brsparkCopilotClarifySelections = {};
+if (typeof window.__ariaCopilotClarifySelections === 'undefined') window.__ariaCopilotClarifySelections = {};
 
 function beginCopilotThinking(label) {
-    window.__brsparkCopilotThinkingCount = (window.__brsparkCopilotThinkingCount || 0) + 1;
+    window.__ariaCopilotThinkingCount = (window.__ariaCopilotThinkingCount || 0) + 1;
     if (label && String(label).trim()) {
-        window.__brsparkCopilotThinkingLabel = String(label).trim();
+        window.__ariaCopilotThinkingLabel = String(label).trim();
     }
     refreshCopilotThinkingDom();
 }
 
 function endCopilotThinking() {
-    window.__brsparkCopilotThinkingCount = Math.max(0, (window.__brsparkCopilotThinkingCount || 0) - 1);
-    if (!window.__brsparkCopilotThinkingCount) {
-        delete window.__brsparkCopilotThinkingLabel;
+    window.__ariaCopilotThinkingCount = Math.max(0, (window.__ariaCopilotThinkingCount || 0) - 1);
+    if (!window.__ariaCopilotThinkingCount) {
+        delete window.__ariaCopilotThinkingLabel;
     }
     refreshCopilotThinkingDom();
 }
 
 /** Atualiza só o rótulo da faixa «a pensar» (para SSE sem empilhar beginCopilotThinking). */
 function copilotSetThinkingMessage(msg) {
-    if ((window.__brsparkCopilotThinkingCount || 0) <= 0) return;
+    if ((window.__ariaCopilotThinkingCount || 0) <= 0) return;
     const t = String(msg || '').trim();
-    window.__brsparkCopilotThinkingLabel = t || 'A IA está pensando…';
+    window.__ariaCopilotThinkingLabel = t || 'A IA está pensando…';
     refreshCopilotThinkingDom();
 }
 
 function refreshCopilotThinkingDom() {
-    const n = window.__brsparkCopilotThinkingCount || 0;
+    const n = window.__ariaCopilotThinkingCount || 0;
     const on = n > 0;
     const strip = document.getElementById('ai-copilot-thinking');
     if (strip) {
@@ -9258,7 +9258,7 @@ function refreshCopilotThinkingDom() {
     }
     const lab = document.getElementById('ai-copilot-thinking-label');
     if (lab) {
-        lab.textContent = window.__brsparkCopilotThinkingLabel || 'A IA está pensando…';
+        lab.textContent = window.__ariaCopilotThinkingLabel || 'A IA está pensando…';
     }
     const dis = on;
     const send = document.getElementById('ai-copilot-send-fab');
@@ -9276,7 +9276,7 @@ function refreshCopilotThinkingDom() {
     const clarifySend = document.getElementById('ai-copilot-clarify-send-btn');
     if (clarifySend) clarifySend.disabled = dis;
     const pick = document.getElementById('copilot-excel-pick-btn');
-    if (pick) pick.disabled = dis || !!window.__brsparkCopilotExcelBusy;
+    if (pick) pick.disabled = dis || !!window.__ariaCopilotExcelBusy;
     const clrSheet = document.getElementById('copilot-excel-clear-btn');
     if (clrSheet) clrSheet.disabled = dis;
     const panel = document.getElementById('ai-copilot-panel');
@@ -9296,14 +9296,14 @@ function refreshCopilotThinkingDom() {
     const cfc = document.getElementById('copilot-clear-focus-btn');
     if (cfc) cfc.disabled = dis;
     const attFab = document.getElementById('ai-copilot-attach-fab');
-    if (attFab) attFab.disabled = dis || !!window.__brsparkCopilotExcelBusy;
+    if (attFab) attFab.disabled = dis || !!window.__ariaCopilotExcelBusy;
     updateCopilotExcelUi();
 }
 
 function buildCopilotSpreadsheetSummaryFromAnalyze(data, fileName) {
     const parts = [];
     parts.push(
-        '### Análise do arquivo anexado ao Composer (Excel, Word, PDF, imagem OCR, JSON BrSpark, JSON Google Forms / outros sistemas)',
+        '### Análise do arquivo anexado ao Composer (Excel, Word, PDF, imagem OCR, JSON Aria, JSON Google Forms / outros sistemas)',
     );
     parts.push('Arquivo: ' + String(fileName || '—'));
     if (data && data.title) parts.push('Título sugerido pela IA: ' + String(data.title).trim());
@@ -9326,10 +9326,10 @@ function buildCopilotSpreadsheetSummaryFromAnalyze(data, fileName) {
     return s;
 }
 
-var BRSPARK_COPILOT_REF_MAX_TOTAL = 22000;
-var BRSPARK_COPILOT_REF_MAX_FILES = 10;
+var ARIA_COPILOT_REF_MAX_TOTAL = 22000;
+var ARIA_COPILOT_REF_MAX_FILES = 10;
 
-function brsparkCopilotReferenceFileNameOk(lowerName) {
+function ariaCopilotReferenceFileNameOk(lowerName) {
     var n = String(lowerName || '').toLowerCase();
     return (
         n.endsWith('.xlsx') ||
@@ -9345,10 +9345,10 @@ function brsparkCopilotReferenceFileNameOk(lowerName) {
 }
 
 function rebuildCopilotSpreadsheetSummaryFromRefs() {
-    var arr = window.__brsparkCopilotReferenceSummaries || [];
+    var arr = window.__ariaCopilotReferenceSummaries || [];
     if (!arr.length) {
-        window.__brsparkCopilotSpreadsheetSummary = '';
-        window.__brsparkCopilotSpreadsheetFileName = '';
+        window.__ariaCopilotSpreadsheetSummary = '';
+        window.__ariaCopilotSpreadsheetFileName = '';
         return;
     }
     var joined = arr
@@ -9358,11 +9358,11 @@ function rebuildCopilotSpreadsheetSummaryFromRefs() {
         .filter(Boolean)
         .join('\n\n---\n\n');
     var summary = joined;
-    if (summary.length > BRSPARK_COPILOT_REF_MAX_TOTAL) {
-        summary = summary.slice(0, BRSPARK_COPILOT_REF_MAX_TOTAL) + '\n…[resumo total dos arquivos truncado]';
+    if (summary.length > ARIA_COPILOT_REF_MAX_TOTAL) {
+        summary = summary.slice(0, ARIA_COPILOT_REF_MAX_TOTAL) + '\n…[resumo total dos arquivos truncado]';
     }
-    window.__brsparkCopilotSpreadsheetSummary = summary;
-    window.__brsparkCopilotSpreadsheetFileName = arr
+    window.__ariaCopilotSpreadsheetSummary = summary;
+    window.__ariaCopilotSpreadsheetFileName = arr
         .map(function (x) {
             return x && x.fileName ? String(x.fileName) : 'arquivo';
         })
@@ -9379,7 +9379,7 @@ function copilotSetLogicDetailsOpen(shouldOpen) {
     if (d) d.open = !!shouldOpen;
 }
 
-window.brsparkCopilotPickExcelFile = function () {
+window.ariaCopilotPickExcelFile = function () {
     const fi = document.getElementById('copilot-excel-file');
     if (fi) fi.click();
 };
@@ -9387,15 +9387,15 @@ window.brsparkCopilotPickExcelFile = function () {
 function updateCopilotExcelUi() {
     const btn = document.getElementById('copilot-excel-clear-btn');
     const pick = document.getElementById('copilot-excel-pick-btn');
-    const has = !!(window.__brsparkCopilotSpreadsheetSummary && String(window.__brsparkCopilotSpreadsheetSummary).trim());
+    const has = !!(window.__ariaCopilotSpreadsheetSummary && String(window.__ariaCopilotSpreadsheetSummary).trim());
     if (btn) btn.style.display = has ? 'inline-flex' : 'none';
     if (pick) {
-        pick.disabled = !!(window.__brsparkCopilotExcelBusy || (window.__brsparkCopilotThinkingCount || 0) > 0);
+        pick.disabled = !!(window.__ariaCopilotExcelBusy || (window.__ariaCopilotThinkingCount || 0) > 0);
     }
 }
 
 function hasVisibleCopilotMessages() {
-    const msgs = window.__brsparkCopilotMessages || [];
+    const msgs = window.__ariaCopilotMessages || [];
     return msgs.some(function (m) {
         return m && (m.role === 'user' || m.role === 'assistant') && !m.hiddenFromUi;
     });
@@ -9405,8 +9405,8 @@ function updateCopilotStartScreenUi() {
     /* UI só chat: a barra de composição fica sempre visível. */
 }
 
-window.brsparkCopilotAdvanceToChat = function () {
-    window.__brsparkCopilotShowStartScreen = false;
+window.ariaCopilotAdvanceToChat = function () {
+    window.__ariaCopilotShowStartScreen = false;
     updateCopilotStartScreenUi();
     renderCopilotMessages();
     const inp = document.getElementById('ai-copilot-input');
@@ -9419,19 +9419,19 @@ window.brsparkCopilotAdvanceToChat = function () {
     }
 };
 
-window.brsparkCopilotGenerateFromContext = async function () {
-    window.__brsparkCopilotShowStartScreen = false;
+window.ariaCopilotGenerateFromContext = async function () {
+    window.__ariaCopilotShowStartScreen = false;
     updateCopilotStartScreenUi();
     const msg =
         'Com base no contexto, links e arquivos de referência já carregados, gere agora um `schemaPatch` robusto para montar/adequar o formulário no canvas (com tipos inferidos automaticamente e evidências onde necessário). Evite resposta consultiva.';
-    await brsparkCopilotPostChatRound(msg, { hideUserBubble: true });
+    await ariaCopilotPostChatRound(msg, { hideUserBubble: true });
 };
 
 function renderCopilotMessages() {
     const root = document.getElementById('ai-copilot-messages');
     if (!root) return;
     root.innerHTML = '';
-    const msgs = window.__brsparkCopilotMessages || [];
+    const msgs = window.__ariaCopilotMessages || [];
     const visible = msgs.filter(function (m) {
         return m && (m.role === 'user' || m.role === 'assistant') && !m.hiddenFromUi;
     });
@@ -9534,7 +9534,7 @@ function renderCopilotRichText(raw) {
     return out.join('');
 }
 
-function brsparkCopilotCountOperationalFields() {
+function ariaCopilotCountOperationalFields() {
     if (!Array.isArray(fields)) return 0;
     var n = 0;
     for (var i = 0; i < fields.length; i++) {
@@ -9639,7 +9639,7 @@ function renderCopilotInsights() {
 }
 
 /** Mantido por compatibilidade (menu lateral removido — vista única de chat). */
-function brsparkCopilotSyncSideMenuUi() {
+function ariaCopilotSyncSideMenuUi() {
     /* no-op */
 }
 
@@ -9647,19 +9647,19 @@ function brsparkCopilotSyncSideMenuUi() {
  * Abre ou fecha a coluna «Opções e contexto».
  * @param {boolean} [force] true = abrir; false = fechar; omitido = alternar.
  */
-window.brsparkCopilotToggleSideMenu = function () {
+window.ariaCopilotToggleSideMenu = function () {
     /* Menu lateral descontinuado — vista única. */
 };
 
-function brsparkCopilotSetSideMenuOpen() {
+function ariaCopilotSetSideMenuOpen() {
     /* no-op */
 }
 
 /** Arrastar ficheiros para o painel do Composer (mesmo fluxo que o clipe). */
-function brsparkCopilotInstallChatDropzone() {
+function ariaCopilotInstallChatDropzone() {
     const col = document.querySelector('#ai-copilot-panel .ai-copilot-col-chat');
-    if (!col || col.__brsparkCopilotDrop) return;
-    col.__brsparkCopilotDrop = true;
+    if (!col || col.__ariaCopilotDrop) return;
+    col.__ariaCopilotDrop = true;
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function (evName) {
         col.addEventListener(
             evName,
@@ -9679,7 +9679,7 @@ function brsparkCopilotInstallChatDropzone() {
             if (!inp) return;
             try {
                 var dt2 = new DataTransfer();
-                var n = Math.min(dt.files.length, BRSPARK_COPILOT_REF_MAX_FILES);
+                var n = Math.min(dt.files.length, ARIA_COPILOT_REF_MAX_FILES);
                 for (var i = 0; i < n; i++) {
                     dt2.items.add(dt.files[i]);
                 }
@@ -9687,7 +9687,7 @@ function brsparkCopilotInstallChatDropzone() {
             } catch (err) {
                 return;
             }
-            void window.brsparkCopilotAnalyzeExcelFile(inp);
+            void window.ariaCopilotAnalyzeExcelFile(inp);
         },
         false,
     );
@@ -9700,14 +9700,14 @@ window.toggleAiCopilotPanel = function () {
     p.classList.toggle('is-open', open);
     p.setAttribute('aria-hidden', open ? 'false' : 'true');
     if (open) {
-        if (typeof window.ensureBrsparkCopilotPanelsOnBody === 'function') {
-            window.ensureBrsparkCopilotPanelsOnBody();
+        if (typeof window.ensureAriaCopilotPanelsOnBody === 'function') {
+            window.ensureAriaCopilotPanelsOnBody();
         }
-        brsparkCopilotBindPanelDrag();
+        ariaCopilotBindPanelDrag();
         requestAnimationFrame(function () {
-            brsparkCopilotApplySavedPanelPosition();
+            ariaCopilotApplySavedPanelPosition();
         });
-        brsparkCopilotSyncSideMenuUi();
+        ariaCopilotSyncSideMenuUi();
         applyBuilderToolboxModeUi();
         renderGuidedBuilderPanel();
         renderCopilotMessages();
@@ -9715,9 +9715,9 @@ window.toggleAiCopilotPanel = function () {
         refreshCopilotThinkingDom();
         window.refreshCopilotCanvasFocusChip();
         syncCopilotTroubleshootPanel();
-        window.__brsparkCopilotShowStartScreen = false;
+        window.__ariaCopilotShowStartScreen = false;
         updateCopilotStartScreenUi();
-        brsparkCopilotInstallChatDropzone();
+        ariaCopilotInstallChatDropzone();
         const inpFocus = document.getElementById('ai-copilot-input');
         if (inpFocus) {
             try {
@@ -9731,27 +9731,27 @@ window.toggleAiCopilotPanel = function () {
     }
 };
 
-window.brsparkCopilotInputKeydown = function (e) {
+window.ariaCopilotInputKeydown = function (e) {
     if (!e || e.key !== 'Enter' || e.shiftKey) return;
     e.preventDefault();
-    window.brsparkCopilotSend();
+    window.ariaCopilotSend();
 };
 
-window.brsparkCopilotClear = function () {
+window.ariaCopilotClear = function () {
     var prevModal = document.getElementById('copilot-schema-preview-modal');
-    if (prevModal && prevModal.classList.contains('is-open') && typeof window.brsparkCopilotCloseSchemaPreview === 'function') {
-        window.brsparkCopilotCloseSchemaPreview(false);
+    if (prevModal && prevModal.classList.contains('is-open') && typeof window.ariaCopilotCloseSchemaPreview === 'function') {
+        window.ariaCopilotCloseSchemaPreview(false);
     }
-    window.__brsparkCopilotMessages = [];
-    window.__brsparkCopilotShowStartScreen = false;
+    window.__ariaCopilotMessages = [];
+    window.__ariaCopilotShowStartScreen = false;
     renderCopilotMessages();
-    window.__brsparkCopilotLast = null;
-    window.__brsparkCopilotLogicLast = null;
-    window.__brsparkCopilotSpreadsheetSummary = '';
-    window.__brsparkCopilotSpreadsheetFileName = '';
-    window.__brsparkCopilotReferenceSummaries = [];
-    window.__brsparkCopilotThinkingCount = 0;
-    delete window.__brsparkCopilotThinkingLabel;
+    window.__ariaCopilotLast = null;
+    window.__ariaCopilotLogicLast = null;
+    window.__ariaCopilotSpreadsheetSummary = '';
+    window.__ariaCopilotSpreadsheetFileName = '';
+    window.__ariaCopilotReferenceSummaries = [];
+    window.__ariaCopilotThinkingCount = 0;
+    delete window.__ariaCopilotThinkingLabel;
     refreshCopilotThinkingDom();
     const fi = document.getElementById('copilot-excel-file');
     if (fi) fi.value = '';
@@ -9764,7 +9764,7 @@ window.brsparkCopilotClear = function () {
     const st = document.getElementById('copilot-excel-status');
     if (st) st.textContent = '';
     updateCopilotExcelUi();
-    window.__brsparkCopilotClarifyOptions = [];
+    window.__ariaCopilotClarifyOptions = [];
     renderCopilotClarifyCards();
     const ch = document.getElementById('ai-copilot-clarify-hint');
     if (ch) ch.style.display = 'none';
@@ -9777,10 +9777,10 @@ window.brsparkCopilotClear = function () {
     updateCopilotStartScreenUi();
 };
 
-window.brsparkCopilotClearSpreadsheet = function () {
-    window.__brsparkCopilotSpreadsheetSummary = '';
-    window.__brsparkCopilotSpreadsheetFileName = '';
-    window.__brsparkCopilotReferenceSummaries = [];
+window.ariaCopilotClearSpreadsheet = function () {
+    window.__ariaCopilotSpreadsheetSummary = '';
+    window.__ariaCopilotSpreadsheetFileName = '';
+    window.__ariaCopilotReferenceSummaries = [];
     const fi = document.getElementById('copilot-excel-file');
     if (fi) fi.value = '';
     const st = document.getElementById('copilot-excel-status');
@@ -9792,8 +9792,8 @@ function renderCopilotClarifyCards() {
     const host = document.getElementById('ai-copilot-clarify');
     if (!host) return;
     host.innerHTML = '';
-    window.__brsparkCopilotClarifySelections = {};
-    const list = window.__brsparkCopilotClarifyOptions || [];
+    window.__ariaCopilotClarifySelections = {};
+    const list = window.__ariaCopilotClarifyOptions || [];
     if (!list.length) return;
     list.forEach(function (block) {
         if (!block || !block.question) return;
@@ -9816,7 +9816,7 @@ function renderCopilotClarifyCards() {
             const cid = String(ch.id || '');
             const lab = String(ch.label || '');
             b.addEventListener('click', function () {
-                window.brsparkCopilotToggleClarifyChoice(qid, cid, lab, b);
+                window.ariaCopilotToggleClarifyChoice(qid, cid, lab, b);
             });
             row.appendChild(b);
         });
@@ -9831,21 +9831,21 @@ function renderCopilotClarifyCards() {
     sendBtn.className = 'btn btn-primary btn-sm';
     sendBtn.textContent = 'Enviar escolhas';
     sendBtn.addEventListener('click', function () {
-        window.brsparkCopilotSendClarifySelections();
+        window.ariaCopilotSendClarifySelections();
     });
     foot.appendChild(sendBtn);
     host.appendChild(foot);
 }
 
 /** Alterna opção nas perguntas de clarificação (várias por pergunta). */
-window.brsparkCopilotToggleClarifyChoice = function (questionId, choiceId, choiceLabel, btnEl) {
+window.ariaCopilotToggleClarifyChoice = function (questionId, choiceId, choiceLabel, btnEl) {
     const qid = String(questionId || '').trim();
     const cid = String(choiceId || '').trim();
     const lab = String(choiceLabel || '').trim();
     if (!qid || !cid || !lab) return;
-    window.__brsparkCopilotClarifySelections = window.__brsparkCopilotClarifySelections || {};
-    if (!window.__brsparkCopilotClarifySelections[qid]) window.__brsparkCopilotClarifySelections[qid] = [];
-    const arr = window.__brsparkCopilotClarifySelections[qid];
+    window.__ariaCopilotClarifySelections = window.__ariaCopilotClarifySelections || {};
+    if (!window.__ariaCopilotClarifySelections[qid]) window.__ariaCopilotClarifySelections[qid] = [];
+    const arr = window.__ariaCopilotClarifySelections[qid];
     const ix = arr.findIndex(function (x) {
         return x && x.cid === cid;
     });
@@ -9865,15 +9865,15 @@ window.brsparkCopilotToggleClarifyChoice = function (questionId, choiceId, choic
 };
 
 /** Monta mensagem com todas as perguntas respondidas e envia o chat. */
-window.brsparkCopilotSendClarifySelections = function () {
-    window.__brsparkCopilotClarifySelections = window.__brsparkCopilotClarifySelections || {};
-    const list = window.__brsparkCopilotClarifyOptions || [];
+window.ariaCopilotSendClarifySelections = function () {
+    window.__ariaCopilotClarifySelections = window.__ariaCopilotClarifySelections || {};
+    const list = window.__ariaCopilotClarifyOptions || [];
     const lines = [];
     list.forEach(function (block) {
         if (!block) return;
         const qid = String(block.id || '').trim();
         if (!qid) return;
-        const sel = window.__brsparkCopilotClarifySelections[qid];
+        const sel = window.__ariaCopilotClarifySelections[qid];
         if (!sel || !sel.length) return;
         const labels = sel
             .map(function (s) {
@@ -9893,10 +9893,10 @@ window.brsparkCopilotSendClarifySelections = function () {
     }
     const inp = document.getElementById('ai-copilot-input');
     if (inp) inp.value = lines.join('\n');
-    window.brsparkCopilotSend();
+    window.ariaCopilotSend();
 };
 
-window.ensureBrsparkCopilotPanelsOnBody = function () {
+window.ensureAriaCopilotPanelsOnBody = function () {
     ['ai-copilot-panel', 'copilot-schema-preview-modal'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el && el.parentNode !== document.body) {
@@ -9905,12 +9905,12 @@ window.ensureBrsparkCopilotPanelsOnBody = function () {
     });
 };
 
-var __brsparkCopilotDragState = null;
-var __brsparkCopilotDragBindDone = false;
-var __brsparkCopilotResizeTimer = null;
-var BRSPARK_COPILOT_POS_KEY = 'brsparkCopilotPanelPos';
+var __ariaCopilotDragState = null;
+var __ariaCopilotDragBindDone = false;
+var __ariaCopilotResizeTimer = null;
+var ARIA_COPILOT_POS_KEY = 'ariaCopilotPanelPos';
 
-function brsparkCopilotFloatingDragEnabled() {
+function ariaCopilotFloatingDragEnabled() {
     try {
         return typeof window.matchMedia === 'function' && !window.matchMedia('(max-width: 700px)').matches;
     } catch (eM) {
@@ -9918,7 +9918,7 @@ function brsparkCopilotFloatingDragEnabled() {
     }
 }
 
-function brsparkCopilotClearPanelPositionStyles() {
+function ariaCopilotClearPanelPositionStyles() {
     var panel = document.getElementById('ai-copilot-panel');
     if (!panel) return;
     ['left', 'top', 'right', 'bottom'].forEach(function (k) {
@@ -9926,10 +9926,10 @@ function brsparkCopilotClearPanelPositionStyles() {
     });
 }
 
-function brsparkCopilotClampPanelToViewport() {
+function ariaCopilotClampPanelToViewport() {
     var panel = document.getElementById('ai-copilot-panel');
     if (!panel || !panel.classList.contains('is-open')) return;
-    if (!brsparkCopilotFloatingDragEnabled()) return;
+    if (!ariaCopilotFloatingDragEnabled()) return;
     var margin = 8;
     var r = panel.getBoundingClientRect();
     var vw = window.innerWidth;
@@ -9946,29 +9946,29 @@ function brsparkCopilotClampPanelToViewport() {
     panel.style.bottom = 'auto';
 }
 
-function brsparkCopilotResetPanelPosition() {
+function ariaCopilotResetPanelPosition() {
     var panel = document.getElementById('ai-copilot-panel');
     if (!panel) return;
     try {
-        sessionStorage.removeItem(BRSPARK_COPILOT_POS_KEY);
+        sessionStorage.removeItem(ARIA_COPILOT_POS_KEY);
     } catch (eR) {
         /* ignore */
     }
-    brsparkCopilotClearPanelPositionStyles();
-    if (brsparkCopilotFloatingDragEnabled()) {
+    ariaCopilotClearPanelPositionStyles();
+    if (ariaCopilotFloatingDragEnabled()) {
         requestAnimationFrame(function () {
-            brsparkCopilotClampPanelToViewport();
+            ariaCopilotClampPanelToViewport();
         });
     }
 }
 
-function brsparkCopilotApplySavedPanelPosition() {
+function ariaCopilotApplySavedPanelPosition() {
     var panel = document.getElementById('ai-copilot-panel');
     if (!panel || !panel.classList.contains('is-open')) return;
-    if (!brsparkCopilotFloatingDragEnabled()) return;
+    if (!ariaCopilotFloatingDragEnabled()) return;
     var raw;
     try {
-        raw = sessionStorage.getItem(BRSPARK_COPILOT_POS_KEY);
+        raw = sessionStorage.getItem(ARIA_COPILOT_POS_KEY);
     } catch (eS) {
         return;
     }
@@ -9985,16 +9985,16 @@ function brsparkCopilotApplySavedPanelPosition() {
     panel.style.top = Math.round(o.top) + 'px';
     panel.style.right = 'auto';
     panel.style.bottom = 'auto';
-    brsparkCopilotClampPanelToViewport();
+    ariaCopilotClampPanelToViewport();
 }
 
-function brsparkCopilotSavePanelPosition() {
+function ariaCopilotSavePanelPosition() {
     var panel = document.getElementById('ai-copilot-panel');
     if (!panel) return;
     var r = panel.getBoundingClientRect();
     try {
         sessionStorage.setItem(
-            BRSPARK_COPILOT_POS_KEY,
+            ARIA_COPILOT_POS_KEY,
             JSON.stringify({ left: Math.round(r.left), top: Math.round(r.top) })
         );
     } catch (eW) {
@@ -10002,8 +10002,8 @@ function brsparkCopilotSavePanelPosition() {
     }
 }
 
-function brsparkCopilotOnPanelDragMove(e) {
-    var st = __brsparkCopilotDragState;
+function ariaCopilotOnPanelDragMove(e) {
+    var st = __ariaCopilotDragState;
     if (!st || !st.panel) return;
     var dx = e.clientX - st.startX;
     var dy = e.clientY - st.startY;
@@ -10013,30 +10013,30 @@ function brsparkCopilotOnPanelDragMove(e) {
     st.panel.style.top = Math.round(nt) + 'px';
     st.panel.style.right = 'auto';
     st.panel.style.bottom = 'auto';
-    brsparkCopilotClampPanelToViewport();
+    ariaCopilotClampPanelToViewport();
 }
 
-function brsparkCopilotOnPanelDragEnd() {
-    var st = __brsparkCopilotDragState;
+function ariaCopilotOnPanelDragEnd() {
+    var st = __ariaCopilotDragState;
     if (!st) return;
-    __brsparkCopilotDragState = null;
+    __ariaCopilotDragState = null;
     var panel = st.panel;
     if (panel) {
         panel.classList.remove('is-dragging-copilot');
-        panel.removeEventListener('pointermove', brsparkCopilotOnPanelDragMove);
-        panel.removeEventListener('pointerup', brsparkCopilotOnPanelDragEnd);
-        panel.removeEventListener('pointercancel', brsparkCopilotOnPanelDragEnd);
+        panel.removeEventListener('pointermove', ariaCopilotOnPanelDragMove);
+        panel.removeEventListener('pointerup', ariaCopilotOnPanelDragEnd);
+        panel.removeEventListener('pointercancel', ariaCopilotOnPanelDragEnd);
         try {
             if (st.pid != null) panel.releasePointerCapture(st.pid);
         } catch (eC) {
             /* ignore */
         }
-        brsparkCopilotSavePanelPosition();
+        ariaCopilotSavePanelPosition();
     }
 }
 
-function brsparkCopilotOnPanelDragStart(e) {
-    if (!brsparkCopilotFloatingDragEnabled()) return;
+function ariaCopilotOnPanelDragStart(e) {
+    if (!ariaCopilotFloatingDragEnabled()) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     var head = e.currentTarget;
     if (!head) return;
@@ -10045,7 +10045,7 @@ function brsparkCopilotOnPanelDragStart(e) {
     if (e.target.closest && e.target.closest('button')) return;
     if (e.target.closest && e.target.closest('input, textarea, a, select')) return;
     var r = panel.getBoundingClientRect();
-    __brsparkCopilotDragState = {
+    __ariaCopilotDragState = {
         panel: panel,
         startX: e.clientX,
         startY: e.clientY,
@@ -10060,9 +10060,9 @@ function brsparkCopilotOnPanelDragStart(e) {
         panel.style.right = 'auto';
         panel.style.bottom = 'auto';
     }
-    panel.addEventListener('pointermove', brsparkCopilotOnPanelDragMove);
-    panel.addEventListener('pointerup', brsparkCopilotOnPanelDragEnd);
-    panel.addEventListener('pointercancel', brsparkCopilotOnPanelDragEnd);
+    panel.addEventListener('pointermove', ariaCopilotOnPanelDragMove);
+    panel.addEventListener('pointerup', ariaCopilotOnPanelDragEnd);
+    panel.addEventListener('pointercancel', ariaCopilotOnPanelDragEnd);
     try {
         panel.setPointerCapture(e.pointerId);
     } catch (eCap) {
@@ -10071,30 +10071,30 @@ function brsparkCopilotOnPanelDragStart(e) {
     e.preventDefault();
 }
 
-function brsparkCopilotBindPanelDrag() {
-    if (__brsparkCopilotDragBindDone) return;
+function ariaCopilotBindPanelDrag() {
+    if (__ariaCopilotDragBindDone) return;
     var panel = document.getElementById('ai-copilot-panel');
     var head = panel && panel.querySelector('.ai-copilot-head');
     if (!panel || !head) return;
-    __brsparkCopilotDragBindDone = true;
-    head.addEventListener('pointerdown', brsparkCopilotOnPanelDragStart);
+    __ariaCopilotDragBindDone = true;
+    head.addEventListener('pointerdown', ariaCopilotOnPanelDragStart);
     head.addEventListener('dblclick', function (e) {
-        if (!brsparkCopilotFloatingDragEnabled()) return;
+        if (!ariaCopilotFloatingDragEnabled()) return;
         if (e.target.closest && e.target.closest('button')) return;
         e.preventDefault();
-        brsparkCopilotResetPanelPosition();
+        ariaCopilotResetPanelPosition();
     });
     window.addEventListener(
         'resize',
         function () {
-            clearTimeout(__brsparkCopilotResizeTimer);
-            __brsparkCopilotResizeTimer = setTimeout(function () {
+            clearTimeout(__ariaCopilotResizeTimer);
+            __ariaCopilotResizeTimer = setTimeout(function () {
                 var p = document.getElementById('ai-copilot-panel');
                 if (!p || !p.classList.contains('is-open')) return;
-                if (brsparkCopilotFloatingDragEnabled()) {
-                    brsparkCopilotClampPanelToViewport();
+                if (ariaCopilotFloatingDragEnabled()) {
+                    ariaCopilotClampPanelToViewport();
                 } else {
-                    brsparkCopilotClearPanelPositionStyles();
+                    ariaCopilotClearPanelPositionStyles();
                 }
             }, 120);
         },
@@ -10102,7 +10102,7 @@ function brsparkCopilotBindPanelDrag() {
     );
 }
 
-function brsparkCopilotDeepClone(obj) {
+function ariaCopilotDeepClone(obj) {
     try {
         return JSON.parse(JSON.stringify(obj));
     } catch (e) {
@@ -10161,7 +10161,7 @@ var COPILOT_PREVIEW_ALLOWED_TYPES = (function () {
     return s;
 })();
 
-function brsparkCopilotPreviewTypeLabel(type) {
+function ariaCopilotPreviewTypeLabel(type) {
     var t = String(type || '').trim();
     for (var i = 0; i < COPILOT_PREVIEW_FIELD_TYPE_LABELS.length; i++) {
         if (COPILOT_PREVIEW_FIELD_TYPE_LABELS[i][0] === t) return COPILOT_PREVIEW_FIELD_TYPE_LABELS[i][1];
@@ -10170,9 +10170,9 @@ function brsparkCopilotPreviewTypeLabel(type) {
 }
 
 /** Recria o objeto do campo com defaults do novo tipo, preservando id e metadados editados na revisão. */
-function brsparkCopilotRehydrateFieldForTypeChange(oldField, newType, st) {
+function ariaCopilotRehydrateFieldForTypeChange(oldField, newType, st) {
     var nt = String(newType || '').trim();
-    if (!nt || !COPILOT_PREVIEW_ALLOWED_TYPES[nt]) return brsparkCopilotDeepClone(oldField);
+    if (!nt || !COPILOT_PREVIEW_ALLOWED_TYPES[nt]) return ariaCopilotDeepClone(oldField);
     var lab = oldField.label != null ? String(oldField.label) : 'Campo';
     var nTransit =
         nt === 'transit_start'
@@ -10195,7 +10195,7 @@ function brsparkCopilotRehydrateFieldForTypeChange(oldField, newType, st) {
     return nf;
 }
 
-function brsparkCopilotAppendPreviewTypeSelect(typCell, currentType) {
+function ariaCopilotAppendPreviewTypeSelect(typCell, currentType) {
     var sel = document.createElement('select');
     sel.className = 'copilot-prev-type';
     sel.title = 'Tipo de campo no app';
@@ -10214,7 +10214,7 @@ function brsparkCopilotAppendPreviewTypeSelect(typCell, currentType) {
     if (cur && !found) {
         var ox = document.createElement('option');
         ox.value = cur;
-        ox.textContent = brsparkCopilotPreviewTypeLabel(cur) + ' (' + cur + ')';
+        ox.textContent = ariaCopilotPreviewTypeLabel(cur) + ' (' + cur + ')';
         ox.selected = true;
         sel.insertBefore(ox, sel.firstChild);
     }
@@ -10225,7 +10225,7 @@ function brsparkCopilotAppendPreviewTypeSelect(typCell, currentType) {
     typCell.appendChild(sel);
 }
 
-function brsparkCopilotExtractPreviewAiSeed(field) {
+function ariaCopilotExtractPreviewAiSeed(field) {
     if (!field || typeof field !== 'object') return '';
     var directKeys = ['previewAiNote', 'copilotAiNote', 'aiNote', 'ai_note'];
     for (var i = 0; i < directKeys.length; i++) {
@@ -10251,13 +10251,13 @@ function brsparkCopilotExtractPreviewAiSeed(field) {
     return '';
 }
 
-function brsparkCopilotBuildInterviewPreviewContext() {
+function ariaCopilotBuildInterviewPreviewContext() {
     var parts = [];
     var ctx = collectCopilotFormContext();
     if (ctx && ctx.objective) parts.push('Objetivo: ' + String(ctx.objective).trim());
     if (ctx && ctx.sector) parts.push('Setor/cenário: ' + String(ctx.sector).trim());
     if (ctx && ctx.audience) parts.push('Quem preenche: ' + String(ctx.audience).trim());
-    var msgs = Array.isArray(window.__brsparkCopilotMessages) ? window.__brsparkCopilotMessages : [];
+    var msgs = Array.isArray(window.__ariaCopilotMessages) ? window.__ariaCopilotMessages : [];
     var userLines = [];
     msgs.forEach(function (msg) {
         if (!msg || msg.role !== 'user' || msg.hiddenFromUi) return;
@@ -10281,8 +10281,8 @@ function brsparkCopilotBuildInterviewPreviewContext() {
  * para não repetir URL/resumo em cada linha «Instruções p/ IA».
  * @returns {string}
  */
-function brsparkCopilotBuildDefaultPreviewGeneralNote() {
-    var interview = brsparkCopilotBuildInterviewPreviewContext();
+function ariaCopilotBuildDefaultPreviewGeneralNote() {
+    var interview = ariaCopilotBuildInterviewPreviewContext();
     if (!interview) return '';
     return 'Contexto do pedido (pode editar ou apagar):\n' + interview;
 }
@@ -10292,12 +10292,12 @@ function brsparkCopilotBuildDefaultPreviewGeneralNote() {
  * Só pré-preenche dicas curtas para tipos Visão IA onde ajuda o reprocessamento.
  * @param {{ type?: string, label?: string, description?: string }} row
  */
-function brsparkCopilotBuildDefaultPreviewAiNote(row) {
+function ariaCopilotBuildDefaultPreviewAiNote(row) {
     if (!row || String(row.type || '').trim() === 'section_break') return '';
     var label = String(row.label || '').trim();
     var description = String(row.description || '').trim();
     var type = String(row.type || '').trim();
-    var interview = brsparkCopilotBuildInterviewPreviewContext();
+    var interview = ariaCopilotBuildInterviewPreviewContext();
     var blob = normalizeFieldLabelKey([label, description, interview].join(' '));
     if (type === 'vision_ai_analysis' || type === 'vision_ai_comparison' || type === 'vision_checklist') {
         if (blob.indexOf('epi') >= 0 || blob.indexOf('equipamento de protecao') >= 0) {
@@ -10310,7 +10310,7 @@ function brsparkCopilotBuildDefaultPreviewAiNote(row) {
     return '';
 }
 
-function brsparkCopilotCollectNewFieldPreviewRows(prevFields, proposedSchema) {
+function ariaCopilotCollectNewFieldPreviewRows(prevFields, proposedSchema) {
     var prevIds = new Set();
     (prevFields || []).forEach(function (f) {
         if (f && f.id) prevIds.add(String(f.id));
@@ -10325,22 +10325,22 @@ function brsparkCopilotCollectNewFieldPreviewRows(prevFields, proposedSchema) {
             type: f.type != null ? String(f.type) : '',
             description: f.description != null ? String(f.description) : '',
             required: !!(f.required === true || f.required === 'true'),
-            aiNote: brsparkCopilotExtractPreviewAiSeed(f),
+            aiNote: ariaCopilotExtractPreviewAiSeed(f),
         });
     });
     return rows;
 }
 
-function brsparkCopilotNeedsSchemaPreviewTable(data) {
+function ariaCopilotNeedsSchemaPreviewTable(data) {
     if (!data || !Array.isArray(data.schemaData)) return false;
-    var rows = brsparkCopilotCollectNewFieldPreviewRows(fields, data.schemaData);
+    var rows = ariaCopilotCollectNewFieldPreviewRows(fields, data.schemaData);
     if (!rows.length) return false;
-    if (brsparkCopilotCountOperationalFields() === 0) return true;
+    if (ariaCopilotCountOperationalFields() === 0) return true;
     if (rows.length >= 2) return true;
     return false;
 }
 
-function brsparkCopilotMergePreviewIntoSchemaData(proposed, rowMap) {
+function ariaCopilotMergePreviewIntoSchemaData(proposed, rowMap) {
     var prevIds = new Set();
     fields.forEach(function (f) {
         if (f && f.id) prevIds.add(String(f.id));
@@ -10349,7 +10349,7 @@ function brsparkCopilotMergePreviewIntoSchemaData(proposed, rowMap) {
     (proposed || []).forEach(function (f) {
         if (!f || !f.id) return;
         var id = String(f.id);
-        var copy = brsparkCopilotDeepClone(f);
+        var copy = ariaCopilotDeepClone(f);
         if (!prevIds.has(id)) {
             var st = rowMap[id];
             if (!st || !st.include) return;
@@ -10364,7 +10364,7 @@ function brsparkCopilotMergePreviewIntoSchemaData(proposed, rowMap) {
                 ? String(st.type).trim()
                 : copy.type;
             if (wantType !== copy.type) {
-                copy = brsparkCopilotRehydrateFieldForTypeChange(copy, wantType, st);
+                copy = ariaCopilotRehydrateFieldForTypeChange(copy, wantType, st);
             } else {
                 copy.required = !!st.required;
                 if (st.description !== undefined && st.description !== null) {
@@ -10377,7 +10377,7 @@ function brsparkCopilotMergePreviewIntoSchemaData(proposed, rowMap) {
     return out;
 }
 
-function brsparkCopilotReadPreviewRowMapFromDom() {
+function ariaCopilotReadPreviewRowMapFromDom() {
     var map = {};
     var trs = document.querySelectorAll('#copilot-schema-preview-tbody tr[data-field-id]');
     trs.forEach(function (tr) {
@@ -10400,15 +10400,15 @@ function brsparkCopilotReadPreviewRowMapFromDom() {
     return map;
 }
 
-function brsparkCopilotOpenSchemaPreviewModal(data) {
-    window.ensureBrsparkCopilotPanelsOnBody();
-    var rows = brsparkCopilotCollectNewFieldPreviewRows(fields, data.schemaData);
+function ariaCopilotOpenSchemaPreviewModal(data) {
+    window.ensureAriaCopilotPanelsOnBody();
+    var rows = ariaCopilotCollectNewFieldPreviewRows(fields, data.schemaData);
     var tbody = document.getElementById('copilot-schema-preview-tbody');
     var modal = document.getElementById('copilot-schema-preview-modal');
     var genTa = document.getElementById('copilot-schema-preview-general-note');
     if (!tbody || !modal) return;
     tbody.innerHTML = '';
-    if (genTa) genTa.value = brsparkCopilotBuildDefaultPreviewGeneralNote();
+    if (genTa) genTa.value = ariaCopilotBuildDefaultPreviewGeneralNote();
     rows.forEach(function (r) {
         var isSec = r.type === 'section_break';
         var tr = document.createElement('tr');
@@ -10423,7 +10423,7 @@ function brsparkCopilotOpenSchemaPreviewModal(data) {
         var labCell = document.createElement('td');
         labCell.textContent = r.label || '(sem rótulo)';
         var typCell = document.createElement('td');
-        brsparkCopilotAppendPreviewTypeSelect(typCell, r.type || '');
+        ariaCopilotAppendPreviewTypeSelect(typCell, r.type || '');
         var descCell = document.createElement('td');
         var inp = document.createElement('input');
         inp.type = 'text';
@@ -10437,7 +10437,7 @@ function brsparkCopilotOpenSchemaPreviewModal(data) {
         aiTa.rows = 2;
         aiTa.placeholder =
             'Opcional: instrução só para este campo ao usar «Reprocessar com instruções». O contexto do chat entra em Comentários gerais.';
-        aiTa.value = r.aiNote || brsparkCopilotBuildDefaultPreviewAiNote(r);
+        aiTa.value = r.aiNote || ariaCopilotBuildDefaultPreviewAiNote(r);
         aiCell.appendChild(aiTa);
         var reqCell = document.createElement('td');
         if (isSec) {
@@ -10457,16 +10457,16 @@ function brsparkCopilotOpenSchemaPreviewModal(data) {
         tr.appendChild(reqCell);
         tbody.appendChild(tr);
     });
-    window.__brsparkCopilotPreviewPayload = brsparkCopilotDeepClone(data);
-    window.__brsparkCopilotDeferredLogicSuggestions = Array.isArray(data.logicSuggestions)
+    window.__ariaCopilotPreviewPayload = ariaCopilotDeepClone(data);
+    window.__ariaCopilotDeferredLogicSuggestions = Array.isArray(data.logicSuggestions)
         ? data.logicSuggestions.slice()
         : [];
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
 }
 
-function brsparkCopilotCancelPendingCopilotProposal() {
-    var d = window.__brsparkCopilotLast;
+function ariaCopilotCancelPendingCopilotProposal() {
+    var d = window.__ariaCopilotLast;
     if (d) {
         d.schemaPatch = null;
         d.logicSuggestions = [];
@@ -10485,19 +10485,19 @@ function brsparkCopilotCancelPendingCopilotProposal() {
             /* ignore */
         }
     }
-    window.__brsparkCopilotLogicLast = [];
-    window.__brsparkCopilotDeferredLogicSuggestions = [];
-    delete window.__brsparkCopilotPreviewPayload;
+    window.__ariaCopilotLogicLast = [];
+    window.__ariaCopilotDeferredLogicSuggestions = [];
+    delete window.__ariaCopilotPreviewPayload;
 }
 
-window.brsparkCopilotPreviewMarkAllOptional = function () {
+window.ariaCopilotPreviewMarkAllOptional = function () {
     document.querySelectorAll('#copilot-schema-preview-tbody .copilot-prev-required').forEach(function (el) {
         if (!el.disabled) el.checked = false;
     });
 };
 
 /** Fecha só o diálogo visual — não cancela a proposta em memória (para reprocessar via IA). */
-window.brsparkCopilotHideSchemaPreviewModal = function () {
+window.ariaCopilotHideSchemaPreviewModal = function () {
     var modal = document.getElementById('copilot-schema-preview-modal');
     if (modal) {
         modal.classList.remove('is-open');
@@ -10505,8 +10505,8 @@ window.brsparkCopilotHideSchemaPreviewModal = function () {
     }
 };
 
-function brsparkCopilotBuildReprocessInstructionMessage(rowMap, proposedSchema, generalNote) {
-    var rows = brsparkCopilotCollectNewFieldPreviewRows(fields, proposedSchema);
+function ariaCopilotBuildReprocessInstructionMessage(rowMap, proposedSchema, generalNote) {
+    var rows = ariaCopilotCollectNewFieldPreviewRows(fields, proposedSchema);
     var lines = [];
     rows.forEach(function (r) {
         var st = rowMap[r.id];
@@ -10519,7 +10519,7 @@ function brsparkCopilotBuildReprocessInstructionMessage(rowMap, proposedSchema, 
         lines.push('- **' + (r.label || r.id) + '** (`' + r.id + '`): ' + bits.join('; ') + '.');
     });
     var gn = String(generalNote || '').trim();
-    var merged = brsparkCopilotMergePreviewIntoSchemaData(proposedSchema, rowMap);
+    var merged = ariaCopilotMergePreviewIntoSchemaData(proposedSchema, rowMap);
     var jsonPart = '';
     try {
         jsonPart = JSON.stringify(merged);
@@ -10537,13 +10537,13 @@ function brsparkCopilotBuildReprocessInstructionMessage(rowMap, proposedSchema, 
     );
 }
 
-window.brsparkCopilotReprocessSchemaPreview = async function () {
-    var base = window.__brsparkCopilotPreviewPayload || window.__brsparkCopilotLast;
+window.ariaCopilotReprocessSchemaPreview = async function () {
+    var base = window.__ariaCopilotPreviewPayload || window.__ariaCopilotLast;
     if (!base || !Array.isArray(base.schemaData)) {
         fbAlert('fb_alert_copilot_reprocess', null, 'Sem proposta carregada para reprocessar.');
         return;
     }
-    var rowMap = brsparkCopilotReadPreviewRowMapFromDom();
+    var rowMap = ariaCopilotReadPreviewRowMapFromDom();
     var genEl = document.getElementById('copilot-schema-preview-general-note');
     var generalNote = genEl ? String(genEl.value || '') : '';
     var hasAny =
@@ -10561,47 +10561,47 @@ window.brsparkCopilotReprocessSchemaPreview = async function () {
             return;
         }
     }
-    var msg = brsparkCopilotBuildReprocessInstructionMessage(rowMap, base.schemaData, generalNote);
-    window.brsparkCopilotHideSchemaPreviewModal();
-    delete window.__brsparkCopilotPreviewPayload;
-    await brsparkCopilotPostChatRound(msg);
+    var msg = ariaCopilotBuildReprocessInstructionMessage(rowMap, base.schemaData, generalNote);
+    window.ariaCopilotHideSchemaPreviewModal();
+    delete window.__ariaCopilotPreviewPayload;
+    await ariaCopilotPostChatRound(msg);
 };
 
-window.brsparkCopilotCloseSchemaPreview = function (apply) {
+window.ariaCopilotCloseSchemaPreview = function (apply) {
     var modal = document.getElementById('copilot-schema-preview-modal');
     if (modal) {
         modal.classList.remove('is-open');
         modal.setAttribute('aria-hidden', 'true');
     }
     if (!apply) {
-        brsparkCopilotCancelPendingCopilotProposal();
+        ariaCopilotCancelPendingCopilotProposal();
         var ub = document.getElementById('ai-copilot-undo-btn');
-        if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
+        if (ub) ub.disabled = !(window.__ariaSchemaUndoStack && window.__ariaSchemaUndoStack.length);
         return;
     }
-    var base = window.__brsparkCopilotPreviewPayload || window.__brsparkCopilotLast;
+    var base = window.__ariaCopilotPreviewPayload || window.__ariaCopilotLast;
     if (!base) return;
-    var rowMap = brsparkCopilotReadPreviewRowMapFromDom();
-    var merged = brsparkCopilotMergePreviewIntoSchemaData(base.schemaData, rowMap);
-    var data = brsparkCopilotDeepClone(base);
+    var rowMap = ariaCopilotReadPreviewRowMapFromDom();
+    var merged = ariaCopilotMergePreviewIntoSchemaData(base.schemaData, rowMap);
+    var data = ariaCopilotDeepClone(base);
     data.schemaData = merged;
     data.schemaPatch = null;
-    data.logicSuggestions = window.__brsparkCopilotDeferredLogicSuggestions || [];
-    window.__brsparkCopilotLast = data;
-    window.__brsparkCopilotLogicLast = data.logicSuggestions || [];
-    delete window.__brsparkCopilotPreviewPayload;
-    window.__brsparkCopilotDeferredLogicSuggestions = [];
+    data.logicSuggestions = window.__ariaCopilotDeferredLogicSuggestions || [];
+    window.__ariaCopilotLast = data;
+    window.__ariaCopilotLogicLast = data.logicSuggestions || [];
+    delete window.__ariaCopilotPreviewPayload;
+    window.__ariaCopilotDeferredLogicSuggestions = [];
 
     pushCopilotUndoSnapshot();
-    window.brsparkCopilotApplyPatch({ skipUndoPush: true });
-    if (window.__brsparkCopilotLogicLast && window.__brsparkCopilotLogicLast.length) {
-        window.brsparkCopilotApplyLogic({ skipUndoPush: true });
+    window.ariaCopilotApplyPatch({ skipUndoPush: true });
+    if (window.__ariaCopilotLogicLast && window.__ariaCopilotLogicLast.length) {
+        window.ariaCopilotApplyLogic({ skipUndoPush: true });
     }
     var ub = document.getElementById('ai-copilot-undo-btn');
-    if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
+    if (ub) ub.disabled = !(window.__ariaSchemaUndoStack && window.__ariaSchemaUndoStack.length);
 };
 
-function brsparkCopilotCountOperationalInSchema(schema) {
+function ariaCopilotCountOperationalInSchema(schema) {
     if (!Array.isArray(schema)) return 0;
     var n = 0;
     for (var i = 0; i < schema.length; i++) {
@@ -10611,7 +10611,7 @@ function brsparkCopilotCountOperationalInSchema(schema) {
     return n;
 }
 
-function brsparkCopilotDeriveFallbackTaskTitle(schema, ctx) {
+function ariaCopilotDeriveFallbackTaskTitle(schema, ctx) {
     var firstSec = null;
     for (var i = 0; i < (schema || []).length; i++) {
         var f = schema[i];
@@ -10631,7 +10631,7 @@ function brsparkCopilotDeriveFallbackTaskTitle(schema, ctx) {
     return 'Formulário';
 }
 
-function brsparkCopilotGuessTaskIconFromSchema(schema, ctx) {
+function ariaCopilotGuessTaskIconFromSchema(schema, ctx) {
     var parts = [];
     if (ctx && ctx.objective) parts.push(String(ctx.objective));
     (schema || []).forEach(function (f) {
@@ -10674,18 +10674,18 @@ function brsparkCopilotGuessTaskIconFromSchema(schema, ctx) {
 }
 
 /** Garante título e ícone do modelo quando a IA não os enviou (ou enviou título genérico). */
-function brsparkCopilotEnsureTaskBrandingFromResponse(data) {
+function ariaCopilotEnsureTaskBrandingFromResponse(data) {
     if (!data || typeof data !== 'object') return;
     var schema = Array.isArray(data.schemaData) ? data.schemaData : null;
     if (!schema || !schema.length) return;
-    if (brsparkCopilotCountOperationalInSchema(schema) < 1) return;
+    if (ariaCopilotCountOperationalInSchema(schema) < 1) return;
     var ctx = collectCopilotFormContext();
     var genericTitle = function (t) {
         return isGenericDefaultFormTitle(t);
     };
     var tr = data.templateTitleResolved != null ? String(data.templateTitleResolved).trim() : '';
     if (!tr || genericTitle(tr)) {
-        data.templateTitleResolved = brsparkCopilotDeriveFallbackTaskTitle(schema, ctx);
+        data.templateTitleResolved = ariaCopilotDeriveFallbackTaskTitle(schema, ctx);
     }
     if (!data.templateMetadata || typeof data.templateMetadata !== 'object' || Array.isArray(data.templateMetadata)) {
         data.templateMetadata = {};
@@ -10694,17 +10694,17 @@ function brsparkCopilotEnsureTaskBrandingFromResponse(data) {
     }
     var ic = String(data.templateMetadata.icon || '').trim();
     if (!ic) {
-        data.templateMetadata.icon = brsparkCopilotGuessTaskIconFromSchema(schema, ctx);
+        data.templateMetadata.icon = ariaCopilotGuessTaskIconFromSchema(schema, ctx);
         data.templateMetadata.iconLibrary = 'Ionicons';
     }
 }
 
-function brsparkCopilotApplyChatResponse(data) {
-    window.__brsparkCopilotClarifyOptions = Array.isArray(data.clarifyOptions) ? data.clarifyOptions : [];
+function ariaCopilotApplyChatResponse(data) {
+    window.__ariaCopilotClarifyOptions = Array.isArray(data.clarifyOptions) ? data.clarifyOptions : [];
     renderCopilotClarifyCards();
 
-    const hasClarify = window.__brsparkCopilotClarifyOptions.length > 0;
-    /* Comparação com o estado atual **antes** de brsparkCopilotEnsureTaskBrandingFromResponse:
+    const hasClarify = window.__ariaCopilotClarifyOptions.length > 0;
+    /* Comparação com o estado atual **antes** de ariaCopilotEnsureTaskBrandingFromResponse:
      esse fallback preenche ícone/título do modelo e faria metadataChanged/titleChanged sem patch da IA. */
 
     let schemaChanged = false;
@@ -10756,19 +10756,19 @@ function brsparkCopilotApplyChatResponse(data) {
     const changed = schemaChanged || settingsChanged || metadataChanged || titleChanged;
 
     var useSchemaPreview =
-        !hasClarify && schemaChanged && brsparkCopilotNeedsSchemaPreviewTable(data);
+        !hasClarify && schemaChanged && ariaCopilotNeedsSchemaPreviewTable(data);
     if (hasClarify) {
-        window.__brsparkCopilotLogicLast = [];
+        window.__ariaCopilotLogicLast = [];
     } else if (useSchemaPreview) {
-        window.__brsparkCopilotLogicLast = [];
+        window.__ariaCopilotLogicLast = [];
     } else {
-        window.__brsparkCopilotLogicLast = Array.isArray(data.logicSuggestions) ? data.logicSuggestions : [];
+        window.__ariaCopilotLogicLast = Array.isArray(data.logicSuggestions) ? data.logicSuggestions : [];
     }
     const hasLog =
         !hasClarify &&
         !useSchemaPreview &&
-        Array.isArray(window.__brsparkCopilotLogicLast) &&
-        window.__brsparkCopilotLogicLast.some(function (s) {
+        Array.isArray(window.__ariaCopilotLogicLast) &&
+        window.__ariaCopilotLogicLast.some(function (s) {
             const monId = s && s.monitorFieldId ? String(s.monitorFieldId) : '';
             if (!monId) return false;
             return fields.some(function (f) {
@@ -10777,7 +10777,7 @@ function brsparkCopilotApplyChatResponse(data) {
         });
 
     if (!hasClarify) {
-        brsparkCopilotEnsureTaskBrandingFromResponse(data);
+        ariaCopilotEnsureTaskBrandingFromResponse(data);
     }
 
     let assistantContent = String(data.replyText || '').trim();
@@ -10806,22 +10806,22 @@ function brsparkCopilotApplyChatResponse(data) {
         }
     }
 
-    window.__brsparkCopilotMessages.push({ role: 'assistant', content: assistantContent });
-    window.__brsparkCopilotLast = data;
+    window.__ariaCopilotMessages.push({ role: 'assistant', content: assistantContent });
+    window.__ariaCopilotLast = data;
     renderCopilotInsights(data);
     renderCopilotMessages();
     const ch = document.getElementById('ai-copilot-clarify-hint');
     if (ch) ch.style.display = hasClarify ? 'block' : 'none';
 
     if (!hasClarify && useSchemaPreview) {
-        brsparkCopilotOpenSchemaPreviewModal(data);
+        ariaCopilotOpenSchemaPreviewModal(data);
     } else if (!hasClarify && (changed || hasLog)) {
         pushCopilotUndoSnapshot();
-        if (changed) window.brsparkCopilotApplyPatch({ skipUndoPush: true });
-        if (hasLog) window.brsparkCopilotApplyLogic({ skipUndoPush: true });
+        if (changed) window.ariaCopilotApplyPatch({ skipUndoPush: true });
+        if (hasLog) window.ariaCopilotApplyLogic({ skipUndoPush: true });
     }
     const ub = document.getElementById('ai-copilot-undo-btn');
-    if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
+    if (ub) ub.disabled = !(window.__ariaSchemaUndoStack && window.__ariaSchemaUndoStack.length);
 
     const foot = document.getElementById('copilot-rag-footnote');
     if (foot) {
@@ -10919,25 +10919,25 @@ function brsparkCopilotApplyChatResponse(data) {
  * @param {string} userText
  * @param {{ hideUserBubble?: boolean }} [opts] — se hideUserBubble, a mensagem entra no histórico enviado à API mas não aparece como bolha «Você».
  */
-async function brsparkCopilotPostChatRound(userText, opts) {
-    const token = brsparkAdminBearerToken();
+async function ariaCopilotPostChatRound(userText, opts) {
+    const token = ariaAdminBearerToken();
     if (!token) {
         fbAlert('fb_alert_login', null, 'Faça login no painel admin (token ausente).');
         return;
     }
     const trimmed = String(userText || '').trim();
     if (!trimmed) return;
-    window.__brsparkCopilotMessages = window.__brsparkCopilotMessages || [];
+    window.__ariaCopilotMessages = window.__ariaCopilotMessages || [];
     var userEntry = { role: 'user', content: trimmed };
     if (opts && opts.hideUserBubble) userEntry.hiddenFromUi = true;
-    window.__brsparkCopilotMessages.push(userEntry);
-    window.__brsparkCopilotClarifyOptions = [];
+    window.__ariaCopilotMessages.push(userEntry);
+    window.__ariaCopilotClarifyOptions = [];
     renderCopilotClarifyCards();
     const ch = document.getElementById('ai-copilot-clarify-hint');
     if (ch) ch.style.display = 'none';
     renderCopilotMessages();
 
-    const summary = String(window.__brsparkCopilotSpreadsheetSummary || '').slice(0, 12000);
+    const summary = String(window.__ariaCopilotSpreadsheetSummary || '').slice(0, 12000);
 
     const tid =
         typeof currentFormId === 'string' &&
@@ -10947,7 +10947,7 @@ async function brsparkCopilotPostChatRound(userText, opts) {
             ? currentFormId.trim()
             : '';
     const chatPayload = {
-        messages: window.__brsparkCopilotMessages,
+        messages: window.__ariaCopilotMessages,
         schemaData: fields,
         formContext: collectCopilotFormContext(),
         spreadsheetSummary: summary,
@@ -10984,9 +10984,9 @@ async function brsparkCopilotPostChatRound(userText, opts) {
     try {
         // Robustez por padrão: usa resposta JSON normal (não-stream).
         // Stream continua disponível se habilitado explicitamente em runtime.
-        const useStream = window.__brsparkCopilotUseStream === true;
+        const useStream = window.__ariaCopilotUseStream === true;
         const chatUrl =
-            brsparkApiBase() +
+            ariaApiBase() +
             '/checklists/ai/session/chat' +
             (useStream ? '-stream' : '');
 
@@ -11102,13 +11102,13 @@ async function brsparkCopilotPostChatRound(userText, opts) {
             }
         }
 
-        brsparkCopilotApplyChatResponse(data);
+        ariaCopilotApplyChatResponse(data);
     } catch (e) {
         console.error(e);
         const ragFootErr = document.getElementById('copilot-rag-footnote');
         if (ragFootErr) ragFootErr.textContent = '';
         const isAbort = !!(e && (e.name === 'AbortError' || /timeout/i.test(String(e.message || ''))));
-        window.__brsparkCopilotMessages.push({
+        window.__ariaCopilotMessages.push({
             role: 'assistant',
             content: isAbort
                 ? 'Erro: a IA demorou além do limite de 420s. Tente novamente (ou reduza o tamanho do arquivo/contexto).'
@@ -11121,8 +11121,8 @@ async function brsparkCopilotPostChatRound(userText, opts) {
     }
 }
 
-window.brsparkCopilotSend = async function () {
-    const token = brsparkAdminBearerToken();
+window.ariaCopilotSend = async function () {
+    const token = ariaAdminBearerToken();
     if (!token) {
         fbAlert('fb_alert_login', null, 'Faça login no painel admin (token ausente).');
         return;
@@ -11131,7 +11131,7 @@ window.brsparkCopilotSend = async function () {
     let text = inp ? String(inp.value || '').trim() : '';
     let autoPrompt = false;
     if (!text) {
-        if (window.__brsparkCopilotSpreadsheetSummary && String(window.__brsparkCopilotSpreadsheetSummary).trim()) {
+        if (window.__ariaCopilotSpreadsheetSummary && String(window.__ariaCopilotSpreadsheetSummary).trim()) {
             autoPrompt = true;
             text =
                 'Com base na planilha em contexto e no formulário atual no canvas, aplique melhorias concretas agora: devolva `schemaPatch` (e `logicSuggestions` se necessário), inferindo automaticamente os tipos de campo. Não responda apenas com próximos passos.';
@@ -11145,9 +11145,9 @@ window.brsparkCopilotSend = async function () {
         }
     }
     if (inp) inp.value = '';
-    window.__brsparkCopilotShowStartScreen = false;
+    window.__ariaCopilotShowStartScreen = false;
     updateCopilotStartScreenUi();
-    await brsparkCopilotPostChatRound(text, autoPrompt ? { hideUserBubble: true } : undefined);
+    await ariaCopilotPostChatRound(text, autoPrompt ? { hideUserBubble: true } : undefined);
     const inpAfter = document.getElementById('ai-copilot-input');
     if (inpAfter) {
         try {
@@ -11158,8 +11158,8 @@ window.brsparkCopilotSend = async function () {
     }
 };
 
-window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
-    const token = brsparkAdminBearerToken();
+window.ariaCopilotAnalyzeExcelFile = async function (inputEl) {
+    const token = ariaAdminBearerToken();
     if (!token) {
         fbAlert('fb_alert_login', null, 'Faça login no painel admin (token ausente).');
         if (inputEl) inputEl.value = '';
@@ -11173,7 +11173,7 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
     for (var bi = 0; bi < rawList.length; bi++) {
         var f = rawList[bi];
         var nm = String(f && f.name ? f.name : '').toLowerCase();
-        if (!brsparkCopilotReferenceFileNameOk(nm)) bad.push(f && f.name ? f.name : '(sem nome)');
+        if (!ariaCopilotReferenceFileNameOk(nm)) bad.push(f && f.name ? f.name : '(sem nome)');
         else files.push(f);
     }
     if (bad.length) {
@@ -11189,17 +11189,17 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
             return;
         }
     }
-    if (files.length > BRSPARK_COPILOT_REF_MAX_FILES) {
+    if (files.length > ARIA_COPILOT_REF_MAX_FILES) {
         fbAlert(
             'fb_alert_copilot_max_files',
-            { max: String(BRSPARK_COPILOT_REF_MAX_FILES) },
+            { max: String(ARIA_COPILOT_REF_MAX_FILES) },
             'No máximo ' +
-                BRSPARK_COPILOT_REF_MAX_FILES +
+                ARIA_COPILOT_REF_MAX_FILES +
                 ' arquivos por vez. Serão analisados só os primeiros ' +
-                BRSPARK_COPILOT_REF_MAX_FILES +
+                ARIA_COPILOT_REF_MAX_FILES +
                 '.'
         );
-        files = files.slice(0, BRSPARK_COPILOT_REF_MAX_FILES);
+        files = files.slice(0, ARIA_COPILOT_REF_MAX_FILES);
     }
 
     const statusEl = document.getElementById('copilot-excel-status');
@@ -11208,7 +11208,7 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
             ? 'Lendo e analisando ' + files.length + ' arquivos com IA…'
             : 'Lendo e analisando o arquivo com IA…',
     );
-    window.__brsparkCopilotExcelBusy = true;
+    window.__ariaCopilotExcelBusy = true;
     updateCopilotExcelUi();
     if (statusEl) {
         statusEl.textContent =
@@ -11221,7 +11221,7 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
     const hint = hintEl ? String(hintEl.value || '').trim() : '';
     const opts = Object.assign({}, collectCopilotFormContext(), { hint: hint });
 
-    window.__brsparkCopilotReferenceSummaries = window.__brsparkCopilotReferenceSummaries || [];
+    window.__ariaCopilotReferenceSummaries = window.__ariaCopilotReferenceSummaries || [];
     const newPieces = [];
     const errors = [];
 
@@ -11255,7 +11255,7 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
                 }, FILE_ANALYZE_TIMEOUT_MS);
                 let res;
                 try {
-                    res = await fetch(brsparkApiBase() + '/checklists/ai/analyze-from-file', {
+                    res = await fetch(ariaApiBase() + '/checklists/ai/analyze-from-file', {
                         method: 'POST',
                         headers: { Authorization: 'Bearer ' + token },
                         body: fd,
@@ -11287,7 +11287,7 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
 
         if (newPieces.length) {
             for (var j = 0; j < newPieces.length; j++) {
-                window.__brsparkCopilotReferenceSummaries.push(newPieces[j]);
+                window.__ariaCopilotReferenceSummaries.push(newPieces[j]);
             }
             rebuildCopilotSpreadsheetSummaryFromRefs();
             if (statusEl) {
@@ -11320,9 +11320,9 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
                     : 'Acabei de enviar ' +
                       nOk +
                       ' arquivos de referência para análise (os resumos estão no contexto do sistema). NÃO responda só com resumo/dicas. Gere agora um `schemaPatch` completo para montar o formulário no canvas, consolidando convergências e conflitos entre as fontes, com tipos inferidos automaticamente e evidências nos campos críticos. Inclua `templateTitlePatch` e `templateMetadataPatch.icon` quando fizer sentido.';
-            window.__brsparkCopilotShowStartScreen = false;
+            window.__ariaCopilotShowStartScreen = false;
             updateCopilotStartScreenUi();
-            await brsparkCopilotPostChatRound(msgRound, { hideUserBubble: true });
+            await ariaCopilotPostChatRound(msgRound, { hideUserBubble: true });
         } else {
             if (statusEl) statusEl.textContent = errors.length ? 'Erro: ' + errors.join(' | ') : 'Nenhum arquivo analisado.';
             if (errors.length) {
@@ -11344,16 +11344,16 @@ window.brsparkCopilotAnalyzeExcelFile = async function (inputEl) {
             e && e.message ? e.message : String(e)
         );
     } finally {
-        window.__brsparkCopilotExcelBusy = false;
+        window.__ariaCopilotExcelBusy = false;
         endCopilotThinking();
         updateCopilotExcelUi();
         if (inputEl) inputEl.value = '';
     }
 };
 
-window.brsparkCopilotApplyPatch = function (opts) {
+window.ariaCopilotApplyPatch = function (opts) {
     opts = opts || {};
-    const data = window.__brsparkCopilotLast;
+    const data = window.__ariaCopilotLast;
     if (!data) return;
     const hasSchema = Array.isArray(data.schemaData);
     const hasSettings = data.templateSettings && typeof data.templateSettings === 'object';
@@ -11399,11 +11399,11 @@ window.brsparkCopilotApplyPatch = function (opts) {
         window.fbScheduleSchemaLocaleAutoTranslate();
     }
     const ub = document.getElementById('ai-copilot-undo-btn');
-    if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
+    if (ub) ub.disabled = !(window.__ariaSchemaUndoStack && window.__ariaSchemaUndoStack.length);
 };
 
-window.brsparkCopilotUndo = function () {
-    const st = window.__brsparkSchemaUndoStack;
+window.ariaCopilotUndo = function () {
+    const st = window.__ariaSchemaUndoStack;
     if (!st || !st.length) return;
     const entry = parseCopilotUndoEntry(st.pop());
     if (!entry) return;
@@ -11433,8 +11433,8 @@ window.brsparkCopilotUndo = function () {
     if (ub) ub.disabled = st.length === 0;
 };
 
-window.brsparkCopilotSuggestLogic = async function () {
-    const token = brsparkAdminBearerToken();
+window.ariaCopilotSuggestLogic = async function () {
+    const token = ariaAdminBearerToken();
     if (!token) {
         fbAlert('fb_alert_login', null, 'Faça login no painel admin (token ausente).');
         return;
@@ -11447,7 +11447,7 @@ window.brsparkCopilotSuggestLogic = async function () {
     }
     beginCopilotThinking('A IA está elaborando sugestões de regras…');
     try {
-        const res = await fetch(brsparkApiBase() + '/checklists/ai/suggest-logic', {
+        const res = await fetch(ariaApiBase() + '/checklists/ai/suggest-logic', {
             method: 'POST',
             headers: {
                 Authorization: 'Bearer ' + token,
@@ -11474,7 +11474,7 @@ window.brsparkCopilotSuggestLogic = async function () {
         }
         if (!res.ok) throw new Error(data.error || res.statusText || 'Pedido falhou');
 
-        window.__brsparkCopilotMessages = window.__brsparkCopilotMessages || [];
+        window.__ariaCopilotMessages = window.__ariaCopilotMessages || [];
         let chunk =
             (data.replyText ? data.replyText + '\n\n' : '') +
             (data.logicSuggestions && data.logicSuggestions.length
@@ -11483,17 +11483,17 @@ window.brsparkCopilotSuggestLogic = async function () {
         if (Array.isArray(data.warnings) && data.warnings.length) {
             chunk += '\n\n' + data.warnings.join(' ');
         }
-        window.__brsparkCopilotMessages.push({ role: 'assistant', content: chunk.trim() });
+        window.__ariaCopilotMessages.push({ role: 'assistant', content: chunk.trim() });
         renderCopilotMessages();
 
-        window.__brsparkCopilotLogicLast = data.logicSuggestions || [];
-        const hasLog = window.__brsparkCopilotLogicLast.length > 0;
+        window.__ariaCopilotLogicLast = data.logicSuggestions || [];
+        const hasLog = window.__ariaCopilotLogicLast.length > 0;
         if (hasLog) {
             pushCopilotUndoSnapshot();
-            window.brsparkCopilotApplyLogic({ skipUndoPush: true });
+            window.ariaCopilotApplyLogic({ skipUndoPush: true });
         }
         const ub = document.getElementById('ai-copilot-undo-btn');
-        if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
+        if (ub) ub.disabled = !(window.__ariaSchemaUndoStack && window.__ariaSchemaUndoStack.length);
 
         const footSug = document.getElementById('copilot-rag-footnote');
         if (footSug && data.documentationFetch) {
@@ -11520,9 +11520,9 @@ window.brsparkCopilotSuggestLogic = async function () {
     }
 };
 
-window.brsparkCopilotApplyLogic = function (opts) {
+window.ariaCopilotApplyLogic = function (opts) {
     opts = opts || {};
-    const list = window.__brsparkCopilotLogicLast;
+    const list = window.__ariaCopilotLogicLast;
     if (!list || !list.length) return;
     if (!opts.skipUndoPush) pushCopilotUndoSnapshot();
     list.forEach(function (s) {
@@ -11553,11 +11553,11 @@ window.brsparkCopilotApplyLogic = function (opts) {
             actions: [action],
         });
     });
-    window.__brsparkCopilotLogicLast = [];
+    window.__ariaCopilotLogicLast = [];
     renderCanvas();
     renderProperties();
     const ub = document.getElementById('ai-copilot-undo-btn');
-    if (ub) ub.disabled = !(window.__brsparkSchemaUndoStack && window.__brsparkSchemaUndoStack.length);
+    if (ub) ub.disabled = !(window.__ariaSchemaUndoStack && window.__ariaSchemaUndoStack.length);
 };
 
 /** «Traduzir agora»: spinner + texto enquanto corre MyMemory. */
@@ -11752,7 +11752,7 @@ async function translateOneLabelMyMemory(text, langpair) {
     /** 1) Mesma origem da API Node — contorna CSP / bloqueios a domínios externos no browser. */
     try {
         const proxyUrl =
-            brsparkApiBase() + '/checklists/translate-mymemory?q=' + qp + '&langpair=' + lp;
+            ariaApiBase() + '/checklists/translate-mymemory?q=' + qp + '&langpair=' + lp;
         const res = await fetch(proxyUrl, {
             headers: adminJsonHeaders(),
             credentials: 'include',
@@ -11929,8 +11929,8 @@ function initFormSchemaLocaleSelect() {
     const sel = document.getElementById('fb-schema-locale-select');
     if (!sel) return;
     try {
-        const ls = localStorage.getItem('brspark_form_schema_edit_locale');
-        if (ls && window.BrSparkSchemaLocale && window.BrSparkSchemaLocale.SUPPORTED.indexOf(ls) >= 0) {
+        const ls = localStorage.getItem('aria_form_schema_edit_locale');
+        if (ls && window.AriaSchemaLocale && window.AriaSchemaLocale.SUPPORTED.indexOf(ls) >= 0) {
             sel.value = ls;
         }
     } catch (e) {
@@ -11942,19 +11942,19 @@ function initFormSchemaLocaleSelect() {
     if (autoCb && autoCb.dataset.fbBound !== '1') {
         autoCb.dataset.fbBound = '1';
         try {
-            var saved = localStorage.getItem('brspark_form_schema_auto_translate');
+            var saved = localStorage.getItem('aria_form_schema_auto_translate');
             if (saved === '0') autoCb.checked = false;
             else if (saved === '1') autoCb.checked = true;
             else {
                 autoCb.checked = true;
-                localStorage.setItem('brspark_form_schema_auto_translate', '1');
+                localStorage.setItem('aria_form_schema_auto_translate', '1');
             }
         } catch (e0) {
             /* ignore */
         }
         autoCb.addEventListener('change', function () {
             try {
-                localStorage.setItem('brspark_form_schema_auto_translate', autoCb.checked ? '1' : '0');
+                localStorage.setItem('aria_form_schema_auto_translate', autoCb.checked ? '1' : '0');
             } catch (e1) {
                 /* ignore */
             }
@@ -11998,7 +11998,7 @@ function initFormSchemaLocaleSelect() {
     sel.addEventListener('change', function () {
         window.__formSchemaEditLocale = sel.value || 'pt-BR';
         try {
-            localStorage.setItem('brspark_form_schema_edit_locale', window.__formSchemaEditLocale);
+            localStorage.setItem('aria_form_schema_edit_locale', window.__formSchemaEditLocale);
         } catch (e2) {
             /* ignore */
         }

@@ -1,5 +1,5 @@
 /**
- * dataCollectionService — BrSpark Field Service
+ * dataCollectionService — Aria Field Service
  *
  * Máquina de estados de coleta de dados adaptativa.
  * Aplica a CollectionPolicy do tenant para ajustar:
@@ -79,8 +79,8 @@ const DEFAULT_POLICY: CollectionPolicy = {
   outOfPolicyAction: 'PROCEED_FLAG',
 };
 
-const POLICY_KEY     = '@brspark_collection_policy';
-const TELEMETRY_KEY  = '@brspark_telemetry_outbox';
+const POLICY_KEY     = '@aria_collection_policy';
+const TELEMETRY_KEY  = '@aria_telemetry_outbox';
 
 // ─── Service class ───────────────────────────────────────────────────────────
 
@@ -294,7 +294,7 @@ class DataCollectionService {
     this.subscription = null;
     if (this.geofenceRegions.length > 0) {
       try {
-        await Location.stopGeofencingAsync('brspark_geofence');
+        await Location.stopGeofencingAsync('aria_geofence');
       } catch (e) {
         console.warn('[DataCollection] stopGeofencingAsync:', e);
       }
@@ -307,7 +307,7 @@ class DataCollectionService {
       const { status } = await Location.requestBackgroundPermissionsAsync();
       if (status !== 'granted') return;
       this.geofenceRegions = [{ identifier: 'client_site', latitude: lat, longitude: lng, radius }];
-      await Location.startGeofencingAsync('brspark_geofence', this.geofenceRegions);
+      await Location.startGeofencingAsync('aria_geofence', this.geofenceRegions);
     } catch (e) {
       console.warn('[DataCollection] Geofence not available:', e);
     }

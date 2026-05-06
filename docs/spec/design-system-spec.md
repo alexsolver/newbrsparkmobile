@@ -1,4 +1,4 @@
-# BrSpark — especificação de design system (spec-driven)
+# Aria — especificação de design system (spec-driven)
 
 Documento normativo para **novas telas**, **refactors de UI** e **paridade app ↔ admin**. Agentes e devs devem consultar isto antes de introduzir cores ou componentes ad‑hoc.
 
@@ -39,8 +39,8 @@ Usar `colors.status.{success|warning|danger|info}` com `{ fg, bg, border }` para
 
 ## Admin (web)
 
-- Variáveis geradas: [`admin-panel/css/brspark-tokens.css`](../../admin-panel/css/brspark-tokens.css) (gerar com `npm run theme:export-css` após alterar `webCssVariableMap` em `colors.ts`).
-- [`admin-panel/css/main.css`](../../admin-panel/css/main.css) importa `brspark-tokens.css`. Preferir `var(--color-…)` a hex em páginas novas ou refactors (ex.: `reports.html`).
+- Variáveis geradas: [`admin-panel/css/aria-tokens.css`](../../admin-panel/css/aria-tokens.css) (gerar com `npm run theme:export-css` após alterar `webCssVariableMap` em `colors.ts`).
+- [`admin-panel/css/main.css`](../../admin-panel/css/main.css) importa `aria-tokens.css`. Preferir `var(--color-…)` a hex em páginas novas ou refactors (ex.: `reports.html`).
 
 ### Anatomia das páginas HTML do painel (shell canônico)
 
@@ -69,6 +69,6 @@ Todas as telas internas autenticadas devem seguir o mesmo esqueleto que [`admin-
 | 2026-04-09 | Idioma (pt-BR): norma e glossário para cópias; alinhamento com regras do Cursor. |
 | 2026-04-14 | Admin HTML: anatomia do shell canônico (`page-hero` + `data-shell`) e exceções. |
 | 2026-04-14 | Fase C: `reports.html`, `checklists.html` e `cockpit.html` alinhados ao esqueleto; cockpit mantém tema NOC com classes `cockpit-*` nos tokens locais. |
-| 2026-04-14 | Fase D: `index.html` (cópia login), `track.html` e `evaluation-survey.html` com `brspark-tokens.css` onde aplicável; contraste da trilha no `cockpit.html`. |
-| 2026-04-14 | Fase E: `checklists.html` — estilos locais do builder (toolbox/canvas/estados vazios) alinhados a variáveis de `brspark-tokens.css` (neutros e destrutivo); mantêm-se hex de acento (índigo/violeta do copiloto) até export de tokens dedicados. |
+| 2026-04-14 | Fase D: `index.html` (cópia login), `track.html` e `evaluation-survey.html` com `aria-tokens.css` onde aplicável; contraste da trilha no `cockpit.html`. |
+| 2026-04-14 | Fase E: `checklists.html` — estilos locais do builder (toolbox/canvas/estados vazios) alinhados a variáveis de `aria-tokens.css` (neutros e destrutivo); mantêm-se hex de acento (índigo/violeta do copiloto) até export de tokens dedicados. |
 | 2026-04-15 | Idioma (pt-BR): subsecção explícita para `*-i18n.js` / HTML estático — evitar cópias em português de Portugal na chave `pt-BR`. |

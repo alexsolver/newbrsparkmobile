@@ -87,7 +87,7 @@ export async function buildProviderTaskStatusSets(): Promise<{
   /** `completedAt` em ms para OS no mapa de concluídas recentes (executadas localmente). */
   completedAtById: Map<string, number>;
 }> {
-  const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
+  const executedStr = await AsyncStorage.getItem('@aria_executed_tasks') || '[]';
   let executedTasksRaw: any[] = [];
   try {
     executedTasksRaw = JSON.parse(executedStr);
@@ -112,7 +112,7 @@ export async function buildProviderTaskStatusSets(): Promise<{
   }
   const completedIds = new Set(Object.keys(executedMap));
 
-  const inprogStr = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
+  const inprogStr = await AsyncStorage.getItem('@aria_inprogress_tasks') || '[]';
   let inprogressTasks: string[] = [];
   try {
     inprogressTasks = JSON.parse(inprogStr);
@@ -126,7 +126,7 @@ export async function buildProviderTaskStatusSets(): Promise<{
     ...outboxInProgIds.map((id) => String(id)),
   ]);
 
-  const accStr = await AsyncStorage.getItem('@brspark_accepted_tasks') || '[]';
+  const accStr = await AsyncStorage.getItem('@aria_accepted_tasks') || '[]';
   let acceptedTasks: string[] = [];
   try {
     acceptedTasks = JSON.parse(accStr);
@@ -154,7 +154,7 @@ export async function loadLinkableTasksForTechnicianExpense(
   }
   if (!Array.isArray(tasks)) tasks = [];
 
-  const rejStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
+  const rejStr = await AsyncStorage.getItem('@aria_rejected_tasks') || '[]';
   let rejected: string[] = [];
   try {
     rejected = JSON.parse(rejStr);

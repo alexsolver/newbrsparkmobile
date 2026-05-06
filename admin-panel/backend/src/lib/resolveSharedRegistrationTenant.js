@@ -36,7 +36,7 @@ async function resolveSharedRegistrationTenant(tx) {
 /**
  * True se `tenantId` é a tenant COMPANY de registo partilhado (piscina da app).
  * Usa `resolveSharedRegistrationTenant` e, em fallback, o slug na linha — evita falhas quando
- * `APP_REGISTRATION_SHARED_TENANT_ID` no env não coincide com o id real (ex.: «BrSpark App (master)» no painel).
+ * `APP_REGISTRATION_SHARED_TENANT_ID` no env não coincide com o id real (ex.: «Aria App (master)» no painel).
  *
  * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} client
  * @param {string|null|undefined} tenantId

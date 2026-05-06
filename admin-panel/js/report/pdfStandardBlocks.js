@@ -120,13 +120,13 @@ function wrapVisionStampedMedia(innerHtml, stampLine, escHtml, kind = 'vision', 
   const geoBlock = geo
     ? `<div style="margin-top:4px;font-size:7.5px;font-weight:600;line-height:1.35;opacity:0.97">📍 ${escHtml(geo)}</div>`
     : '';
-  return `<div class="pdf-photo-card" style="margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;background:#EA580C;border:1px solid #c2410c;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
+  return `<div class="pdf-photo-card" style="margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;background:#0d9488;border:1px solid #115e59;border-radius:8px;overflow:hidden;display:flex;flex-direction:column">
     <div style="background:#e2e8f0;line-height:0">${innerHtml}</div>
-    <div style="background:#EA580C;color:#fff;padding:8px 10px;font-size:8px;font-weight:700;line-height:1.35;box-sizing:border-box;font-family:ui-monospace,monospace">🕒 ${escHtml(stampLine)} · ${escHtml(badge)}${geoBlock}</div>
+    <div style="background:#0d9488;color:#fff;padding:8px 10px;font-size:8px;font-weight:700;line-height:1.35;box-sizing:border-box;font-family:ui-monospace,monospace">🕒 ${escHtml(stampLine)} · ${escHtml(badge)}${geoBlock}</div>
   </div>`;
 }
 
-/** Foto com anotações vinda da galeria: sem carimbo laranja (só moldura neutra). */
+/** Foto com anotações vinda da galeria: sem carimbo de marca (só moldura neutra). */
 function wrapAnnotationGalleryMedia(innerHtml) {
   return `<div style="margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;background:#fff">
     <div style="background:#f8fafc;line-height:0">${innerHtml}</div>

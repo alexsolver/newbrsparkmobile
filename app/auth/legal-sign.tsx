@@ -95,7 +95,7 @@ export default function LegalSignScreen() {
           {load ? <ActivityIndicator color="#fff" /> : <Text style={s.mainT}>{t('auth.legalSignContinue')}</Text>}
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => Linking.openURL('https://www.brspark.com/termos').catch(() => {})}
+          onPress={() => Linking.openURL('https://www.aria.com/termos').catch(() => {})}
           style={{ marginTop: 16, alignItems: 'center' }}
         >
           <Text style={s.link}>{t('auth.termsOfUse')}</Text>

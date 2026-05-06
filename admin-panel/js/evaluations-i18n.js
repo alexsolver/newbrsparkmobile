@@ -6,7 +6,7 @@ import { mpT } from './menu-pages-i18n.js';
 
 const M = {
   'pt-BR': {
-    ev_pageTitle: 'BrSpark Admin, Qualidade e avaliações',
+    ev_pageTitle: 'Aria Admin, Qualidade e avaliações',
     ev_bc_panel: 'Painel',
     ev_bc_page: 'Qualidade e avaliações',
     ev_hero_title: 'Avaliações',
@@ -43,7 +43,7 @@ const M = {
     ev_notify_meta: 'Modelo: {tpl} · OS: {os}',
     ev_notify_email_detected: 'E-mail obtido dos dados da OS. Pode alterar antes de enviar.',
     ev_notify_email_missing: 'Sem e-mail na OS: indique o e-mail do cliente abaixo para enviar por e-mail ou notificação na app.',
-    ev_notify_foot_hint: 'O push só chega a quem tem a app BrSpark instalada, com sessão iniciada com o mesmo e-mail. WhatsApp e SMS serão suportados numa próxima fase.',
+    ev_notify_foot_hint: 'O push só chega a quem tem a app Aria instalada, com sessão iniciada com o mesmo e-mail. WhatsApp e SMS serão suportados numa próxima fase.',
     ev_notify_lbl_email: 'E-mail (recomendado)',
     ev_notify_lbl_push: 'Notificação no app do cliente',
     ev_notify_lbl_wa: 'WhatsApp (em breve)',
@@ -207,7 +207,7 @@ const M = {
     ev_chat_media: '[arquivo] {url}',
   },
   'en-US': {
-    ev_pageTitle: 'BrSpark Admin, Quality & evaluations',
+    ev_pageTitle: 'Aria Admin, Quality & evaluations',
     ev_bc_panel: 'Home',
     ev_bc_page: 'Quality & evaluations',
     ev_hero_title: 'Evaluations',
@@ -244,7 +244,7 @@ const M = {
     ev_notify_meta: 'Template: {tpl} · WO: {os}',
     ev_notify_email_detected: 'Email taken from the work order. You may edit it before sending.',
     ev_notify_email_missing: 'No email on the work order: enter the customer email below for email or app notification.',
-    ev_notify_foot_hint: 'Push only reaches users with the BrSpark app signed in with the same email. WhatsApp and SMS are planned next.',
+    ev_notify_foot_hint: 'Push only reaches users with the Aria app signed in with the same email. WhatsApp and SMS are planned next.',
     ev_notify_lbl_email: 'Email (recommended)',
     ev_notify_lbl_push: 'Customer app notification',
     ev_notify_lbl_wa: 'WhatsApp (coming soon)',

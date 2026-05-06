@@ -4,8 +4,8 @@
 import { CONFIG, getPanelCapabilities } from './config.js';
 import { getAdminUiLocale } from './user-pages-i18n.js';
 
-const ARCHIVED_KEY = 'brspark_panel_archived_chat_rooms';
-const VIEWER_LOCALE_KEY = 'brspark_panel_chat_viewer_locale';
+const ARCHIVED_KEY = 'aria_panel_archived_chat_rooms';
+const VIEWER_LOCALE_KEY = 'aria_panel_chat_viewer_locale';
 const VIEWER_LOCALE_OPTIONS = ['pt-BR', 'en-US', 'es-ES', 'de-DE'];
 const ROOM_ARCHIVE_PREFIX = 'room:';
 const OPS_ARCHIVE_PREFIX = 'ops:';
@@ -156,7 +156,7 @@ export function initAdminChatPage() {
   const userResultsEl = document.getElementById('admin-chat-user-results');
   const searchEl = document.getElementById('admin-chat-search');
 
-  const myEmail = (sessionStorage.getItem('brspark_admin_email') || '').trim().toLowerCase();
+  const myEmail = (sessionStorage.getItem('aria_admin_email') || '').trim().toLowerCase();
   const panelCaps = new Set(getPanelCapabilities());
   const canManageGroups =
     panelCaps.has('tenant.users.write.limited') ||

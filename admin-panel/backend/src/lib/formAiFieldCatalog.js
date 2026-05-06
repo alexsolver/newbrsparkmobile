@@ -139,7 +139,7 @@ const FIELD_SPECS = [
     proposalsDefault: false,
     contextFlag: 'allowTransit',
     descPt:
-      'Fim de deslocamento. Obrigatório se existir transit_start; nunca antes do início; no BrSpark ficam sempre no início do formulário (logo após transit_start), nunca no meio nem no final.',
+      'Fim de deslocamento. Obrigatório se existir transit_start; nunca antes do início; no Aria ficam sempre no início do formulário (logo após transit_start), nunca no meio nem no final.',
   },
   {
     type: 'geofence_check',
@@ -321,12 +321,12 @@ function formatSchemaTypeDocBlock() {
 }
 
 /**
- * Regras BrSpark para deslocamento — incluir nos system prompts (Composer, análise de planilha, geração de schema).
+ * Regras Aria para deslocamento — incluir nos system prompts (Composer, análise de planilha, geração de schema).
  * @returns {string}
  */
 function formatTransitDisplacementRulesForPrompt() {
   return `### Deslocamento (transit_start / transit_end)
-- **Regra fixa BrSpark:** com deslocamento ativo, **início** (\`transit_start\`) e **fim** (\`transit_end\`) ficam **sempre no início do formulário** para o técnico — o **primeiro bloco operacional** do preenchimento: (a) logo **após** o \`section_break\` que abre a **primeira etapa**, **antes** de fotos, assinaturas e restantes perguntas; ou (b), se existir **Área Externa** (campos antes do primeiro \`section_break\`), ainda assim como **primeiros campos** dessa zona. **Nunca** os coloque no meio nem no rodapé do checklist.
+- **Regra fixa Aria:** com deslocamento ativo, **início** (\`transit_start\`) e **fim** (\`transit_end\`) ficam **sempre no início do formulário** para o técnico — o **primeiro bloco operacional** do preenchimento: (a) logo **após** o \`section_break\` que abre a **primeira etapa**, **antes** de fotos, assinaturas e restantes perguntas; ou (b), se existir **Área Externa** (campos antes do primeiro \`section_break\`), ainda assim como **primeiros campos** dessa zona. **Nunca** os coloque no meio nem no rodapé do checklist.
 - **Par obrigatório**: se houver \`transit_start\`, **tem de existir** \`transit_end\` no mesmo formulário. Não sugira nem crie só um dos dois.
 - **Ordem no array:** primeiro \`transit_start\`, depois \`transit_end\`; \`transit_end\` **nunca** antes do primeiro \`transit_start\`.
 - Em \`schemaPatch\` (ex.: \`add_field\` com \`afterId\`) ou \`schemaData\`, **garanta** essa posição no topo; não «empurre» o par para o fim com \`afterId\` em últimos campos.`;
@@ -338,13 +338,13 @@ function formatTransitDisplacementRulesForPrompt() {
  * @returns {string}
  */
 function formatOsDestinationVsGeometryConventionForPrompt() {
-  return `### Convenção BrSpark: destino vs geometria (OS / despacho)
+  return `### Convenção Aria: destino vs geometria (OS / despacho)
 - **Destino** = o **ponto GPS da OS** para onde o técnico vai na **navegação** (Waze/Google Maps, ETA, início de \`transit_start\`). Costuma ser o endereço/coordenadas definidos no despacho (\`locationLat\`/\`locationLng\` e, quando aplicável, \`metadata.navigationDestination\`). Em OS **trecho (A↔B)**, o destino de navegação no momento é **A ou B** (escolha no app) — ainda assim são só **dois pontos** de destino possíveis, não «o KML inteiro».
 - **Geometria** = **todo o resto** usado para **validar** se o trabalho está no sítio certo: polígono, linha/rota KML (corredor), tolerâncias, modo «perto de A ou B», etc. Serve à **cerca eletrônica** e ao campo \`geofence_check\`; **não** substitui o destino de navegação quando o despacho separa «destino» de «KML só para validação».`;
 }
 
 /** Ícones Ionicons por tipo quando o modelo não enviou icon (fallback no servidor). */
-const DEFAULT_BRSPARK_TYPE_ICONS = {
+const DEFAULT_ARIA_TYPE_ICONS = {
   section_break: { icon: 'albums-outline', iconColor: '#7c3aed' },
   leitura: { icon: 'book-outline', iconColor: '#4338ca' },
   voice_note: { icon: 'mic-outline', iconColor: '#7c3aed' },
@@ -363,7 +363,7 @@ const DEFAULT_BRSPARK_TYPE_ICONS = {
   photo_stamped: { icon: 'camera-outline', iconColor: '#be185d' },
   signature: { icon: 'pencil-outline', iconColor: '#0f766e' },
   signature_summary: { icon: 'reader-outline', iconColor: '#0e7490' },
-  materials_consumption: { icon: 'cube-outline', iconColor: '#ea580c' },
+  materials_consumption: { icon: 'cube-outline', iconColor: '#0d9488' },
   materials_receipt: { icon: 'archive-outline', iconColor: '#16a34a' },
   technician_finance_expense: { icon: 'trending-down-outline', iconColor: '#b91c1c' },
   technician_finance_revenue: { icon: 'trending-up-outline', iconColor: '#15803d' },
@@ -376,7 +376,7 @@ const DEFAULT_BRSPARK_TYPE_ICONS = {
   vision_ai_comparison: { icon: 'git-compare-outline', iconColor: '#a21caf' },
   transit_start: { icon: 'rocket-outline', iconColor: '#2563eb' },
   transit_end: { icon: 'flag-outline', iconColor: '#dc2626' },
-  geofence_check: { icon: 'navigate-circle-outline', iconColor: '#ea580c' },
+  geofence_check: { icon: 'navigate-circle-outline', iconColor: '#0d9488' },
   calculated: { icon: 'calculator-outline', iconColor: '#8b5cf6' },
   image_annotation: { icon: 'brush-outline', iconColor: '#c2410c' },
   lookup_select: { icon: 'cloud-download-outline', iconColor: '#2563eb' },
@@ -384,7 +384,7 @@ const DEFAULT_BRSPARK_TYPE_ICONS = {
   opinion_scale: { icon: 'analytics-outline', iconColor: '#7c3aed' },
 };
 
-const SECTION_ICON_COLORS = ['#6366f1', '#0ea5e9', '#16a34a', '#ca8a04', '#ea580c', '#db2777', '#7c3aed'];
+const SECTION_ICON_COLORS = ['#6366f1', '#0ea5e9', '#16a34a', '#ca8a04', '#0d9488', '#db2777', '#7c3aed'];
 
 /**
  * Preenche icon / iconLibrary / iconColor em itens do schema quando vêm vazios (pós-normalização).
@@ -396,7 +396,7 @@ function applyDefaultTypeIconsToSchemaItems(schemaData) {
   for (const item of schemaData) {
     if (!item || typeof item !== 'object') continue;
     if (item.icon != null && String(item.icon).trim()) continue;
-    const def = DEFAULT_BRSPARK_TYPE_ICONS[item.type];
+    const def = DEFAULT_ARIA_TYPE_ICONS[item.type];
     if (!def) continue;
     item.icon = def.icon;
     item.iconLibrary = 'Ionicons';

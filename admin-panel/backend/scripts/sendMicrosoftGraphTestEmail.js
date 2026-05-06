@@ -19,14 +19,14 @@ async function main() {
     process.exit(1);
   }
 
-  const subject = '[BrSpark] Teste Microsoft Graph';
+  const subject = '[Aria] Teste Microsoft Graph';
   const text = [
-    'Este é um e-mail de teste enviado pelo BrSpark usando a integração Microsoft Graph.',
+    'Este é um e-mail de teste enviado pelo Aria usando a integração Microsoft Graph.',
     '',
     `Destinatário: ${to}`,
     `Data (UTC): ${new Date().toISOString()}`,
   ].join('\n');
-  const html = `<p>Este é um e-mail de <strong>teste</strong> enviado pelo BrSpark via <strong>Microsoft Graph</strong>.</p>
+  const html = `<p>Este é um e-mail de <strong>teste</strong> enviado pelo Aria via <strong>Microsoft Graph</strong>.</p>
 <p>Destinatário: <code>${to.replace(/</g, '')}</code><br/>UTC: ${new Date().toISOString()}</p>`;
 
   const send = await sendEmailViaMicrosoftGraph({ to, subject, text, html });

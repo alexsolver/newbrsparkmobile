@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — API Docs</title>
+  <title>Aria Admin — API Docs</title>
   <link rel="stylesheet" href="css/main.css" />
   <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" crossorigin="anonymous" />
   <style>
@@ -65,7 +65,7 @@
       <div class="data-toolbar">
         <div class="data-toolbar-main"></div>
         <div class="data-toolbar-actions">
-          <a class="btn btn-ghost btn-sm" href="openapi.json" download="brspark-openapi.json">
+          <a class="btn btn-ghost btn-sm" href="openapi.json" download="aria-openapi.json">
             <ion-icon name="download-outline" style="font-size:16px;vertical-align:middle;margin-right:8px"></ion-icon>
             <span id="apidoc-btn-dl-text">Baixar OpenAPI (JSON)</span>
           </a>
@@ -288,7 +288,7 @@
     const base = String(resolveApiBase() || '').replace(/\/+$/, '');
     return `${base}/docs/assistant`;
   })();
-  const getAdminToken = () => String(sessionStorage.getItem('brspark_admin_token') || '').trim();
+  const getAdminToken = () => String(sessionStorage.getItem('aria_admin_token') || '').trim();
 
   function setAiStatus(msgKey, vars = {}) {
     if (!aiStatusEl) return;

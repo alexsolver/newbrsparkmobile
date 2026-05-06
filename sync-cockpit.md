@@ -7,7 +7,7 @@ description: Planejamento detalhado para o Cockpit de Sincronização (Monitoram
 
 ## 1. Visão Geral (Overview)
 
-O **Sync Cockpit** será o "coração da monitoração" do sistema **BrsparkMobile**. Como o aplicativo opera com foco extremo na arquitetura offline-first e integridade criptografada dos payloads, é imperativo ter uma visão consolidada de:
+O **Sync Cockpit** será o "coração da monitoração" do sistema **AriaMobile**. Como o aplicativo opera com foco extremo na arquitetura offline-first e integridade criptografada dos payloads, é imperativo ter uma visão consolidada de:
 - **Fluxo de Dados:** Transferências concluídas com sucesso.
 - **Saúde (Health):** Tempos de resposta (Latência), gargalos no servidor, CPU/Memória.
 - **Detecção de Anomalias:** Falhas de rede, esquemas incompatíveis ou chaves criptográficas desatualizadas, que causam "Sync Failures".
@@ -37,7 +37,7 @@ Este será um painel exclusivo integrado ao *Admin Panel* existente, construído
 ## 5. Estrutura de Arquivos (File Structure)
 
 ```text
-BrsparkMobile/
+AriaMobile/
 └── admin-panel/
     ├── cockpit.html (Nova interface do painel do Cockpit)
     ├── js/

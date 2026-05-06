@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ChatMessage, ChatRoom } from './chat';
 
-const roomsKey = (userId: string) => `@brspark_chat_rooms_cache:${userId}`;
-const messagesKey = (userId: string, roomId: string) => `@brspark_chat_msgs_cache:${userId}:${roomId}`;
-const outboxKey = (userId: string) => `@brspark_chat_outbox:${userId}`;
+const roomsKey = (userId: string) => `@aria_chat_rooms_cache:${userId}`;
+const messagesKey = (userId: string, roomId: string) => `@aria_chat_msgs_cache:${userId}:${roomId}`;
+const outboxKey = (userId: string) => `@aria_chat_outbox:${userId}`;
 
 export type ChatOutboxItem = {
   localId: string;

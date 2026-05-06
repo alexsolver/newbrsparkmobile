@@ -17,7 +17,7 @@ import { adminIntlLocale } from './admin-i18n-resolve.js';
 /** Atualizado em `bootUserEditPage` para acionar indicador «não guardado» */
 const dirtyHooks = { mark: () => {}, refreshWorkspace: () => {} };
 let ueSkillsWidgetBound = false;
-/** E-mail técnico no `User.email` da linha vs. o mostrado no painel (conta de login real / +brspark). */
+/** E-mail técnico no `User.email` da linha vs. o mostrado no painel (conta de login real / +aria). */
 let ueBaselineRowEmail = '';
 let ueBaselineDisplayEmail = '';
 /** Definido em `bootUserEditPage` — atualiza a secção de ponto após alterar a galeria facial. */
@@ -85,8 +85,8 @@ function syncUserEditEmailBaselines(u) {
   ueBaselineDisplayEmail = humanLoginEmailDisplay(u);
 }
 
-const NAV_CTX_KEY = 'brspark_user_edit_nav';
-const DUP_DRAFT_KEY = 'brspark_user_duplicate_draft';
+const NAV_CTX_KEY = 'aria_user_edit_nav';
+const DUP_DRAFT_KEY = 'aria_user_duplicate_draft';
 const COLLAPSIBLE_SECTION_SUMMARIES = {
   'sec-face': 'Fotos base e situação da biometria.',
   'sec-docs-p': 'Documentos civis e pessoais do colaborador.',
@@ -100,8 +100,8 @@ const COLLAPSIBLE_SECTION_SUMMARIES = {
 
 function panelTenantIdUserEdit() {
   try {
-    if (sessionStorage.getItem('brspark_panel_mode') === 'tenant') {
-      const row = JSON.parse(sessionStorage.getItem('brspark_panel_tenant') || '{}');
+    if (sessionStorage.getItem('aria_panel_mode') === 'tenant') {
+      const row = JSON.parse(sessionStorage.getItem('aria_panel_tenant') || '{}');
       return row.id || null;
     }
   } catch {
@@ -208,8 +208,8 @@ function uePaffDedRowHtml(weekday, start, end) {
 }
 
 function ensureUePaffDedModalBound() {
-  if (window.__brsparkUePaffDedBound) return;
-  window.__brsparkUePaffDedBound = true;
+  if (window.__ariaUePaffDedBound) return;
+  window.__ariaUePaffDedBound = true;
   document.getElementById('ue-paff-ded-close')?.addEventListener('click', () => closeUePaffDedicatedExclusiveModal());
   document.getElementById('ue-paff-ded-cancel')?.addEventListener('click', () => closeUePaffDedicatedExclusiveModal());
   document.getElementById('ue-paff-ded-overlay')?.addEventListener('click', (ev) => {
@@ -2066,9 +2066,9 @@ function renderCoverageMainMap() {
     const selected = selectedIds.has(String(location.id));
     const marker = L.circleMarker([lat, lng], {
       radius: selected ? 8 : 6,
-      color: selected ? '#f97316' : '#64748b',
+      color: selected ? '#14b8a6' : '#64748b',
       weight: selected ? 3 : 2,
-      fillColor: selected ? '#f97316' : '#cbd5e1',
+      fillColor: selected ? '#14b8a6' : '#cbd5e1',
       fillOpacity: selected ? 0.95 : 0.9,
     })
       .addTo(map)
@@ -3847,8 +3847,8 @@ export async function bootUserEditPage() {
   refreshDirty();
   applyUserEditReadonlyIfNeeded();
 
-  if (!window.__brsparkUeEditBeforeUnload) {
-    window.__brsparkUeEditBeforeUnload = true;
+  if (!window.__ariaUeEditBeforeUnload) {
+    window.__ariaUeEditBeforeUnload = true;
     window.addEventListener('beforeunload', (e) => {
       if (isUserEditReadonly()) return;
       try {

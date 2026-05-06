@@ -3,13 +3,13 @@
 const prisma = require('../db');
 
 /**
- * Tenant org BrSpark (seed: nome «BrSpark», slug `brspark`).
+ * Tenant org Aria (seed: nome «Aria», slug `aria`).
  * Usada por fluxos administrativos / legado. O registo público no app usa a tenant COMPANY partilhada
  * (`resolveSharedRegistrationTenant`, slug omissão `master`), não esta tenant.
  *
  * Opcional: `APP_DEFAULT_TENANT_ID` ou `APP_DEFAULT_TENANT_SLUG` substituem (staging / testes).
  */
-const APP_MOBILE_MASTER_TENANT_SLUG = 'brspark';
+const APP_MOBILE_MASTER_TENANT_SLUG = 'aria';
 
 /**
  * @returns {Promise<string|null>} id da tenant ou null se não existir na base
@@ -29,7 +29,7 @@ async function resolveAppDefaultTenantId() {
 }
 
 /**
- * Tenant org legada do painel / OTP (slug `brspark` por omissão). Usa o mesmo critério que
+ * Tenant org legada do painel / OTP (slug `aria` por omissão). Usa o mesmo critério que
  * `APP_DEFAULT_TENANT_*`, com recurso ao slug da linha quando o env não resolve o id.
  *
  * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} client

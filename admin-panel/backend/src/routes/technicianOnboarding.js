@@ -3,7 +3,7 @@
 const express = require('express');
 const authUser = require('../middleware/authUser');
 const prisma = require('../db');
-const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
+const { deliverAriaLaravelEvent, EVENT_TYPES } = require('../lib/ariaSyncWebhook');
 const { isProviderFirstNetworkEnabled } = require('../lib/providerFirstNetwork');
 
 const router = express.Router();
@@ -90,7 +90,7 @@ router.post('/kyc/start', authUser, express.json(), async (req, res) => {
         kycProvider: provider,
       },
     });
-    deliverBrsparkLaravelEvent({
+    deliverAriaLaravelEvent({
       type: EVENT_TYPES.KYC_STATUS_CHANGED,
       idempotencyKey: `kyc-${req.user.id}-${Date.now()}`,
       payload: {

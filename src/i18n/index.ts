@@ -8,7 +8,7 @@ import enUS from './locales/en-US.json';
 import esES from './locales/es-ES.json';
 import deDE from './locales/de-DE.json';
 
-const LANG_KEY = '@brspark_language';
+const LANG_KEY = '@aria_language';
 
 const SUPPORTED = ['pt-BR', 'en-US', 'es-ES', 'de-DE'] as const;
 type SupportedLang = typeof SUPPORTED[number];

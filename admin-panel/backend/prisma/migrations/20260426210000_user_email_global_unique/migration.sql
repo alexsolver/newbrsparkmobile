@@ -4,7 +4,7 @@
 UPDATE "User" u
 SET email =
   split_part(lower(trim(u.email)), '@', 1)
-  || '+brspark.ws.'
+  || '+aria.ws.'
   || md5(random()::text || u.id::text || clock_timestamp()::text)
   || '@'
   || split_part(lower(trim(u.email)), '@', 2)

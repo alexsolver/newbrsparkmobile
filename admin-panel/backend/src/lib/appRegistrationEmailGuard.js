@@ -5,7 +5,7 @@ const crypto = require('crypto');
 
 /** Mensagem única para conflitos de registo no app (alinhado ao login multi-tenant). */
 const APP_REGISTER_EMAIL_TAKEN_PT =
-  'Este e-mail já está associado a uma conta BrSpark. Inicie sessão; se aparecer mais do que uma organização, escolha a correta. Para um registo novo, utilize outro e-mail.';
+  'Este e-mail já está associado a uma conta Aria. Inicie sessão; se aparecer mais do que uma organização, escolha a correta. Para um registo novo, utilize outro e-mail.';
 
 /**
  * `AppAccount` sem nenhum `User` ativo (ex.: exclusão parcial / legado) — liberta o e-mail para novo registo.
@@ -38,7 +38,7 @@ async function reclaimOrphanAppAccountIfAllUsersInactive(prisma, emailNorm) {
           where: { id },
           data: {
             name: 'Usuário Excluído',
-            email: `deleted_${id}@brspark.com`,
+            email: `deleted_${id}@aria.com`,
             password: randomPassword,
             phone: null,
             avatarUrl: null,

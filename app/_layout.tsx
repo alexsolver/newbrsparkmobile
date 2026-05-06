@@ -20,7 +20,7 @@ import {
   resetUnitPreference,
 } from '../src/i18n/formatters';
 
-const BRSPARK_REGION_KEY = '@brspark_region';
+const ARIA_REGION_KEY = '@aria_region';
 import { Header } from '../src/components/Header';
 import { AppProvider } from '../src/context/AppContext';
 import { PersonaProvider, usePersona } from '../src/context/PersonaContext';
@@ -79,7 +79,7 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     const inLogin =
       pathname.startsWith('/auth/login') || (segments[0] === 'auth' && otpSeg === 'login');
     const inProviderCatalog = segments[0] === 'provider-services';
-    /** Convite vínculo (`brsparkmobile://provider-affiliation/accept?…`) — não redireccionar antes do ecrã ler o token. */
+    /** Convite vínculo (`ariamobile://provider-affiliation/accept?…`) — não redireccionar antes do ecrã ler o token. */
     const inProviderAffiliationInvite = pathname.startsWith('/provider-affiliation');
     const seg0 = (segments as string[])[0];
     /** `/` ou ecrã `index` — deixar `app/index` decidir login vs home (não forçar login aqui). */
@@ -111,9 +111,9 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
         return;
       }
       // Logged-in user in `auth/*` fora de fluxos explícitos: completar onboarding geral ou sair do **login**.
-      // Não redireccionar para a home só porque `@brspark_onboarding_done` existe — isso cancelava
+      // Não redireccionar para a home só porque `@aria_onboarding_done` existe — isso cancelava
       // `tech-registration` (Quero ser prestador) numa frame em que pathname/segments ainda não batiam.
-      AsyncStorage.getItem('@brspark_onboarding_done')
+      AsyncStorage.getItem('@aria_onboarding_done')
         .then((done) => {
           if (!done) {
             router.replace('/auth/onboarding' as any);
@@ -161,13 +161,13 @@ function AppInitializer() {
         
         // ─── Session & Isolation Audit ───
         const ISOLATION_VERSION = 'v2_strict';
-        const currentVersion = await AsyncStorage.getItem('@brspark:isolation_v');
+        const currentVersion = await AsyncStorage.getItem('@aria:isolation_v');
 
         if (currentVersion !== ISOLATION_VERSION) {
           console.warn(`[BOOT] 🛡️ Upgrading Isolation to ${ISOLATION_VERSION}. Purging local data...`);
           clearLocalDatabase();
           await AsyncStorage.clear(); // Nuclear option for old keys
-          await AsyncStorage.setItem('@brspark:isolation_v', ISOLATION_VERSION);
+          await AsyncStorage.setItem('@aria:isolation_v', ISOLATION_VERSION);
           // Reinforcement: keep user session if possible, but force re-login if needed.
           // Since we cleared all keys, user will have to login again. This is SAFER.
         }
@@ -187,7 +187,7 @@ function AppInitializer() {
         await ApiService.sync(user?.email || '');
         await loadUnitPreference();
         try {
-          const savedRegion = await AsyncStorage.getItem(BRSPARK_REGION_KEY);
+          const savedRegion = await AsyncStorage.getItem(ARIA_REGION_KEY);
           const resolvedRegion = savedRegion || getDeviceRegion();
           if (resolvedRegion === 'US') await setUnitSystem(true);
           else await resetUnitPreference();

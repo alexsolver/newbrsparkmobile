@@ -1362,7 +1362,7 @@ export default function ScheduleRegionsScreen() {
                         key={b.id}
                         coordinate={{ latitude: Number(b.latitude), longitude: Number(b.longitude) }}
                         title={b.name}
-                        pinColor={sel ? 'orange' : '#9CA3AF'}
+                        pinColor={sel ? '#0d9488' : '#9CA3AF'}
                         onPress={() => toggleSlotDraftLoc(b.id)}
                       />
                     );
@@ -1382,7 +1382,7 @@ export default function ScheduleRegionsScreen() {
                       key={`slot-cm-${c.id}`}
                       coordinate={{ latitude: c.latitude, longitude: c.longitude }}
                       draggable
-                      pinColor="#ea580c"
+                      pinColor="#0d9488"
                       onDragEnd={(e) =>
                         updateSlotCircleCenter(c.id, e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)
                       }

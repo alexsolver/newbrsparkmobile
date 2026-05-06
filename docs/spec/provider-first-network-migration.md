@@ -36,7 +36,7 @@ Resultado esperado:
 
 3. `ProviderOnboardingApplication` (global)
 - Jornada de cadastro/KYC sem tenant obrigatório.
-- Revisão central (ou por operação BrSpark).
+- Revisão central (ou por operação Aria).
 
 ## 3.2 Proposta de entidades (Prisma conceitual)
 
@@ -222,7 +222,7 @@ P2
 
 ## 10. Decisões de produto pendentes
 
-1. Quem aprova KYC global: operação central BrSpark ou tenant patrocinadora?
+1. Quem aprova KYC global: operação central Aria ou tenant patrocinadora?
 2. Quais dados globais podem ser visíveis para tenant antes do aceite?
 3. Tenant pode exigir documentos adicionais locais? (sim/não e como versionar)
 4. Prestador pode atuar simultaneamente em tenants concorrentes? (política comercial)

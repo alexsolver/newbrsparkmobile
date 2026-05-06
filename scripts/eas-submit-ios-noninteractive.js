@@ -45,7 +45,7 @@ try {
   json.submit = json.submit || {};
   json.submit.production = json.submit.production || {};
   json.submit.production.ios = {
-    bundleIdentifier: 'com.brspark',
+    bundleIdentifier: 'com.aria',
     ...(json.submit.production.ios || {}),
     ascAppId,
   };

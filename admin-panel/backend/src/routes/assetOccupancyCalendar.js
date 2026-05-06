@@ -76,7 +76,7 @@ router.post('/ensure', authUser, async (req, res) => {
       assetId,
       token,
       url,
-      calName: titleForCal ? `Ocupação — ${titleForCal}` : `BrSpark — ${assetId}`,
+      calName: titleForCal ? `Ocupação — ${titleForCal}` : `Aria — ${assetId}`,
     });
   } catch (e) {
     console.error('[asset-occupancy-calendar] ensure:', e);
@@ -111,7 +111,7 @@ async function publicAssetOccupancyIcs(req, res) {
     });
     const data = Array.isArray(row?.data) ? row.data : [];
 
-    let calName = `BrSpark — ${feed.assetId}`;
+    let calName = `Aria — ${feed.assetId}`;
     const asset = await prisma.asset.findUnique({
       where: { id: feed.assetId },
       select: { title: true },

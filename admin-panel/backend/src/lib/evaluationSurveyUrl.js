@@ -3,7 +3,7 @@
 /**
  * Monta o caminho e, se configurado, a URL absoluta do formulário público de avaliação.
  * ADMIN_PANEL_PUBLIC_BASE_URL — origem/pasta onde está evaluation-survey.html, sem barra final.
- * Ex.: https://admin.empresa.com ou https://app.empresa.com/brspark/admin-panel
+ * Ex.: https://admin.empresa.com ou https://app.empresa.com/aria/admin-panel
  *
  * Em desenvolvimento, sem URL explícita, usa a **mesma porta que o processo Node** (`PORT`, default 3001).
  * Não usar `CORS_ORIGIN` como base: costuma listar outra porta (ex. 3002) ou o Live Server, gerando links errados.

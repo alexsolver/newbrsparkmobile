@@ -28,8 +28,8 @@ function esc(s) {
 function resolvePanelTenantId() {
   try {
     if (typeof sessionStorage === 'undefined') return null;
-    if (sessionStorage.getItem('brspark_panel_mode') !== 'tenant') return null;
-    const t = JSON.parse(sessionStorage.getItem('brspark_panel_tenant') || '{}');
+    if (sessionStorage.getItem('aria_panel_mode') !== 'tenant') return null;
+    const t = JSON.parse(sessionStorage.getItem('aria_panel_tenant') || '{}');
     return t?.id && String(t.id).trim() ? String(t.id).trim() : null;
   } catch {
     return null;
@@ -333,7 +333,7 @@ async function loadTenantsIntoFilter() {
       if (singleId) {
         let label = singleId.slice(0, 48);
         try {
-          const raw = sessionStorage.getItem('brspark_panel_tenant');
+          const raw = sessionStorage.getItem('aria_panel_tenant');
           const t = raw ? JSON.parse(raw) : {};
           if (t && (t.name || t.email)) label = String(t.name || t.email).slice(0, 48);
         } catch {

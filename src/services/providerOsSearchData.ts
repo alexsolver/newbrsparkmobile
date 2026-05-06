@@ -125,7 +125,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
 async function enrichSearchIndexFromLocalStores(rows: ProviderOsSearchRow[]): Promise<void> {
   const keys: string[] = [];
   for (const r of rows) {
-    keys.push(`@brspark_execution_${r.id}`);
+    keys.push(`@aria_execution_${r.id}`);
     keys.push(`@draft_tsk_${r.id}`);
   }
   const extraById: Record<string, string> = {};
@@ -133,8 +133,8 @@ async function enrichSearchIndexFromLocalStores(rows: ProviderOsSearchRow[]): Pr
     const pairs = await AsyncStorage.multiGet(part);
     for (const [k, v] of pairs) {
       if (!v) continue;
-      const id = k.startsWith('@brspark_execution_')
-        ? k.slice('@brspark_execution_'.length)
+      const id = k.startsWith('@aria_execution_')
+        ? k.slice('@aria_execution_'.length)
         : k.startsWith('@draft_tsk_')
           ? k.slice('@draft_tsk_'.length)
           : '';
@@ -142,7 +142,7 @@ async function enrichSearchIndexFromLocalStores(rows: ProviderOsSearchRow[]): Pr
       try {
         const o = JSON.parse(v);
         let blob = '';
-        if (k.startsWith('@brspark_execution_')) {
+        if (k.startsWith('@aria_execution_')) {
           blob +=
             flattenUnknownToSearchText(o?.responses) +
             flattenUnknownToSearchText(o?.metadata) +
@@ -172,7 +172,7 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
   await pullPromise;
   const events = await AgendaService.getUnifiedAgenda(email, 'PROVIDER');
 
-  const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
+  const executedStr = await AsyncStorage.getItem('@aria_executed_tasks') || '[]';
   let executedTasksRaw: any[] = [];
   try {
     executedTasksRaw = JSON.parse(executedStr);
@@ -199,7 +199,7 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
     }
   }
   if (updatedExecs) {
-    await updateStoredJsonArray<any>('@brspark_executed_tasks', (current) => {
+    await updateStoredJsonArray<any>('@aria_executed_tasks', (current) => {
       const merged = [...validExecs];
       const seen = new Set(
         merged.map((ex) => String(typeof ex === 'string' ? ex : ex?.id || '').trim()).filter(Boolean)
@@ -219,7 +219,7 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
     });
   }
 
-  const inprogStr = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
+  const inprogStr = await AsyncStorage.getItem('@aria_inprogress_tasks') || '[]';
   let inprogressTasks: string[] = [];
   try {
     inprogressTasks = JSON.parse(inprogStr);
@@ -232,7 +232,7 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
     new Set([...inprogressTasks.map((id: string) => String(id)), ...outboxInProgIds.map((id) => String(id))]),
   );
 
-  const accStr = await AsyncStorage.getItem('@brspark_accepted_tasks') || '[]';
+  const accStr = await AsyncStorage.getItem('@aria_accepted_tasks') || '[]';
   let acceptedTasks: string[] = [];
   try {
     acceptedTasks = JSON.parse(accStr);
@@ -242,7 +242,7 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
   if (!Array.isArray(acceptedTasks)) acceptedTasks = [];
   const acceptedIdSet = new Set(acceptedTasks.map((id: string) => String(id)));
 
-  const rejStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
+  const rejStr = await AsyncStorage.getItem('@aria_rejected_tasks') || '[]';
   let rejectedTasks: string[] = [];
   try {
     rejectedTasks = JSON.parse(rejStr);
@@ -368,7 +368,7 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
     const id = String(rows[ri]?.id || '');
     if (!id || !pendingChecklistPostAckIds.has(id)) continue;
     try {
-      const exRaw = await AsyncStorage.getItem(`@brspark_execution_${id}`);
+      const exRaw = await AsyncStorage.getItem(`@aria_execution_${id}`);
       if (!exRaw) continue;
       const ex = JSON.parse(exRaw);
       const svc = String(ex?.title || ex?.metadata?.title || '').trim();
@@ -397,7 +397,7 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
   }
 
   const completedIdList = rows.filter((r) => r.statusEff === 'COMPLETED').map((r) => r.id);
-  const execKeys = completedIdList.map((id) => `@brspark_execution_${id}`);
+  const execKeys = completedIdList.map((id) => `@aria_execution_${id}`);
   const pairs = execKeys.length > 0 ? await AsyncStorage.multiGet(execKeys) : [];
   const cacheNow = Date.now();
   const completedBodyCachedIds = new Set<string>();
@@ -407,7 +407,7 @@ export async function loadProviderOsSearchRows(email: string): Promise<ProviderO
       const o = JSON.parse(v);
       const dl = Number(o._technicianViewDownloadAt);
       if (Number.isFinite(dl) && cacheNow - dl <= COMPLETED_BODY_LOCAL_TTL_MS) {
-        completedBodyCachedIds.add(String(k.replace('@brspark_execution_', '')));
+        completedBodyCachedIds.add(String(k.replace('@aria_execution_', '')));
       }
     } catch {
       /* ignore */

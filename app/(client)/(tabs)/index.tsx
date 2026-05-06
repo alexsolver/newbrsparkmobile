@@ -108,10 +108,10 @@ import {
   shouldRequireKnownExecutionGate,
 } from '../../../src/utils/providerTaskEventFilter';
 import {
-  BRSPARK_OPEN_TRANSIT_CHANGED,
-  BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY,
-  type BrsparkOpenTransitPayload,
-  type BrsparkProviderTaskCompletedPayload,
+  ARIA_OPEN_TRANSIT_CHANGED,
+  ARIA_PROVIDER_TASK_COMPLETED_LOCALLY,
+  type AriaOpenTransitPayload,
+  type AriaProviderTaskCompletedPayload,
 } from '../../../src/constants/deviceEvents';
 import { getLocationZoneTypeVisual, resolveLocationZoneChrome } from '../../../src/utils/locationZoneTypeDisplay';
 import { LocationZoneTypeBadge } from '../../../src/components/LocationZoneTypeBadge';
@@ -313,9 +313,9 @@ function normalizeSavedLongPressForSlot(
   return providerLongPressModesForAnchor(anchor).includes(mode) ? mode : anchor === 'NEWEST' ? 'NEWEST' : 'OLDEST';
 }
 
-const OS_ALT_SORT_STORAGE_KEY = '@brspark_provider_os_alt_sort_v1';
-const PROVIDER_CARD_HIGH_CONTRAST_KEY = '@brspark_provider_cards_high_contrast_v1';
-const PROVIDER_CARD_VARIANT_KEY = '@brspark_provider_cards_variant_v1';
+const OS_ALT_SORT_STORAGE_KEY = '@aria_provider_os_alt_sort_v1';
+const PROVIDER_CARD_HIGH_CONTRAST_KEY = '@aria_provider_cards_high_contrast_v1';
+const PROVIDER_CARD_VARIANT_KEY = '@aria_provider_cards_variant_v1';
 type ProviderCardVariant = 'premium';
 
 /** Chips Recentes / Antigas / Roteirizador — mesma métrica de ícone e texto. */
@@ -2234,7 +2234,7 @@ export default function DashboardScreen() {
   const providerTasksForTabs = useMemo(() => providerTasks, [providerTasks]);
   const [inprogressIds, setInprogressIds] = useState<Set<string>>(new Set());
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
-  /** IDs em `@brspark_accepted_tasks` (aceite local); a aba «Iniciadas» usa `inprogressIds` / estado IN_PROGRESS. */
+  /** IDs em `@aria_accepted_tasks` (aceite local); a aba «Iniciadas» usa `inprogressIds` / estado IN_PROGRESS. */
   const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
   const [providerSortMode, setProviderSortMode] = useState<ProviderListSortMode>('NEWEST');
   const providerCardEnterAnimMapRef = useRef<Map<string, Animated.Value>>(new Map());
@@ -2271,7 +2271,7 @@ export default function DashboardScreen() {
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [taskModalVisible, setTaskModalVisible] = useState(false);
 
-  /** Com rede: guardar o JSON do modelo em `@brspark_templates` ao abrir o cartão — evita checklist vazio offline. */
+  /** Com rede: guardar o JSON do modelo em `@aria_templates` ao abrir o cartão — evita checklist vazio offline. */
   useEffect(() => {
     if (mode !== 'PROVIDER' || !taskModalVisible || !selectedTask?.refId) return;
     const rid = String(selectedTask.refId).trim();
@@ -2863,7 +2863,7 @@ export default function DashboardScreen() {
            if (eid) cloudExecIds.add(eid);
          }
 
-         const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
+         const executedStr = await AsyncStorage.getItem('@aria_executed_tasks') || '[]';
          let executedTasksRaw = [];
          try {
            executedTasksRaw = JSON.parse(executedStr);
@@ -2892,7 +2892,7 @@ export default function DashboardScreen() {
          }
          
          if (updatedExecs) {
-             await updateStoredJsonArray<any>('@brspark_executed_tasks', (current) => {
+             await updateStoredJsonArray<any>('@aria_executed_tasks', (current) => {
                const merged = [...validExecs];
                const seen = new Set(
                  merged.map((ex) => String(typeof ex === 'string' ? ex : ex?.id || '').trim()).filter(Boolean)
@@ -2912,7 +2912,7 @@ export default function DashboardScreen() {
              });
          }
          
-         const inprogStr = await AsyncStorage.getItem('@brspark_inprogress_tasks') || '[]';
+         const inprogStr = await AsyncStorage.getItem('@aria_inprogress_tasks') || '[]';
          let inprogressTasks = [];
          try {
            inprogressTasks = JSON.parse(inprogStr);
@@ -2928,7 +2928,7 @@ export default function DashboardScreen() {
            ])
          );
          
-         const accStr = await AsyncStorage.getItem('@brspark_accepted_tasks') || '[]';
+         const accStr = await AsyncStorage.getItem('@aria_accepted_tasks') || '[]';
          let acceptedTasks: string[] = [];
          try {
            acceptedTasks = JSON.parse(accStr);
@@ -2939,7 +2939,7 @@ export default function DashboardScreen() {
          const acceptedIdSet = new Set(acceptedTasks.map((id: string) => String(id)));
          setAcceptedIds(acceptedIdSet);
          
-         const rejStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
+         const rejStr = await AsyncStorage.getItem('@aria_rejected_tasks') || '[]';
          let rejectedTasks: string[] = [];
          try {
            rejectedTasks = JSON.parse(rejStr);
@@ -3113,13 +3113,13 @@ export default function DashboardScreen() {
                lastPauseAt: t.metadata?.lastPauseAt ?? null,
             };
          });
-         /** Cartão com snapshot vazio do servidor: preencher a partir do payload local em `@brspark_execution_*` (quarentena / mídia). */
+         /** Cartão com snapshot vazio do servidor: preencher a partir do payload local em `@aria_execution_*` (quarentena / mídia). */
          for (let mi = 0; mi < mapped.length; mi++) {
            const row = mapped[mi];
            const mid = String(row?.id || '');
            if (!mid || !pendingChecklistPostAckIds.has(mid)) continue;
            try {
-             const exRaw = await AsyncStorage.getItem(`@brspark_execution_${mid}`);
+             const exRaw = await AsyncStorage.getItem(`@aria_execution_${mid}`);
              if (!exRaw) continue;
              const ex = JSON.parse(exRaw);
              const svc = String(ex?.title || ex?.metadata?.title || '').trim();
@@ -3145,7 +3145,7 @@ export default function DashboardScreen() {
          const completedIdList = mapped
            .filter((t: any) => t.status === 'COMPLETED')
            .map((t: any) => String(t.id));
-         const execKeys = completedIdList.map((id: string) => `@brspark_execution_${id}`);
+         const execKeys = completedIdList.map((id: string) => `@aria_execution_${id}`);
          const pairs = execKeys.length > 0 ? await AsyncStorage.multiGet(execKeys) : [];
          const completedBodyCachedIds = new Set<string>();
          for (const [k, v] of pairs) {
@@ -3154,7 +3154,7 @@ export default function DashboardScreen() {
              const o = JSON.parse(v);
              const dl = Number(o._technicianViewDownloadAt);
              if (Number.isFinite(dl) && cacheNow - dl <= COMPLETED_BODY_LOCAL_TTL_MS) {
-               completedBodyCachedIds.add(String(k.replace('@brspark_execution_', '')));
+               completedBodyCachedIds.add(String(k.replace('@aria_execution_', '')));
              }
            } catch {
              /* ignore */
@@ -3344,8 +3344,8 @@ export default function DashboardScreen() {
   /** Conclusão de checklist: actualização optimista das abas antes do `loadData` assíncrono terminar. */
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(
-      BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY,
-      (payload: BrsparkProviderTaskCompletedPayload) => {
+      ARIA_PROVIDER_TASK_COMPLETED_LOCALLY,
+      (payload: AriaProviderTaskCompletedPayload) => {
         const tid = String(payload?.taskId || '').trim();
         if (!tid) return;
         setCompletedIds((prev) => {
@@ -3380,8 +3380,8 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener(
-      BRSPARK_OPEN_TRANSIT_CHANGED,
-      (payload: BrsparkOpenTransitPayload) => {
+      ARIA_OPEN_TRANSIT_CHANGED,
+      (payload: AriaOpenTransitPayload) => {
         const raw = payload?.taskId;
         const tid = raw != null && String(raw).trim() !== '' ? String(raw).trim() : '';
         setProviderOpenTransitTaskId(tid || null);
@@ -6083,7 +6083,7 @@ export default function DashboardScreen() {
                                     body: JSON.stringify({ reason: rejectReason }),
                                   });
                                 }
-                                const rStr = await AsyncStorage.getItem('@brspark_rejected_tasks') || '[]';
+                                const rStr = await AsyncStorage.getItem('@aria_rejected_tasks') || '[]';
                                 let rejArr: string[] = [];
                                 try {
                                   rejArr = JSON.parse(rStr);
@@ -6093,7 +6093,7 @@ export default function DashboardScreen() {
                                 if (!Array.isArray(rejArr)) rejArr = [];
                                 if (!rejArr.includes(String(selectedTask.id))) {
                                   rejArr.push(String(selectedTask.id));
-                                  await AsyncStorage.setItem('@brspark_rejected_tasks', JSON.stringify(rejArr));
+                                  await AsyncStorage.setItem('@aria_rejected_tasks', JSON.stringify(rejArr));
                                 }
                                 setRejectingTaskId(null);
                                 setRejectReason('');
@@ -6207,7 +6207,7 @@ export default function DashboardScreen() {
                                     loadData(false);
                                     return;
                                   }
-                                  await appendUniqueStringToStoredArray('@brspark_accepted_tasks', taskIdStr);
+                                  await appendUniqueStringToStoredArray('@aria_accepted_tasks', taskIdStr);
                                   setSelectedTask((prev: any) => ({
                                     ...prev,
                                     isAccepted: true,
@@ -6220,7 +6220,7 @@ export default function DashboardScreen() {
                                   return;
                                 }
                               } else {
-                                await appendUniqueStringToStoredArray('@brspark_accepted_tasks', taskIdStr);
+                                await appendUniqueStringToStoredArray('@aria_accepted_tasks', taskIdStr);
                                 try {
                                   const acceptedTs = new Date().toISOString();
                                   await enqueueExecutionStatusPatch(taskIdStr, {
@@ -6248,7 +6248,7 @@ export default function DashboardScreen() {
                                   style: 'default',
                                   onPress: async () => {
                                     await appendUniqueStringToStoredArray(
-                                      '@brspark_inprogress_tasks',
+                                      '@aria_inprogress_tasks',
                                       String(selectedTask.id)
                                     );
                                     await enqueueExecutionInProgressFromDashboard(String(selectedTask.id));
@@ -6294,7 +6294,7 @@ export default function DashboardScreen() {
                           return;
                         }
                         await appendUniqueStringToStoredArray(
-                          '@brspark_inprogress_tasks',
+                          '@aria_inprogress_tasks',
                           String(selectedTask.id)
                         );
                         await enqueueExecutionInProgressFromDashboard(String(selectedTask.id));

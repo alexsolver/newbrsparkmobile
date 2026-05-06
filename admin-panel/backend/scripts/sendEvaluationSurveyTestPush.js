@@ -5,7 +5,7 @@
  * O utilizador deve ter sessão no app com notificações activas (token Expo registado).
  *
  * Uso:
- *   cd admin-panel/backend && node scripts/sendEvaluationSurveyTestPush.js alex@brspark.com
+ *   cd admin-panel/backend && node scripts/sendEvaluationSurveyTestPush.js alex@aria.com
  *
  * Requer: DATABASE_URL, EXPO_ACCESS_TOKEN (ou o que sendExpoPushToMany usar), ADMIN_PANEL_PUBLIC_BASE_URL para surveyUrl completo.
  */
@@ -16,7 +16,7 @@ const { buildClientSurveyLinks } = require('../src/lib/evaluationSurveyUrl');
 const { pushToUserById } = require('../src/lib/evaluationPush');
 
 async function main() {
-  const email = String(process.argv[2] || 'alex@brspark.com')
+  const email = String(process.argv[2] || 'alex@aria.com')
     .trim()
     .toLowerCase();
   if (!email.includes('@')) {
@@ -36,7 +36,7 @@ async function main() {
   const tokens = await prisma.pushToken.findMany({ where: { userId: user.id } });
   if (!tokens.length) {
     console.error(
-      'Sem token Expo para este utilizador. Abra o app BrSpark neste telemóvel, inicie sessão e active as notificações.',
+      'Sem token Expo para este utilizador. Abra o app Aria neste telemóvel, inicie sessão e active as notificações.',
     );
     process.exit(3);
   }
@@ -62,7 +62,7 @@ async function main() {
   }
 
   const osLabel = inst.execution?.osNumber != null ? String(inst.execution.osNumber) : '—';
-  const tenantLabel = inst.tenant?.name || 'BrSpark';
+  const tenantLabel = inst.tenant?.name || 'Aria';
 
   await pushToUserById(user.id, {
     title: `${tenantLabel} — Avalie o serviço`,

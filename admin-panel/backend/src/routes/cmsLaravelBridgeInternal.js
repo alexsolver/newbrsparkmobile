@@ -11,7 +11,7 @@ const { sendExpoPushToMany } = require('../services/expoPush');
 const { isHiddenFromPublicDirectoryAt } = require('../lib/providerDedicatedExclusiveService');
 
 const AFFILIATION_ACCEPT_BASE_URL =
-  String(process.env.PROVIDER_AFFILIATION_ACCEPT_URL_BASE || 'brsparkmobile://provider-affiliation/accept').trim();
+  String(process.env.PROVIDER_AFFILIATION_ACCEPT_URL_BASE || 'ariamobile://provider-affiliation/accept').trim();
 
 const router = express.Router();
 
@@ -23,7 +23,7 @@ function timingSafeEqual(a, b) {
 }
 
 function requireBridge(req, res) {
-  const expected = process.env.BRSPARK_WEB_BRIDGE_SECRET;
+  const expected = process.env.ARIA_WEB_BRIDGE_SECRET;
   if (!expected || !timingSafeEqual(req.headers['x-bridge-secret'], expected)) {
     res.status(401).json({ error: 'Não autorizado.' });
     return false;
@@ -117,7 +117,7 @@ router.post('/cms-tenant-provision', express.json({ limit: '128kb' }), async (re
     let slug = baseSlug;
     let attempt = 0;
     const syntheticEmail = () =>
-      `cms+${laravelTenantId.replace(/-/g, '').slice(0, 12)}-${attempt || '0'}@brspark.cms.linked`;
+      `cms+${laravelTenantId.replace(/-/g, '').slice(0, 12)}-${attempt || '0'}@aria.cms.linked`;
 
     while (attempt < 20) {
       const email = syntheticEmail();
@@ -442,9 +442,9 @@ router.post('/provider-affiliations/invite', express.json({ limit: '64kb' }), as
     };
 
     try {
-      const subject = `Convite BrSpark — ${tenantLabel}`;
-      const text = `Olá,\n\nA empresa «${tenantLabel}» convidou-o para ${relPt} na rede BrSpark.\n\nAbra o link no telemóvel com a app BrSpark instalada:\n${acceptUrl}\n\nNo app: Perfil → Organizações e parcerias.\n`;
-      const html = `<p>Olá,</p><p>A empresa <strong>${escapeHtmlEmailFragment(tenantLabel)}</strong> convidou-o para <strong>${escapeHtmlEmailFragment(relPt)}</strong> na rede BrSpark.</p><p><a href="${escapeHtmlEmailFragment(acceptUrl)}">Abrir no app / aceitar convite</a></p>`;
+      const subject = `Convite Aria — ${tenantLabel}`;
+      const text = `Olá,\n\nA empresa «${tenantLabel}» convidou-o para ${relPt} na rede Aria.\n\nAbra o link no telemóvel com a app Aria instalada:\n${acceptUrl}\n\nNo app: Perfil → Organizações e parcerias.\n`;
+      const html = `<p>Olá,</p><p>A empresa <strong>${escapeHtmlEmailFragment(tenantLabel)}</strong> convidou-o para <strong>${escapeHtmlEmailFragment(relPt)}</strong> na rede Aria.</p><p><a href="${escapeHtmlEmailFragment(acceptUrl)}">Abrir no app / aceitar convite</a></p>`;
       const { send, provider: emailProviderUsed } = await sendTransactionalEmailWithFallback({
         to: emailTo,
         subject,
@@ -475,7 +475,7 @@ router.post('/provider-affiliations/invite', express.json({ limit: '64kb' }), as
         const pushRes = await sendExpoPushToMany(tokens, {
           title: pushTitle,
           body: pushBody,
-          android: { channelId: 'brspark-tecnico', sound: 'default' },
+          android: { channelId: 'aria-tecnico', sound: 'default' },
           data: {
             type: 'PROVIDER_AFFILIATION_INVITED',
             tenantId: String(tenantId),

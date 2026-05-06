@@ -4,7 +4,7 @@ import {
   migrateLegacyMobileWarehouseStockRows,
 } from '../database';
 
-const MIGRATION_FLAG = '@brspark_tech_stock_legacy_migrated_v2';
+const MIGRATION_FLAG = '@aria_tech_stock_legacy_migrated_v2';
 
 /**
  * Move stock do antigo “armazém móvel” (Asset virtual) para tech_stock_* e limpa cache.
@@ -16,14 +16,14 @@ export async function ensureTechnicianStockLegacyMigration(ownerEmail?: string):
     if (done === '1') return;
 
     const ids = new Set<string>();
-    const cached = await AsyncStorage.getItem('@brspark_mobile_warehouse_asset_id');
+    const cached = await AsyncStorage.getItem('@aria_mobile_warehouse_asset_id');
     if (cached && String(cached).trim()) ids.add(String(cached).trim());
     if (ownerEmail) {
       getMobileWarehouseAssetIdsFromLocalDb(ownerEmail).forEach((id) => ids.add(id));
     }
 
     migrateLegacyMobileWarehouseStockRows([...ids]);
-    await AsyncStorage.removeItem('@brspark_mobile_warehouse_asset_id');
+    await AsyncStorage.removeItem('@aria_mobile_warehouse_asset_id');
     await AsyncStorage.setItem(MIGRATION_FLAG, '1');
   } catch (e) {
     console.warn('[technicianStockMigration]', e);

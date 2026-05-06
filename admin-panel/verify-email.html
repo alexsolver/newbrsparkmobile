@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Confirmar e-mail — BrSpark</title>
-  <meta name="theme-color" content="#EA580C" />
-  <link rel="stylesheet" href="css/brspark-tokens.css" />
+  <title>Confirmar e-mail — Aria</title>
+  <meta name="theme-color" content="#0d9488" />
+  <link rel="stylesheet" href="css/aria-tokens.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
@@ -53,7 +53,7 @@
     </div>
   </div>
   <script>
-    const LS_API_ORIGIN = 'brspark_admin_api_origin';
+    const LS_API_ORIGIN = 'aria_admin_api_origin';
 
     function normalizeApiBase(fullBase) {
       let s = String(fullBase || '').trim().replace(/\/+$/, '');
@@ -147,7 +147,7 @@
           data.message || 'E-mail confirmado com sucesso.',
           true,
           false,
-          'Você já pode fechar esta página e voltar ao app BrSpark.',
+          'Você já pode fechar esta página e voltar ao app Aria.',
         );
       } catch (e) {
         const msg = e && e.message ? String(e.message) : 'Erro de rede ou servidor.';
@@ -157,7 +157,7 @@
           msg,
           false,
           true,
-          'Em desenvolvimento com Live Server, defina no navegador localStorage "brspark_admin_api_origin" como http://127.0.0.1:3001 ou use ?api=http://127.0.0.1:3001 na URL.',
+          'Em desenvolvimento com Live Server, defina no navegador localStorage "aria_admin_api_origin" como http://127.0.0.1:3001 ou use ?api=http://127.0.0.1:3001 na URL.',
         );
       }
     }

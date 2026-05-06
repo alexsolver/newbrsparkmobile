@@ -98,8 +98,8 @@ function canQuery() {
 
 function resolveInitialTenant() {
   try {
-    const raw = sessionStorage.getItem('brspark_panel_tenant');
-    const panelMode = sessionStorage.getItem('brspark_panel_mode');
+    const raw = sessionStorage.getItem('aria_panel_tenant');
+    const panelMode = sessionStorage.getItem('aria_panel_mode');
     if (raw && panelMode === 'tenant') {
       const t = JSON.parse(raw);
       return t.id || null;

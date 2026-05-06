@@ -28,8 +28,8 @@ export type RoutineTaskOpenResult = {
   reused: boolean;
 };
 
-const RT_ASSIGNMENTS_CACHE_KEY = '@brspark_rt_assignments_cache_v1';
-const TEMPLATES_STORAGE_KEY = '@brspark_templates';
+const RT_ASSIGNMENTS_CACHE_KEY = '@aria_rt_assignments_cache_v1';
+const TEMPLATES_STORAGE_KEY = '@aria_templates';
 
 const RT_TERMINAL = new Set(['COMPLETED', 'SYNCED', 'CANCELLED', 'CANCELED', 'DONE', 'CLOSED', 'ARCHIVED']);
 
@@ -122,7 +122,7 @@ function pickReusableLocalRtExecution(
 }
 
 /**
- * Modelos RT do utilizador. Offline: último JSON de `/api/routine-tasks/me` ou inferência a partir de `@brspark_rt_cloud_tasks`.
+ * Modelos RT do utilizador. Offline: último JSON de `/api/routine-tasks/me` ou inferência a partir de `@aria_rt_cloud_tasks`.
  */
 export async function fetchRoutineTaskAssignments(): Promise<RoutineTaskAssignmentDto[]> {
   try {
@@ -146,7 +146,7 @@ export async function fetchRoutineTaskAssignments(): Promise<RoutineTaskAssignme
   return derived;
 }
 
-/** Garante que o JSON do modelo existe em `@brspark_templates` (mesma chave que o checklist). */
+/** Garante que o JSON do modelo existe em `@aria_templates` (mesma chave que o checklist). */
 export async function cacheChecklistTemplateIfMissing(
   templateId: string,
   opts?: { timeoutMs?: number }
@@ -187,7 +187,7 @@ export async function prefetchRoutineTaskTemplates(assignments: RoutineTaskAssig
 }
 
 /**
- * Abre ou reutiliza uma instância RT e regista no cache local RT (`@brspark_rt_cloud_tasks`) para o checklist.
+ * Abre ou reutiliza uma instância RT e regista no cache local RT (`@aria_rt_cloud_tasks`) para o checklist.
  * Offline: reutiliza execução ativa do mesmo modelo já presente no aparelho, se existir.
  */
 export async function openRoutineTaskAndCacheCloudTask(

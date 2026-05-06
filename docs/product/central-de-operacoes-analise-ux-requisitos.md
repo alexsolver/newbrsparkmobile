@@ -124,7 +124,7 @@ Legenda: **M** = Must have, **S** = Should have, **C** = Could have, **W** = Won
 ### 4.1 Implementação atual (shell do quadro)
 
 - Módulo [`admin-panel/js/operations-i18n.js`](../../admin-panel/js/operations-i18n.js): `opsT`, `applyOperationsStaticI18n`, `opsSortLocale`, `opsSortButtonLabel`, `opsFormatTimeAgo`, `opsFormatCardDateTime`, `refreshOpsTenantChip`.
-- [`operations.html`](../../admin-panel/operations.html) chama `applyOperationsStaticI18n()` após `initPage()`; breadcrumb, hero, filtros, colunas Kanban, botões, limite na API, aviso de truncagem e chip de organização usam o locale do painel (`brspark_admin_ui_locale`).
+- [`operations.html`](../../admin-panel/operations.html) chama `applyOperationsStaticI18n()` após `initPage()`; breadcrumb, hero, filtros, colunas Kanban, botões, limite na API, aviso de truncagem e chip de organização usam o locale do painel (`aria_admin_ui_locale`).
 - **Pendente para paridade total:** modais de despacho/detalhe/revisão, mensagens `alert` dispersas, rótulos dinâmicos nos cartões (badges de estado) — podem ir ganhando chaves no mesmo ficheiro.
 
 ### 4.2 Padrão (referência)

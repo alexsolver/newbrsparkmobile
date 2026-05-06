@@ -29,19 +29,19 @@ function dispatchFbCmd(cmd, ev, argRaw) {
     case 'confirmIconSelectionEmpty':
       if (typeof w.confirmIconSelection === 'function') w.confirmIconSelection('');
       return;
-    case 'brsparkCopilotCloseSchemaPreview':
-      if (typeof w.brsparkCopilotCloseSchemaPreview === 'function') {
-        w.brsparkCopilotCloseSchemaPreview(argRaw === 'true');
+    case 'ariaCopilotCloseSchemaPreview':
+      if (typeof w.ariaCopilotCloseSchemaPreview === 'function') {
+        w.ariaCopilotCloseSchemaPreview(argRaw === 'true');
       }
       return;
     case 'hideIconPickerModal':
       hideIconPickerModal();
       return;
-    case 'brsparkCopilotPickExcelFile':
-      if (typeof w.brsparkCopilotPickExcelFile === 'function') void w.brsparkCopilotPickExcelFile();
+    case 'ariaCopilotPickExcelFile':
+      if (typeof w.ariaCopilotPickExcelFile === 'function') void w.ariaCopilotPickExcelFile();
       return;
-    case 'brsparkCopilotReprocessSchemaPreview':
-      if (typeof w.brsparkCopilotReprocessSchemaPreview === 'function') void w.brsparkCopilotReprocessSchemaPreview();
+    case 'ariaCopilotReprocessSchemaPreview':
+      if (typeof w.ariaCopilotReprocessSchemaPreview === 'function') void w.ariaCopilotReprocessSchemaPreview();
       return;
     default: {
       const fn = w[cmd];
@@ -88,8 +88,8 @@ export function initFbMarkupDelegation() {
     if (typeof window.closeSectionStepEditModal === 'function') window.closeSectionStepEditModal();
   });
   bindModalBackdrop('copilot-schema-preview-modal', () => {
-    if (typeof window.brsparkCopilotCloseSchemaPreview === 'function') {
-      window.brsparkCopilotCloseSchemaPreview(false);
+    if (typeof window.ariaCopilotCloseSchemaPreview === 'function') {
+      window.ariaCopilotCloseSchemaPreview(false);
     }
   });
   bindModalBackdrop('template-history-modal', () => {
@@ -124,10 +124,10 @@ export function initFbMarkupDelegation() {
     window.updateIconGridColors?.();
   });
   document.getElementById('ai-copilot-input')?.addEventListener('keydown', (e) => {
-    window.brsparkCopilotInputKeydown?.(e);
+    window.ariaCopilotInputKeydown?.(e);
   });
   document.getElementById('copilot-excel-file')?.addEventListener('change', (e) => {
     const el = e.target;
-    if (el instanceof HTMLInputElement) void window.brsparkCopilotAnalyzeExcelFile?.(el);
+    if (el instanceof HTMLInputElement) void window.ariaCopilotAnalyzeExcelFile?.(el);
   });
 }

@@ -35,7 +35,7 @@ export function metadataIndicatesAdminRevisionCycle(meta: unknown): boolean {
 }
 
 /**
- * Decide se o id deve sair de `@brspark_executed_tasks` com base no snapshot remoto.
+ * Decide se o id deve sair de `@aria_executed_tasks` com base no snapshot remoto.
  * Só remove em ciclo explícito de revisão/reabertura.
  */
 export function shouldRemoveExecutedCacheForRemoteTask(

@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { WorkTimeMeOk } from './workTimeService';
 
-const WORK_TIME_ME_CACHE_KEY = '@brspark_work_time_me_snapshot_v2';
-const WORK_TIME_ME_CACHE_KEY_LEGACY_V1 = '@brspark_work_time_me_snapshot_v1';
+const WORK_TIME_ME_CACHE_KEY = '@aria_work_time_me_snapshot_v2';
+const WORK_TIME_ME_CACHE_KEY_LEGACY_V1 = '@aria_work_time_me_snapshot_v1';
 void AsyncStorage.removeItem(WORK_TIME_ME_CACHE_KEY_LEGACY_V1);
 
 export function parseWorkTimeMeCache(raw: string | null): WorkTimeMeOk | null {

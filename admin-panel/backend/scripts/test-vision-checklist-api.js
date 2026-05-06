@@ -68,7 +68,7 @@ async function loadUrlFromDb() {
 }
 
 async function fetchAndNormalize(baseUrl, apiKey) {
-  const boundary = '----BrSparkVisionCli' + Date.now().toString(36);
+  const boundary = '----AriaVisionCli' + Date.now().toString(36);
   const bodyBuf = buildMultipartBuffer(boundary, [
     { name: 'media', value: PROBE_PNG, filename: 'probe.png', contentType: 'image/png' },
     { name: 'questions', value: JSON.stringify(PROBE_QUESTIONS) },
@@ -130,7 +130,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('\n--- Passo 2: validação do JSON de resposta (contrato BrSpark) ---');
+  console.log('\n--- Passo 2: validação do JSON de resposta (contrato Aria) ---');
   try {
     const { status, normalized, bodyPreview } = await fetchAndNormalize(baseUrl, apiKey);
     console.log('HTTP', status);

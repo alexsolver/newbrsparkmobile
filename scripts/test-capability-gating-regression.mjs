@@ -16,7 +16,7 @@ const TARGET_FILES = [
 ];
 
 const FORBIDDEN_PATTERNS = [
-  /sessionStorage\.getItem\('brspark_admin_role'\)/,
+  /sessionStorage\.getItem\('aria_admin_role'\)/,
   /getStoredPanelRole\(/,
   /myRole === 'SAAS_ADMIN'/,
   /myRole === 'TENANT_ADMIN'/,
@@ -38,7 +38,7 @@ const ALLOWLIST = new Map([
   [
     'admin-panel/users.html',
     [
-      /sessionStorage\.getItem\('brspark_admin_role'\)/,
+      /sessionStorage\.getItem\('aria_admin_role'\)/,
       /u\.role === 'TENANT_ADMIN'/,
       /u\.role === 'SAAS_ADMIN'/,
       /u\.role === 'MANAGER'/,

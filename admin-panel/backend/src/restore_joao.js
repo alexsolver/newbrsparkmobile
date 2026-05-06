@@ -16,7 +16,7 @@ async function main() {
     create: {
       name: 'João Silva',
       slug: 'joao-silva',
-      email: 'joao.silva@brspark.com',
+      email: 'joao.silva@aria.com',
       ownerName: 'João',
       phone: '(11) 99999-1234',
       status: 'ACTIVE',
@@ -27,11 +27,11 @@ async function main() {
 
   // ── 2. Usuário João Silva ──────────────────────────────────────
   const user = await prisma.user.upsert({
-    where: { email_tenantId: { email: 'joao.silva@brspark.com', tenantId: tenant.id } },
+    where: { email_tenantId: { email: 'joao.silva@aria.com', tenantId: tenant.id } },
     update: { password: hash, isActive: true },
     create: {
       name: 'João Silva',
-      email: 'joao.silva@brspark.com',
+      email: 'joao.silva@aria.com',
       password: hash,
       tenantId: tenant.id,
       role: 'TENANT_ADMIN',
@@ -58,7 +58,7 @@ async function main() {
   }
 
   console.log('\n🎉 Restauração concluída!');
-  console.log('   Login do App: joao.silva@brspark.com / senha123');
+  console.log('   Login do App: joao.silva@aria.com / senha123');
 }
 
 main()

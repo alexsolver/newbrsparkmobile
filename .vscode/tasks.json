@@ -4,7 +4,7 @@
     {
       "label": "Deploy produção: API (admin-panel)",
       "type": "shell",
-      "command": "export BRSPARK_SSH_KEY=\"${env:HOME}/Downloads/alex.pem\" && ./scripts/deploy-production.sh api",
+      "command": "export ARIA_SSH_KEY=\"${env:HOME}/Downloads/alex.pem\" && ./scripts/deploy-production.sh api",
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -13,9 +13,9 @@
       "group": "none"
     },
     {
-      "label": "Deploy produção: Laravel (BrsparkWeb)",
+      "label": "Deploy produção: Laravel (AriaWeb)",
       "type": "shell",
-      "command": "export BRSPARK_SSH_KEY=\"${env:HOME}/Downloads/alex.pem\" && ./scripts/deploy-production.sh web",
+      "command": "export ARIA_SSH_KEY=\"${env:HOME}/Downloads/alex.pem\" && ./scripts/deploy-production.sh web",
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -26,7 +26,7 @@
     {
       "label": "Deploy produção: API + Laravel",
       "type": "shell",
-      "command": "export BRSPARK_SSH_KEY=\"${env:HOME}/Downloads/alex.pem\" && ./scripts/deploy-production.sh all",
+      "command": "export ARIA_SSH_KEY=\"${env:HOME}/Downloads/alex.pem\" && ./scripts/deploy-production.sh all",
       "options": {
         "cwd": "${workspaceFolder}"
       },

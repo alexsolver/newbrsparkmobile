@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Estoque abaixo do mínimo</title>
+  <title>Aria Admin — Estoque abaixo do mínimo</title>
   <link rel="stylesheet" href="css/main.css" />
 </head>
 <body>
@@ -247,7 +247,7 @@
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'brspark-estoque-critico.csv';
+    a.download = 'aria-estoque-critico.csv';
     a.click();
     URL.revokeObjectURL(a.href);
   }

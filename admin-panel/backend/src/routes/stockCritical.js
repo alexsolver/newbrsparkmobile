@@ -101,7 +101,7 @@ router.get('/', async (req, res) => {
         );
       }
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', 'attachment; filename="brspark-estoque-critico.csv"');
+      res.setHeader('Content-Disposition', 'attachment; filename="aria-estoque-critico.csv"');
       res.send('\uFEFF' + lines.join('\n'));
       return;
     }

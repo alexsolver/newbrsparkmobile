@@ -16,14 +16,14 @@ const { resolvePreferredActiveUserForDispatchOwnerEmail } = require('../lib/user
 
 router.use(authUser);
 
-/** Papéis de utilizador do app que podem participar em convites de chat 1:1 (mesma tenant ou fluxo BrSpark). */
+/** Papéis de utilizador do app que podem participar em convites de chat 1:1 (mesma tenant ou fluxo Aria). */
 const CHAT_PEER_ROLES = new Set(['USER', 'PROVIDER', 'MANAGER', 'TENANT_ADMIN', 'SAAS_ADMIN']);
 
 function normEmail(v) {
   return String(v || '').trim().toLowerCase();
 }
 
-function isBrSparkSaasAppUser(user) {
+function isAriaSaasAppUser(user) {
   return normRole(user?.role) === 'SAAS_ADMIN';
 }
 
@@ -263,15 +263,15 @@ router.post('/contacts/request', async (req, res) => {
       return res.status(403).json({ error: 'Usuário inválido para chat.' });
     }
 
-    const brSparkSaas = isBrSparkSaasAppUser(me);
-    const userExists = brSparkSaas
+    const ariaSaas = isAriaSaasAppUser(me);
+    const userExists = ariaSaas
       ? await findActiveUserByEmailForChat(targetEmail)
       : await findActiveUserInTenantForChat(me.tenantId, targetEmail);
 
     if (!userExists) {
-      return res.status(404).json({ error: 'Usuário não encontrado na plataforma Brspark' });
+      return res.status(404).json({ error: 'Usuário não encontrado na plataforma Aria' });
     }
-    if (!brSparkSaas && String(userExists.tenantId || '') !== String(me.tenantId || '')) {
+    if (!ariaSaas && String(userExists.tenantId || '') !== String(me.tenantId || '')) {
       return res.status(403).json({ error: 'Só é permitido adicionar usuários do mesmo tenant.' });
     }
     if (!isChatPeerRole(userExists.role)) {
@@ -294,7 +294,7 @@ router.post('/contacts/request', async (req, res) => {
       }
     });
 
-    // Push para o destinatário (Android exige channelId = brspark-alerts, criado no app)
+    // Push para o destinatário (Android exige channelId = aria-alerts, criado no app)
     try {
       const pushTokens = await prisma.pushToken.findMany({ where: { userId: userExists.id } });
       if (pushTokens.length === 0) {
@@ -333,7 +333,7 @@ router.get('/contacts/pending', async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    // Dados dos solicitantes (qualquer tenant — ex.: convite de SAAS_ADMIN BrSpark)
+    // Dados dos solicitantes (qualquer tenant — ex.: convite de SAAS_ADMIN Aria)
     const emails = pending.map(p => p.requesterId);
     const byEmail = new Map(Object.entries(await buildChatUserDictByEmails(emails)));
 
@@ -375,8 +375,8 @@ router.put('/contacts/:id/status', async (req, res) => {
       return res.status(403).json({ error: 'Solicitação inválida.' });
     }
     const sameTenant = String(me.tenantId || '') === String(requester.tenantId || '');
-    const brSparkBridge = isBrSparkSaasAppUser(me) || isBrSparkSaasAppUser(requester);
-    if (!sameTenant && !brSparkBridge) {
+    const ariaBridge = isAriaSaasAppUser(me) || isAriaSaasAppUser(requester);
+    if (!sameTenant && !ariaBridge) {
       return res.status(403).json({ error: 'Solicitação inválida para este tenant.' });
     }
 

@@ -19,7 +19,7 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://api.brspark.com"
+        "EXPO_PUBLIC_API_BASE": "https://api.aria.com"
       }
     },
     "preview-lan": {
@@ -32,7 +32,7 @@
     "production": {
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://api.brspark.com"
+        "EXPO_PUBLIC_API_BASE": "https://api.aria.com"
       },
       "autoIncrement": true
     }
@@ -44,7 +44,7 @@
         "track": "production"
       },
       "ios": {
-        "bundleIdentifier": "com.brspark",
+        "bundleIdentifier": "com.aria",
         "ascAppId": "6763369142"
       }
     }

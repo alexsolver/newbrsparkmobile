@@ -1,5 +1,5 @@
 
-> brspark-admin-backend@1.0.0 dev
+> aria-admin-backend@1.0.0 dev
 > nodemon src/index.js
 
 [33m[nodemon] 3.1.14[39m
@@ -21,7 +21,7 @@ Invalid `prisma.$executeRawUnsafe()` invocation:
 Can't reach database server at `localhost:5432`
 
 Please make sure your database server is running at `localhost:5432`.
-[BrSpark] Erro ao escutar HTTP: Error: listen EPERM: operation not permitted 0.0.0.0:3001
+[Aria] Erro ao escutar HTTP: Error: listen EPERM: operation not permitted 0.0.0.0:3001
     at Server.setupListenHandle [as _listen2] (node:net:1886:21)
     at listenInCluster (node:net:1965:12)
     at doListen (node:net:2139:7)

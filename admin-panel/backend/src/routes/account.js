@@ -38,7 +38,7 @@ const {
   completeRegisterFromSetupToken,
   startEmailPurposeChallenge,
 } = require('../lib/otpLoginService');
-const { deliverBrsparkLaravelEvent, EVENT_TYPES } = require('../lib/brsparkSyncWebhook');
+const { deliverAriaLaravelEvent, EVENT_TYPES } = require('../lib/ariaSyncWebhook');
 const { hasActiveDedicatedAffiliationForAppUser } = require('../lib/providerOnboardingGuards');
 const { resolveVisionDetectionEngineLabelForApp } = require('../lib/visionDetectionRouting');
 const { createPersonalClientTenantAndUserInTransaction } = require('../lib/registerPersonalClientTenant');
@@ -239,7 +239,7 @@ async function buildSafeAppUserPayloadAsync(user, db = prisma) {
   const effId = String(user.tenantId || '').trim();
 
   /**
-   * Com vínculo dedicado, `tenant` = empresa; experiência «cliente» (piscina) usa marca BrSpark / registo.
+   * Com vínculo dedicado, `tenant` = empresa; experiência «cliente» (piscina) usa marca Aria / registo.
    */
   if (hid && effId && hid !== effId) {
     try {
@@ -252,7 +252,7 @@ async function buildSafeAppUserPayloadAsync(user, db = prisma) {
       }
       if (homeRow) {
         if (await tenantIsSharedAppRegistrationPool(db, hid)) {
-          const appLabel = 'BrSpark';
+          const appLabel = 'Aria';
           const branding = buildEffectiveTenantBranding({
             tenantName: appLabel,
             planFeatures: homeRow.subscription?.plan?.features,
@@ -281,7 +281,7 @@ async function buildSafeAppUserPayloadAsync(user, db = prisma) {
           });
           if (row) {
             const branding = buildEffectiveTenantBranding({
-              tenantName: 'BrSpark',
+              tenantName: 'Aria',
               planFeatures: row.subscription?.plan?.features,
               tenantFeatures: row.features,
             });
@@ -303,7 +303,7 @@ async function buildSafeAppUserPayloadAsync(user, db = prisma) {
     /** Nome técnico «master» / piscina partilhada: não expor no app para não confundir o utilizador. */
     try {
       if (await tenantIsSharedAppRegistrationPool(db, user.tenant.id)) {
-        const appLabel = 'BrSpark';
+        const appLabel = 'Aria';
         payload.tenant.name = appLabel;
         payload.tenant.ownerName = null;
         const branding = buildEffectiveTenantBranding({
@@ -489,7 +489,7 @@ router.post('/register', async (req, res) => {
       include: { tenant: true, technicianProfile: true },
     });
     const roleHint = hydrated?.technicianProfile ? 'TECHNICIAN' : hydrated?.role;
-    deliverBrsparkLaravelEvent({
+    deliverAriaLaravelEvent({
       type: EVENT_TYPES.USER_CREATED,
       idempotencyKey: `user-${user.id}-register`,
       payload: {
@@ -711,7 +711,7 @@ router.post('/login/oauth', async (req, res) => {
               appAccountId: acc.id,
             });
           });
-          deliverBrsparkLaravelEvent({
+          deliverAriaLaravelEvent({
             type: EVENT_TYPES.USER_CREATED,
             idempotencyKey: `user-${createdOAuth.id}-oauth`,
             payload: {
@@ -872,10 +872,10 @@ router.post('/password-reset/request', async (req, res) => {
         });
       }
       const greet = String(users[0].name || 'usuário').trim();
-      const subject = 'BrSpark: redefina sua senha';
+      const subject = 'Aria: redefina sua senha';
       const text =
         `Olá, ${greet}!\n\n` +
-        `Recebemos uma solicitação para redefinir a senha da sua conta BrSpark (todas as organizações associadas a este e-mail).\n\n` +
+        `Recebemos uma solicitação para redefinir a senha da sua conta Aria (todas as organizações associadas a este e-mail).\n\n` +
         `Use este link para criar uma nova senha:\n${resetLink}\n\n` +
         `${APP_PASSWORD_RULES_USER_FACING_PT}\n\n` +
         `Este link expira em ${process.env.PASSWORD_RESET_EXPIRES_IN || '30 minutos'}.\n` +
@@ -884,7 +884,7 @@ router.post('/password-reset/request', async (req, res) => {
         `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">` +
         `<h2 style="margin:0 0 12px">Redefinição de senha</h2>` +
         `<p>Olá, <strong>${escapeHtml(greet)}</strong>.</p>` +
-        `<p>Recebemos uma solicitação para redefinir a senha da sua conta BrSpark (todas as organizações associadas a este e-mail).</p>` +
+        `<p>Recebemos uma solicitação para redefinir a senha da sua conta Aria (todas as organizações associadas a este e-mail).</p>` +
         `<p style="margin:0 0 16px;font-size:14px;color:#334155">${escapeHtml(APP_PASSWORD_RULES_USER_FACING_PT)}</p>` +
         `<p style="margin:24px 0">` +
         `<a href="${escapeHtml(resetLink)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Criar nova senha</a>` +
@@ -946,15 +946,15 @@ router.post('/password-reset/request', async (req, res) => {
           };
         }
 
-        const tenantName = String(user.tenant?.name || 'BrSpark').trim();
+        const tenantName = String(user.tenant?.name || 'Aria').trim();
         const subject =
           users.length > 1
-            ? `BrSpark: redefina sua senha (${tenantName})`
-            : 'BrSpark: redefina sua senha';
+            ? `Aria: redefina sua senha (${tenantName})`
+            : 'Aria: redefina sua senha';
 
         const text =
           `Olá, ${user.name || 'usuário'}!\n\n` +
-          `Recebemos uma solicitação para redefinir a senha da sua conta BrSpark${tenantName ? ` em ${tenantName}` : ''}.\n\n` +
+          `Recebemos uma solicitação para redefinir a senha da sua conta Aria${tenantName ? ` em ${tenantName}` : ''}.\n\n` +
           `Use este link para criar uma nova senha:\n${resetLink}\n\n` +
           `${APP_PASSWORD_RULES_USER_FACING_PT}\n\n` +
           `Este link expira em ${process.env.PASSWORD_RESET_EXPIRES_IN || '30 minutos'}.\n` +
@@ -964,7 +964,7 @@ router.post('/password-reset/request', async (req, res) => {
           `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">` +
           `<h2 style="margin:0 0 12px">Redefinição de senha</h2>` +
           `<p>Olá, <strong>${escapeHtml(user.name || 'usuário')}</strong>.</p>` +
-          `<p>Recebemos uma solicitação para redefinir a senha da sua conta BrSpark${tenantName ? ` em <strong>${escapeHtml(tenantName)}</strong>` : ''}.</p>` +
+          `<p>Recebemos uma solicitação para redefinir a senha da sua conta Aria${tenantName ? ` em <strong>${escapeHtml(tenantName)}</strong>` : ''}.</p>` +
           `<p style="margin:0 0 16px;font-size:14px;color:#334155">${escapeHtml(APP_PASSWORD_RULES_USER_FACING_PT)}</p>` +
           `<p style="margin:24px 0">` +
           `<a href="${escapeHtml(resetLink)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:700">Criar nova senha</a>` +
@@ -1309,7 +1309,7 @@ router.get('/me/directory-hero', authUser, requireTenantDirectoryManager, async 
           logo_url: null,
           company_name: tenant?.name || null,
           hint:
-            'Não encontramos conta do painel web com este e-mail. Use o mesmo e-mail da empresa no portal BrSpark para sincronizar o banner.',
+            'Não encontramos conta do painel web com este e-mail. Use o mesmo e-mail da empresa no portal Aria para sincronizar o banner.',
         });
       }
       return res.status(result.status >= 400 ? result.status : 502).json({
@@ -1360,7 +1360,7 @@ router.put('/me/directory-hero', authUser, requireTenantDirectoryManager, async 
       if (result.status === 404 && result.body?.code === 'CMS_USER_NOT_FOUND') {
         return res.status(409).json({
           error:
-            'Não encontramos conta do painel web com este e-mail. Cadastre a empresa no portal BrSpark com o mesmo e-mail ou contacte o suporte.',
+            'Não encontramos conta do painel web com este e-mail. Cadastre a empresa no portal Aria com o mesmo e-mail ou contacte o suporte.',
           code: 'CMS_USER_NOT_FOUND',
         });
       }
@@ -1603,7 +1603,7 @@ router.get('/me/sibling-workspaces', authUser, async (req, res) => {
       const isSharedPool = sharedPoolId && tid === sharedPoolId;
       return {
         id: tid,
-        name: isSharedPool ? 'BrSpark' : u.tenant?.name || tid,
+        name: isSharedPool ? 'Aria' : u.tenant?.name || tid,
         slug: u.tenant?.slug || null,
         kind: u.tenant?.kind || 'COMPANY',
         memberCount: countMap[tid] || 0,
@@ -1859,9 +1859,9 @@ function syntheticTenantEmailForWorkspace(userEmail, tag) {
   if (at > 0) {
     const local = e.slice(0, at);
     const domain = e.slice(at + 1);
-    return `${local}+brspark.${tail}@${domain}`;
+    return `${local}+aria.${tail}@${domain}`;
   }
-  return `workspace-${tail}@brspark.internal.invalid`;
+  return `workspace-${tail}@aria.internal.invalid`;
 }
 
 /** POST /api/me/workspaces — cria filiação USER ou PROVIDER na tenant COMPANY partilhada (sem novas tenants CLIENT/PROVIDER). */
@@ -1915,7 +1915,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
       });
       if (existsPersonal) {
         return res.status(409).json({
-          error: 'Já existe um perfil de utilizador na BrSpark App para este e-mail.',
+          error: 'Já existe um perfil de utilizador na Aria App para este e-mail.',
           tenantId: existsPersonal.tenantId,
           userId: existsPersonal.id,
         });
@@ -2012,7 +2012,7 @@ router.post('/me/workspaces', authUser, async (req, res) => {
 });
 
 /**
- * Todos os `User` associados ao mesmo login (mesmo `AppAccount` ou e-mail legado / técnico +brspark.ws.*).
+ * Todos os `User` associados ao mesmo login (mesmo `AppAccount` ou e-mail legado / técnico +aria.ws.*).
  * Sem isto, só uma filiação era anonimizada e o utilizador voltava a entrar com o mesmo e-mail/palavra-passe
  * noutra organização.
  */
@@ -2043,7 +2043,7 @@ async function resolveAllUserIdsForAccountDeletion(db, anchorUserId) {
   if (!em.includes('@')) return [row.id];
   const at = em.indexOf('@');
   const local = em.slice(0, at);
-  const synthFrag = `${local}+brspark.ws.`;
+  const synthFrag = `${local}+aria.ws.`;
   const siblings = await db.user.findMany({
     where: {
       OR: [
@@ -2110,7 +2110,7 @@ router.delete('/me', authUser, async (req, res) => {
       }
 
       for (const id of idsToTombstone) {
-        const tombstoneEmail = `deleted_${id}@brspark.com`;
+        const tombstoneEmail = `deleted_${id}@aria.com`;
         await tx.user.update({
           where: { id },
           data: {
@@ -2230,7 +2230,7 @@ router.put('/me', authUser, async (req, res) => {
       if (dedicatedLock) {
         return res.status(403).json({
           error:
-            'Com vínculo dedicado ativo, horários, bases e área de atendimento são definidos pela empresa vinculante no painel BrSpark. Contacte o gestor se precisar de alterações.',
+            'Com vínculo dedicado ativo, horários, bases e área de atendimento são definidos pela empresa vinculante no painel Aria. Contacte o gestor se precisar de alterações.',
         });
       }
     }
@@ -2449,7 +2449,7 @@ router.post('/me/technician', authUser, async (req, res) => {
     } else {
       /**
        * SUBMITTED de outro `candidateUserId`, null, ou conta apagada/recriada com o mesmo e-mail no tenant
-       * (ex.: piscina BrSpark) — não bloquear novo «Quero ser prestador».
+       * (ex.: piscina Aria) — não bloquear novo «Quero ser prestador».
        */
       const token = generateTechRegInviteToken();
       const createdApp = await prisma.technicianRegistrationApplication.create({
@@ -2501,7 +2501,7 @@ router.post('/otp-auth/start', express.json(), async (req, res) => {
     }
     /** Diagnóstico: registo verifica e-mail/telefone activos antes de enviar OTP (espaço CLIENT). */
     if (String(req.body?.purpose || '').toLowerCase() === 'register') {
-      res.setHeader('X-Brspark-Register-Start-Policy', 'v3-client-tenant-guard-at-send');
+      res.setHeader('X-Aria-Register-Start-Policy', 'v3-client-tenant-guard-at-send');
     }
     return res.json({
       challengeId: out.challengeId,

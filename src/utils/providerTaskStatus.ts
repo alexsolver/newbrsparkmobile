@@ -82,7 +82,7 @@ export function effectiveProviderTaskStatus(
   if (SERVER_COMPLETED_STATUSES.has(raw)) return 'COMPLETED';
   const meta = providerTaskMetadataRecord(t);
   /**
-   * `@brspark_executed_tasks`: conclusão offline-first. Tem de ficar **antes** do ramo de revisão:
+   * `@aria_executed_tasks`: conclusão offline-first. Tem de ficar **antes** do ramo de revisão:
    * com metadata de revisão/reopen no snapshot remoto, o servidor pode ainda devolver PENDING no pull
    * enquanto o POST do checklist não fechou a OS — o cartão não pode voltar a «Pendentes» só por isso.
    * Reabertura real no painel: o pull remove o id do cache (`syncPolicy.shouldRemoveExecutedCacheForRemoteTask`).

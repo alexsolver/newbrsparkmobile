@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return;
     if (userRole === 'TECHNICIAN' && !canUseProviderMode(user)) {
       _setUserRole('CLIENT');
-      AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch((e) =>
+      AsyncStorage.setItem('@aria_active_role', 'CLIENT').catch((e) =>
         warnDev('useAuth.syncRoleStorage.technicianToClient', e),
       );
       dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
@@ -97,13 +97,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const k = String(user.tenant?.kind || '').toUpperCase();
     if (k === 'CLIENT' && userRole !== 'CLIENT') {
       _setUserRole('CLIENT');
-      AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch((e) =>
+      AsyncStorage.setItem('@aria_active_role', 'CLIENT').catch((e) =>
         warnDev('useAuth.syncRoleStorage.tenantClient', e),
       );
       dataCollectionService.onSessionOpen(user.email, user.tenantId, false);
     } else if (k === 'PROVIDER' && userRole !== 'TECHNICIAN') {
       _setUserRole('TECHNICIAN');
-      AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN').catch((e) =>
+      AsyncStorage.setItem('@aria_active_role', 'TECHNICIAN').catch((e) =>
         warnDev('useAuth.syncRoleStorage.tenantProvider', e),
       );
       dataCollectionService.onSessionOpen(user.email, user.tenantId, true);
@@ -119,14 +119,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         if (!user) {
-          await AsyncStorage.setItem('@brspark_active_persona_v1', 'client');
+          await AsyncStorage.setItem('@aria_active_persona_v1', 'client');
           return;
         }
         if (canUseProviderMode(user)) {
           const shell: 'client' | 'provider' = userRole === 'TECHNICIAN' ? 'provider' : 'client';
-          await AsyncStorage.setItem('@brspark_active_persona_v1', shell);
+          await AsyncStorage.setItem('@aria_active_persona_v1', shell);
         } else {
-          await AsyncStorage.setItem('@brspark_active_persona_v1', 'client');
+          await AsyncStorage.setItem('@aria_active_persona_v1', 'client');
         }
       } catch (e) {
         warnDev('useAuth.persistActivePersona', e);
@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const prev = prevTechnicianStatusRef.current;
     if (prev !== null && prev !== 'ACTIVE' && st === 'ACTIVE' && userRole === 'CLIENT' && canUseProviderMode(user)) {
       _setUserRole('TECHNICIAN');
-      AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN').catch((e) =>
+      AsyncStorage.setItem('@aria_active_role', 'TECHNICIAN').catch((e) =>
         warnDev('useAuth.syncRoleStorage.technicianActivated', e),
       );
       dataCollectionService.onSessionOpen(user.email, user.tenantId, true);
@@ -175,7 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(after);
               if (!after) {
                 _setUserRole('CLIENT');
-                await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch((e) =>
+                await AsyncStorage.setItem('@aria_active_role', 'CLIENT').catch((e) =>
                   warnDev('useAuth.appStateRefresh.clearRole', e),
                 );
               }
@@ -314,7 +314,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        const rawSaved = await AsyncStorage.getItem('@brspark_active_role');
+        const rawSaved = await AsyncStorage.getItem('@aria_active_role');
         let role: 'CLIENT' | 'TECHNICIAN' =
           rawSaved === 'TECHNICIAN' || rawSaved === 'CLIENT' ? rawSaved : 'CLIENT';
 
@@ -322,21 +322,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const k = String(effective.tenant?.kind || '').toUpperCase();
           if (k === 'CLIENT') {
             role = 'CLIENT';
-            await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
+            await AsyncStorage.setItem('@aria_active_role', 'CLIENT');
           } else if (k === 'PROVIDER') {
             role = 'TECHNICIAN';
-            await AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN');
+            await AsyncStorage.setItem('@aria_active_role', 'TECHNICIAN');
           } else {
             const wasActive = localUser ? canUseProviderMode(localUser) : false;
             const nowActive = canUseProviderMode(effective);
 
             if (role === 'TECHNICIAN' && !nowActive) {
               role = 'CLIENT';
-              await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
+              await AsyncStorage.setItem('@aria_active_role', 'CLIENT');
             }
             if (role === 'CLIENT' && !wasActive && nowActive) {
               role = 'TECHNICIAN';
-              await AsyncStorage.setItem('@brspark_active_role', 'TECHNICIAN');
+              await AsyncStorage.setItem('@aria_active_role', 'TECHNICIAN');
             }
           }
         }
@@ -402,7 +402,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     runAvatarWarm(u);
     const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
-    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    await AsyncStorage.setItem('@aria_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync post-login failed:', err));
   };
@@ -418,7 +418,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     runAvatarWarm(u);
     const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
-    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    await AsyncStorage.setItem('@aria_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync pós-login OAuth falhou:', err));
   };
@@ -429,7 +429,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     runAvatarWarm(u);
     const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
-    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    await AsyncStorage.setItem('@aria_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync post-2fa failed:', err));
   };
@@ -444,7 +444,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     runAvatarWarm(u);
     const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
-    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    await AsyncStorage.setItem('@aria_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync pós-OTP app falhou:', err));
   };
@@ -456,7 +456,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(u);
     runAvatarWarm(u);
     _setUserRole('CLIENT');
-    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
+    await AsyncStorage.setItem('@aria_active_role', 'CLIENT');
     dataCollectionService.onSessionOpen(u.email, u.tenantId, false);
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync pós-registo OTP falhou:', err));
   };
@@ -467,7 +467,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(u);
     runAvatarWarm(u);
     _setUserRole('CLIENT');
-    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT');
+    await AsyncStorage.setItem('@aria_active_role', 'CLIENT');
     dataCollectionService.onSessionOpen(u.email, u.tenantId, false);
     ApiService.sync(u.email).catch(err => console.error('[AUTH] Sync post-register failed:', err));
   };
@@ -476,7 +476,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearStoredAppCredentials();
     setUser(null);
     _setUserRole('CLIENT');
-    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch((e) =>
+    await AsyncStorage.setItem('@aria_active_role', 'CLIENT').catch((e) =>
       warnDev('useAuth.clearSessionForRegistrationFlow', e),
     );
   }, []);
@@ -493,7 +493,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AuthService.deleteAccount();
     setUser(null);
     _setUserRole('CLIENT');
-    await AsyncStorage.setItem('@brspark_active_role', 'CLIENT').catch((e) =>
+    await AsyncStorage.setItem('@aria_active_role', 'CLIENT').catch((e) =>
       warnDev('useAuth.deleteAccount.clearRole', e),
     );
   };
@@ -503,7 +503,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     _setUserRole(role);
-    await AsyncStorage.setItem('@brspark_active_role', role);
+    await AsyncStorage.setItem('@aria_active_role', role);
     if (user) {
       dataCollectionService.onSessionOpen(user.email, user.tenantId, role === 'TECHNICIAN');
     }
@@ -515,7 +515,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     runAvatarWarm(u);
     const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
-    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    await AsyncStorage.setItem('@aria_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
     ApiService.sync(u.email).catch((err) => console.error('[AUTH] Sync pós-criação de espaço falhou:', err));
     return u;
@@ -527,7 +527,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     runAvatarWarm(u);
     const defaultRole = defaultPersonaRoleForSession(u);
     _setUserRole(defaultRole);
-    await AsyncStorage.setItem('@brspark_active_role', defaultRole);
+    await AsyncStorage.setItem('@aria_active_role', defaultRole);
     dataCollectionService.onSessionOpen(u.email, u.tenantId, defaultRole === 'TECHNICIAN');
     ApiService.sync(u.email).catch((err) => console.error('[AUTH] Sync pós-troca de organização falhou:', err));
     return u;

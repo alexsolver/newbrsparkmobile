@@ -12,8 +12,8 @@ import {
 
 function panelTenantId() {
   try {
-    if (sessionStorage.getItem('brspark_panel_mode') === 'tenant') {
-      const t = JSON.parse(sessionStorage.getItem('brspark_panel_tenant') || '{}');
+    if (sessionStorage.getItem('aria_panel_mode') === 'tenant') {
+      const t = JSON.parse(sessionStorage.getItem('aria_panel_tenant') || '{}');
       return t.id || null;
     }
   } catch {

@@ -1,11 +1,11 @@
 /**
- * retention-cleanup.js — BrSpark Data Retention Cleanup
+ * retention-cleanup.js — Aria Data Retention Cleanup
  *
  * Executar via cron diário:
  *   node scripts/retention-cleanup.js
  *
  * Ou via cron no servidor:
- *   0 3 * * * node /app/scripts/retention-cleanup.js >> /var/log/brspark-retention.log 2>&1
+ *   0 3 * * * node /app/scripts/retention-cleanup.js >> /var/log/aria-retention.log 2>&1
  */
 'use strict';
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });

@@ -1,4 +1,4 @@
-"""API HTTP compatível com o painel Brspark (Visão IA - Moondream): /v1/query + X-Moondream-Auth.
+"""API HTTP compatível com o painel Aria (Visão IA - Moondream): /v1/query + X-Moondream-Auth.
 
 Moondream2 via Hugging Face Transformers em CPU. Porta padrão 8001.
 """
@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Moondream2 CPU API (Brspark-compatible)", version="1.1.0", lifespan=lifespan)
+app = FastAPI(title="Moondream2 CPU API (Aria-compatible)", version="1.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),

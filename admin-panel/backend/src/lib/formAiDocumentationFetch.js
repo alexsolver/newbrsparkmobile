@@ -123,7 +123,7 @@ async function fetchDocumentationForCopilot(rawUrl, opts = {}) {
       headers: {
         Accept:
           'application/pdf,text/html,application/xhtml+xml,text/plain,application/json;q=0.9,*/*;q=0.7',
-        'User-Agent': 'BrSpark-Admin-CopilotDocFetch/1.1',
+        'User-Agent': 'Aria-Admin-CopilotDocFetch/1.1',
       },
     });
     if (!res.ok) {

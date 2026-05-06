@@ -218,7 +218,7 @@ async function suggestLogicRules(schemaData, userGoal, formContext = {}, docOpts
       'Use para alinhar regras ao processo descrito. Pode incluir **API_FETCH** quando houver URL HTTPS válida e fluxo claro—**GET** na regra = URL fixo; variáveis via **POST** a endpoint próprio que leia `responses`.\n\n' +
       docText
     : '';
-  const systemPrompt = `Você é especialista em regras condicionais do Form Builder BrSpark.
+  const systemPrompt = `Você é especialista em regras condicionais do Form Builder Aria.
 Cada regra no app: monitora um campo (ou cronômetro); SE condição; ENTÃO ações (mostrar/ocultar/tornar obrigatório).
 Use apenas rótulos de campos que existam no JSON do schema enviado pelo usuário.
 Campos transit_start e transit_end (deslocamento) ficam **sempre** no **início** do formulário (primeiro bloco operacional) e em par — não sugira regras nem textos que os coloquem no meio ou no final do fluxo.

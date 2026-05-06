@@ -1,12 +1,12 @@
 /**
- * Cache local de execuções: FT/OS (`@brspark_cloud_tasks`) vs RT (`@brspark_rt_cloud_tasks`).
+ * Cache local de execuções: FT/OS (`@aria_cloud_tasks`) vs RT (`@aria_rt_cloud_tasks`).
  * RT não entra na lista «Pendentes» do prestador — só fila/cache para abertura pelo menu radial.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { taskRowIsRoutineTask } from './routineTaskQueueUi';
 
-export const FTS_CLOUD_TASKS_KEY = '@brspark_cloud_tasks';
-export const RT_CLOUD_TASKS_KEY = '@brspark_rt_cloud_tasks';
+export const FTS_CLOUD_TASKS_KEY = '@aria_cloud_tasks';
+export const RT_CLOUD_TASKS_KEY = '@aria_rt_cloud_tasks';
 
 function parseArr(raw: string | null): any[] {
   try {

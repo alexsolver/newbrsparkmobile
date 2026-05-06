@@ -10,12 +10,12 @@ const { syntheticTenantOwnerEmailForClientSpace } = require('../admin-panel/back
 
 function run() {
   const a = syntheticTenantOwnerEmailForClientSpace('maria.silva@exemplo.com');
-  assert.match(a, /^maria\.silva\+brspark\.cliente\./, 'deve usar plus-addressing com prefixo cliente');
+  assert.match(a, /^maria\.silva\+aria\.cliente\./, 'deve usar plus-addressing com prefixo cliente');
   assert.match(a, /@exemplo\.com$/i, 'deve preservar o domínio do utilizador');
 
   const b = syntheticTenantOwnerEmailForClientSpace('invalid-no-at');
   assert.ok(b.includes('@'), 'fallback sem @ no input deve ainda produzir e-mail com @');
-  assert.ok(b.endsWith('@brspark.internal.invalid'), 'fallback sem @ deve usar domínio interno');
+  assert.ok(b.endsWith('@aria.internal.invalid'), 'fallback sem @ deve usar domínio interno');
 
   const two = new Set();
   for (let i = 0; i < 20; i++) {

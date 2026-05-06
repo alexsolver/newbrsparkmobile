@@ -75,8 +75,8 @@ import {
   clearOperationalTransitLockForTask,
 } from '../../src/services/operationalTransitLock';
 import {
-  BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY,
-  type BrsparkProviderTaskCompletedPayload,
+  ARIA_PROVIDER_TASK_COMPLETED_LOCALLY,
+  type AriaProviderTaskCompletedPayload,
 } from '../../src/constants/deviceEvents';
 import { FieldHelpInstructions, isFieldInstructionsVisible } from '../../src/components/FieldHelpInstructions';
 import { LeituraBlock } from '../../src/components/LeituraBlock';
@@ -179,7 +179,7 @@ const PAUSE_PICKER_CAT_COLOR: Record<string, string> = {
 };
 
 /** Extrai valor de objecto JSON por caminho com pontos (ex.: current.temp_c); suporta índices numéricos em arrays. */
-function brsparkJsonPathLookup(obj: unknown, path: string): unknown {
+function ariaJsonPathLookup(obj: unknown, path: string): unknown {
   if (!path || typeof path !== 'string') return undefined;
   const parts = path
     .split('.')
@@ -715,7 +715,7 @@ async function ensureTaskMarkedInProgressLocally(executionId: string): Promise<v
   const id = String(executionId || '').trim();
   if (!id) return;
   try {
-    await appendUniqueStringToStoredArray('@brspark_inprogress_tasks', id);
+    await appendUniqueStringToStoredArray('@aria_inprogress_tasks', id);
   } catch {
     /* ignore */
   }
@@ -2486,7 +2486,7 @@ async function buildFacialCaptureQuerySuffix(): Promise<string> {
 
 /**
  * A câmara do ImagePicker grava em cache temporário; ao sair do formulário o SO pode apagar o ficheiro
- * e o rascunho fica com URI morta. Copiamos para `documentDirectory/brspark_facial/` antes de gravar nas respostas.
+ * e o rascunho fica com URI morta. Copiamos para `documentDirectory/aria_facial/` antes de gravar nas respostas.
  */
 async function persistFacialCapturePathForDraft(imageUriWithOptionalQuery: string, hintId: string): Promise<string> {
   const full = String(imageUriWithOptionalQuery || '');
@@ -2494,12 +2494,12 @@ async function persistFacialCapturePathForDraft(imageUriWithOptionalQuery: strin
   const base = qIdx >= 0 ? full.slice(0, qIdx) : full;
   const query = qIdx >= 0 ? full.slice(qIdx) : '';
   if (!base) return full;
-  if (base.includes('/brspark_facial/')) return full;
+  if (base.includes('/aria_facial/')) return full;
 
   const root = FileSystem.documentDirectory;
   if (!root) return full;
 
-  const dir = `${root}brspark_facial/`;
+  const dir = `${root}aria_facial/`;
   try {
     await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
   } catch {
@@ -4897,7 +4897,7 @@ export default function ChecklistEngine() {
       const tid = String(resolvedTaskId || '').trim();
       if (!tid) return;
       try {
-          const key = `@brspark_notified_${tid}_${status}`;
+          const key = `@aria_notified_${tid}_${status}`;
           if (await AsyncStorage.getItem(key)) return;
           
           const ts = new Date().toISOString();
@@ -4923,7 +4923,7 @@ export default function ChecklistEngine() {
       if (resolvedTaskId && !isReadOnly) {
          notifyKanbanStatus('ACCEPTED');
          // Técnico aceitou a OS — GPS no modo leve (aguardando saída)
-         AsyncStorage.getItem('@brspark_email').then(email => {
+         AsyncStorage.getItem('@aria_email').then(email => {
            dataCollectionService.setState('DISPATCHED', {
              executionId: String(resolvedTaskId),
              ownerEmail: email || 'unknown',
@@ -4937,7 +4937,7 @@ export default function ChecklistEngine() {
     useCallback(() => {
       if (!resolvedTaskId || isReadOnly) return undefined;
       let cancelled = false;
-      AsyncStorage.getItem('@brspark_email').then((email) => {
+      AsyncStorage.getItem('@aria_email').then((email) => {
         if (!cancelled) {
           dataCollectionService.syncExecutionContext(String(resolvedTaskId), email || undefined);
         }
@@ -4986,7 +4986,7 @@ export default function ChecklistEngine() {
       setGlobalGeofenceMapTask(null);
       pendingGlobalGeofenceAfterRouteRef.current = false;
 
-      const executedStr = await AsyncStorage.getItem('@brspark_executed_tasks') || '[]';
+      const executedStr = await AsyncStorage.getItem('@aria_executed_tasks') || '[]';
       let execs = [];
       try {
         execs = JSON.parse(executedStr);
@@ -4997,7 +4997,7 @@ export default function ChecklistEngine() {
 
       /** Cache da execução (GET) — inclui `status`; não depender só da lista de concluídas (pode expirar aos 30 dias). */
       const execStrEarly = hasTaskId
-        ? await AsyncStorage.getItem(`@brspark_execution_${taskIdNorm}`)
+        ? await AsyncStorage.getItem(`@aria_execution_${taskIdNorm}`)
         : null;
       let snapshotIsTerminal = false;
       if (execStrEarly) {
@@ -5026,7 +5026,7 @@ export default function ChecklistEngine() {
       let readOnlyMode = Boolean(isCompleted);
       let lastSubmittedRevForNext = 0;
 
-      /** Expo pode expor `id` como `string | string[]` — normalizar para bater com `@brspark_templates`. */
+      /** Expo pode expor `id` como `string | string[]` — normalizar para bater com `@aria_templates`. */
       const resolvedRouteTemplateId =
         typeof id === 'string'
           ? id.trim()
@@ -5049,7 +5049,7 @@ export default function ChecklistEngine() {
       // Ao baixar a execução, extraímos o verdadeiro templateId dela!
       if (isCompleted) {
         const execStr = execStrEarly;
-        /** Respostas lidas de `@brspark_execution_*` antes de qualquer GET — evita apagar deslocamento ao fundir com snapshot do servidor atrasado. */
+        /** Respostas lidas de `@aria_execution_*` antes de qualquer GET — evita apagar deslocamento ao fundir com snapshot do servidor atrasado. */
         let cachedResponsesBeforeFetch: Record<string, unknown> = {};
         let cacheStale = !execStr;
         if (execStr) {
@@ -5084,7 +5084,7 @@ export default function ChecklistEngine() {
           }
         };
 
-        const outboxStr = await AsyncStorage.getItem('@brspark_outbox') || '[]';
+        const outboxStr = await AsyncStorage.getItem('@aria_outbox') || '[]';
         let outbox: any[] = [];
         try {
           outbox = JSON.parse(outboxStr);
@@ -5176,7 +5176,7 @@ export default function ChecklistEngine() {
                   _cacheTime: ts,
                   _technicianViewDownloadAt: ts,
                 };
-                await AsyncStorage.setItem(`@brspark_execution_${taskIdNorm}`, JSON.stringify(cachePayload));
+                await AsyncStorage.setItem(`@aria_execution_${taskIdNorm}`, JSON.stringify(cachePayload));
               } else if (res.status === 404) {
                 if (!execStr) {
                   initialRes = {};
@@ -5261,7 +5261,7 @@ export default function ChecklistEngine() {
               }
               const tsRv = Date.now();
               await AsyncStorage.setItem(
-                `@brspark_execution_${taskIdNorm}`,
+                `@aria_execution_${taskIdNorm}`,
                 JSON.stringify({
                   ...remoteExec,
                   responses: initialRes,
@@ -5371,7 +5371,7 @@ export default function ChecklistEngine() {
                readOnlyMode = true;
                reopenRevisionPending = false;
                try {
-                 const execStr = await AsyncStorage.getItem(`@brspark_execution_${taskIdNorm}`);
+                 const execStr = await AsyncStorage.getItem(`@aria_execution_${taskIdNorm}`);
                  if (execStr) {
                    const c = JSON.parse(execStr);
                    if (c.responses && typeof c.responses === 'object' && !Array.isArray(c.responses)) {
@@ -5386,7 +5386,7 @@ export default function ChecklistEngine() {
 
            if (lastSubmittedRevForNext === 0 && hasTaskId) {
              try {
-               const execStr = await AsyncStorage.getItem(`@brspark_execution_${taskIdNorm}`);
+               const execStr = await AsyncStorage.getItem(`@aria_execution_${taskIdNorm}`);
                if (execStr) {
                  const c = JSON.parse(execStr);
                  lastSubmittedRevForNext = Math.max(
@@ -5402,7 +5402,7 @@ export default function ChecklistEngine() {
       }
 
       // PASSO 2: Baixa o Template usando o realTemplateId
-      const dbStr = await AsyncStorage.getItem('@brspark_templates');
+      const dbStr = await AsyncStorage.getItem('@aria_templates');
       let db = dbStr ? JSON.parse(dbStr) : {};
       let tmpl = null;
       
@@ -5413,7 +5413,7 @@ export default function ChecklistEngine() {
          if (res.ok) {
             tmpl = await res.json();
             db[realTemplateId] = tmpl;
-            await AsyncStorage.setItem('@brspark_templates', JSON.stringify(db));
+            await AsyncStorage.setItem('@aria_templates', JSON.stringify(db));
          } else {
             throw new Error('Fallback Offline'); // Vai pro catch e tenta usar o db[realTemplateId]
          }
@@ -5522,7 +5522,7 @@ export default function ChecklistEngine() {
       if (hasTaskId && !readOnlyMode) {
         let nextRev = lastSubmittedRevForNext + 1;
         try {
-          const outboxStr = await AsyncStorage.getItem('@brspark_outbox') || '[]';
+          const outboxStr = await AsyncStorage.getItem('@aria_outbox') || '[]';
           let outbox: any[] = [];
           try {
             outbox = JSON.parse(outboxStr);
@@ -5656,7 +5656,7 @@ export default function ChecklistEngine() {
         console.log('[GeoMap] sem taskId ou readOnly — taskId=', taskIdNorm, 'readOnlyMode=', readOnlyMode);
       }
 
-      // Dashboard: aba "Em andamento" usa @brspark_inprogress_tasks. Só gravávamos no 1.º handleInput
+      // Dashboard: aba "Em andamento" usa @aria_inprogress_tasks. Só gravávamos no 1.º handleInput
       // (assíncrono) — offline com rascunho já carregado ou saída rápida deixava a OS em "Pendentes".
       // Revisão ainda não "Aceite" (PENDING/RECEIVED sem id em accepted_tasks): não marcar até o fluxo do modal.
       if (resolvedTaskId && !readOnlyMode) {
@@ -5666,7 +5666,7 @@ export default function ChecklistEngine() {
             const allCt = await loadAllCloudTasksForExecutionLookup();
             const ct = allCt.find((t: any) => String(t.id) === String(resolvedTaskId));
             const st = String(ct?.status || '').toUpperCase();
-            const accRaw = await AsyncStorage.getItem('@brspark_accepted_tasks') || '[]';
+            const accRaw = await AsyncStorage.getItem('@aria_accepted_tasks') || '[]';
             let acc: string[] = [];
             try {
               acc = JSON.parse(accRaw);
@@ -5807,7 +5807,7 @@ export default function ChecklistEngine() {
               lastPauseAt: startedAt,
             },
           });
-          void AsyncStorage.getItem('@brspark_email')
+          void AsyncStorage.getItem('@aria_email')
             .then((email) => pushSyncQueue(email || undefined))
             .catch(() => {});
         });
@@ -7458,13 +7458,13 @@ export default function ChecklistEngine() {
       const draftKey = submitTaskId ? `@draft_tsk_${submitTaskId}` : `@draft_chk_${id}`;
       // Salva execução offline completa
       if (submitTaskId) {
-         await AsyncStorage.setItem(`@brspark_execution_${submitTaskId}`, JSON.stringify(payload));
+         await AsyncStorage.setItem(`@aria_execution_${submitTaskId}`, JSON.stringify(payload));
       }
       
         console.log("Checklist concluído offline-first. Injetando no Outbox...");
         const payloadIdentityKey = checklistOutboxIdentityKey(payload);
         const payloadTaskId = String(payload?.taskId || '').trim();
-        await updateStoredJsonArray<any>('@brspark_outbox', (outbox) => {
+        await updateStoredJsonArray<any>('@aria_outbox', (outbox) => {
           const next = Array.isArray(outbox) ? outbox.filter((item) => {
             if (payloadTaskId) return String(item?.taskId || '').trim() !== payloadTaskId;
             return checklistOutboxIdentityKey(item) !== payloadIdentityKey;
@@ -7488,9 +7488,9 @@ export default function ChecklistEngine() {
             completedAt: String(payload.completedAt || new Date().toISOString()),
           };
           try {
-            await withAsyncStorageKeyLock(`@brspark_finalize_${tid}`, async () => {
+            await withAsyncStorageKeyLock(`@aria_finalize_${tid}`, async () => {
               await clearExecutionStatusOutboxForTask(tid);
-              await updateStoredJsonArray<any>('@brspark_executed_tasks', (current) => {
+              await updateStoredJsonArray<any>('@aria_executed_tasks', (current) => {
                 const execs = [...current];
                 const existingIdx = execs.findIndex(
                   (e) => (typeof e === 'string' ? e : e?.id) === tid
@@ -7499,7 +7499,7 @@ export default function ChecklistEngine() {
                 else execs[existingIdx] = completedItem;
                 return execs;
               });
-              await updateStoredJsonArray<string>('@brspark_inprogress_tasks', (inprogs) =>
+              await updateStoredJsonArray<string>('@aria_inprogress_tasks', (inprogs) =>
                 inprogs.filter((t) => String(t) !== tid)
               );
             });
@@ -7507,7 +7507,7 @@ export default function ChecklistEngine() {
             console.warn('[checklist] Falha ao marcar OS como concluída localmente:', localStateErr);
           }
 
-          /** RT/FT: alinhar cache `@brspark_*_cloud_tasks` ao concluir — senão RT fica `IN_PROGRESS` e «Abrir» reutiliza a mesma execução. */
+          /** RT/FT: alinhar cache `@aria_*_cloud_tasks` ao concluir — senão RT fica `IN_PROGRESS` e «Abrir» reutiliza a mesma execução. */
           try {
             await patchCloudTaskById(tid, (row) => ({
               ...row,
@@ -7564,13 +7564,13 @@ export default function ChecklistEngine() {
         }
 
         if (submitTaskId) {
-          const p: BrsparkProviderTaskCompletedPayload = {
+          const p: AriaProviderTaskCompletedPayload = {
             taskId: String(submitTaskId).trim(),
             completedAt: String(payload.completedAt || new Date().toISOString()),
             refId: String(id),
             title: template?.title || 'OS',
           };
-          DeviceEventEmitter.emit(BRSPARK_PROVIDER_TASK_COMPLETED_LOCALLY, p);
+          DeviceEventEmitter.emit(ARIA_PROVIDER_TASK_COMPLETED_LOCALLY, p);
         }
         setIsReadOnly(true);
         router.back();
@@ -7718,7 +7718,7 @@ export default function ChecklistEngine() {
                   if (pathRaw) {
                       try {
                           const json = JSON.parse(text);
-                          const picked = brsparkJsonPathLookup(json, pathRaw);
+                          const picked = ariaJsonPathLookup(json, pathRaw);
                           if (picked == null || picked === undefined) {
                               extracted = '';
                           } else if (typeof picked === 'object') {
@@ -9472,7 +9472,7 @@ export default function ChecklistEngine() {
             }
           }
           await handleTransit(pending.fieldId, 'SAIDA', undefined, pending.scope);
-          const email = await AsyncStorage.getItem('@brspark_email');
+          const email = await AsyncStorage.getItem('@aria_email');
           const schSel = template?.schemaData || [];
           const reimbSel = isReimbursementTransitField(schSel, pending.fieldId);
           const patrolSel = isPatrolTransitField(schSel, pending.fieldId);
@@ -12466,7 +12466,7 @@ export default function ChecklistEngine() {
                          field.type === 'transit_end' ? routeTracker.getTraversedPath() : undefined,
                          scope
                        );
-                       const email = await AsyncStorage.getItem('@brspark_email');
+                       const email = await AsyncStorage.getItem('@aria_email');
                        if (field.type === 'transit_start') {
                          lastTransitScopeRef.current = scope ?? null;
                          dataCollectionService.setState('IN_TRANSIT', {
@@ -12615,7 +12615,7 @@ export default function ChecklistEngine() {
                      let insideZone = false;
                      try { insideZone = JSON.parse(resultStr || '{}').geofence?.insideZone; } catch {}
                      if (insideZone) {
-                       const email = await AsyncStorage.getItem('@brspark_email');
+                       const email = await AsyncStorage.getItem('@aria_email');
                        const taskDest = getDestFromTaskLike(currentTask);
                        dataCollectionService.setState('IN_SERVICE', {
                          executionId: String(taskId || ''),

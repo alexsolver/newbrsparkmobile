@@ -205,7 +205,7 @@ async function load() {
   if (previewTemplateId) {
     state.previewMode = true;
     const jwt =
-      typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('brspark_admin_token') : '';
+      typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('aria_admin_token') : '';
     if (!jwt) {
       document.getElementById('sub').textContent = '';
       showErr(esvT('esv_preview_need_login'));

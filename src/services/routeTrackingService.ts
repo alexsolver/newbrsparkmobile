@@ -14,7 +14,7 @@ import {
   type PatrolSample,
 } from './patrolRouteMetrics';
 
-export const ROUTE_TRACKING_TASK_NAME = 'brspark-route-tracking-v1';
+export const ROUTE_TRACKING_TASK_NAME = 'aria-route-tracking-v1';
 
 export type RouteEvent = 'ROUTE_ON_TRACK' | 'ROUTE_DEVIATION' | 'ROUTE_COMPLETED';
 
@@ -347,8 +347,8 @@ class RouteTrackingService {
     if (Platform.OS === 'android') {
       taskOptions.foregroundService = {
         notificationTitle: 'Deslocamento em andamento',
-        notificationBody: 'A BrSpark está a registar a sua rota. Toque para voltar à app.',
-        notificationColor: '#EA580C',
+        notificationBody: 'A Aria está a registar a sua rota. Toque para voltar à app.',
+        notificationColor: '#0d9488',
       };
     }
 

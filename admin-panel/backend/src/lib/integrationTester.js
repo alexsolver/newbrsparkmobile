@@ -138,7 +138,7 @@ async function testVisionChecklist({ baseUrl, apiKey }) {
     return { ok: false, message: 'Use http:// ou https:// na URL do endpoint.' };
   }
 
-  const boundary = '----BrSparkVisionProbe' + Date.now().toString(36);
+  const boundary = '----AriaVisionProbe' + Date.now().toString(36);
   const bodyBuf = buildMultipartBuffer(boundary, [
     {
       name: 'media',
@@ -397,7 +397,7 @@ async function testMailerSend(integration) {
     const r = await httpsGet(u.hostname, path, {
       Authorization: `Bearer ${token}`,
       Accept: 'application/json',
-      'User-Agent': 'BrSpark-Admin-Integrations/1',
+      'User-Agent': 'Aria-Admin-Integrations/1',
     });
     if (r.status === 200) {
       let extra = '';
@@ -650,7 +650,7 @@ async function testCosmos({ apiKey, baseUrl }) {
   if (!apiKey) return { ok: false, message: 'X-Cosmos-Token não configurado.' };
   try {
     const hostname = (baseUrl || 'api.cosmos.bluesoft.com.br').replace('https://', '').split('/')[0];
-    const r = await httpsGet(hostname, '/gtins/7894900011517.json', { 'X-Cosmos-Token': apiKey, 'User-Agent': 'BrSpark' });
+    const r = await httpsGet(hostname, '/gtins/7894900011517.json', { 'X-Cosmos-Token': apiKey, 'User-Agent': 'Aria' });
     if (r.status === 200) return { ok: true, message: 'Bluesoft Cosmos conectado com sucesso ✓' };
     if (r.status === 401) return { ok: false, message: 'Token de acesso Cosmos inválido (401)' };
     if (r.status === 404) return { ok: true, message: 'Cosmos conectado ✓ (Produto de teste 404)' }; // Sometimes the test GTIN might be 404, but API works
@@ -670,7 +670,7 @@ async function testStripe({ apiKey }) {
   try {
     const r = await httpsGet('api.stripe.com', '/v1/balance', {
       Authorization: `Bearer ${k}`,
-      'User-Agent': 'BrSpark/1.0 (integrations-test)',
+      'User-Agent': 'Aria/1.0 (integrations-test)',
     });
     if (r.status === 200) {
       let o;
@@ -711,7 +711,7 @@ async function testDidit(integration) {
   const headers = {
     'x-api-key': key,
     Accept: 'application/json',
-    'User-Agent': 'BrSpark/1.0 (didit-ping)',
+    'User-Agent': 'Aria/1.0 (didit-ping)',
   };
   try {
     const r = await httpsGet(u.hostname, path, headers);
@@ -744,7 +744,7 @@ async function testUpcItemDb({ apiKey, baseUrl }) {
     // Testa com um UPC qualquer válido (Ex: 012993441012 - Altoids)
     const reqPath = `${basePath.endsWith('/') ? basePath.slice(0, -1) : basePath}/lookup?upc=012993441012`;
     
-    const headers = { 'User-Agent': 'BrSpark' };
+    const headers = { 'User-Agent': 'Aria' };
     if (apiKey) headers['user_key'] = apiKey;
 
     const r = await httpsGet(hostname, reqPath, headers);
@@ -946,7 +946,7 @@ async function testCompreface(integration) {
       return {
         ok: false,
         message:
-          'FaceMatch devolveu 404 em todos os endpoints de teste. Confira: (1) URL só com host e porta na raiz do serviço, ex. http://192.168.85.113:8000 — sem /api/v1 no final; (2) stack Docker completa com API Recognition; (3) o teste corre no **servidor** Node do BrSpark (firewall/VPN).' +
+          'FaceMatch devolveu 404 em todos os endpoints de teste. Confira: (1) URL só com host e porta na raiz do serviço, ex. http://192.168.85.113:8000 — sem /api/v1 no final; (2) stack Docker completa com API Recognition; (3) o teste corre no **servidor** Node do Aria (firewall/VPN).' +
           prefixHint +
           diag +
           ' Último URL tentado: ' +

@@ -13,9 +13,9 @@ function buildSyntheticUserEmail(loginEmailNorm, entropy) {
   if (at > 0) {
     const local = e.slice(0, at);
     const domain = e.slice(at + 1);
-    return `${local}+brspark.ws.${suf}@${domain}`;
+    return `${local}+aria.ws.${suf}@${domain}`;
   }
-  return `ws-${suf}@brspark.internal.invalid`;
+  return `ws-${suf}@aria.internal.invalid`;
 }
 
 /**
@@ -88,7 +88,7 @@ async function resolveFieldTaskOwnerEmailCandidatesForAppUser(prisma, userId) {
 
 /**
  * Utilizadores ativos para envio de push quando `ChecklistExecution.ownerEmail` (ou equivalente)
- * é o login canónico (`AppAccount.emailNorm`) mas a linha `User.email` é sintética (`+brspark.ws.…`).
+ * é o login canónico (`AppAccount.emailNorm`) mas a linha `User.email` é sintética (`+aria.ws.…`).
  *
  * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} db
  * @param {string} emailRaw

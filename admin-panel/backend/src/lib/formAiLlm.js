@@ -27,7 +27,7 @@ const { sanitizeTaskIconName } = require('./formAiTemplateMetadataPatch');
  */
 function buildAnalyzeSystemPrompt(formContext) {
   const typeList = formatAnalyzeFieldTypesForPrompt(formContext || {});
-  return `Você é um assistente que analisa documentos (Excel, Word, PDF, texto vindo de OCR de imagem ou **JSON de formulários externos** já descrito em Markdown) e prepara um formulário BrSpark (checklist no celular).
+  return `Você é um assistente que analisa documentos (Excel, Word, PDF, texto vindo de OCR de imagem ou **JSON de formulários externos** já descrito em Markdown) e prepara um formulário Aria (checklist no celular).
 
 Retorne APENAS JSON válido (sem markdown), com as chaves:
 - "title": título provisório do formulário (pt-BR, curto).
@@ -83,7 +83,7 @@ ${formatOsDestinationVsGeometryConventionForPrompt()}
  */
 function buildStructureExtractSystemPrompt(_formContext) {
   const typeList = formatAnalyzeFieldTypesForPrompt(_formContext || {});
-  return `Você é um assistente que lê documentos (Excel, Word, PDF ou texto de OCR de imagem) e extrai a ESTRUTURA lógica de um formulário BrSpark (checklist no celular).
+  return `Você é um assistente que lê documentos (Excel, Word, PDF ou texto de OCR de imagem) e extrai a ESTRUTURA lógica de um formulário Aria (checklist no celular).
 
 Retorne APENAS JSON válido (sem markdown), com as chaves:
 - "title": título provisório do formulário (pt-BR, curto).
@@ -116,7 +116,7 @@ ${formatOsDestinationVsGeometryConventionForPrompt()}
 
 function buildCanonicalSystemPrompt() {
   const typeDoc = formatSchemaTypeDocBlock();
-  return `Você é um assistente que gera formulários para a plataforma BrSpark (checklist no celular).
+  return `Você é um assistente que gera formulários para a plataforma Aria (checklist no celular).
 Retorne APENAS JSON válido (sem markdown), com as chaves: "title", "description", "schemaData" e opcionalmente "metadata".
 
 schemaData é um array ordenado de objetos. Cada objeto representa um campo OU um separador de etapa.
@@ -235,7 +235,7 @@ function buildUserContentWithProfile(input) {
     fmt === 'json_typeform' ||
     fmt === 'json_external_form'
       ? '\n\n### Nota sobre a origem (JSON de outro sistema)\n' +
-        'O texto acima foi **normalizado automaticamente** a partir de um JSON exportado (Google Forms, Microsoft Forms, Typeform ou lista genérica de campos). **Não** copie identificadores técnicos da ferramenta de origem para o BrSpark. Cada «Pergunta» / «Campo» deve virar um `field` com `label` em pt-BR quando possível; quebras de página / capítulos → `section_break`. Use `suggestedType` quando o tipo original for óbvio (escolha única com poucas opções → `dropdown` ou `yes_no`; várias escolhas → `multiselect`; texto curto → `text`; parágrafo → `text`; escala numérica → `rating`; data → `date`; arquivo → `file_upload`).\n'
+        'O texto acima foi **normalizado automaticamente** a partir de um JSON exportado (Google Forms, Microsoft Forms, Typeform ou lista genérica de campos). **Não** copie identificadores técnicos da ferramenta de origem para o Aria. Cada «Pergunta» / «Campo» deve virar um `field` com `label` em pt-BR quando possível; quebras de página / capítulos → `section_break`. Use `suggestedType` quando o tipo original for óbvio (escolha única com poucas opções → `dropdown` ou `yes_no`; várias escolhas → `multiselect`; texto curto → `text`; parágrafo → `text`; escala numérica → `rating`; data → `date`; arquivo → `file_upload`).\n'
       : '';
   return (
     (ctxBlock ? ctxBlock + '\n\n' : '') +

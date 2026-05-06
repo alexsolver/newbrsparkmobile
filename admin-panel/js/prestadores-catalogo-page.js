@@ -13,8 +13,8 @@ let lastMeta = { total: 0, page: 1, pageSize: PAGE_SIZE, fetchedFromDb: 0, cappe
 
 function panelTenantId() {
   try {
-    if (sessionStorage.getItem('brspark_panel_mode') === 'tenant') {
-      const row = JSON.parse(sessionStorage.getItem('brspark_panel_tenant') || '{}');
+    if (sessionStorage.getItem('aria_panel_mode') === 'tenant') {
+      const row = JSON.parse(sessionStorage.getItem('aria_panel_tenant') || '{}');
       return row.id || null;
     }
   } catch {
@@ -24,7 +24,7 @@ function panelTenantId() {
 }
 
 function isGlobalPlatformSession() {
-  return String(sessionStorage.getItem('brspark_panel_mode') || '').trim() === 'global';
+  return String(sessionStorage.getItem('aria_panel_mode') || '').trim() === 'global';
 }
 
 function canUsePlatformTenantPicker() {

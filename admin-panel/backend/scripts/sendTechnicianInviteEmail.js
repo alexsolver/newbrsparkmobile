@@ -60,7 +60,7 @@ async function main() {
   const anyAppAccount = await prisma.user.findFirst({ where: { email: em }, select: { id: true } });
   if (!anyAppAccount) {
     console.error(
-      'Este e-mail ainda não tem conta no BrSpark. O prestador deve cadastrar-se no app com este e-mail antes.'
+      'Este e-mail ainda não tem conta no Aria. O prestador deve cadastrar-se no app com este e-mail antes.'
     );
     process.exit(1);
   }
@@ -124,27 +124,27 @@ async function main() {
     console.log(`Convite criado: ${app.id}`);
   }
 
-  const deepLinkHint = `brspark://auth/tech-registration?token=${token}`;
+  const deepLinkHint = `aria://auth/tech-registration?token=${token}`;
   const textBody = [
     'Olá,',
     '',
-    `${tenant.name} convidou você a concluir o cadastro de prestador no BrSpark.`,
-    `Utilize a conta BrSpark já registada com o e-mail ${em} e abra o convite no app.`,
+    `${tenant.name} convidou você a concluir o cadastro de prestador no Aria.`,
+    `Utilize a conta Aria já registada com o e-mail ${em} e abra o convite no app.`,
     '',
     `Abrir no app: ${deepLinkHint}`,
     '',
-    'Se o link não abrir, abra o BrSpark, inicie sessão com este e-mail e utilize o fluxo de cadastro por convite com o token fornecido pelo gestor.',
+    'Se o link não abrir, abra o Aria, inicie sessão com este e-mail e utilize o fluxo de cadastro por convite com o token fornecido pelo gestor.',
   ].join('\n');
 
   const htmlBody = `<p>Olá,</p>
-<p><strong>${escapeHtml(tenant.name)}</strong> convidou você a concluir o <strong>cadastro de prestador</strong> no BrSpark.</p>
+<p><strong>${escapeHtml(tenant.name)}</strong> convidou você a concluir o <strong>cadastro de prestador</strong> no Aria.</p>
 <p>Utilize a conta já registada com o e-mail <strong>${escapeHtml(em)}</strong> e abra o convite no app.</p>
 <p><a href="${escapeHtml(deepLinkHint)}">Abrir convite no app</a></p>
 <p style="font-size:12px;color:#555">Se o botão não funcionar, copie o link acima para o navegador ou abra o app manualmente após iniciar sessão.</p>`;
 
   const { send, provider } = await sendTransactionalEmailWithFallback({
     to: { email: em },
-    subject: `Convite BrSpark — cadastro de prestador (${tenant.name})`,
+    subject: `Convite Aria — cadastro de prestador (${tenant.name})`,
     text: textBody,
     html: htmlBody,
   });

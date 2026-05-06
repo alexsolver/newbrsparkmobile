@@ -422,7 +422,7 @@ router.post('/instances/:id/notify', express.json(), async (req, res) => {
     const results = { email: null, push: null };
 
     const osLabel = inst.execution?.osNumber != null ? String(inst.execution.osNumber) : '—';
-    const tenantLabel = inst.tenant?.name || 'BrSpark';
+    const tenantLabel = inst.tenant?.name || 'Aria';
     const tplName = inst.template?.name || 'Avaliação de serviço';
 
     if (wantEmail) {

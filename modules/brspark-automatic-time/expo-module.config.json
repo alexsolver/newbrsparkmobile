@@ -1,9 +1,0 @@
-{
-  "platforms": ["apple", "android"],
-  "apple": {
-    "modules": ["BrsparkAutomaticTimeModule"]
-  },
-  "android": {
-    "modules": ["expo.modules.brsparkautomatictime.BrsparkAutomaticTimeModule"]
-  }
-}

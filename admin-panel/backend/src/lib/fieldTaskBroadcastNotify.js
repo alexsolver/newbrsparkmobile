@@ -19,7 +19,7 @@ async function notifyBroadcastLosers(prisma, opts) {
   );
   if (!executionId || losers.length === 0) return { sent: 0 };
 
-  const appDisplayName = await resolveTenantAppDisplayName(prisma, templateTenantId, 'BrSpark');
+  const appDisplayName = await resolveTenantAppDisplayName(prisma, templateTenantId, 'Aria');
 
   const r = await sendFieldTaskActivityPushToAssignees(prisma, {
     ownerEmails: losers,

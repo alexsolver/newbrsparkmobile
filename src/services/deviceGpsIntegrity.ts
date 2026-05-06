@@ -3,7 +3,7 @@ import * as Location from 'expo-location';
 import {
   isMockLocationDeveloperSettingEnabled,
   isIosSoftwareSimulatedLocation,
-} from 'brspark-location-integrity';
+} from 'aria-location-integrity';
 
 export type GpsIntegrityFailReason =
   | 'android_mock_settings'

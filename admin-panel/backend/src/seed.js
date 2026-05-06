@@ -8,15 +8,15 @@ const bcrypt  = require('bcryptjs');
 const prisma = require('./db');
 const { normalizeOsrmBaseUrl } = require('./lib/osrmBaseUrl');
 async function main() {
-  console.log('🌱 Seeding BrSpark Admin database...\n');
+  console.log('🌱 Seeding Aria Admin database...\n');
 
   // Admin
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@brspark.com';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@aria.com';
   const adminHash  = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'admin123', 10);
   await prisma.admin.upsert({
     where:  { email: adminEmail },
     update: {},
-    create: { email: adminEmail, name: 'BrSpark Admin', password: adminHash },
+    create: { email: adminEmail, name: 'Aria Admin', password: adminHash },
   });
   console.log(`✅ Admin: ${adminEmail}`);
 
@@ -416,9 +416,9 @@ async function main() {
   const nextMonth = new Date(now);
   nextMonth.setMonth(nextMonth.getMonth() + 1);
 
-  // Tenant hospedeira do app (slug `master`; legado `brspark-app` é renomeada aqui, mesmo id).
+  // Tenant hospedeira do app (slug `master`; legado `aria-app` é renomeada aqui, mesmo id).
   const legacyShared = await prisma.tenant.findFirst({
-    where: { slug: { equals: 'brspark-app', mode: 'insensitive' } },
+    where: { slug: { equals: 'aria-app', mode: 'insensitive' } },
   });
   const existingMaster = await prisma.tenant.findFirst({
     where: { slug: { equals: 'master', mode: 'insensitive' } },
@@ -445,8 +445,8 @@ async function main() {
       data: {
         name: 'master',
         slug: 'master',
-        email: 'app-conta@brspark.internal',
-        ownerName: 'BrSpark',
+        email: 'app-conta@aria.internal',
+        ownerName: 'Aria',
         kind: 'COMPANY',
         localeId: locBr.id,
         status: 'ACTIVE',
@@ -473,12 +473,12 @@ async function main() {
   );
 
   const tenantDemo = await prisma.tenant.upsert({
-    where: { email: 'conta-demo@brspark.com' },
+    where: { email: 'conta-demo@aria.com' },
     update: { localeId: locBr.id, status: 'ACTIVE' },
     create: {
       name: 'Conta Demonstração',
       slug: 'conta-demonstracao',
-      email: 'conta-demo@brspark.com',
+      email: 'conta-demo@aria.com',
       ownerName: 'Maria Souza',
       phone: '+5511987654321',
       localeId: locBr.id,
@@ -502,11 +502,11 @@ async function main() {
 
   const demoUserHash = await bcrypt.hash('demo123', 10);
   const mariaDemo = await prisma.user.upsert({
-    where: { email: 'maria@brspark.com' },
+    where: { email: 'maria@aria.com' },
     update: {},
     create: {
       tenantId: tenantDemo.id,
-      email: 'maria@brspark.com',
+      email: 'maria@aria.com',
       name: 'Maria Souza',
       password: demoUserHash,
       role: 'TENANT_ADMIN',
@@ -515,26 +515,26 @@ async function main() {
     },
   });
 
-  // Tenant BrSpark (SaaS admin — login por organização no painel)
+  // Tenant Aria (SaaS admin — login por organização no painel)
   try {
-    /** Utilizadores `User` do tenant org `brspark` (app). Não reutiliza `ADMIN_PASSWORD` (é só da tabela `Admin`). */
+    /** Utilizadores `User` do tenant org `aria` (app). Não reutiliza `ADMIN_PASSWORD` (é só da tabela `Admin`). */
     const saasPwd = process.env.SAAS_PANEL_PASSWORD || '123456';
     const saasHash = await bcrypt.hash(saasPwd, 10);
-    const brsparkTenant = await prisma.tenant.upsert({
-      where: { slug: 'brspark' },
-      update: { name: 'BrSpark', status: 'ACTIVE', localeId: locBr.id },
+    const ariaTenant = await prisma.tenant.upsert({
+      where: { slug: 'aria' },
+      update: { name: 'Aria', status: 'ACTIVE', localeId: locBr.id },
       create: {
-        name: 'BrSpark',
-        slug: 'brspark',
-        email: 'platform@brspark.com',
-        ownerName: 'BrSpark Plataforma',
+        name: 'Aria',
+        slug: 'aria',
+        email: 'platform@aria.com',
+        ownerName: 'Aria Plataforma',
         localeId: locBr.id,
         status: 'ACTIVE',
         defaultLang: 'pt-BR',
       },
     });
     await prisma.user.upsert({
-      where: { email: 'admin@brspark.com' },
+      where: { email: 'admin@aria.com' },
       update: {
         role: 'SAAS_ADMIN',
         isActive: true,
@@ -542,8 +542,8 @@ async function main() {
         password: saasHash,
       },
       create: {
-        tenantId: brsparkTenant.id,
-        email: 'admin@brspark.com',
+        tenantId: ariaTenant.id,
+        email: 'admin@aria.com',
         name: 'Administrador SaaS',
         password: saasHash,
         role: 'SAAS_ADMIN',
@@ -551,11 +551,11 @@ async function main() {
       },
     });
     await prisma.user.upsert({
-      where: { email: 'gestor@brspark.com' },
+      where: { email: 'gestor@aria.com' },
       update: { role: 'MANAGER', isActive: true, name: 'Gestor (demo)', password: saasHash },
       create: {
-        tenantId: brsparkTenant.id,
-        email: 'gestor@brspark.com',
+        tenantId: ariaTenant.id,
+        email: 'gestor@aria.com',
         name: 'Gestor (demo)',
         password: saasHash,
         role: 'MANAGER',
@@ -564,7 +564,7 @@ async function main() {
     });
     // Prestador demo: despacho exige User ativo + TechnicianProfile.status ACTIVE (não basta isActive).
     const alexTech = await prisma.user.upsert({
-      where: { email: 'alex@brspark.com' },
+      where: { email: 'alex@aria.com' },
       update: {
         isActive: true,
         role: 'PROVIDER',
@@ -572,8 +572,8 @@ async function main() {
         password: saasHash,
       },
       create: {
-        tenantId: brsparkTenant.id,
-        email: 'alex@brspark.com',
+        tenantId: ariaTenant.id,
+        email: 'alex@aria.com',
         name: 'Alex (técnico demo)',
         password: saasHash,
         role: 'PROVIDER',
@@ -586,18 +586,18 @@ async function main() {
       create: { userId: alexTech.id, status: 'ACTIVE', score: 5 },
     });
     const removedTypo = await prisma.user.deleteMany({
-      where: { tenantId: brsparkTenant.id, email: 'asmin@brspark.com' },
+      where: { tenantId: ariaTenant.id, email: 'asmin@aria.com' },
     });
     if (removedTypo.count) {
       console.log(
-        `   Removido usuário legado asmin@brspark.com (${removedTypo.count})`
+        `   Removido usuário legado asmin@aria.com (${removedTypo.count})`
       );
     }
     console.log(
-      `✅ Tenant brspark + admin + gestor + alex@brspark.com (PROVIDER, perfil ACTIVE; senha User tenant = SAAS_PANEL_PASSWORD ou "123456")`
+      `✅ Tenant aria + admin + gestor + alex@aria.com (PROVIDER, perfil ACTIVE; senha User tenant = SAAS_PANEL_PASSWORD ou "123456")`
     );
   } catch (e) {
-    console.warn('⚠️  Seed tenant brspark:', e.message);
+    console.warn('⚠️  Seed tenant aria:', e.message);
   }
 
   const tenantTrial = await prisma.tenant.upsert({
@@ -742,7 +742,7 @@ async function main() {
   // Asset Types & Status (Patterns from App)
   const metatags = [
     { type: 'ASSET_TYPE',       key: 'real_estate',   ptBr: 'Imóvel',           enUs: 'Real Estate',    esEs: 'Inmueble',         icon: 'home-outline', color: '#3B82F6' },
-    { type: 'ASSET_TYPE',       key: 'terrestrial',   ptBr: 'Veículo',          enUs: 'Vehicle',        esEs: 'Vehículo',         icon: 'car-outline', color: '#F97316' },
+    { type: 'ASSET_TYPE',       key: 'terrestrial',   ptBr: 'Veículo',          enUs: 'Vehicle',        esEs: 'Vehículo',         icon: 'car-outline', color: '#14b8a6' },
     { type: 'ASSET_TYPE',       key: 'aquatic',       ptBr: 'Embarcação',       enUs: 'Vessel',         esEs: 'Embarcación',      icon: 'boat-outline', color: '#06B6D4' },
     { type: 'ASSET_TYPE',       key: 'special',       ptBr: 'Equipamento',      enUs: 'Equipment',      esEs: 'Equipamiento',     icon: 'construct-outline', color: '#8B5CF6' },
     
@@ -769,7 +769,7 @@ async function main() {
   }
 
   const techExpenseCats = [
-    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'combustivel', ptBr: 'Combustível', enUs: 'Fuel', esEs: 'Combustible', icon: 'flash-outline', color: '#EA580C' },
+    { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'combustivel', ptBr: 'Combustível', enUs: 'Fuel', esEs: 'Combustible', icon: 'flash-outline', color: '#0d9488' },
     { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'estacionamento', ptBr: 'Estacionamento', enUs: 'Parking', esEs: 'Estacionamiento', icon: 'business-outline', color: '#64748B' },
     { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'pedagio', ptBr: 'Pedágio / pedágios', enUs: 'Tolls', esEs: 'Peajes', icon: 'ticket-outline', color: '#7C3AED' },
     { type: 'TECHNICIAN_EXPENSE_CATEGORY', key: 'transporte_publico_taxi_app', ptBr: 'Transporte público / táxi / app', enUs: 'Public transit / taxi / ride-hail', esEs: 'Transporte / taxi / app', icon: 'bus-outline', color: '#2563EB' },
@@ -799,19 +799,19 @@ async function main() {
 
   // ── Notification Templates ─────────────────────────────
   const templates = [
-    { key: 'welcome',        label: 'Boas-vindas',           channel: 'EMAIL', subject: 'Bem-vindo à BrSpark, {{name}}!', body: 'Olá {{name}},\n\nSeu acesso foi criado com sucesso.\n\nE-mail: {{email}}\nSenha temporária: {{password}}\n\nAcesse: {{loginUrl}}' },
+    { key: 'welcome',        label: 'Boas-vindas',           channel: 'EMAIL', subject: 'Bem-vindo à Aria, {{name}}!', body: 'Olá {{name}},\n\nSeu acesso foi criado com sucesso.\n\nE-mail: {{email}}\nSenha temporária: {{password}}\n\nAcesse: {{loginUrl}}' },
     { key: 'stock_low',      label: 'Estoque Crítico',       channel: 'PUSH',  body: '⚠️ {{itemName}} atingiu nível crítico no {{assetName}} ({{currentStock}} {{unit}} restantes)' },
     { key: 'policy_expiring',label: 'Apólice Vencendo',     channel: 'EMAIL', subject: 'Apólice vencendo em {{days}} dias', body: 'Sua apólice {{policyName}} vence em {{dueDate}}.' },
     { key: 'trial_ending',   label: 'Trial Encerrando',     channel: 'EMAIL', subject: 'Seu período trial encerra em {{days}} dias', body: 'Olá {{tenantName}},\n\nSeu trial encerra em {{days}} dias. Escolha um plano para continuar usando.' },
     { key: 'tech_reg_submitted_candidate_push', label: 'Cadastro prestador enviado (candidato/push)', channel: 'PUSH', subject: 'Cadastro enviado', body: 'Recebemos sua candidatura para {{tenantName}}.' },
-    { key: 'tech_reg_submitted_candidate_email', label: 'Cadastro prestador enviado (candidato/e-mail)', channel: 'EMAIL', subject: 'BrSpark — candidatura de prestador recebida ({{tenantName}})', body: 'Olá,\n\nRecebemos sua candidatura de prestador para {{tenantName}}. Nossa equipe fará a análise e você será avisado quando houver atualização de status.' },
+    { key: 'tech_reg_submitted_candidate_email', label: 'Cadastro prestador enviado (candidato/e-mail)', channel: 'EMAIL', subject: 'Aria — candidatura de prestador recebida ({{tenantName}})', body: 'Olá,\n\nRecebemos sua candidatura de prestador para {{tenantName}}. Nossa equipe fará a análise e você será avisado quando houver atualização de status.' },
     { key: 'tech_reg_submitted_reviewer_push', label: 'Novo cadastro prestador (revisor/push)', channel: 'PUSH', subject: 'Nova candidatura de prestador', body: '{{invitedEmail}} enviou candidatura ({{tenantName}}).' },
     { key: 'tech_reg_needs_revision_candidate_push', label: 'Cadastro prestador com ajustes (candidato/push)', channel: 'PUSH', subject: 'Ajustes no cadastro', body: 'A equipe solicitou ajustes na sua candidatura de prestador.' },
-    { key: 'tech_reg_needs_revision_candidate_email', label: 'Cadastro prestador com ajustes (candidato/e-mail)', channel: 'EMAIL', subject: 'BrSpark — ajustes solicitados no cadastro de prestador', body: 'Olá,\n\nA equipe solicitou ajustes na sua candidatura de prestador ({{tenantName}}).\n\nMensagem da revisão:\n{{revisionNote}}\n\nAbra o app BrSpark para corrigir e reenviar.' },
+    { key: 'tech_reg_needs_revision_candidate_email', label: 'Cadastro prestador com ajustes (candidato/e-mail)', channel: 'EMAIL', subject: 'Aria — ajustes solicitados no cadastro de prestador', body: 'Olá,\n\nA equipe solicitou ajustes na sua candidatura de prestador ({{tenantName}}).\n\nMensagem da revisão:\n{{revisionNote}}\n\nAbra o app Aria para corrigir e reenviar.' },
     { key: 'tech_reg_approved_candidate_push', label: 'Cadastro prestador aprovado (candidato/push)', channel: 'PUSH', subject: 'Cadastro aprovado', body: 'Seu cadastro de prestador foi aprovado. O modo Prestador já está disponível no app.' },
-    { key: 'tech_reg_approved_candidate_email', label: 'Cadastro prestador aprovado (candidato/e-mail)', channel: 'EMAIL', subject: 'BrSpark — cadastro de prestador aprovado', body: 'Olá,\n\nSeu cadastro de prestador foi aprovado para {{tenantName}}.\nVocê já pode usar o modo Prestador no app BrSpark.' },
+    { key: 'tech_reg_approved_candidate_email', label: 'Cadastro prestador aprovado (candidato/e-mail)', channel: 'EMAIL', subject: 'Aria — cadastro de prestador aprovado', body: 'Olá,\n\nSeu cadastro de prestador foi aprovado para {{tenantName}}.\nVocê já pode usar o modo Prestador no app Aria.' },
     { key: 'tech_reg_rejected_candidate_push', label: 'Cadastro prestador não aprovado (candidato/push)', channel: 'PUSH', subject: 'Cadastro não aprovado', body: 'Sua candidatura de prestador foi encerrada sem aprovação.' },
-    { key: 'tech_reg_rejected_candidate_email', label: 'Cadastro prestador não aprovado (candidato/e-mail)', channel: 'EMAIL', subject: 'BrSpark — cadastro de prestador não aprovado', body: 'Olá,\n\nSua candidatura de prestador ({{tenantName}}) foi encerrada sem aprovação.\n\nMotivo informado:\n{{reason}}' },
+    { key: 'tech_reg_rejected_candidate_email', label: 'Cadastro prestador não aprovado (candidato/e-mail)', channel: 'EMAIL', subject: 'Aria — cadastro de prestador não aprovado', body: 'Olá,\n\nSua candidatura de prestador ({{tenantName}}) foi encerrada sem aprovação.\n\nMotivo informado:\n{{reason}}' },
   ];
   for (const t of templates) {
     await prisma.notificationTemplate.upsert({

@@ -74,7 +74,7 @@ async function sendClientTrackingLinkEmail(opts) {
     'Link para acompanhamento (mapa e chat, quando disponível):',
     trackingUrl,
     '',
-    '— BrSpark',
+    '— Aria',
   ].join('\n');
 
   const safeUrl = escapeHtml(trackingUrl);

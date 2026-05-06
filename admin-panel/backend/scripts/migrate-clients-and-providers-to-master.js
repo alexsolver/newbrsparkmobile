@@ -17,7 +17,7 @@
  *
  * Variáveis opcionais:
  *   MIGRATION_TARGET_TENANT_SLUG=master   ou   MIGRATION_TARGET_TENANT_ID=cuid
- *   MIGRATION_EXCLUDE_SOURCE_TENANT_SLUGS=lansolver,brspark   (CSV; omissão **exclui** esses slugs da origem)
+ *   MIGRATION_EXCLUDE_SOURCE_TENANT_SLUGS=lansolver,aria   (CSV; omissão **exclui** esses slugs da origem)
  *   Defina `MIGRATION_EXCLUDE_SOURCE_TENANT_SLUGS=` (vazio) para não excluir nenhuma tenant de origem.
  */
 
@@ -45,7 +45,7 @@ function resolveExcludeSlugSet() {
   const raw =
     process.env.MIGRATION_EXCLUDE_SOURCE_TENANT_SLUGS !== undefined
       ? String(process.env.MIGRATION_EXCLUDE_SOURCE_TENANT_SLUGS).trim()
-      : 'lansolver,brspark';
+      : 'lansolver,aria';
   if (!raw) return new Set();
   return new Set(
     raw

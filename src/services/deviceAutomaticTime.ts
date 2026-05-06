@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { isAutomaticDateTimeEnabled } from 'brspark-automatic-time';
+import { isAutomaticDateTimeEnabled } from 'aria-automatic-time';
 import { API_BASE } from './appApiBase';
 
 const SERVER_SKEW_MS = 3 * 60 * 1000;

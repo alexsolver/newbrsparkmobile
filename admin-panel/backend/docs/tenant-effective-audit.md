@@ -11,7 +11,7 @@
 Antes de SQL destrutivo, alinhar com produto:
 
 - **A** — A tenant empresa (ex. Lansolver) é o workspace operacional: ajustar `WorkTimeSettings`, subscrição e, se aplicável, qual tenant Node recebe o `laravel_tenant_id` (único global no Prisma).
-- **B** — Duplicata/legacy: fundir recursos, arquivar afiliações, ou repor o email do `Tenant` para endereço sintético (padrão semelhante a `cms+…@brspark.cms.linked`).
+- **B** — Duplicata/legacy: fundir recursos, arquivar afiliações, ou repor o email do `Tenant` para endereço sintético (padrão semelhante a `cms+…@aria.cms.linked`).
 
 ## Consultas de auditoria (somente leitura, PostgreSQL)
 
@@ -23,8 +23,8 @@ Ajustar nomes de schema/base conforme o ambiente.
 SELECT t.id, t.email, t.slug, t.kind, t.status, t."laravel_tenant_id"
 FROM "Tenant" t
 WHERE t.kind = 'COMPANY'
-  AND t.email NOT LIKE '%@brspark.%'
-  AND t.email NOT LIKE '%@brspark.cms.linked'
+  AND t.email NOT LIKE '%@aria.%'
+  AND t.email NOT LIKE '%@aria.cms.linked'
   AND NOT EXISTS (SELECT 1 FROM "User" u WHERE u."tenantId" = t.id);
 ```
 

@@ -5,13 +5,13 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter } from 'react-native';
-import { BRSPARK_OPEN_TRANSIT_CHANGED } from '../constants/deviceEvents';
+import { ARIA_OPEN_TRANSIT_CHANGED } from '../constants/deviceEvents';
 
 function emitOpenTransit(taskId: string | null) {
-  DeviceEventEmitter.emit(BRSPARK_OPEN_TRANSIT_CHANGED, { taskId });
+  DeviceEventEmitter.emit(ARIA_OPEN_TRANSIT_CHANGED, { taskId });
 }
 
-export const OPERATIONAL_TRANSIT_LOCK_STORAGE_KEY = '@brspark_active_operational_transit_v1';
+export const OPERATIONAL_TRANSIT_LOCK_STORAGE_KEY = '@aria_active_operational_transit_v1';
 
 export type OperationalTransitLockPayload = { taskId: string };
 

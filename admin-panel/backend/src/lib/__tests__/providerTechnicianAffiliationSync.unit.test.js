@@ -150,7 +150,7 @@ test('reconcileAffiliationsToTechnicianProfilesForAppAccount: por PI — só afi
   assert.deepEqual(updatedPiIds, ['pi-sess']);
 });
 
-test('reconcileCrossTenantPartnerAffiliations: PI do Lan + tenant BrSpark usa técnico do User BrSpark', async () => {
+test('reconcileCrossTenantPartnerAffiliations: PI do Lan + tenant Aria usa técnico do User Aria', async () => {
   let lastWhereId;
   const client = {
     user: {

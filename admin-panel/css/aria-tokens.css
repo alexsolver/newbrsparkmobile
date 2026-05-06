@@ -1,0 +1,40 @@
+/* Gerado por npm run theme:export-css — não editar à mão */
+:root {
+  --color-brand-primary: #0d9488;
+  --color-brand-accent: #0f766e;
+  --color-brand-bright: #14b8a6;
+  --color-slate: #0F172A;
+  --color-bg: #F8F9FA;
+  --color-surface-low: #F3F4F5;
+  --color-surface: #FFFFFF;
+  --color-text-secondary: #475569;
+  --color-text-light: #64748B;
+  --color-border: #E2E8F0;
+  --color-divider: #F1F5F9;
+  --color-status-success-fg: #059669;
+  --color-status-success-bg: #D1FAE5;
+  --color-status-success-border: #A7F3D0;
+  --color-status-warning-fg: #9a3412;
+  --color-status-warning-bg: #FFEDD5;
+  --color-status-warning-border: #FDBA74;
+  --color-status-danger-fg: #B91C1C;
+  --color-status-danger-bg: #FEE2E2;
+  --color-status-danger-border: #FECACA;
+  --color-status-info-fg: #0f766e;
+  --color-status-info-bg: #ccfbf1;
+  --color-status-info-border: #99f6e4;
+  --color-connectivity-checking: #64748B;
+  --color-connectivity-online: #10B981;
+  --color-connectivity-offline: #EF4444;
+  --color-destructive: #DC2626;
+  --color-filled-button-bg: #115e59;
+  --color-filled-button-fg: #FFFFFF;
+  --color-overlay-dark: #0F172A;
+  --color-on-overlay-dark: #FFFFFF;
+  --color-media-before: #14b8a6;
+  --color-media-during: #F59E0B;
+  --color-media-after: #10B981;
+  --color-media-damage: #EF4444;
+  --color-media-warranty: #8B5CF6;
+  --color-media-other: #6B7280;
+}

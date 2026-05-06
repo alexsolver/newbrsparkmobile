@@ -30,7 +30,7 @@ Standard flat colors can feel sterile. For hero sections or primary CTAs, utiliz
 
 We utilize a dual-font strategy to balance character with utility.
 
-*   **Display & Headlines (Plus Jakarta Sans):** This is our "Editorial" voice. Use `display-lg` and `headline-lg` with tight letter-spacing to create a bold, modern brand presence. The geometric nature of Plus Jakarta Sans mirrors the precision of the BrSpark logo.
+*   **Display & Headlines (Plus Jakarta Sans):** This is our "Editorial" voice. Use `display-lg` and `headline-lg` with tight letter-spacing to create a bold, modern brand presence. The geometric nature of Plus Jakarta Sans mirrors the precision of the Aria logo.
 *   **Body & Labels (Inter):** Inter provides a neutral, highly legible foundation for functional information. Use `body-md` for standard reading and `label-md` for metadata.
 
 **Hierarchy Tip:** Always skip a size when creating contrast (e.g., pair a `headline-sm` with a `body-sm`) to ensure the hierarchy is unmistakable and dramatic.

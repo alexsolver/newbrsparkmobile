@@ -529,7 +529,7 @@ async function runCopilotBrainTurn(input) {
         ...outRepair,
         replyText:
           out.replyText +
-          '\n\n---\n**Correção automática (validador BrSpark — espelhamento do documento):**\n\n' +
+          '\n\n---\n**Correção automática (validador Aria — espelhamento do documento):**\n\n' +
           outRepair.replyText,
         warnings: w1.concat(
           'Validador: a 1.ª proposta não cobria os títulos do artigo na referência web; foi aplicada uma **2.ª passagem** automática.',
@@ -576,7 +576,7 @@ async function runCopilotBrainTurn(input) {
         ...outRepair,
         replyText:
           out.replyText +
-          '\n\n---\n**Correcao automatica (validador BrSpark - evidencia sequencial):**\n\n' +
+          '\n\n---\n**Correcao automatica (validador Aria - evidencia sequencial):**\n\n' +
           outRepair.replyText,
         warnings: w1.concat(
           'Validador: a proposta nao cumpria a regra de evidencia sequencial; foi aplicada uma 2a passagem automatica.',
@@ -623,7 +623,7 @@ async function runCopilotBrainTurn(input) {
         ...outRepair,
         replyText:
           out.replyText +
-          '\n\n---\n**Correcao automatica (validador BrSpark - profundidade regulatoria):**\n\n' +
+          '\n\n---\n**Correcao automatica (validador Aria - profundidade regulatoria):**\n\n' +
           outRepair.replyText,
         warnings: w1.concat(
           'Validador: a proposta estava generica para documento normativo (NR); foi aplicada uma 2a passagem automatica.',
@@ -670,7 +670,7 @@ async function runCopilotBrainTurn(input) {
         ...outRepair,
         replyText:
           out.replyText +
-          '\n\n---\n**Correcao automatica (validador BrSpark - inferencia de tipo):**\n\n' +
+          '\n\n---\n**Correcao automatica (validador Aria - inferencia de tipo):**\n\n' +
           outRepair.replyText,
         warnings: w1.concat(
           'Validador: perguntas de tipo de campo foram suprimidas; aplicada 2a passagem com inferencia automatica.',
@@ -728,7 +728,7 @@ async function runCopilotBrainTurn(input) {
         ...outRepair,
         replyText:
           out.replyText +
-          '\n\n---\n**Correcao automatica (validador BrSpark - patch obrigatorio):**\n\n' +
+          '\n\n---\n**Correcao automatica (validador Aria - patch obrigatorio):**\n\n' +
           outRepair.replyText,
         warnings: w1.concat(
           'Validador: resposta consultiva sem patch foi rejeitada; aplicada 2a passagem com alteracoes aplicaveis.',

@@ -11,7 +11,7 @@ const fleet: RootAssetType[] = ['MOBILITY', 'AQUATIC'];
 const collectionsInstall: RootAssetType[] = ['REAL_ESTATE', 'COLLECTIONS', 'SPECIAL'];
 
 export const INDUSTRY_CONTEXTS: IndustryContext[] = [
-  { id: 'residential',    labelKey: 'assetJourney.context.residential',    descKey: 'assetJourney.contextDesc.residential',    icon: 'home-outline',           color: '#EA580C' },
+  { id: 'residential',    labelKey: 'assetJourney.context.residential',    descKey: 'assetJourney.contextDesc.residential',    icon: 'home-outline',           color: '#0d9488' },
   { id: 'personal_mobility', labelKey: 'assetJourney.context.personal_mobility', descKey: 'assetJourney.contextDesc.personal_mobility', icon: 'car-outline', color: '#904D00' },
   { id: 'infra_built',    labelKey: 'assetJourney.context.infra_built',    descKey: 'assetJourney.contextDesc.infra_built',    icon: 'business-outline',    color: '#FF8C00' },
   { id: 'food_horeca',  labelKey: 'assetJourney.context.food_horeca',  descKey: 'assetJourney.contextDesc.food_horeca',  icon: 'restaurant-outline',   color: '#DC2626' },
@@ -28,7 +28,7 @@ export const INDUSTRY_CONTEXTS: IndustryContext[] = [
 const mod = (m: ModuleVisibility) => m;
 
 export const ASSET_KINDS: AssetKindDef[] = [
-  { id: 'RESIDENTIAL_PROPERTY', labelKey: 'assetKinds.residentialProperty', shortDescKey: 'assetKinds.residentialPropertyShort', contextIds: ['residential'], compatibleRootTypes: ['REAL_ESTATE'], icon: 'home-outline', color: '#EA580C', searchTokens: 'casa apartamento residencial sobrado kitnet imóvel habitação condomínio', fieldSchema: [], defaultModules: mod({}), marketplaceTag: 'real_estate' },
+  { id: 'RESIDENTIAL_PROPERTY', labelKey: 'assetKinds.residentialProperty', shortDescKey: 'assetKinds.residentialPropertyShort', contextIds: ['residential'], compatibleRootTypes: ['REAL_ESTATE'], icon: 'home-outline', color: '#0d9488', searchTokens: 'casa apartamento residencial sobrado kitnet imóvel habitação condomínio', fieldSchema: [], defaultModules: mod({}), marketplaceTag: 'real_estate' },
   { id: 'PRIVATE_VEHICLE', labelKey: 'assetKinds.privateVehicle', shortDescKey: 'assetKinds.privateVehicleShort', contextIds: ['personal_mobility'], compatibleRootTypes: ['MOBILITY'], icon: 'car-outline', color: '#904D00', searchTokens: 'carro automóvel particular passeio família suv hatch sedã moto uso pessoal b2c', fieldSchema: [], defaultModules: mod({ insurance: true, media: true }), marketplaceTag: 'vehicle' },
   { id: 'ELEVATOR', labelKey: 'assetKinds.elevator', shortDescKey: 'assetKinds.elevatorShort', contextIds: ['infra_built'], compatibleRootTypes: install, icon: 'chevron-up-outline', color: '#0F766E', searchTokens: 'elevador cabine nbr 15158', fieldSchema: [
     { id: 'patrimonyTag', labelKey: 'assetField.patrimonyTag', type: 'text' },
@@ -62,7 +62,7 @@ export const ASSET_KINDS: AssetKindDef[] = [
     { id: 'mgmtIp', labelKey: 'assetField.mgmtIp', type: 'text' },
     { id: 'firmware', labelKey: 'assetField.firmware', type: 'text' },
   ], defaultModules: mod({ stock: false }), marketplaceTag: 'it' },
-  { id: 'HOME_APPLIANCE', labelKey: 'assetKinds.homeAppliance', shortDescKey: 'assetKinds.homeApplianceShort', contextIds: ['hospitality'], compatibleRootTypes: ['REAL_ESTATE', 'MOBILITY', 'MACHINERY', 'COLLECTIONS', 'SPECIAL'], icon: 'cafe-outline', color: '#EA580C', searchTokens: 'eletrodoméstico geladeira', fieldSchema: [
+  { id: 'HOME_APPLIANCE', labelKey: 'assetKinds.homeAppliance', shortDescKey: 'assetKinds.homeApplianceShort', contextIds: ['hospitality'], compatibleRootTypes: ['REAL_ESTATE', 'MOBILITY', 'MACHINERY', 'COLLECTIONS', 'SPECIAL'], icon: 'cafe-outline', color: '#14b8a6', searchTokens: 'eletrodoméstico geladeira', fieldSchema: [
     { id: 'serial', labelKey: 'assetField.serial', type: 'text', required: true },
   ], defaultModules: mod({ vault: false, stock: true }), maintenanceIntervalMonths: 12, marketplaceTag: 'appliance' },
   { id: 'DENTAL_CHAIR', labelKey: 'assetKinds.dentalChair', shortDescKey: 'assetKinds.dentalChairShort', contextIds: ['health'], compatibleRootTypes: install, icon: 'body-outline', color: '#0D9488', searchTokens: 'cadeira odontologia consultório', fieldSchema: [
@@ -89,7 +89,7 @@ export const ASSET_KINDS: AssetKindDef[] = [
   { id: 'HARVESTER', labelKey: 'assetKinds.harvester', shortDescKey: 'assetKinds.harvesterShort', contextIds: ['agro'], compatibleRootTypes: landMachinery, icon: 'leaf-outline', color: '#3F6212', searchTokens: 'colheitadeira grão', fieldSchema: [
     { id: 'crop', labelKey: 'assetField.crop', type: 'text' },
   ], defaultModules: mod({ stock: true }), maintenanceIntervalMonths: 6, marketplaceTag: 'agro' },
-  { id: 'FORKLIFT', labelKey: 'assetKinds.forklift', shortDescKey: 'assetKinds.forkliftShort', contextIds: ['fleet', 'industry', 'agro'], compatibleRootTypes: landMachinery, icon: 'cube-outline', color: '#EA580C', searchTokens: 'empilhadeira still toyota nichiyu', fieldSchema: [
+  { id: 'FORKLIFT', labelKey: 'assetKinds.forklift', shortDescKey: 'assetKinds.forkliftShort', contextIds: ['fleet', 'industry', 'agro'], compatibleRootTypes: landMachinery, icon: 'cube-outline', color: '#115e59', searchTokens: 'empilhadeira still toyota nichiyu', fieldSchema: [
     { id: 'mast', labelKey: 'assetField.mastM', type: 'number' },
   ], defaultModules: mod({ insurance: true, stock: true }), maintenanceIntervalMonths: 3, marketplaceTag: 'forklift' },
   { id: 'REEFER_TRAILER', labelKey: 'assetKinds.reefer', shortDescKey: 'assetKinds.reeferShort', contextIds: ['fleet', 'food_horeca'], compatibleRootTypes: fleet, icon: 'thermometer-outline', color: '#0EA5E9', searchTokens: 'câmara carreta baú congelado gancheira', fieldSchema: [

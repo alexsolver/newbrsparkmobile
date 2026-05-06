@@ -106,7 +106,7 @@ function newDocId() {
 async function copyToComplianceStorage(sourceUri: string, docId: string, suggestedName: string): Promise<string> {
   const safe =
     suggestedName.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80) || 'file';
-  const base = `${FileSystem.documentDirectory || ''}brspark_compliance/`;
+  const base = `${FileSystem.documentDirectory || ''}aria_compliance/`;
   await FileSystem.makeDirectoryAsync(base, { intermediates: true }).catch(() => {});
   const dest = `${base}${docId}_${safe}`;
   await FileSystem.copyAsync({ from: sourceUri, to: dest });
@@ -221,7 +221,7 @@ export function ComplianceCertModule({ assetId }: BaseProps) {
     const docId = editingDoc?.id || newDocId();
     let localUri: string | undefined = form.localUri;
     if (localUri) {
-      if (!localUri.includes('brspark_compliance/')) {
+      if (!localUri.includes('aria_compliance/')) {
         try {
           localUri = await copyToComplianceStorage(localUri, docId, form.title.trim() || 'doc');
         } catch (e) {

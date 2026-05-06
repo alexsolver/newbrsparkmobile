@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BrSpark Admin — Entrar</title>
-  <link rel="stylesheet" href="css/brspark-tokens.css" />
+  <title>Aria Admin — Entrar</title>
+  <link rel="stylesheet" href="css/aria-tokens.css" />
   <link rel="stylesheet" href="css/main.css" />
   <style>
     .pw-wrap { position: relative; }
@@ -31,7 +31,7 @@
       <div class="login-logo">
         <img src="img/logo.png" alt="Logo">
         <div class="login-logo-text">
-          <p>Painel admin BrSpark</p>
+          <p>Painel admin Aria</p>
         </div>
       </div>
 
@@ -45,8 +45,8 @@
       <form id="login-form">
         <div class="form-group" id="wrap-tenant-slug">
           <label class="form-label" for="tenant-slug">Organização <span class="login-label-hint">(slug)</span></label>
-          <input class="form-control" type="text" id="tenant-slug" placeholder="ex.: brspark" autocomplete="organization" autocapitalize="none" required />
-          <p class="login-field-hint">Identificador da conta no sistema — o mesmo das URLs internas (ex.: <code>brspark</code>).</p>
+          <input class="form-control" type="text" id="tenant-slug" placeholder="ex.: aria" autocomplete="organization" autocapitalize="none" required />
+          <p class="login-field-hint">Identificador da conta no sistema — o mesmo das URLs internas (ex.: <code>aria</code>).</p>
         </div>
         <div class="form-group">
           <label class="form-label" for="email">E-mail</label>
@@ -66,7 +66,7 @@
       </form>
 
       <p class="login-hint" style="margin-top:12px;font-size:11px;line-height:1.45;color:var(--text3)">
-        <strong>Dev:</strong> após <code>npm run db:seed</code> — slug <code>brspark</code>; <strong>SaaS admin</strong> <code>admin@brspark.com</code> (menu completo); <strong>Gestor</strong> <code>gestor@brspark.com</code> (Gestão + Operações). Senha: env ou <code>admin123</code>.
+        <strong>Dev:</strong> após <code>npm run db:seed</code> — slug <code>aria</code>; <strong>SaaS admin</strong> <code>admin@aria.com</code> (menu completo); <strong>Gestor</strong> <code>gestor@aria.com</code>. Senha deste login: <code>SAAS_PANEL_PASSWORD</code> no <code>.env</code> ou, por defeito no seed, <code>123456</code> (não é <code>admin123</code> — esse é só do admin legado sem slug).
       </p>
       <p class="login-hint" style="margin-top:0;padding-top:12px;border-top:none">
         API PostgreSQL: <code>cd admin-panel/backend && npm run dev</code> — abrir o painel pela URL do servidor (ex. <code>http://localhost:3001/index.html</code>).
@@ -84,7 +84,7 @@
       <form id="reset-form">
         <div class="form-group">
           <label class="form-label" for="reset-tenant-slug">Organização <span class="login-label-hint">(slug)</span></label>
-          <input class="form-control" type="text" id="reset-tenant-slug" placeholder="ex.: brspark" autocomplete="organization" autocapitalize="none" required />
+          <input class="form-control" type="text" id="reset-tenant-slug" placeholder="ex.: aria" autocomplete="organization" autocapitalize="none" required />
         </div>
         <div class="form-group">
           <label class="form-label" for="reset-email">E-mail</label>
@@ -114,9 +114,9 @@
     await ensureAdminApiDetected();
     restoreAdminSessionBundleIfNeeded();
 
-    if (sessionStorage.getItem('brspark_admin_token')) {
+    if (sessionStorage.getItem('aria_admin_token')) {
       window.location.href = defaultLandingPageForRole(
-        sessionStorage.getItem('brspark_admin_role') || ''
+        sessionStorage.getItem('aria_admin_role') || ''
       );
     }
 
@@ -142,10 +142,10 @@
     });
 
     function clearSessionExtras() {
-      sessionStorage.removeItem('brspark_panel_mode');
-      sessionStorage.removeItem('brspark_panel_tenant');
-      sessionStorage.removeItem('brspark_admin_name');
-      sessionStorage.removeItem('brspark_admin_role');
+      sessionStorage.removeItem('aria_panel_mode');
+      sessionStorage.removeItem('aria_panel_tenant');
+      sessionStorage.removeItem('aria_admin_name');
+      sessionStorage.removeItem('aria_admin_role');
     }
 
     function openResetModal() {
@@ -227,12 +227,12 @@
         if (!res.ok || !data.token) throw new Error(data.error || 'Credenciais inválidas.');
 
         clearSessionExtras();
-        sessionStorage.setItem('brspark_admin_token', data.token);
-        sessionStorage.setItem('brspark_admin_email', data.user.email);
-        sessionStorage.setItem('brspark_admin_name', data.user.name || '');
-        sessionStorage.setItem('brspark_panel_mode', 'tenant');
-        sessionStorage.setItem('brspark_panel_tenant', JSON.stringify(data.tenant));
-        sessionStorage.setItem('brspark_admin_role', data.user.role || '');
+        sessionStorage.setItem('aria_admin_token', data.token);
+        sessionStorage.setItem('aria_admin_email', data.user.email);
+        sessionStorage.setItem('aria_admin_name', data.user.name || '');
+        sessionStorage.setItem('aria_panel_mode', 'tenant');
+        sessionStorage.setItem('aria_panel_tenant', JSON.stringify(data.tenant));
+        sessionStorage.setItem('aria_admin_role', data.user.role || '');
         applyPanelSessionBootstrap(data);
 
         persistAdminSessionBundleFromSessionStorage();

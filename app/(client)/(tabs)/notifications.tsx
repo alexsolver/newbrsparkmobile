@@ -130,7 +130,7 @@ export default function NotificationsScreen() {
   const testPush = () => {
     NotificationService.addNotification({
       title: '⚡ Teste de Push Corporativo',
-      body: 'Sistema BrSpark confirmou o canal de comunicação push ativo.',
+      body: 'Sistema Aria confirmou o canal de comunicação push ativo.',
       category: 'info',
       personaScope: persona,
     });

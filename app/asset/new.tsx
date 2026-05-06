@@ -686,7 +686,7 @@ export default function NewAssetScreen() {
             <TextInput style={styles.modInput} value={inventoryId} onChangeText={setInventoryId} placeholder={t('newAsset.inventoryPlaceholder')} returnKeyType="done"
                       />
 
-            {/* Campos Dinâmicos por Tipo de Ativo (Polimorfismo Brspark) */}
+            {/* Campos Dinâmicos por Tipo de Ativo (Polimorfismo Aria) */}
             {getAssetFormBlock(type) === 'realEstate' ? (
               <>
                 <View style={{flexDirection: 'row', gap: 12}}>

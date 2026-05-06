@@ -14,7 +14,7 @@ async function reverseGeocodeLatLng(lat, lng) {
   try {
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'BrSparkAdmin/1.0 (work-time; +https://brspark.com)',
+        'User-Agent': 'AriaAdmin/1.0 (work-time; +https://aria.com)',
         Accept: 'application/json',
       },
       signal: ac.signal,

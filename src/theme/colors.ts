@@ -1,8 +1,17 @@
 /**
+ * Identidade de marca (logo: teal cromado + metal).
+ * Alinhar primário/acento do app e do painel admin (`npm run theme:export-css`).
+ */
+export const BRAND_PRIMARY = '#0d9488'; // teal-600
+export const BRAND_ACCENT = '#0f766e'; // teal-700
+export const BRAND_BRIGHT = '#14b8a6'; // teal-500 — destaques em fundo escuro
+export const BRAND_INK = '#115e59'; // teal-800 — botões preenchidos / contraste
+
+/**
  * Tags de mídia — único conjunto para app (tabs/media, MediaModule, etc.).
  */
 export const MEDIA_TAG_COLORS: Record<string, string> = {
-  BEFORE: '#3B82F6',
+  BEFORE: '#14b8a6',
   DURING: '#F59E0B',
   AFTER: '#10B981',
   DAMAGE: '#EF4444',
@@ -17,12 +26,12 @@ export const MEDIA_TAG_COLORS: Record<string, string> = {
 /** Cores do segmento SERVIÇOS / BENS / PRESTADOR no header */
 export const MODE_SEGMENT_COLORS = {
   SERVICES: '#10B981',
-  ASSETS: '#3B82F6',
-  PROVIDER: '#D97706',
+  ASSETS: '#0891b2',
+  PROVIDER: BRAND_PRIMARY,
 } as const;
 
 export const SERVICE_CATEGORY_COLORS: Record<string, string> = {
-  all: '#904D00',
+  all: BRAND_INK,
   Elétrica: '#F59E0B',
   Hidráulica: '#3B82F6',
   Limpeza: '#10B981',
@@ -31,7 +40,7 @@ export const SERVICE_CATEGORY_COLORS: Record<string, string> = {
   Segurança: '#EF4444',
   Climatização: '#06B6D4',
   Tecnologia: '#6366F1',
-  Dedetização: '#F97316',
+  Dedetização: '#0e7490',
   Mudança: '#EC4899',
   Gás: '#84CC16',
   Pintura: '#A855F7',
@@ -39,24 +48,24 @@ export const SERVICE_CATEGORY_COLORS: Record<string, string> = {
 
 const statusLight = {
   success: { fg: '#059669', bg: '#D1FAE5', border: '#A7F3D0' },
-  warning: { fg: '#C2410C', bg: '#FFEDD5', border: '#FDBA74' },
+  warning: { fg: '#9a3412', bg: '#FFEDD5', border: '#FDBA74' },
   danger: { fg: '#B91C1C', bg: '#FEE2E2', border: '#FECACA' },
-  info: { fg: '#1D4ED8', bg: '#DBEAFE', border: '#93C5FD' },
+  info: { fg: BRAND_ACCENT, bg: '#ccfbf1', border: '#99f6e4' },
 };
 
 const statusDark = {
   success: { fg: '#4ADE80', bg: '#14532D', border: '#166534' },
   warning: { fg: '#FDBA74', bg: '#5E3000', border: '#9A3412' },
   danger: { fg: '#FCA5A5', bg: '#450A0A', border: '#7F1D1D' },
-  info: { fg: '#93C5FD', bg: '#1E3A8A', border: '#1D4ED8' },
+  info: { fg: '#5eead4', bg: '#134e4a', border: '#0f766e' },
 };
 
 export const lightColors = {
-  primary: '#F97316',
-  accent: '#EA580C',
-  branding: '#F97316',
+  primary: BRAND_PRIMARY,
+  accent: BRAND_ACCENT,
+  branding: BRAND_PRIMARY,
   /** Chips de filtro / menus horizontais (ativo vs inativo) — sobrescreve branding quando preenchido. */
-  menuChipActiveBg: '#EA580C',
+  menuChipActiveBg: BRAND_PRIMARY,
   menuChipActiveFg: '#FFFFFF',
   menuChipInactiveBg: '#FFFFFF',
   menuChipInactiveFg: '#475569',
@@ -70,7 +79,7 @@ export const lightColors = {
   textLight: '#64748B',
   border: '#E2E8F0',
   success: { background: '#D1FAE5', text: '#059669' },
-  warning: { background: '#FFEDD5', text: '#EA580C' },
+  warning: { background: '#FFEDD5', text: '#9a3412' },
   divider: '#F1F5F9',
   status: statusLight,
   connectivity: {
@@ -80,19 +89,19 @@ export const lightColors = {
   },
   destructive: '#DC2626',
   gpsAura: {
-    ring: '#FACC15',
-    shadow: '#CA8A04',
+    ring: BRAND_BRIGHT,
+    shadow: BRAND_INK,
   },
   switch: {
     trackOff: '#E2E8F0',
-    trackOn: 'rgba(249, 115, 22, 0.35)',
+    trackOn: 'rgba(13, 148, 136, 0.35)',
     thumb: '#FFFFFF',
   },
   /**
    * Botões retangulares "ink" (Guardar, Voltar cheio, chips ativos escuros).
    * Nunca usar `slate` como fundo: em dark o slate é cor de texto clara.
    */
-  filledButtonBg: '#0F172A',
+  filledButtonBg: BRAND_INK,
   filledButtonFg: '#FFFFFF',
   /** Barras/modais que devem permanecer escuros em qualquer tema */
   overlayDark: '#0F172A',
@@ -100,12 +109,12 @@ export const lightColors = {
 };
 
 export const darkColors = {
-  /** Mesma cor de marca que no light — evita fundos "claros" invisíveis com texto branco */
-  primary: '#F97316',
-  accent: '#FFB84D',
-  branding: '#F97316',
-  menuChipActiveBg: '#FFB84D',
-  menuChipActiveFg: '#0F172A',
+  /** Teal mais claro para legível em fundos escuros */
+  primary: BRAND_BRIGHT,
+  accent: '#5eead4',
+  branding: BRAND_BRIGHT,
+  menuChipActiveBg: BRAND_BRIGHT,
+  menuChipActiveFg: '#0f172a',
   menuChipInactiveBg: '#282B2C',
   menuChipInactiveFg: '#8B9193',
   menuChipInactiveBorder: '#2D3132',
@@ -127,15 +136,15 @@ export const darkColors = {
   },
   destructive: '#F87171',
   gpsAura: {
-    ring: '#FACC15',
-    shadow: '#CA8A04',
+    ring: BRAND_BRIGHT,
+    shadow: BRAND_INK,
   },
   switch: {
     trackOff: '#3D4244',
-    trackOn: 'rgba(255, 184, 77, 0.35)',
+    trackOn: 'rgba(45, 212, 191, 0.35)',
     thumb: '#E8EAEB',
   },
-  filledButtonBg: '#F97316',
+  filledButtonBg: BRAND_PRIMARY,
   filledButtonFg: '#FFFFFF',
   overlayDark: '#0F172A',
   onOverlayDark: '#FFFFFF',
@@ -150,8 +159,9 @@ export type ColorPalette = typeof lightColors;
  * Rode: `npm run theme:export-css`
  */
 export const webCssVariableMap: Record<string, string> = {
-  'color-brand-primary': lightColors.primary,
-  'color-brand-accent': lightColors.accent,
+  'color-brand-primary': BRAND_PRIMARY,
+  'color-brand-accent': BRAND_ACCENT,
+  'color-brand-bright': BRAND_BRIGHT,
   'color-slate': lightColors.slate,
   'color-bg': lightColors.background,
   'color-surface-low': lightColors.surfaceLow,

@@ -1,5 +1,5 @@
 /**
- * Contexto de OS a partir do cache FT local (`@brspark_cloud_tasks` — ver `cloudTasksBuckets.ts`).
+ * Contexto de OS a partir do cache FT local (`@aria_cloud_tasks` — ver `cloudTasksBuckets.ts`).
  */
 
 export type CloudTaskFinanceInfo = {

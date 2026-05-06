@@ -2,7 +2,7 @@
  * Catálogo embutido quando ainda não houve sync de /api/config (mesmas chaves do seed do admin).
  */
 export const TECHNICIAN_EXPENSE_CATEGORIES_FALLBACK = [
-  { id: 'combustivel', label: 'Combustível', icon: 'flash-outline', color: '#EA580C' },
+  { id: 'combustivel', label: 'Combustível', icon: 'flash-outline', color: '#0d9488' },
   { id: 'estacionamento', label: 'Estacionamento', icon: 'business-outline', color: '#64748B' },
   { id: 'pedagio', label: 'Pedágio / pedágios', icon: 'ticket-outline', color: '#7C3AED' },
   {

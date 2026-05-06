@@ -16,7 +16,7 @@ import { getAdminUiLocale, setAdminUiLocale, t } from './user-pages-i18n.js';
 
 function impersonationBannerHtml() {
   try {
-    const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('brspark_impersonation_backup') : null;
+    const raw = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('aria_impersonation_backup') : null;
     if (!raw) return '';
     const b = JSON.parse(raw);
     if (!b || !b.token) return '';
@@ -75,7 +75,7 @@ function tenantPickerOptionLabel(row) {
   return name || slug || id;
 }
 
-const SS_PANEL_TENANT_LIST_KIND = 'brspark_panel_tenant_list_kind';
+const SS_PANEL_TENANT_LIST_KIND = 'aria_panel_tenant_list_kind';
 
 /** Seletor de plataforma: só organizações empresa (alinhado a `GET /tenants?all=1` sem `kind=ALL`). */
 function setPanelTenantListKindCompanyOnly() {
@@ -88,7 +88,7 @@ function setPanelTenantListKindCompanyOnly() {
 
 function getCurrentContextTenantId() {
   try {
-    const raw = sessionStorage.getItem('brspark_panel_tenant');
+    const raw = sessionStorage.getItem('aria_panel_tenant');
     if (!raw) return '';
     const o = JSON.parse(raw);
     return o && o.id ? String(o.id) : '';
@@ -145,14 +145,14 @@ async function refillPanelTenantSelectOptions(sel) {
 
   sel.value = currentId;
   if (sel.value !== currentId) sel.value = '';
-  sel.dataset.brsparkPrev = sel.value;
+  sel.dataset.ariaPrev = sel.value;
   sel.disabled = false;
 }
 
 /** Seletor de organização para admin de plataforma (JWT com filtro opcional no token). */
 async function bindPanelTenantScopePicker() {
   const wrap = document.getElementById('sidebar-panel-scope-picker');
-  if (!wrap || wrap.dataset.brsparkPickerInit === '1') return;
+  if (!wrap || wrap.dataset.ariaPickerInit === '1') return;
 
   const sel = document.getElementById('sidebar-panel-tenant-select');
   if (!sel) return;
@@ -162,7 +162,7 @@ async function bindPanelTenantScopePicker() {
 
   sel.addEventListener('change', async () => {
     const v = String(sel.value || '').trim();
-    const prev = sel.dataset.brsparkPrev || '';
+    const prev = sel.dataset.ariaPrev || '';
     if (v === prev) return;
     sel.disabled = true;
     const res = await CONFIG.post('/auth/panel-select-tenant', { tenantId: v || null });
@@ -172,32 +172,32 @@ async function bindPanelTenantScopePicker() {
       sel.disabled = false;
       return;
     }
-    sessionStorage.setItem('brspark_admin_token', res.token);
+    sessionStorage.setItem('aria_admin_token', res.token);
     if (res.user) {
-      sessionStorage.setItem('brspark_admin_email', res.user.email || '');
-      sessionStorage.setItem('brspark_admin_name', res.user.name || '');
-      sessionStorage.setItem('brspark_admin_role', res.user.role || '');
+      sessionStorage.setItem('aria_admin_email', res.user.email || '');
+      sessionStorage.setItem('aria_admin_name', res.user.name || '');
+      sessionStorage.setItem('aria_admin_role', res.user.role || '');
     } else if (res.admin) {
-      sessionStorage.setItem('brspark_admin_email', res.admin.email || '');
-      sessionStorage.setItem('brspark_admin_name', res.admin.name || '');
-      sessionStorage.setItem('brspark_admin_role', '');
+      sessionStorage.setItem('aria_admin_email', res.admin.email || '');
+      sessionStorage.setItem('aria_admin_name', res.admin.name || '');
+      sessionStorage.setItem('aria_admin_role', '');
     }
     applyPanelSessionBootstrap(res);
     if (res.tenant && res.tenant.id) {
-      sessionStorage.setItem('brspark_panel_mode', 'tenant');
-      sessionStorage.setItem('brspark_panel_tenant', JSON.stringify(res.tenant));
+      sessionStorage.setItem('aria_panel_mode', 'tenant');
+      sessionStorage.setItem('aria_panel_tenant', JSON.stringify(res.tenant));
     } else {
-      sessionStorage.setItem('brspark_panel_mode', 'global');
-      sessionStorage.removeItem('brspark_panel_tenant');
+      sessionStorage.setItem('aria_panel_mode', 'global');
+      sessionStorage.removeItem('aria_panel_tenant');
     }
     persistAdminSessionBundleFromSessionStorage();
     window.location.reload();
   });
 
-  wrap.dataset.brsparkPickerInit = '1';
+  wrap.dataset.ariaPickerInit = '1';
 }
 
-const SIDEBAR_COLLAPSED_KEY = 'brspark_admin_sidebar_collapsed';
+const SIDEBAR_COLLAPSED_KEY = 'aria_admin_sidebar_collapsed';
 
 /**
  * Novo separador não herda `sessionStorage` — copia chaves de sessão do separador que abriu esta página
@@ -206,21 +206,21 @@ const SIDEBAR_COLLAPSED_KEY = 'brspark_admin_sidebar_collapsed';
 function seedAdminSessionFromOpenerIfNeeded() {
   if (typeof window === 'undefined' || !window.sessionStorage) return;
   try {
-    if (sessionStorage.getItem('brspark_admin_token')) return;
+    if (sessionStorage.getItem('aria_admin_token')) return;
     const op = window.opener;
     if (!op || op.closed) return;
     const src = op.sessionStorage;
     if (!src) return;
     const keys = [
-      'brspark_admin_token',
-      'brspark_admin_email',
-      'brspark_admin_name',
-      'brspark_admin_role',
-      'brspark_panel_mode',
-      'brspark_panel_tenant',
-      'brspark_panel_tenant_list_kind',
-      'brspark_admin_context',
-      'brspark_admin_capabilities',
+      'aria_admin_token',
+      'aria_admin_email',
+      'aria_admin_name',
+      'aria_admin_role',
+      'aria_panel_mode',
+      'aria_panel_tenant',
+      'aria_panel_tenant_list_kind',
+      'aria_admin_context',
+      'aria_admin_capabilities',
     ];
     for (const k of keys) {
       try {
@@ -230,9 +230,9 @@ function seedAdminSessionFromOpenerIfNeeded() {
         /* ignore */
       }
     }
-    if (sessionStorage.getItem('brspark_admin_token')) {
+    if (sessionStorage.getItem('aria_admin_token')) {
       try {
-        sessionStorage.setItem('brspark_panel_tenant_list_kind', 'COMPANY');
+        sessionStorage.setItem('aria_panel_tenant_list_kind', 'COMPANY');
       } catch {
         /* ignore */
       }
@@ -353,7 +353,7 @@ export const MANAGER_PANEL_PAGES = new Set([
 ]);
 
 export function getStoredPanelRole() {
-  return (sessionStorage.getItem('brspark_admin_role') || '').trim();
+  return (sessionStorage.getItem('aria_admin_role') || '').trim();
 }
 
 export function navItemsForRole(role) {
@@ -421,9 +421,9 @@ async function fetchPanelChatTopbarBadgeCount() {
 }
 
 function updatePanelChatTopbarBadgeElement(n) {
-  const badge = document.querySelector('[data-brspark-chat-badge]');
+  const badge = document.querySelector('[data-aria-chat-badge]');
   if (!badge) return;
-  const countEl = badge.querySelector('[data-brspark-chat-badge-count]') || badge;
+  const countEl = badge.querySelector('[data-aria-chat-badge-count]') || badge;
   if (n > 0) {
     badge.hidden = false;
     countEl.textContent = n > 99 ? '99+' : String(n);
@@ -435,18 +435,18 @@ function updatePanelChatTopbarBadgeElement(n) {
 
 function setupPanelChatTopbarBadgePolling() {
   if (typeof window === 'undefined') return;
-  if (window.__brsparkChatBadgeInterval) {
-    clearInterval(window.__brsparkChatBadgeInterval);
-    window.__brsparkChatBadgeInterval = null;
+  if (window.__ariaChatBadgeInterval) {
+    clearInterval(window.__ariaChatBadgeInterval);
+    window.__ariaChatBadgeInterval = null;
   }
   const run = async () => {
-    const link = document.querySelector('[data-brspark-topbar-chat]');
+    const link = document.querySelector('[data-aria-topbar-chat]');
     if (!link) return;
     const n = await fetchPanelChatTopbarBadgeCount();
     updatePanelChatTopbarBadgeElement(n);
   };
   void run();
-  window.__brsparkChatBadgeInterval = setInterval(() => void run(), 12000);
+  window.__ariaChatBadgeInterval = setInterval(() => void run(), 12000);
 }
 
 /**
@@ -456,54 +456,54 @@ function injectGlobalTopbarActions() {
   const main = document.querySelector('.admin-layout > .main-content') || document.querySelector('.main-content');
   if (!main) return;
   const topbar = main.querySelector(':scope > .topbar');
-  if (!topbar || topbar.querySelector('[data-brspark-app-topbar]')) return;
+  if (!topbar || topbar.querySelector('[data-aria-app-topbar]')) return;
 
-  const email = sessionStorage.getItem('brspark_admin_email') || '';
-  const displayName = (sessionStorage.getItem('brspark_admin_name') || '').trim();
+  const email = sessionStorage.getItem('aria_admin_email') || '';
+  const displayName = (sessionStorage.getItem('aria_admin_name') || '').trim();
   const initialsSource = (displayName || email || '—').trim();
   const initials = initialsSource.slice(0, 2).toUpperCase() || '—';
   const shortName = (displayName || (email.includes('@') ? email.split('@')[0] : email) || '—').trim();
 
   const actions = document.createElement('div');
-  actions.className = 'topbar-actions brspark-app-topbar';
-  actions.setAttribute('data-brspark-app-topbar', '1');
+  actions.className = 'topbar-actions aria-app-topbar';
+  actions.setAttribute('data-aria-app-topbar', '1');
   const chatTitle = String(t('topbarChat')).replace(/"/g, '&quot;');
   const chatUnreadHint = String(t('topbarChatUnread')).replace(/"/g, '&quot;');
   actions.innerHTML = `
-    <a href="chat.html" class="topbar-chat-link" data-brspark-topbar-chat="1" title="${chatTitle}" aria-label="${chatUnreadHint}">
+    <a href="chat.html" class="topbar-chat-link" data-aria-topbar-chat="1" title="${chatTitle}" aria-label="${chatUnreadHint}">
       <span class="topbar-chat-ic-wrap" aria-hidden="true"><ion-icon name="chatbubbles-outline"></ion-icon></span>
-      <span class="topbar-chat-badge" data-brspark-chat-badge hidden aria-live="polite"><span data-brspark-chat-badge-count></span></span>
+      <span class="topbar-chat-badge" data-aria-chat-badge hidden aria-live="polite"><span data-aria-chat-badge-count></span></span>
     </a>
-    <label class="topbar-locale-wrap" for="brspark-topbar-locale">
+    <label class="topbar-locale-wrap" for="aria-topbar-locale">
       <span class="topbar-locale-icon" title="${String(t('localeLabel')).replace(/"/g, '&quot;')}" aria-hidden="true"><ion-icon name="language-outline"></ion-icon></span>
-      <select id="brspark-topbar-locale" class="form-control topbar-locale-select">
+      <select id="aria-topbar-locale" class="form-control topbar-locale-select">
         <option value="pt-BR">PT</option>
         <option value="en-US">EN</option>
         <option value="es-ES">ES</option>
         <option value="de-DE">DE</option>
       </select>
     </label>
-    <details class="topbar-user-details" id="brspark-topbar-user-wrap">
+    <details class="topbar-user-details" id="aria-topbar-user-wrap">
       <summary class="topbar-user-trigger">
-        <div class="topbar-user-avatar" id="brspark-topbar-avatar"></div>
+        <div class="topbar-user-avatar" id="aria-topbar-avatar"></div>
         <div class="topbar-user-meta">
-          <span class="topbar-user-name" id="brspark-topbar-name"></span>
-          <span class="topbar-user-email" id="brspark-topbar-email"></span>
+          <span class="topbar-user-name" id="aria-topbar-name"></span>
+          <span class="topbar-user-email" id="aria-topbar-email"></span>
         </div>
       </summary>
       <div class="topbar-user-dropdown">
-        <button type="button" class="btn btn-ghost btn-sm" id="brspark-topbar-logout-btn"></button>
+        <button type="button" class="btn btn-ghost btn-sm" id="aria-topbar-logout-btn"></button>
       </div>
     </details>
   `;
   topbar.appendChild(actions);
   topbar.classList.add('topbar--with-chrome');
 
-  const av = document.getElementById('brspark-topbar-avatar');
-  const nm = document.getElementById('brspark-topbar-name');
-  const em = document.getElementById('brspark-topbar-email');
-  const locSel = document.getElementById('brspark-topbar-locale');
-  const loBtn = document.getElementById('brspark-topbar-logout-btn');
+  const av = document.getElementById('aria-topbar-avatar');
+  const nm = document.getElementById('aria-topbar-name');
+  const em = document.getElementById('aria-topbar-email');
+  const locSel = document.getElementById('aria-topbar-locale');
+  const loBtn = document.getElementById('aria-topbar-logout-btn');
   if (av) av.textContent = initials;
   if (nm) nm.textContent = shortName;
   if (em) em.textContent = email;
@@ -534,12 +534,12 @@ export function renderSidebar(alertCount = 3) {
   const page = window.location.pathname.split('/').pop().replace('.html','') || 'dashboard';
   const currentPage = page.endsWith('.html') ? page : page + '.html';
   const ctx = getPanelContext();
-  const panelMode = sessionStorage.getItem('brspark_panel_mode') || (ctx?.scope === 'platform' ? 'global' : 'tenant');
+  const panelMode = sessionStorage.getItem('aria_panel_mode') || (ctx?.scope === 'platform' ? 'global' : 'tenant');
   const isPlatformCtx = ctx?.scope === 'platform';
   let tenantLine = '';
   if (!isPlatformCtx) {
     try {
-      const raw = sessionStorage.getItem('brspark_panel_tenant');
+      const raw = sessionStorage.getItem('aria_panel_tenant');
       if (raw && panelMode === 'tenant') {
         const tn = JSON.parse(raw);
         const kind = tn.kind || 'COMPANY';
@@ -668,7 +668,7 @@ export async function initPage() {
   seedAdminSessionFromOpenerIfNeeded();
   restoreAdminSessionBundleIfNeeded();
 
-  if (!sessionStorage.getItem('brspark_admin_token')) {
+  if (!sessionStorage.getItem('aria_admin_token')) {
     window.location.href = 'index.html';
     return;
   }
@@ -717,7 +717,7 @@ export async function initPage() {
     impBtn.addEventListener('click', () => {
       let raw;
       try {
-        raw = sessionStorage.getItem('brspark_impersonation_backup');
+        raw = sessionStorage.getItem('aria_impersonation_backup');
       } catch {
         raw = null;
       }
@@ -726,23 +726,23 @@ export async function initPage() {
       try {
         b = JSON.parse(raw);
       } catch {
-        sessionStorage.removeItem('brspark_impersonation_backup');
+        sessionStorage.removeItem('aria_impersonation_backup');
         return;
       }
       if (!b || !b.token) {
-        sessionStorage.removeItem('brspark_impersonation_backup');
+        sessionStorage.removeItem('aria_impersonation_backup');
         return;
       }
-      sessionStorage.setItem('brspark_admin_token', b.token);
-      sessionStorage.setItem('brspark_admin_email', b.email || '');
-      sessionStorage.setItem('brspark_admin_name', b.name || '');
-      sessionStorage.setItem('brspark_admin_role', b.role || '');
-      if (b.panelMode) sessionStorage.setItem('brspark_panel_mode', b.panelMode);
-      else sessionStorage.removeItem('brspark_panel_mode');
-      if (b.panelTenant) sessionStorage.setItem('brspark_panel_tenant', b.panelTenant);
-      else sessionStorage.removeItem('brspark_panel_tenant');
+      sessionStorage.setItem('aria_admin_token', b.token);
+      sessionStorage.setItem('aria_admin_email', b.email || '');
+      sessionStorage.setItem('aria_admin_name', b.name || '');
+      sessionStorage.setItem('aria_admin_role', b.role || '');
+      if (b.panelMode) sessionStorage.setItem('aria_panel_mode', b.panelMode);
+      else sessionStorage.removeItem('aria_panel_mode');
+      if (b.panelTenant) sessionStorage.setItem('aria_panel_tenant', b.panelTenant);
+      else sessionStorage.removeItem('aria_panel_tenant');
       applyPanelSessionBootstrap(b);
-      sessionStorage.removeItem('brspark_impersonation_backup');
+      sessionStorage.removeItem('aria_impersonation_backup');
       persistAdminSessionBundleFromSessionStorage();
       window.location.href = defaultLandingPageForRole(b.role || '');
     });
@@ -756,8 +756,8 @@ export async function initPage() {
     });
   }
 
-  if (!window.__brsparkSidebarMqlBound) {
-    window.__brsparkSidebarMqlBound = true;
+  if (!window.__ariaSidebarMqlBound) {
+    window.__ariaSidebarMqlBound = true;
     window.matchMedia('(min-width: 769px)').addEventListener('change', (e) => {
       if (!e.matches) {
         document.body.classList.remove('sidebar-collapsed');
@@ -775,8 +775,8 @@ export async function initPage() {
     console.warn('[admin] injectGlobalTopbarActions:', e);
   }
 
-  if (!window.__brsparkTopbarDetailsOutsideBound) {
-    window.__brsparkTopbarDetailsOutsideBound = true;
+  if (!window.__ariaTopbarDetailsOutsideBound) {
+    window.__ariaTopbarDetailsOutsideBound = true;
     document.addEventListener('click', (ev) => {
       const t = ev.target;
       if (!(t instanceof Element)) return;

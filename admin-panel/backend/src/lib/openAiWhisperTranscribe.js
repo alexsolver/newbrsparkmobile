@@ -72,7 +72,7 @@ async function transcribeAudioWithOpenAiWhisper(opts) {
     };
   }
 
-  const boundary = `brspark_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+  const boundary = `aria_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   const ext = (() => {
     const fn = String(filename || 'recording.m4a').toLowerCase();
     const m = String(mimetype || '').toLowerCase();

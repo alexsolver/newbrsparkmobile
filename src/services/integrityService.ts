@@ -1,5 +1,5 @@
 /**
- * integrityService — BrSpark Field Service
+ * integrityService — Aria Field Service
  *
  * Detecta anomalias de integridade no dispositivo:
  *   - Mock Location (GPS falso / simulado)
@@ -150,7 +150,7 @@ async function getBattery(): Promise<{ level: number | null; charging: boolean |
 
 // ── Pseudonymized deviceId ───────────────────────────────────────────────────
 async function getDeviceId(): Promise<string> {
-  const KEY = '@brspark_device_id';
+  const KEY = '@aria_device_id';
   try {
     let id = await AsyncStorage.getItem(KEY);
     if (!id) {

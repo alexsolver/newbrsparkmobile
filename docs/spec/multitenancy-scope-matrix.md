@@ -1,13 +1,13 @@
-# Matriz De Escopos Multitenancy BrSpark
+# Matriz De Escopos Multitenancy Aria
 
 ## Escopos
-- `platform`: operação da BrSpark como dona do SaaS
+- `platform`: operação da Aria como dona do SaaS
 - `network`: gestão da rede / marketplace de técnicos
 - `tenant`: workspace isolado de cada parceiro
 - `public`: superfícies públicas controladas
 
 ## Atores
-- `PLATFORM_OWNER`: acesso global da BrSpark
+- `PLATFORM_OWNER`: acesso global da Aria
 - `TENANT_ADMIN`: administração de um tenant específico
 - `TENANT_MANAGER`: gestão operacional de um tenant específico
 - `PROVIDER`: técnico/prestador com atuação por tenant
@@ -20,7 +20,7 @@
 - Páginas:
   - `admin-panel/tenants.html`
   - `admin-panel/users.html` quando o filtro cruza tenants
-  - dashboards e páginas globais de administração da BrSpark
+  - dashboards e páginas globais de administração da Aria
 - APIs:
   - `GET /api/tenants`
   - `POST /api/tenants`
@@ -68,7 +68,7 @@
 
 ## Critérios De Aceite
 - Nenhum ator `tenant` acessa dados de outro tenant.
-- A BrSpark acessa múltiplos tenants via `platform`, não por exceção de branding/slug.
+- A Aria acessa múltiplos tenants via `platform`, não por exceção de branding/slug.
 - O frontend só mostra ações presentes em `capabilities`.
 
 ## Matriz Operacional De UX

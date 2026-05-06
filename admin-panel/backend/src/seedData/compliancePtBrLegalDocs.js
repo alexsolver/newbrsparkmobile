@@ -3,7 +3,7 @@
 const VERSION = '2026.04.2';
 const EFFECTIVE_FROM = '2026-04-25T00:00:00.000Z';
 const REVIEW_BANNER = [
-  '> **Minuta para revisão jurídica.** Este documento foi preparado como base operacional para a BrSpark e deve ser revisado por advogado habilitado antes de publicação ao público, clientes, colaboradores ou prestadores.',
+  '> **Minuta para revisão jurídica.** Este documento foi preparado como base operacional para a Aria e deve ser revisado por advogado habilitado antes de publicação ao público, clientes, colaboradores ou prestadores.',
   '',
 ].join('\n');
 
@@ -22,18 +22,18 @@ function md(title, sections) {
     ]),
     '---',
     '',
-    '**Contato jurídico e privacidade:** dpo@brspark.com',
+    '**Contato jurídico e privacidade:** dpo@aria.com',
   ].join('\n');
 }
 
-const commonController = 'BrSpark Tecnologia Ltda., suas afiliadas, sucessoras ou entidades operacionais indicadas no contrato aplicável.';
-const commonScope = 'site, painel administrativo, APIs, app mobile, módulos de campo, integrações, comunicações transacionais e serviços correlatos da plataforma BrSpark.';
+const commonController = 'Aria Tecnologia Ltda., suas afiliadas, sucessoras ou entidades operacionais indicadas no contrato aplicável.';
+const commonScope = 'site, painel administrativo, APIs, app mobile, módulos de campo, integrações, comunicações transacionais e serviços correlatos da plataforma Aria.';
 
 const legalDocsPtBr = [
   {
     id: 'legal-ptbr-terms-of-use-2026041',
     type: 'TERMS_OF_USE',
-    title: 'Termos de Uso da Plataforma BrSpark',
+    title: 'Termos de Uso da Plataforma Aria',
     audience: 'ALL',
     platform: 'ALL',
     jurisdiction: 'BR',
@@ -41,26 +41,26 @@ const legalDocsPtBr = [
     requiresAcceptance: true,
     blocking: true,
     changeSummary: 'Minuta consolidada para uso SaaS multi-tenant, app mobile, painel admin, planos, limites, dados do cliente e uso aceitável.',
-    content: md('Termos de Uso da Plataforma BrSpark', [
-      { title: '1. Identificação e escopo', body: `Estes Termos regulam o acesso e uso da plataforma BrSpark, incluindo ${commonScope} A contratação ou uso contínuo indica ciência e concordância com estes Termos, políticas complementares e eventuais condições comerciais aceitas pelo cliente.` },
-      { title: '2. Definições principais', body: ['**BrSpark**: fornecedora da plataforma. **Cliente ou Tenant**: pessoa jurídica ou conta empresarial que administra usuários, técnicos, ativos, ordens de serviço e dados. **Usuário**: pessoa autorizada pelo Cliente. **Prestador**: profissional convidado, cadastrado ou afiliado a um tenant. **Dados do Cliente**: conteúdo, documentos, registros, fotos, checklists, dados operacionais e informações inseridas ou geradas no uso da plataforma.'] },
-      { title: '3. Conta, credenciais e elegibilidade', body: 'O Cliente deve fornecer dados verdadeiros, manter credenciais seguras, definir perfis de acesso adequados e remover usuários que não devam mais acessar a plataforma. Atos praticados com credenciais válidas serão atribuídos à conta correspondente, salvo prova de falha exclusiva da BrSpark.' },
-      { title: '4. Serviços e módulos', body: 'A BrSpark pode oferecer módulos de gestão de ativos, estoque, documentos, checklists, ordens de serviço, localização, jornada, biometria, IA, relatórios, integrações, avaliações, notificações e billing. Módulos podem depender de plano contratado, permissões, limites técnicos, disponibilidade de terceiros ou configuração do tenant.' },
-      { title: '5. Planos, limites e alterações', body: 'Planos podem conter limites de usuários, técnicos, ativos, armazenamento, chamadas de IA, mapas, rotinas, templates, integrações e suporte. A BrSpark pode alterar planos futuros, preservar condições contratadas durante o ciclo vigente quando aplicável e comunicar mudanças materiais com antecedência razoável.' },
+    content: md('Termos de Uso da Plataforma Aria', [
+      { title: '1. Identificação e escopo', body: `Estes Termos regulam o acesso e uso da plataforma Aria, incluindo ${commonScope} A contratação ou uso contínuo indica ciência e concordância com estes Termos, políticas complementares e eventuais condições comerciais aceitas pelo cliente.` },
+      { title: '2. Definições principais', body: ['**Aria**: fornecedora da plataforma. **Cliente ou Tenant**: pessoa jurídica ou conta empresarial que administra usuários, técnicos, ativos, ordens de serviço e dados. **Usuário**: pessoa autorizada pelo Cliente. **Prestador**: profissional convidado, cadastrado ou afiliado a um tenant. **Dados do Cliente**: conteúdo, documentos, registros, fotos, checklists, dados operacionais e informações inseridas ou geradas no uso da plataforma.'] },
+      { title: '3. Conta, credenciais e elegibilidade', body: 'O Cliente deve fornecer dados verdadeiros, manter credenciais seguras, definir perfis de acesso adequados e remover usuários que não devam mais acessar a plataforma. Atos praticados com credenciais válidas serão atribuídos à conta correspondente, salvo prova de falha exclusiva da Aria.' },
+      { title: '4. Serviços e módulos', body: 'A Aria pode oferecer módulos de gestão de ativos, estoque, documentos, checklists, ordens de serviço, localização, jornada, biometria, IA, relatórios, integrações, avaliações, notificações e billing. Módulos podem depender de plano contratado, permissões, limites técnicos, disponibilidade de terceiros ou configuração do tenant.' },
+      { title: '5. Planos, limites e alterações', body: 'Planos podem conter limites de usuários, técnicos, ativos, armazenamento, chamadas de IA, mapas, rotinas, templates, integrações e suporte. A Aria pode alterar planos futuros, preservar condições contratadas durante o ciclo vigente quando aplicável e comunicar mudanças materiais com antecedência razoável.' },
       { title: '6. Obrigações do Cliente', body: 'O Cliente é responsável por obter bases legais, avisos e autorizações necessárias para tratar dados de seus usuários, colaboradores, prestadores e clientes finais; configurar políticas de coleta de dados; revisar documentos jurídicos; usar a plataforma em conformidade com leis trabalhistas, civis, consumeristas, setoriais e de proteção de dados.' },
       { title: '7. Uso aceitável', body: 'É proibido usar a plataforma para fins ilícitos, violar direitos de terceiros, burlar limites, inserir malware, tentar acesso não autorizado, realizar engenharia reversa indevida, coletar dados sem base legal, usar IA para decisões discriminatórias ou alimentar a plataforma com conteúdo ilegal, ofensivo ou que viole segredo empresarial de terceiros.' },
-      { title: '8. Dados, propriedade e licença operacional', body: 'Os Dados do Cliente permanecem pertencentes ao Cliente ou aos titulares correspondentes. O Cliente concede à BrSpark licença limitada para hospedar, processar, transmitir, exibir, analisar e proteger tais dados apenas para operar, manter, auditar, melhorar e prestar suporte aos serviços contratados.' },
-      { title: '9. Integrações e terceiros', body: 'A plataforma pode integrar serviços de nuvem, mapas, e-mail, push, armazenamento, IA, biometria, pagamentos, assinatura eletrônica e APIs externas. A BrSpark não responde por indisponibilidade, alterações ou falhas de terceiros fora de seu controle razoável, sem prejuízo de medidas de mitigação contratualmente cabíveis.' },
-      { title: '10. Segurança e disponibilidade', body: 'A BrSpark emprega medidas técnicas e organizacionais compatíveis com o risco, podendo realizar manutenções, atualizações e bloqueios preventivos. O Cliente deve manter dispositivos, redes, usuários e permissões sob governança adequada.' },
-      { title: '11. Suspensão e encerramento', body: 'A BrSpark pode suspender acesso em caso de inadimplência, risco de segurança, uso abusivo, ordem legal, violação destes Termos ou necessidade de proteger a plataforma. Encerrada a relação, dados poderão ser exportados, retidos ou excluídos conforme contrato, lei e Política de Retenção.' },
-      { title: '12. Limitação de responsabilidade', body: 'Na máxima extensão permitida pela lei, a responsabilidade total da BrSpark será limitada aos valores pagos pelo Cliente nos 12 meses anteriores ao evento, salvo dolo, violação intencional, obrigações legais inderrogáveis ou disposição contratual específica.' },
+      { title: '8. Dados, propriedade e licença operacional', body: 'Os Dados do Cliente permanecem pertencentes ao Cliente ou aos titulares correspondentes. O Cliente concede à Aria licença limitada para hospedar, processar, transmitir, exibir, analisar e proteger tais dados apenas para operar, manter, auditar, melhorar e prestar suporte aos serviços contratados.' },
+      { title: '9. Integrações e terceiros', body: 'A plataforma pode integrar serviços de nuvem, mapas, e-mail, push, armazenamento, IA, biometria, pagamentos, assinatura eletrônica e APIs externas. A Aria não responde por indisponibilidade, alterações ou falhas de terceiros fora de seu controle razoável, sem prejuízo de medidas de mitigação contratualmente cabíveis.' },
+      { title: '10. Segurança e disponibilidade', body: 'A Aria emprega medidas técnicas e organizacionais compatíveis com o risco, podendo realizar manutenções, atualizações e bloqueios preventivos. O Cliente deve manter dispositivos, redes, usuários e permissões sob governança adequada.' },
+      { title: '11. Suspensão e encerramento', body: 'A Aria pode suspender acesso em caso de inadimplência, risco de segurança, uso abusivo, ordem legal, violação destes Termos ou necessidade de proteger a plataforma. Encerrada a relação, dados poderão ser exportados, retidos ou excluídos conforme contrato, lei e Política de Retenção.' },
+      { title: '12. Limitação de responsabilidade', body: 'Na máxima extensão permitida pela lei, a responsabilidade total da Aria será limitada aos valores pagos pelo Cliente nos 12 meses anteriores ao evento, salvo dolo, violação intencional, obrigações legais inderrogáveis ou disposição contratual específica.' },
       { title: '13. Legislação e foro', body: 'Estes Termos são regidos pelas leis da República Federativa do Brasil. Fica eleito o foro da Comarca de São Paulo/SP, salvo contrato específico ou norma cogente aplicável.' },
     ]),
   },
   {
     id: 'legal-ptbr-privacy-policy-2026041',
     type: 'PRIVACY_POLICY',
-    title: 'Política de Privacidade BrSpark',
+    title: 'Política de Privacidade Aria',
     audience: 'ALL',
     platform: 'ALL',
     jurisdiction: 'BR',
@@ -69,14 +69,14 @@ const legalDocsPtBr = [
     blocking: true,
     changeSummary:
       'Reformulação v2026.04.2: política de privacidade alinhada à LGPD (papéis B2B, categorias, bases legais, cookies, transferências, direitos, IA/automação, incidentes, ANPD).',
-    content: md('Política de Privacidade BrSpark', [
+    content: md('Política de Privacidade Aria', [
       {
         title: '1. Quem somos, papéis e âmbito',
         body: `Esta Política descreve como ${commonController.replace(/\.\s*$/, '')} realiza o tratamento de dados pessoais no âmbito de ${commonScope}
 
-Em relações **B2B**, em regra o **Cliente (tenant)** é o **controlador** dos dados relativos aos seus usuários, colaboradores, prestadores de campo e clientes finais cadastrados ou monitorados na plataforma. A **BrSpark** atua predominantemente como **operadora**, executando tratamentos necessários à prestação do serviço contratado, com base em instruções compatíveis com a legislação e nas configurações do painel.
+Em relações **B2B**, em regra o **Cliente (tenant)** é o **controlador** dos dados relativos aos seus usuários, colaboradores, prestadores de campo e clientes finais cadastrados ou monitorados na plataforma. A **Aria** atua predominantemente como **operadora**, executando tratamentos necessários à prestação do serviço contratado, com base em instruções compatíveis com a legislação e nas configurações do painel.
 
-A BrSpark poderá atuar como **controladora** quando tratar dados para finalidades **próprias**, como faturamento, prevenção a fraudes, segurança da informação, cumprimento de obrigações legais, relacionamento comercial, melhoria de produto de forma agregada ou anonimizada quando possível, e resposta a autoridades.`,
+A Aria poderá atuar como **controladora** quando tratar dados para finalidades **próprias**, como faturamento, prevenção a fraudes, segurança da informação, cumprimento de obrigações legais, relacionamento comercial, melhoria de produto de forma agregada ou anonimizada quando possível, e resposta a autoridades.`,
       },
       {
         title: '2. Categorias de dados pessoais',
@@ -94,7 +94,7 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
       },
       {
         title: '3. Dados sensíveis e saúde ocupacional',
-        body: 'Determinados formulários ou fluxos podem capturar **dados sensíveis** (incluindo, em certos cenários, dados de saúde ou segurança ocupacional) **por decisão e configuração do Cliente**. Nesses casos, o Cliente é responsável por informar os titulares, obter bases legais aplicáveis (incluindo hipóteses do art. 11 da LGPD), aplicar minimização e definir prazos de retenção compatíveis. A BrSpark limita o acesso interno ao estritamente necessário e exige segregação lógica entre tenants.',
+        body: 'Determinados formulários ou fluxos podem capturar **dados sensíveis** (incluindo, em certos cenários, dados de saúde ou segurança ocupacional) **por decisão e configuração do Cliente**. Nesses casos, o Cliente é responsável por informar os titulares, obter bases legais aplicáveis (incluindo hipóteses do art. 11 da LGPD), aplicar minimização e definir prazos de retenção compatíveis. A Aria limita o acesso interno ao estritamente necessário e exige segregação lógica entre tenants.',
       },
       {
         title: '4. Finalidades do tratamento',
@@ -122,7 +122,7 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
       },
       {
         title: '10. Direitos dos titulares e canal de atendimento',
-        body: 'Nos termos da LGPD, os titulares podem solicitar confirmação de tratamento, acesso, correção, anonimização, bloqueio ou eliminação, portabilidade (quando aplicável), informação sobre compartilhamentos, informação sobre a possibilidade de não fornecer consentimento e suas consequências, revogação de consentimento e revisão de decisões automatizadas (quando couber). Em contexto **B2B**, muitas solicitações devem ser tratadas pelo **Cliente controlador**; a BrSpark prestará apoio razoável ao Cliente para resposta dentro dos prazos legais. Canal da BrSpark: **dpo@brspark.com**. O titular também poderá contatar a **Autoridade Nacional de Proteção de Dados (ANPD)** nos termos da legislação.',
+        body: 'Nos termos da LGPD, os titulares podem solicitar confirmação de tratamento, acesso, correção, anonimização, bloqueio ou eliminação, portabilidade (quando aplicável), informação sobre compartilhamentos, informação sobre a possibilidade de não fornecer consentimento e suas consequências, revogação de consentimento e revisão de decisões automatizadas (quando couber). Em contexto **B2B**, muitas solicitações devem ser tratadas pelo **Cliente controlador**; a Aria prestará apoio razoável ao Cliente para resposta dentro dos prazos legais. Canal da Aria: **dpo@aria.com**. O titular também poderá contatar a **Autoridade Nacional de Proteção de Dados (ANPD)** nos termos da legislação.',
       },
       {
         title: '11. Segurança e incidentes',
@@ -152,19 +152,19 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     legalBasis: 'LGPD',
     requiresAcceptance: true,
     blocking: true,
-    changeSummary: 'Minuta de DPA B2B para BrSpark como operadora, incluindo suboperadores, incidentes, auditoria e encerramento.',
+    changeSummary: 'Minuta de DPA B2B para Aria como operadora, incluindo suboperadores, incidentes, auditoria e encerramento.',
     content: md('DPA — Acordo de Tratamento de Dados Pessoais', [
-      { title: '1. Objeto', body: 'Este Acordo de Tratamento de Dados Pessoais (“DPA”) complementa o contrato entre BrSpark e Cliente e regula o tratamento de dados pessoais realizado pela BrSpark em nome do Cliente na qualidade de operadora, nos termos da LGPD.' },
-      { title: '2. Papéis das partes', body: 'O Cliente é controlador dos dados de seus usuários, colaboradores, prestadores, clientes finais e demais titulares cadastrados na plataforma. A BrSpark é operadora quando trata tais dados conforme instruções do Cliente. A BrSpark pode ser controladora independente para dados administrativos, billing, segurança, cumprimento legal e relacionamento comercial.' },
-      { title: '3. Instruções documentadas', body: 'A BrSpark tratará dados conforme contrato, configurações do tenant, políticas publicadas, instruções documentadas do Cliente e obrigações legais. Se uma instrução parecer violar a legislação aplicável, a BrSpark poderá alertar o Cliente ou suspender a execução até esclarecimento.' },
+      { title: '1. Objeto', body: 'Este Acordo de Tratamento de Dados Pessoais (“DPA”) complementa o contrato entre Aria e Cliente e regula o tratamento de dados pessoais realizado pela Aria em nome do Cliente na qualidade de operadora, nos termos da LGPD.' },
+      { title: '2. Papéis das partes', body: 'O Cliente é controlador dos dados de seus usuários, colaboradores, prestadores, clientes finais e demais titulares cadastrados na plataforma. A Aria é operadora quando trata tais dados conforme instruções do Cliente. A Aria pode ser controladora independente para dados administrativos, billing, segurança, cumprimento legal e relacionamento comercial.' },
+      { title: '3. Instruções documentadas', body: 'A Aria tratará dados conforme contrato, configurações do tenant, políticas publicadas, instruções documentadas do Cliente e obrigações legais. Se uma instrução parecer violar a legislação aplicável, a Aria poderá alertar o Cliente ou suspender a execução até esclarecimento.' },
       { title: '4. Categorias de dados e titulares', body: 'Podem ser tratados dados cadastrais, contato, credenciais, documentos, fotos, localização, telemetria, registros de jornada, biometria, checklists, ordens de serviço, avaliações, logs, dispositivos e dados profissionais de usuários, técnicos, prestadores, administradores, clientes finais e contatos comerciais.' },
-      { title: '5. Medidas de segurança', body: 'A BrSpark manterá medidas técnicas e organizacionais proporcionais ao risco, incluindo controles de acesso, segregação lógica por tenant, logs, backups, criptografia em trânsito, gestão de incidentes e restrição de acesso interno conforme necessidade.' },
-      { title: '6. Suboperadores', body: 'O Cliente autoriza o uso de suboperadores necessários à prestação dos serviços, incluindo provedores de infraestrutura, nuvem, mapas, IA, biometria, e-mail, push, pagamentos, assinatura eletrônica e observabilidade. A BrSpark manterá lista de suboperadores e exigirá obrigações compatíveis de proteção de dados.' },
-      { title: '7. Transferências internacionais', body: 'Quando suboperadores estiverem fora do Brasil, a BrSpark adotará mecanismos adequados de transferência, cláusulas contratuais, controles de segurança e avaliação de risco compatíveis com a legislação aplicável.' },
-      { title: '8. Incidentes', body: 'A BrSpark notificará o Cliente, sem atraso injustificado, ao tomar conhecimento de incidente de segurança que possa acarretar risco ou dano relevante aos titulares, fornecendo informações razoavelmente disponíveis para avaliação e resposta.' },
-      { title: '9. Atendimento a titulares e autoridades', body: 'A BrSpark auxiliará o Cliente, de forma razoável e conforme contrato, no atendimento de solicitações de titulares e autoridades. Solicitações recebidas diretamente pela BrSpark em contexto B2B poderão ser encaminhadas ao Cliente controlador.' },
-      { title: '10. Exclusão, devolução e retenção', body: 'Ao término do contrato, a BrSpark excluirá, anonimizará ou devolverá dados conforme instruções do Cliente, contrato, Política de Retenção e obrigações legais ou de defesa de direitos.' },
-      { title: '11. Auditoria', body: 'Mediante solicitação razoável, confidencialidade e limites operacionais, a BrSpark poderá disponibilizar informações, relatórios, evidências ou questionários de segurança para demonstrar conformidade.' },
+      { title: '5. Medidas de segurança', body: 'A Aria manterá medidas técnicas e organizacionais proporcionais ao risco, incluindo controles de acesso, segregação lógica por tenant, logs, backups, criptografia em trânsito, gestão de incidentes e restrição de acesso interno conforme necessidade.' },
+      { title: '6. Suboperadores', body: 'O Cliente autoriza o uso de suboperadores necessários à prestação dos serviços, incluindo provedores de infraestrutura, nuvem, mapas, IA, biometria, e-mail, push, pagamentos, assinatura eletrônica e observabilidade. A Aria manterá lista de suboperadores e exigirá obrigações compatíveis de proteção de dados.' },
+      { title: '7. Transferências internacionais', body: 'Quando suboperadores estiverem fora do Brasil, a Aria adotará mecanismos adequados de transferência, cláusulas contratuais, controles de segurança e avaliação de risco compatíveis com a legislação aplicável.' },
+      { title: '8. Incidentes', body: 'A Aria notificará o Cliente, sem atraso injustificado, ao tomar conhecimento de incidente de segurança que possa acarretar risco ou dano relevante aos titulares, fornecendo informações razoavelmente disponíveis para avaliação e resposta.' },
+      { title: '9. Atendimento a titulares e autoridades', body: 'A Aria auxiliará o Cliente, de forma razoável e conforme contrato, no atendimento de solicitações de titulares e autoridades. Solicitações recebidas diretamente pela Aria em contexto B2B poderão ser encaminhadas ao Cliente controlador.' },
+      { title: '10. Exclusão, devolução e retenção', body: 'Ao término do contrato, a Aria excluirá, anonimizará ou devolverá dados conforme instruções do Cliente, contrato, Política de Retenção e obrigações legais ou de defesa de direitos.' },
+      { title: '11. Auditoria', body: 'Mediante solicitação razoável, confidencialidade e limites operacionais, a Aria poderá disponibilizar informações, relatórios, evidências ou questionários de segurança para demonstrar conformidade.' },
       { title: '12. Prevalência', body: 'Em caso de conflito entre este DPA e outros documentos, prevalecerá a disposição que oferecer maior proteção aos dados pessoais, salvo exigência legal ou contratual específica.' },
     ]),
   },
@@ -180,7 +180,7 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: false,
     changeSummary: 'Minuta para banner e preferências de cookies, incluindo categorias necessárias, analytics, preferências e marketing.',
     content: md('Política de Cookies e Tecnologias Semelhantes', [
-      { title: '1. Escopo', body: 'Esta Política explica o uso de cookies, localStorage, sessionStorage, pixels, SDKs e tecnologias semelhantes no site, painel e interfaces web da BrSpark.' },
+      { title: '1. Escopo', body: 'Esta Política explica o uso de cookies, localStorage, sessionStorage, pixels, SDKs e tecnologias semelhantes no site, painel e interfaces web da Aria.' },
       { title: '2. O que são cookies', body: 'Cookies são pequenos arquivos ou identificadores armazenados no navegador para reconhecer sessões, lembrar preferências, proteger contas, medir uso e melhorar a experiência.' },
       { title: '3. Categorias', body: ['**Necessários:** autenticação, segurança, sessão e funcionamento básico. **Preferências:** idioma, região, tema e configurações. **Analytics:** métricas agregadas de uso e desempenho. **Marketing:** campanhas e mensuração comercial, quando habilitados.'] },
       { title: '4. Base legal e consentimento', body: 'Cookies estritamente necessários podem ser usados para execução do serviço e segurança. Cookies não essenciais devem depender de consentimento ou base legal aplicável, com opção de aceitar, rejeitar ou ajustar preferências.' },
@@ -193,7 +193,7 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
   {
     id: 'legal-ptbr-mobile-eula-2026041',
     type: 'MOBILE_EULA',
-    title: 'EULA e Termos do App Mobile BrSpark',
+    title: 'EULA e Termos do App Mobile Aria',
     audience: 'TECHNICIAN',
     platform: 'MOBILE',
     jurisdiction: 'BR',
@@ -201,9 +201,9 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     requiresAcceptance: true,
     blocking: true,
     changeSummary: 'Minuta específica para app mobile, permissões, offline, lojas Apple/Google, GPS, câmera, microfone e notificações.',
-    content: md('EULA e Termos do App Mobile BrSpark', [
-      { title: '1. Licença de uso', body: 'A BrSpark concede ao usuário uma licença limitada, revogável, não exclusiva e intransferível para instalar e usar o app mobile BrSpark conforme estes termos, políticas aplicáveis e permissões concedidas pelo Cliente/tenant.' },
-      { title: '2. Relação com lojas de aplicativos', body: 'O app pode ser distribuído por Apple App Store, Google Play ou canais autorizados. As regras das lojas também se aplicam. Apple e Google não são responsáveis pelo conteúdo, suporte ou operação da BrSpark, salvo obrigações próprias da loja.' },
+    content: md('EULA e Termos do App Mobile Aria', [
+      { title: '1. Licença de uso', body: 'A Aria concede ao usuário uma licença limitada, revogável, não exclusiva e intransferível para instalar e usar o app mobile Aria conforme estes termos, políticas aplicáveis e permissões concedidas pelo Cliente/tenant.' },
+      { title: '2. Relação com lojas de aplicativos', body: 'O app pode ser distribuído por Apple App Store, Google Play ou canais autorizados. As regras das lojas também se aplicam. Apple e Google não são responsáveis pelo conteúdo, suporte ou operação da Aria, salvo obrigações próprias da loja.' },
       { title: '3. Permissões do dispositivo', body: 'O app pode solicitar câmera, fotos, localização em uso e em segundo plano, microfone, notificações, rede, armazenamento local, biometria local e outros recursos necessários aos módulos contratados.' },
       { title: '4. Uso em campo e offline', body: 'O app pode operar offline e sincronizar posteriormente checklists, fotos, geolocalização, eventos, justificativas e registros. O usuário deve revisar dados antes do envio sempre que a interface permitir.' },
       { title: '5. Localização e monitoramento operacional', body: 'Quando habilitado pelo tenant e aceito pelo usuário quando exigido, o app pode coletar localização para check-in, rota, geofence, jornada, segurança, auditoria e comprovação de execução. Detalhes constam no Aviso de Geolocalização.' },
@@ -226,14 +226,14 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: true,
     changeSummary: 'Minuta granular para GPS foreground/background, geofence, rotas, check-in, retenção e revogação.',
     content: md('Aviso de Geolocalização e Rastreamento Operacional', [
-      { title: '1. Finalidade deste aviso', body: 'Este Aviso explica quando e por que o app BrSpark pode coletar localização do dispositivo, inclusive em segundo plano, conforme configuração do tenant e permissões do sistema operacional.' },
+      { title: '1. Finalidade deste aviso', body: 'Este Aviso explica quando e por que o app Aria pode coletar localização do dispositivo, inclusive em segundo plano, conforme configuração do tenant e permissões do sistema operacional.' },
       { title: '2. Quando coletamos localização', body: 'A coleta pode ocorrer ao abrir sessão, aceitar ordem de serviço, iniciar deslocamento, entrar/sair de geofence, fazer check-in/check-out, registrar jornada, enviar heartbeat operacional, justificar exceções ou executar tarefas que exigem comprovação de presença.' },
       { title: '3. Localização em segundo plano', body: 'Quando habilitada, a localização em segundo plano pode ser coletada durante deslocamentos, atendimento ou jornada ativa, mesmo com o app minimizado. A coleta deve respeitar políticas do tenant, permissões do dispositivo e base legal aplicável.' },
       { title: '4. Dados coletados', body: 'Podem ser tratados latitude, longitude, precisão, altitude, velocidade, direção, timestamp, fonte de localização, status de rede, bateria, appVersion, deviceId pseudonimizado, eventos de geofence e dados de integridade.' },
-      { title: '5. Quem acessa', body: 'Administradores autorizados do tenant, gestores operacionais, suporte BrSpark e suboperadores necessários podem acessar dados conforme perfil, finalidade e necessidade.' },
+      { title: '5. Quem acessa', body: 'Administradores autorizados do tenant, gestores operacionais, suporte Aria e suboperadores necessários podem acessar dados conforme perfil, finalidade e necessidade.' },
       { title: '6. Retenção', body: 'GPS bruto deve ser mantido por prazo curto. Eventos de check-in, checkout, geofence e evidências legais podem ser retidos por período maior conforme Política de Retenção e obrigações do tenant.' },
       { title: '7. Revogação e consequências', body: 'O usuário pode revogar permissões no sistema operacional. A revogação pode impedir check-in, jornada, rotas, comprovação de presença ou execução de módulos que dependam de GPS.' },
-      { title: '8. Proibição de uso abusivo', body: 'O tenant deve evitar rastreamento desnecessário, permanente ou incompatível com a finalidade informada. A BrSpark recomenda coleta proporcional ao contexto operacional e revisão jurídica para relações de emprego ou prestação de serviço.' },
+      { title: '8. Proibição de uso abusivo', body: 'O tenant deve evitar rastreamento desnecessário, permanente ou incompatível com a finalidade informada. A Aria recomenda coleta proporcional ao contexto operacional e revisão jurídica para relações de emprego ou prestação de serviço.' },
       { title: '9. Integridade', body: 'A plataforma pode detectar localização simulada, root/jailbreak, relógio adulterado e outras inconsistências para fins de segurança, auditoria e prevenção a fraude.' },
     ]),
   },
@@ -249,7 +249,7 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: true,
     changeSummary: 'Minuta para tratamento de biometria facial como dado sensível, matrícula facial, validação e alternativas.',
     content: md('Aviso de Biometria e Reconhecimento Facial', [
-      { title: '1. Escopo', body: 'Este Aviso regula a captura e uso de imagens faciais e templates biométricos no app e painel BrSpark quando o tenant habilitar módulos de reconhecimento facial, ponto, check-in, KYC ou validação de identidade.' },
+      { title: '1. Escopo', body: 'Este Aviso regula a captura e uso de imagens faciais e templates biométricos no app e painel Aria quando o tenant habilitar módulos de reconhecimento facial, ponto, check-in, KYC ou validação de identidade.' },
       { title: '2. Natureza sensível', body: 'Dados biométricos são dados pessoais sensíveis nos termos da LGPD. Seu tratamento exige finalidade legítima, transparência, minimização, segurança reforçada e base legal adequada.' },
       { title: '3. Finalidades', body: 'A biometria pode ser usada para confirmar identidade, evitar fraude, registrar ponto, validar presença em tarefa, aprovar cadastro de prestador, proteger contas e auditar eventos operacionais.' },
       { title: '4. Dados tratados', body: 'Podem ser capturadas fotos base, selfies, imagens de check-in, pontuação de similaridade, motor de validação, status de matrícula facial, data/hora, deviceId, tenant e evidências técnicas.' },
@@ -272,15 +272,15 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: true,
     changeSummary: 'Minuta para registros de jornada com GPS, face, endereço, exceções, CLT/PJ e auditoria.',
     content: md('Política de Jornada, Ponto e Registro de Horas', [
-      { title: '1. Objetivo', body: 'Esta Política disciplina o uso dos módulos de registro de horas, ponto, presença e jornada no app BrSpark, conforme configuração do tenant e legislação aplicável.' },
-      { title: '2. Regimes de trabalho', body: 'O tenant deve classificar corretamente usuários como empregados CLT, prestadores PJ, terceiros ou outros regimes. A BrSpark fornece ferramenta tecnológica e não define vínculo trabalhista.' },
+      { title: '1. Objetivo', body: 'Esta Política disciplina o uso dos módulos de registro de horas, ponto, presença e jornada no app Aria, conforme configuração do tenant e legislação aplicável.' },
+      { title: '2. Regimes de trabalho', body: 'O tenant deve classificar corretamente usuários como empregados CLT, prestadores PJ, terceiros ou outros regimes. A Aria fornece ferramenta tecnológica e não define vínculo trabalhista.' },
       { title: '3. Eventos registrados', body: 'Podem ser registrados início e fim de jornada, pausas, retorno, check-in, checkout, exceções, justificativas, endereço resolvido, GPS, precisão, foto/face, deviceTimestamp, serverTimestamp e validações de integridade.' },
       { title: '4. Responsabilidades do usuário', body: 'O usuário deve registrar eventos de forma verdadeira, no momento correto, sem emprestar credenciais, simular localização, adulterar horário ou pedir que terceiros registrem eventos por ele.' },
       { title: '5. Responsabilidades do tenant', body: 'O tenant deve configurar regras adequadas ao regime jurídico, informar trabalhadores, obter bases legais, revisar exceções, corrigir inconsistências e evitar monitoramento desproporcional.' },
       { title: '6. Exceções', body: 'Falhas de GPS, câmera, conectividade, reconhecimento facial, endereço ou relógio podem gerar registro excepcional com justificativa. Exceções devem ser revisadas por gestor autorizado.' },
       { title: '7. Dados sensíveis e localização', body: 'Quando houver face e GPS, aplicam-se o Aviso de Biometria, o Aviso de Geolocalização e a Política de Privacidade.' },
       { title: '8. Retenção', body: 'Registros de jornada e evidências associadas podem ser mantidos por prazos necessários à legislação trabalhista, fiscal, contratual e defesa de direitos.' },
-      { title: '9. Não substituição de assessoria trabalhista', body: 'A BrSpark não substitui assessoria jurídica, contábil ou trabalhista do tenant. Configurações devem ser validadas por especialistas do Cliente.' },
+      { title: '9. Não substituição de assessoria trabalhista', body: 'A Aria não substitui assessoria jurídica, contábil ou trabalhista do tenant. Configurações devem ser validadas por especialistas do Cliente.' },
     ]),
   },
   {
@@ -295,11 +295,11 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: false,
     changeSummary: 'Minuta para LLM, visão computacional, análise de imagens, revisão humana, limitações e suboperadores de IA.',
     content: md('Política de Uso de Inteligência Artificial', [
-      { title: '1. Escopo', body: 'A BrSpark pode usar recursos de IA, aprendizado de máquina, visão computacional, OCR, análise de imagens, classificação, recomendações e assistentes de linguagem para apoiar funcionalidades da plataforma.' },
+      { title: '1. Escopo', body: 'A Aria pode usar recursos de IA, aprendizado de máquina, visão computacional, OCR, análise de imagens, classificação, recomendações e assistentes de linguagem para apoiar funcionalidades da plataforma.' },
       { title: '2. Finalidades', body: 'IA pode ser usada para interpretar checklists, analisar fotos, sugerir respostas, classificar ativos, detectar inconformidades, auxiliar suporte, resumir dados, gerar relatórios e melhorar produtividade.' },
       { title: '3. Limitações', body: 'Saídas de IA podem conter erros, vieses, omissões ou interpretações imprecisas. Elas não devem substituir julgamento humano, laudos técnicos, decisões disciplinares, médicas, jurídicas, financeiras ou trabalhistas sem revisão qualificada.' },
       { title: '4. Dados enviados a IA', body: 'Podem ser processados textos, imagens, metadados, perguntas, respostas de checklist, dados de tarefa e contexto operacional. O tenant deve evitar inserir dados excessivos, sensíveis ou desnecessários.' },
-      { title: '5. Suboperadores de IA', body: 'A BrSpark pode usar provedores próprios ou terceiros para IA, incluindo modelos hospedados em infraestrutura da BrSpark ou APIs externas. A lista de suboperadores deve indicar provedores relevantes quando aplicável.' },
+      { title: '5. Suboperadores de IA', body: 'A Aria pode usar provedores próprios ou terceiros para IA, incluindo modelos hospedados em infraestrutura da Aria ou APIs externas. A lista de suboperadores deve indicar provedores relevantes quando aplicável.' },
       { title: '6. Decisões automatizadas', body: 'A plataforma não deve ser usada para decisões exclusivamente automatizadas com efeitos jurídicos ou relevantes sobre titulares sem base legal, transparência e possibilidade de revisão humana.' },
       { title: '7. Uso proibido', body: 'É proibido usar IA para discriminação, vigilância abusiva, identificação indevida de pessoas, criação de conteúdo ilegal, engenharia social, violação de direitos autorais ou processamento de dados sem base legal.' },
       { title: '8. Logs e melhoria', body: 'Interações podem ser registradas para segurança, auditoria, qualidade, suporte e melhoria, respeitando contratos, configurações, retenção e confidencialidade.' },
@@ -318,7 +318,7 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: false,
     changeSummary: 'Minuta com camadas de retenção para GPS bruto, auditoria, evidências legais, métricas, conta e backups.',
     content: md('Política de Retenção e Exclusão de Dados', [
-      { title: '1. Objetivo', body: 'Esta Política define princípios e prazos referenciais para retenção, arquivamento, anonimização e exclusão de dados tratados pela BrSpark.' },
+      { title: '1. Objetivo', body: 'Esta Política define princípios e prazos referenciais para retenção, arquivamento, anonimização e exclusão de dados tratados pela Aria.' },
       { title: '2. Princípios', body: 'Adotamos minimização, finalidade, necessidade, segurança, rastreabilidade, segregação por tenant e retenção proporcional ao risco e à obrigação legal.' },
       { title: '3. GPS bruto', body: 'Heartbeats frequentes, trilhas brutas e telemetria de alta volumetria devem ter retenção curta, preferencialmente entre 7 e 90 dias, conforme política do tenant e necessidade operacional.' },
       { title: '4. Eventos operacionais', body: 'Check-in, checkout, geofence, status de tarefa, sync, exceções e auditoria operacional podem ser mantidos por meses ou anos conforme suporte, auditoria, contrato e defesa de direitos.' },
@@ -326,7 +326,7 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
       { title: '6. Métricas e analytics', body: 'Métricas agregadas, anonimizadas ou pseudonimizadas podem ser mantidas por prazo maior para melhoria do produto, capacidade, segurança e análise histórica.' },
       { title: '7. Conta encerrada', body: 'Após encerramento, dados podem permanecer por período de exportação, cobrança, auditoria, obrigação legal ou defesa de direitos, e depois ser excluídos ou anonimizados.' },
       { title: '8. Backups', body: 'Backups seguem ciclos próprios e podem reter dados por prazo técnico limitado. Exclusões lógicas podem levar tempo para refletir em backups até expiração do ciclo.' },
-      { title: '9. Solicitações de titulares', body: 'Pedidos de eliminação serão avaliados conforme papel da BrSpark, instrução do controlador, obrigação legal, exercício de direitos e viabilidade técnica.' },
+      { title: '9. Solicitações de titulares', body: 'Pedidos de eliminação serão avaliados conforme papel da Aria, instrução do controlador, obrigação legal, exercício de direitos e viabilidade técnica.' },
     ]),
   },
   {
@@ -341,14 +341,14 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: false,
     changeSummary: 'Minuta de cadastro de suboperadores por categoria para revisão e preenchimento de fornecedores finais.',
     content: md('Lista de Suboperadores e Terceiros Relevantes', [
-      { title: '1. Objetivo', body: 'Esta lista informa categorias de terceiros que podem tratar dados pessoais em nome da BrSpark ou do Cliente para viabilizar a plataforma.' },
+      { title: '1. Objetivo', body: 'Esta lista informa categorias de terceiros que podem tratar dados pessoais em nome da Aria ou do Cliente para viabilizar a plataforma.' },
       { title: '2. Infraestrutura e hospedagem', body: 'Provedores de cloud, servidores, banco de dados, armazenamento, CDN, backup, monitoramento e segurança podem hospedar ou processar dados da plataforma.' },
       { title: '3. Comunicação', body: 'Provedores de e-mail transacional, SMS, push notification, WhatsApp, mensageria e suporte podem processar dados de contato e conteúdo de comunicações.' },
       { title: '4. Mapas e localização', body: 'Serviços de mapas, rotas, geocoding e resolução de endereço podem processar coordenadas, endereços e contexto de deslocamento.' },
       { title: '5. IA, OCR e biometria', body: 'Modelos de IA, OCR, visão computacional e reconhecimento facial podem processar imagens, textos, metadados e templates conforme módulos habilitados.' },
       { title: '6. Pagamentos e assinatura eletrônica', body: 'Gateways de pagamento, emissão de faturas, antifraude, assinatura eletrônica e cobrança podem processar dados financeiros, fiscais e contratuais.' },
       { title: '7. Critérios de contratação', body: 'Suboperadores devem ser avaliados quanto a segurança, confidencialidade, finalidade, retenção, localização dos dados, transferência internacional e obrigações contratuais compatíveis.' },
-      { title: '8. Alterações', body: 'A BrSpark pode atualizar esta lista quando adicionar, substituir ou remover fornecedores relevantes. Clientes podem solicitar informações adicionais por canal contratual.' },
+      { title: '8. Alterações', body: 'A Aria pode atualizar esta lista quando adicionar, substituir ou remover fornecedores relevantes. Clientes podem solicitar informações adicionais por canal contratual.' },
       { title: '9. Tabela operacional', body: '| Categoria | Fornecedor | Finalidade | País/Região | Dados tratados | Observações |\n|---|---|---|---|---|---|\n| Infraestrutura | A preencher | Hospedagem e banco | A preencher | Dados da plataforma | Revisar contrato |\n| E-mail | A preencher | Mensagens transacionais | A preencher | Nome, e-mail, conteúdo | Revisar DPA |\n| Mapas | A preencher | Rotas/geocoding | A preencher | Coordenadas/endereço | Revisar termos |\n| IA/Biometria | A preencher | Análise/validação | A preencher | Imagens/textos/templates | Revisão reforçada |' },
     ]),
   },
@@ -364,13 +364,13 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: false,
     changeSummary: 'Minuta de suporte, disponibilidade, severidade, manutenção, exclusões e créditos sujeitos a contrato.',
     content: md('Política de SLA, Suporte e Manutenção', [
-      { title: '1. Escopo', body: 'Esta Política define parâmetros de suporte, manutenção e disponibilidade da plataforma BrSpark, salvo condições específicas previstas em proposta ou contrato.' },
+      { title: '1. Escopo', body: 'Esta Política define parâmetros de suporte, manutenção e disponibilidade da plataforma Aria, salvo condições específicas previstas em proposta ou contrato.' },
       { title: '2. Canais de suporte', body: 'Suporte pode ser prestado por e-mail, painel, chat, ferramenta de tickets, telefone ou canal acordado. O Cliente deve indicar contatos autorizados e fornecer informações suficientes para diagnóstico.' },
       { title: '3. Severidades', body: '**Crítica:** indisponibilidade ampla de produção. **Alta:** função essencial indisponível sem contorno razoável. **Média:** falha parcial com contorno. **Baixa:** dúvida, ajuste, melhoria ou problema cosmético.' },
       { title: '4. Tempos de resposta', body: 'Tempos de resposta variam por plano e severidade. Resposta inicial não significa resolução definitiva, que depende de complexidade, terceiros, logs, reprodução e janela de manutenção.' },
-      { title: '5. Disponibilidade', body: 'A BrSpark buscará alta disponibilidade comercialmente razoável. Medições podem excluir manutenções programadas, falhas de terceiros, internet, dispositivos, configurações do Cliente, força maior e uso indevido.' },
+      { title: '5. Disponibilidade', body: 'A Aria buscará alta disponibilidade comercialmente razoável. Medições podem excluir manutenções programadas, falhas de terceiros, internet, dispositivos, configurações do Cliente, força maior e uso indevido.' },
       { title: '6. Manutenções', body: 'Manutenções podem ser programadas com aviso razoável ou emergenciais para segurança, correção crítica ou estabilidade. Atualizações podem alterar interfaces e recursos.' },
-      { title: '7. Backups e restauração', body: 'Backups seguem política operacional da BrSpark. Restauração depende de viabilidade técnica, escopo, ponto de recuperação e impacto sobre dados recentes.' },
+      { title: '7. Backups e restauração', body: 'Backups seguem política operacional da Aria. Restauração depende de viabilidade técnica, escopo, ponto de recuperação e impacto sobre dados recentes.' },
       { title: '8. Exclusões', body: 'Não estão cobertos problemas causados por credenciais comprometidas, customizações não autorizadas, redes do Cliente, dispositivos incompatíveis, integrações de terceiros, dados incorretos ou uso fora da documentação.' },
       { title: '9. Créditos de serviço', body: 'Créditos, multas ou compensações só serão aplicáveis se expressamente previstos em contrato, com limites, forma de cálculo e procedimento de solicitação.' },
     ]),
@@ -387,7 +387,7 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: false,
     changeSummary: 'Minuta para planos mensais/anuais, trial, upgrade/downgrade, inadimplência, impostos, cancelamento e reembolso.',
     content: md('Política de Billing, Cancelamento e Reembolso', [
-      { title: '1. Planos e cobrança', body: 'A BrSpark pode oferecer planos gratuitos, trial, mensais, anuais, enterprise ou personalizados. Valores, limites, impostos, moeda e forma de pagamento serão definidos na contratação ou painel.' },
+      { title: '1. Planos e cobrança', body: 'A Aria pode oferecer planos gratuitos, trial, mensais, anuais, enterprise ou personalizados. Valores, limites, impostos, moeda e forma de pagamento serão definidos na contratação ou painel.' },
       { title: '2. Ciclos e renovação', body: 'Assinaturas renovam automaticamente ao fim do ciclo, salvo cancelamento ou condição contratual diversa. O Cliente deve manter método de pagamento válido.' },
       { title: '3. Trial', body: 'Períodos de teste podem ter limitações, exigir cartão ou converter automaticamente em plano pago se informado no momento da contratação.' },
       { title: '4. Upgrade e downgrade', body: 'Upgrades podem gerar cobrança proporcional imediata ou no próximo ciclo. Downgrades podem aplicar-se no ciclo seguinte e exigir adequação a limites menores.' },
@@ -410,14 +410,14 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: true,
     changeSummary: 'Minuta para técnicos/prestadores, convites por tenant, conduta, documentos, avaliações, independência e suspensão.',
     content: md('Termos de Prestador de Serviços', [
-      { title: '1. Escopo', body: 'Estes Termos regulam o cadastro e uso da BrSpark por prestadores, técnicos autônomos, empresas terceiras e profissionais convidados por tenants para execução de serviços.' },
-      { title: '2. Independência', body: 'Salvo contrato específico em contrário, a BrSpark é plataforma tecnológica e não empregadora, tomadora direta ou garantidora dos serviços prestados entre prestador e tenant/cliente.' },
+      { title: '1. Escopo', body: 'Estes Termos regulam o cadastro e uso da Aria por prestadores, técnicos autônomos, empresas terceiras e profissionais convidados por tenants para execução de serviços.' },
+      { title: '2. Independência', body: 'Salvo contrato específico em contrário, a Aria é plataforma tecnológica e não empregadora, tomadora direta ou garantidora dos serviços prestados entre prestador e tenant/cliente.' },
       { title: '3. Cadastro e documentos', body: 'O prestador deve fornecer informações verdadeiras, documentos válidos, certificações, dados profissionais, disponibilidade, região de atendimento e demais evidências solicitadas.' },
-      { title: '4. Convites e afiliações', body: 'Tenants podem convidar, aprovar, suspender ou remover prestadores de sua operação. O status global na BrSpark não garante contratação, demanda mínima ou exclusividade.' },
+      { title: '4. Convites e afiliações', body: 'Tenants podem convidar, aprovar, suspender ou remover prestadores de sua operação. O status global na Aria não garante contratação, demanda mínima ou exclusividade.' },
       { title: '5. Conduta profissional', body: 'O prestador deve cumprir leis, normas técnicas, segurança do trabalho, confidencialidade, políticas do tenant, horários combinados, padrões de qualidade e respeito a clientes finais.' },
       { title: '6. Uso do app', body: 'O prestador deve registrar tarefas, fotos, checklists, localização, materiais, despesas, jornada ou evidências conforme instruções válidas e documentos aceitos.' },
       { title: '7. Avaliações e disputas', body: 'Serviços podem gerar avaliações, métricas, planos de ação ou disputas. O prestador poderá apresentar justificativas ou contestar avaliações quando o fluxo estiver disponível.' },
-      { title: '8. Pagamentos', body: 'Pagamentos por serviços, reembolsos, repasses ou comissões dependem do contrato entre prestador e tenant, não sendo garantidos pela BrSpark salvo se expressamente assumidos.' },
+      { title: '8. Pagamentos', body: 'Pagamentos por serviços, reembolsos, repasses ou comissões dependem do contrato entre prestador e tenant, não sendo garantidos pela Aria salvo se expressamente assumidos.' },
       { title: '9. Suspensão', body: 'Acesso pode ser suspenso em caso de fraude, documentação inválida, risco de segurança, violação de políticas, uso indevido, solicitação do tenant ou ordem legal.' },
       { title: '10. Confidencialidade', body: 'O prestador deve proteger informações de clientes, ativos, rotas, credenciais, documentos e dados pessoais acessados pela plataforma.' },
     ]),
@@ -434,9 +434,9 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: true,
     changeSummary: 'Minuta para onboarding de prestador, documentos, verificação, antifraude, revisão humana e retenção.',
     content: md('Aviso de Cadastro, Verificação de Identidade e KYC', [
-      { title: '1. Finalidade', body: 'Este Aviso explica o tratamento de dados para cadastro, verificação de identidade, habilitação profissional, antifraude, segurança e aprovação de prestadores na BrSpark.' },
+      { title: '1. Finalidade', body: 'Este Aviso explica o tratamento de dados para cadastro, verificação de identidade, habilitação profissional, antifraude, segurança e aprovação de prestadores na Aria.' },
       { title: '2. Dados coletados', body: 'Podem ser coletados nome, e-mail, telefone, CPF/CNPJ, endereço, foto, documento de identidade, certificações, registros profissionais, disponibilidade, regiões, experiência, dados bancários quando aplicável e evidências de assinatura.' },
-      { title: '3. Verificações', body: 'A BrSpark ou o tenant podem verificar consistência de documentos, validade de certificações, identidade, duplicidade, risco, histórico operacional e informações fornecidas pelo prestador.' },
+      { title: '3. Verificações', body: 'A Aria ou o tenant podem verificar consistência de documentos, validade de certificações, identidade, duplicidade, risco, histórico operacional e informações fornecidas pelo prestador.' },
       { title: '4. Bases legais', body: 'As bases podem incluir execução de contrato, procedimentos preliminares, legítimo interesse, prevenção a fraude, cumprimento legal, exercício regular de direitos e consentimento quando necessário.' },
       { title: '5. Decisão e revisão', body: 'Aprovação, rejeição ou pedido de ajuste pode envolver revisão humana. O prestador pode ser solicitado a corrigir dados ou enviar documentos adicionais.' },
       { title: '6. Compartilhamento', body: 'Dados podem ser compartilhados com tenants que convidam ou avaliam o prestador, provedores de KYC, assinatura eletrônica, storage, suporte, autoridades e suboperadores necessários.' },
@@ -456,7 +456,7 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: false,
     changeSummary: 'Minuta de condutas proibidas, segurança, limites, dados pessoais, IA, integrações e enforcement.',
     content: md('Política de Uso Aceitável', [
-      { title: '1. Objetivo', body: 'Esta Política define regras mínimas de uso aceitável para proteger a BrSpark, seus clientes, usuários, prestadores, titulares de dados e terceiros.' },
+      { title: '1. Objetivo', body: 'Esta Política define regras mínimas de uso aceitável para proteger a Aria, seus clientes, usuários, prestadores, titulares de dados e terceiros.' },
       { title: '2. Segurança', body: 'É proibido tentar acesso não autorizado, varrer portas, explorar vulnerabilidades, contornar autenticação, compartilhar credenciais, usar bots abusivos, inserir malware ou interferir na infraestrutura.' },
       { title: '3. Dados e privacidade', body: 'É proibido coletar, inserir, compartilhar ou processar dados pessoais sem base legal, transparência e autorização adequada, bem como usar a plataforma para vigilância abusiva ou discriminatória.' },
       { title: '4. Conteúdo proibido', body: 'Não é permitido conteúdo ilícito, fraudulento, discriminatório, difamatório, pornográfico ilegal, violento, que viole propriedade intelectual, segredo empresarial, normas profissionais ou direitos de terceiros.' },
@@ -478,15 +478,15 @@ A BrSpark poderá atuar como **controladora** quando tratar dados para finalidad
     blocking: false,
     changeSummary: 'Minuta pública/contratual de segurança: controles, responsabilidades compartilhadas, incidentes, backups e vulnerabilidades.',
     content: md('Política de Segurança da Informação', [
-      { title: '1. Objetivo', body: 'Esta Política descreve práticas de segurança da BrSpark e responsabilidades compartilhadas com Clientes e usuários.' },
-      { title: '2. Controles técnicos', body: 'A BrSpark adota controles como autenticação, autorização por perfil, segregação lógica por tenant, logs, criptografia em trânsito, backups, gestão de segredos, hardening, monitoramento e revisão de acessos internos conforme necessidade.' },
+      { title: '1. Objetivo', body: 'Esta Política descreve práticas de segurança da Aria e responsabilidades compartilhadas com Clientes e usuários.' },
+      { title: '2. Controles técnicos', body: 'A Aria adota controles como autenticação, autorização por perfil, segregação lógica por tenant, logs, criptografia em trânsito, backups, gestão de segredos, hardening, monitoramento e revisão de acessos internos conforme necessidade.' },
       { title: '3. Desenvolvimento seguro', body: 'Mudanças relevantes passam por revisão técnica, testes proporcionais, controle de versão e processos de deploy. Vulnerabilidades conhecidas são avaliadas e priorizadas conforme risco.' },
       { title: '4. Responsabilidades do Cliente', body: 'O Cliente deve gerenciar usuários, senhas, dispositivos, redes, permissões, integrações, políticas internas, treinamento e remoção de acessos indevidos.' },
       { title: '5. Incidentes', body: 'Eventos de segurança são investigados, mitigados e comunicados conforme criticidade, contrato e legislação aplicável. A comunicação pode incluir natureza do incidente, dados afetados, medidas adotadas e recomendações.' },
       { title: '6. Backups e continuidade', body: 'Backups e planos de recuperação são mantidos conforme arquitetura e criticidade. Objetivos de recuperação podem variar por ambiente, plano e causa do incidente.' },
       { title: '7. Vulnerabilidades', body: 'Pesquisadores e clientes devem reportar vulnerabilidades de forma responsável, sem exploração abusiva, acesso a dados de terceiros ou indisponibilização de serviços.' },
-      { title: '8. Acesso interno', body: 'Acesso de colaboradores ou prestadores da BrSpark a dados de clientes deve ser limitado por necessidade, suporte, segurança, operação ou obrigação legal, sujeito a confidencialidade.' },
-      { title: '9. Limites', body: 'Nenhuma política elimina todos os riscos. Segurança depende de cooperação entre BrSpark, Clientes, usuários, provedores de nuvem e terceiros conectados.' },
+      { title: '8. Acesso interno', body: 'Acesso de colaboradores ou prestadores da Aria a dados de clientes deve ser limitado por necessidade, suporte, segurança, operação ou obrigação legal, sujeito a confidencialidade.' },
+      { title: '9. Limites', body: 'Nenhuma política elimina todos os riscos. Segurança depende de cooperação entre Aria, Clientes, usuários, provedores de nuvem e terceiros conectados.' },
     ]),
   },
 ];

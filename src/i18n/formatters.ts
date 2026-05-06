@@ -1,7 +1,7 @@
 import { getCurrentLanguage } from './index';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const UNIT_KEY = '@brspark_units';
+const UNIT_KEY = '@aria_units';
 
 // ── Locale → Currency mapping ────────────────────────────────────────────────
 const LOCALE_CURRENCY: Record<string, string> = {
@@ -41,7 +41,7 @@ export function isImperial(): boolean {
 }
 
 // ── Number Format Preferences ─────────────────────────────────────────────────
-const NUMBER_FORMAT_KEY = '@brspark_number_format';
+const NUMBER_FORMAT_KEY = '@aria_number_format';
 
 export type NumberFormatStyle = 'locale' | 'dot-comma' | 'comma-dot';
 export type NumberFormatPrefs = { decimals: 0 | 1 | 2 | 3; style: NumberFormatStyle };
