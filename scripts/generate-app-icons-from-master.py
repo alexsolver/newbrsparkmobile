@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from collections import deque
+
 from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,8 +20,48 @@ ASSETS = ROOT / "assets"
 LIVE = ASSETS / "liveActivity"
 
 
+def edge_connected_dark_to_white_rgba(im: Image.Image, rgb_max_thr: int = 52) -> Image.Image:
+    """
+    Remove «matte» preto típico de ícones exportados com cantos rectos: inunda a partir das
+    bordas e substitui por branco opaco tudo o que estiver ligado ao exterior com max(R,G,B)
+    abaixo do limiar (não afecta o interior do símbolo, que não toca na borda da imagem).
+    """
+    arr = np.asarray(im.convert("RGBA")).copy()
+    h, w = arr.shape[0], arr.shape[1]
+    mx = np.maximum(np.maximum(arr[:, :, 0], arr[:, :, 1]), arr[:, :, 2])
+    dark = mx < rgb_max_thr
+
+    visited = np.zeros((h, w), dtype=bool)
+    q: deque[tuple[int, int]] = deque()
+
+    def try_push(y: int, x: int) -> None:
+        if 0 <= y < h and 0 <= x < w and dark[y, x] and not visited[y, x]:
+            visited[y, x] = True
+            q.append((y, x))
+
+    for x in range(w):
+        try_push(0, x)
+        try_push(h - 1, x)
+    for y in range(h):
+        try_push(y, 0)
+        try_push(y, w - 1)
+
+    while q:
+        y, x = q.popleft()
+        arr[y, x] = (255, 255, 255, 255)
+        for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < h and 0 <= nx < w and dark[ny, nx] and not visited[ny, nx]:
+                visited[ny, nx] = True
+                q.append((ny, nx))
+
+    return Image.fromarray(arr)
+
+
 def load_rgb(path: Path) -> Image.Image:
-    im = Image.open(path).convert("RGB")
+    raw = Image.open(path).convert("RGBA")
+    raw = edge_connected_dark_to_white_rgba(raw, rgb_max_thr=52)
+    im = raw.convert("RGB")
     if im.size != (1024, 1024):
         im = ImageOps.fit(im, (1024, 1024), method=Image.Resampling.LANCZOS)
     return im
@@ -63,6 +105,10 @@ def main() -> int:
 
     LIVE.mkdir(parents=True, exist_ok=True)
     master = load_rgb(master_path)
+
+    canon_master = (ASSETS / "icon-master-1024.png").resolve()
+    if master_path.resolve() == canon_master:
+        master.save(canon_master, "PNG", optimize=True)
 
     # App Store / Expo principal + splash (sem transparência)
     master.save(ASSETS / "icon.png", "PNG", optimize=True)

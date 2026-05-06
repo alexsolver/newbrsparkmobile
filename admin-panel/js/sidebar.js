@@ -607,7 +607,7 @@ export function renderSidebar(alertCount = 3) {
       <div class="sidebar-header">
         <div class="sidebar-header-row">
           <a href="${defaultLandingPageForRole(role)}" class="sidebar-brand" title="${String(t('nav_home_title')).replace(/"/g, '&quot;')}">
-            <img src="img/logo.png" alt="BrSpark">
+            <img src="img/logo.png" alt="Logo">
           </a>
           <button type="button" class="sidebar-toggle" id="sidebar-toggle"
             aria-label="${collapsed ? String(t('nav_sidebar_expand')).replace(/"/g, '&quot;') : String(t('nav_sidebar_collapse')).replace(/"/g, '&quot;')}"
