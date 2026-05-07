@@ -378,6 +378,7 @@
             <input class="form-control" id="key-app-dropbox" placeholder="App Key (Client ID)" />
             <input class="form-control" id="secret-dropbox" type="password" placeholder="App Secret (Client Secret)" />
             <input class="form-control" id="refresh-dropbox" type="password" placeholder="Refresh Token" />
+            <p id="integ-dropbox-refresh-hint" style="font-size:12px;line-height:1.4;margin:8px 0 0;opacity:.88;color:var(--muted,#64748b)"></p>
             <input class="form-control" id="folder-dropbox" placeholder="Pasta raiz (ex: /Aria)" value="/Aria" />
           </div>
           <div class="int-actions">
@@ -1168,10 +1169,27 @@
       baseUrl: folder,
       apiKey: `${appKey}:${appSecret}`,
       description: `refresh_token:${refreshToken}`,
+      metadata: { dropboxRefreshToken: refreshToken },
     };
-    if (activeInts['Dropbox']) await CONFIG.del(`/integrations/${activeInts['Dropbox'].id}`);
-    await CONFIG.post('/integrations', body);
-    loadIntegrations();
+    const oldId = activeInts['Dropbox']?.id;
+    try {
+      const res = await CONFIG.post('/integrations', body);
+      if (res == null) return;
+      if (res?.id || res?.name) {
+        if (oldId && oldId !== res.id) await CONFIG.del(`/integrations/${oldId}`);
+        loadIntegrations();
+        showToast(integT('integ_toast_dropbox_saved'), true);
+      } else {
+        const detail = res?.error || integT('integ_save_fallback');
+        showToast(detail, false);
+        alert(integT('integ_alert_save_err', { detail }));
+        loadIntegrations();
+      }
+    } catch (e) {
+      const msg = e && e.message ? e.message : String(e);
+      showToast(msg, false);
+      alert(msg);
+    }
   };
 
   // Cloudflare R2 — salva account id no description

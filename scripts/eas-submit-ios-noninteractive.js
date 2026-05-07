@@ -45,7 +45,7 @@ try {
   json.submit = json.submit || {};
   json.submit.production = json.submit.production || {};
   json.submit.production.ios = {
-    bundleIdentifier: 'com.aria',
+    bundleIdentifier: 'com.lansolver.ariamobile',
     ...(json.submit.production.ios || {}),
     ascAppId,
   };

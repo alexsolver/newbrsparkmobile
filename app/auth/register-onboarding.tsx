@@ -16,6 +16,7 @@ import {
   FlatList,
   Keyboard,
   TouchableWithoutFeedback,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -24,7 +25,7 @@ import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
+import { BundledAppMark } from '../../src/components/BrandingLogoImage';
 import { FlagIsoImage } from '../../src/components/FlagIsoImage';
 import { AuthService, beginPublicAuthFlow, resetPublicAuthFlow } from '../../src/services/auth';
 import { API_BASE } from '../../src/services/appApiBase';
@@ -62,12 +63,9 @@ function createRegisterStyles(C: ColorPalette) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.cardWhite },
     container: { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 40 },
-    logoBlock: { width: '100%', alignItems: 'center', paddingTop: 12, paddingBottom: 8 },
+    logoBlock: { width: '100%', alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
     logoImage: {
       alignSelf: 'center',
-      width: '94%',
-      maxWidth: 320,
-      aspectRatio: 220 / 80,
       marginBottom: 6,
     },
     logoSub: { fontSize: 12, color: C.textSecondary, fontWeight: '600', letterSpacing: 0.5 },
@@ -323,6 +321,15 @@ export default function RegisterOnboardingScreen() {
   const { t, i18n } = useTranslation();
   const { colors: C, appTagline } = useTheme();
   const styles = useMemo(() => createRegisterStyles(C), [C]);
+  const { width: windowWidth } = useWindowDimensions();
+  const loginLogoBox = useMemo(() => {
+    const horizontalPad = 56;
+    const w = Number(windowWidth);
+    const safeW = Number.isFinite(w) && w > 0 ? w : 390;
+    const inner = Math.max(1, safeW - horizontalPad);
+    const side = Math.min(136, Math.max(96, inner));
+    return { width: side, height: side };
+  }, [windowWidth]);
   const { completeRegisterAfterOtpSetup, clearSessionForRegistrationFlow } = useAuth();
 
   /**
@@ -644,7 +651,7 @@ export default function RegisterOnboardingScreen() {
           </TouchableOpacity>
 
           <View style={styles.logoBlock}>
-            <BrandingLogoImage variant="login" style={styles.logoImage} resizeMode="contain" />
+            <BundledAppMark style={[styles.logoImage, loginLogoBox]} resizeMode="contain" />
             {appTagline ? <Text style={styles.logoSub}>{appTagline}</Text> : null}
           </View>
 

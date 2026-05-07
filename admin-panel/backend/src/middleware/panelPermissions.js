@@ -44,7 +44,7 @@ function pathAllowedForManager(originalUrl) {
  * Depois de `adminAuth` (ou equivalente que preencha `req.admin`).
  * - Conta Admin legada (`!panelUser`): sem alteração.
  * - SAAS_ADMIN / TENANT_ADMIN: acesso total.
- * - MANAGER: só prefixos em MANAGER_ALLOWED_PREFIXES.
+ * - MANAGER: prefixos em MANAGER_ALLOWED_PREFIXES + `/api/integrations` se tiver capability adequada.
  */
 /**
  * @param {import('express').Request} req
@@ -76,6 +76,25 @@ function enforcePanelPermissions(req, res, next) {
     if (pathAllowedForManager(req.originalUrl)) {
       if (typeof next === 'function') next();
       return true;
+    }
+    const pathOnly = String(req.originalUrl || '').split('?')[0];
+    const integrationsApi =
+      pathOnly === '/api/integrations' || pathOnly.startsWith('/api/integrations/');
+    if (integrationsApi) {
+      const method = String(req.method || 'GET').toUpperCase();
+      const readOk =
+        hasCapability(authz, 'platform.integrations.read') ||
+        hasCapability(authz, 'platform.integrations.write') ||
+        hasCapability(authz, 'platform.system.read') ||
+        hasCapability(authz, 'platform.system.write');
+      const writeOk =
+        hasCapability(authz, 'platform.integrations.write') ||
+        hasCapability(authz, 'platform.system.write');
+      const safeRead = ['GET', 'HEAD', 'OPTIONS'].includes(method);
+      if ((safeRead && readOk) || (!safeRead && writeOk)) {
+        if (typeof next === 'function') next();
+        return true;
+      }
     }
     res.status(403).json({
       error: 'Sem permissão para este recurso (perfil Gestor).',

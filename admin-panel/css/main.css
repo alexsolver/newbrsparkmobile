@@ -1325,6 +1325,8 @@ tbody td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  flex: 1 1 200px;
+  max-width: 100%;
 }
 .filter-field-label {
   display: inline-flex;
@@ -1341,24 +1343,27 @@ tbody td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
   opacity: 0.85;
 }
 .filter-field-control {
-  width: auto;
-  min-width: 160px;
-  max-width: 220px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 8px 12px;
   font-size: 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
 }
 .filter-field--check {
+  flex: 0 1 auto;
   flex-direction: row;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface);
   cursor: pointer;
   user-select: none;
+  width: fit-content;
+  max-width: 100%;
 }
 .filter-field--check input {
   width: 16px;
@@ -1892,6 +1897,13 @@ th.text-right {
   }
   .search-wrap--toolbar input:focus {
     width: 100%;
+  }
+  /* Filtros: uma coluna em ecrã estreito evita recorte por overflow + larguras fixas */
+  .data-toolbar-filters .filter-field {
+    flex: 1 1 100%;
+  }
+  .data-toolbar-filters .filter-field--check {
+    align-self: flex-start;
   }
   #users-table {
     min-width: 980px;

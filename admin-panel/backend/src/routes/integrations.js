@@ -12,6 +12,15 @@ const { normalizeOsrmBaseUrl } = require('../lib/osrmBaseUrl');
 const { normalizeNylasApiUri } = require('../lib/nylasCredentials');
 const { normalizeMoondreamBaseUrl } = require('../lib/visionMoondreamAnalyze');
 const { normalizeMicrosoftGraphApiBaseUrl } = require('../lib/microsoftGraphCredentials');
+const {
+  resolveDropboxRefreshToken,
+  pruneInvalidDropboxRefreshFromMetadata,
+  looksLikeDropboxShortLivedAccessToken,
+  normalizeIntegrationMetadata,
+} = require('../lib/dropboxOAuth');
+
+const DROPBOX_BAD_TOKEN_MSG =
+  'Esse valor é um access_token Dropbox (prefixo sl.), não um refresh_token. Use npm run dropbox:oauth-local ou guarde o campo refresh_token do JSON do POST /oauth2/token (fluxo offline).';
 
 function maskIntegrationSecret(v) {
   if (!v || typeof v !== 'string') return null;
@@ -107,6 +116,21 @@ router.post('/', async (req, res) => {
     } else if (name === 'Visão IA - Moondream') {
       resolvedBase = normalizeMoondreamBaseUrl(baseUrl || '');
     }
+
+    let metadataOut = metadata;
+    if (name === 'Dropbox') {
+      metadataOut = pruneInvalidDropboxRefreshFromMetadata(metadata);
+      const rt = resolveDropboxRefreshToken({ metadata: metadataOut, description });
+      if (!rt || !String(rt).trim()) {
+        return res.status(400).json({
+          error: 'Integração Dropbox: refresh token em falta ou inválido.',
+        });
+      }
+      if (looksLikeDropboxShortLivedAccessToken(rt)) {
+        return res.status(400).json({ error: DROPBOX_BAD_TOKEN_MSG });
+      }
+    }
+
     const integration = await prisma.integration.create({
       data: {
         name,
@@ -119,7 +143,7 @@ router.post('/', async (req, res) => {
         baseUrl: resolvedBase,
         webhookUrl,
         status,
-        metadata,
+        metadata: metadataOut,
       },
     });
     await prisma.auditLog.create({
@@ -170,6 +194,39 @@ router.patch('/:id', async (req, res) => {
     } else if (existing.name === 'Visão IA - Moondream' && data.baseUrl != null) {
       data = { ...data, baseUrl: normalizeMoondreamBaseUrl(data.baseUrl) };
     }
+
+    if (existing.name === 'Dropbox') {
+      const nextDesc =
+        data.description !== undefined ? data.description : existing.description;
+      const mergedMeta =
+        data.metadata !== undefined && typeof data.metadata === 'object'
+          ? { ...normalizeIntegrationMetadata(existing), ...data.metadata }
+          : normalizeIntegrationMetadata(existing);
+      const metaClean = pruneInvalidDropboxRefreshFromMetadata(mergedMeta);
+      const metaBefore = normalizeIntegrationMetadata(existing);
+      if (JSON.stringify(metaClean) !== JSON.stringify(metaBefore)) {
+        data.metadata = metaClean;
+      }
+
+      const touched =
+        Object.prototype.hasOwnProperty.call(data, 'description') ||
+        Object.prototype.hasOwnProperty.call(data, 'metadata');
+      if (touched) {
+        const rt = resolveDropboxRefreshToken({
+          metadata: metaClean,
+          description: nextDesc,
+        });
+        if (!rt || !String(rt).trim()) {
+          return res.status(400).json({
+            error: 'Integração Dropbox: refresh token em falta ou inválido.',
+          });
+        }
+        if (looksLikeDropboxShortLivedAccessToken(rt)) {
+          return res.status(400).json({ error: DROPBOX_BAD_TOKEN_MSG });
+        }
+      }
+    }
+
     const integration = await prisma.integration.update({ where: { id: req.params.id }, data });
     res.json({
       ...integration,

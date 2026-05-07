@@ -45,6 +45,9 @@ credentials/google-play-service-account.json
 /ios
 /android
 
+# Snapshot de integrações copiado de remoto (contém API keys — nunca versionar)
+admin-panel/backend/scripts/.integrations-remote-import.json
+
 # Backups de base de dados (dados sensíveis: credenciais, PII, etc.)
 # Gerados localmente pelo painel/scripts — nunca versionar.
 admin-panel/backend/backups/*.sql.gz

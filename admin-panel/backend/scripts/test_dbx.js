@@ -7,50 +7,10 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-const https = require('https');
-
-function getDropboxAccessToken(appKey, appSecret, refreshToken) {
-  return new Promise((resolve, reject) => {
-    const data = new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken
-    }).toString();
-    const auth = Buffer.from(`${appKey}:${appSecret}`).toString('base64');
-
-    const req = https.request(
-      {
-        hostname: 'api.dropbox.com',
-        path: '/oauth2/token',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Authorization: `Basic ${auth}`,
-          'Content-Length': Buffer.byteLength(data)
-        }
-      },
-      (res) => {
-        let body = '';
-        res.on('data', (d) => {
-          body += d;
-        });
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              resolve(JSON.parse(body).access_token);
-            } catch (e) {
-              reject(e);
-            }
-          } else {
-            reject(new Error(`Dropbox Oauth Error ${res.statusCode}: ${body}`));
-          }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.write(data);
-    req.end();
-  });
-}
+const {
+  resolveDropboxRefreshToken,
+  getDropboxAccessToken,
+} = require('../src/lib/dropboxOAuth');
 
 async function main() {
   const dbx = await prisma.integration.findFirst({
@@ -61,14 +21,15 @@ async function main() {
 
   const [appKey, ...secretParts] = (dbx.apiKey || '').split(':');
   const appSecret = secretParts.join(':');
-  const refreshToken = (dbx.description?.match(/refresh_token:(\S+)/) || [])[1];
+  const refreshToken = resolveDropboxRefreshToken(dbx);
 
   console.log('AppKey:', appKey);
   console.log('AppSecret:', appSecret);
   console.log('Refresh:', !!refreshToken);
+  if (!refreshToken) return console.error('Sem refresh_token na description (esperado refresh_token:...)');
 
   try {
-    const token = await getDropboxAccessToken(appKey, appSecret, refreshToken);
+    const token = await getDropboxAccessToken(appKey.trim(), appSecret.trim(), refreshToken);
     console.log('Successfully got token:', !!token);
 
     await prisma.integration.update({

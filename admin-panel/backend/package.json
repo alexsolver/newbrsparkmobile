@@ -19,6 +19,7 @@
     "backfill:os-numbers": "node scripts/backfillOsNumbers.js",
     "dropbox:check": "node scripts/check_dropbox.js",
     "dropbox:exchange": "node scripts/exchange_dbx.js",
+    "dropbox:oauth-local": "node scripts/dropbox_oauth_local.js",
     "dropbox:test-token": "node scripts/test_dbx.js",
     "openapi": "node ../scripts/build-openapi.js",
     "vision:test-external": "node scripts/test-vision-checklist-api.js",

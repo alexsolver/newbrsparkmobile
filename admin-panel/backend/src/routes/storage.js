@@ -6,6 +6,7 @@ const {
   resolvePublicApiOriginForUploads,
   ensureHttpsUrlForPublicInternet,
 } = require('../lib/publicHttpsUrl');
+const { resolveDropboxRefreshToken, getDropboxAccessToken } = require('../lib/dropboxOAuth');
 const https    = require('https');
 const crypto   = require('crypto');
 
@@ -192,40 +193,6 @@ async function uploadToS3(buffer, integration, remotePath, contentType) {
   return { path: `/${bucket}/${remotePath}`, url: publicUrl };
 }
 
-// ── Dropbox ───────────────────────────────────────────────
-function getDropboxAccessToken(appKey, appSecret, refreshToken) {
-  return new Promise((resolve, reject) => {
-    const data = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }).toString();
-    const auth = Buffer.from(`${appKey}:${appSecret}`).toString('base64');
-    
-    const req = https.request({
-      hostname: 'api.dropbox.com',
-      path: '/oauth2/token',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${auth}`,
-        'Content-Length': Buffer.byteLength(data)
-      }
-    }, res => {
-      let body = '';
-      res.on('data', d => { body += d; });
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          try {
-            resolve(JSON.parse(body).access_token);
-          } catch(e) { reject(e); }
-        } else {
-          reject(new Error(`Dropbox Oauth Error ${res.statusCode}: ${body}`));
-        }
-      });
-    });
-    req.on('error', reject);
-    req.write(data);
-    req.end();
-  });
-}
-
 // ── Dropbox Upload (mantido como fallback) ────────────────
 function uploadToDropbox(buffer, token, dropboxPath) {
   return new Promise((resolve, reject) => {
@@ -350,14 +317,14 @@ router.post('/upload', async (req, res) => {
     if (integration.provider === 'dropbox') {
       const [appKey, ...secretParts] = (integration.apiKey || '').split(':');
       const appSecret = secretParts.join(':');
-      const refreshToken = (integration.description?.match(/refresh_token:(\S+)/) || [])[1];
+      const refreshToken = resolveDropboxRefreshToken(integration);
 
       if (!appKey || !appSecret || !refreshToken) {
         throw new Error('Dropbox OAuth2 incompleto. Configure App Key, Secret e Refresh Token no painel.');
       }
 
       console.log('[STORAGE] Renovando token do Dropbox...');
-      const token = await getDropboxAccessToken(appKey.trim(), appSecret.trim(), refreshToken.trim());
+      const token = await getDropboxAccessToken(appKey.trim(), appSecret.trim(), refreshToken);
       const rootFolder  = integration.baseUrl || '/Aria';
       const dropboxPath = `${rootFolder}/${remotePath}`.replace(/\/\//g, '/');
       console.log(`[STORAGE] Dropbox upload: ${dropboxPath} (${buffer.length} bytes)`);
@@ -424,9 +391,9 @@ async function syncStrandedFiles() {
     if (integration.provider === 'dropbox') {
       const [appKey, ...secretParts] = (integration.apiKey || '').split(':');
       const appSecret = secretParts.join(':');
-      const refreshToken = (integration.description?.match(/refresh_token:(\S+)/) || [])[1];
+      const refreshToken = resolveDropboxRefreshToken(integration);
       if (appKey && appSecret && refreshToken) {
-         dbxToken = await getDropboxAccessToken(appKey.trim(), appSecret.trim(), refreshToken.trim());
+         dbxToken = await getDropboxAccessToken(appKey.trim(), appSecret.trim(), refreshToken);
       } else { isSyncing = false; return; }
     }
 

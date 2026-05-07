@@ -44,7 +44,7 @@
         "track": "production"
       },
       "ios": {
-        "bundleIdentifier": "com.aria",
+        "bundleIdentifier": "com.lansolver.ariamobile",
         "ascAppId": "6763369142"
       }
     }

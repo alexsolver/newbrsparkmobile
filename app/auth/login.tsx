@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, KeyboardAvoidingView, Platform, Alert,
   ActivityIndicator, Linking, Modal, Keyboard, TouchableWithoutFeedback,
+  useWindowDimensions,
 } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTranslation } from 'react-i18next';
 import { ColorPalette } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
+import { BundledAppMark } from '../../src/components/BrandingLogoImage';
 import { useAuth } from '../../src/hooks/useAuth';
 import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 import {
@@ -29,32 +30,28 @@ function createLoginStyles(C: ColorPalette) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.cardWhite },
     container: { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 40 },
-    heroBg: {
+    /** Logo + slogan sempre acima das abas; faixa colorida só se contrastar com o fundo da página. */
+    loginBrandHeader: {
+      width: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingTop: 8,
+      paddingBottom: 10,
+      marginBottom: 4,
+    },
+    loginBrandHeaderHero: {
       marginHorizontal: -28,
       marginBottom: 10,
-      minHeight: 168,
-      justifyContent: 'center',
-      backgroundColor: C.surfaceLow,
+      paddingHorizontal: 28,
+      paddingTop: 12,
+      paddingBottom: 14,
       borderBottomLeftRadius: 26,
       borderBottomRightRadius: 26,
       overflow: 'hidden',
     },
-    heroContent: {
-      width: '100%',
-      paddingHorizontal: 28,
-      paddingTop: 16,
-      paddingBottom: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-
-    logoBlock: { width: '100%', alignItems: 'center', paddingTop: 20, paddingBottom: 8 },
-    /** Caixa ~38% maior que 220×80; largura adapta à tela (`contain` no asset). */
+    /** Largura/altura em pt vêm de `useWindowDimensions` — % no ScrollView quebrava o layout. */
     logoImage: {
       alignSelf: 'center',
-      width: '94%',
-      maxWidth: 320,
-      aspectRatio: 220 / 80,
       marginBottom: 6,
     },
     logoSub: {
@@ -273,8 +270,40 @@ export default function LoginScreen() {
   const { login, loginWithOAuth, logout, completeLoginWithOtp, user, loading: authBoot, clearSessionForRegistrationFlow } =
     useAuth();
   const { t, i18n } = useTranslation();
-  const { colors: C, appTagline, loginScreenHeroBackgroundColor, loginHeroTaglineColor } = useTheme();
+  const {
+    colors: C,
+    appTagline,
+    appDisplayName,
+    loginScreenHeroBackgroundColor,
+    loginHeroTaglineColor,
+  } = useTheme();
   const styles = useMemo(() => createLoginStyles(C), [C]);
+  const { width: windowWidth } = useWindowDimensions();
+  /** Hero branco (= fundo da página) fazia o logo «sumir»; só aplicamos faixa se houver contraste. */
+  const effectiveHeroBg = useMemo(() => {
+    if (!loginScreenHeroBackgroundColor) return null;
+    const norm = (x: string) => {
+      const s = x.replace(/\s/g, '').toUpperCase();
+      if (!/^#([0-9A-F]{3}|[0-9A-F]{6})$/.test(s)) return s;
+      if (s.length === 4) {
+        return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`;
+      }
+      return s;
+    };
+    const hero = norm(loginScreenHeroBackgroundColor);
+    const card = norm(C.cardWhite);
+    if (hero === card) return null;
+    return loginScreenHeroBackgroundColor;
+  }, [loginScreenHeroBackgroundColor, C.cardWhite]);
+  /** Caixa quadrada no topo — ícone centrado (evita % no ScrollView). */
+  const loginLogoBox = useMemo(() => {
+    const horizontalPad = 56; // styles.container paddingHorizontal 28×2
+    const w = Number(windowWidth);
+    const safeW = Number.isFinite(w) && w > 0 ? w : 390;
+    const inner = Math.max(1, safeW - horizontalPad);
+    const side = Math.min(136, Math.max(96, inner));
+    return { width: side, height: side };
+  }, [windowWidth]);
 
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
@@ -620,21 +649,31 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {loginScreenHeroBackgroundColor ? (
-            <View style={[styles.heroBg, { backgroundColor: loginScreenHeroBackgroundColor }]}>
-              <View style={styles.heroContent}>
-                <BrandingLogoImage variant="login" style={styles.logoImage} resizeMode="contain" />
-                {appTagline ? (
-                  <Text style={[styles.logoSub, { color: loginHeroTaglineColor, opacity: 0.9 }]}>{appTagline}</Text>
-                ) : null}
-              </View>
-            </View>
-          ) : (
-            <View style={styles.logoBlock}>
-              <BrandingLogoImage variant="login" style={styles.logoImage} resizeMode="contain" />
-              {appTagline ? <Text style={styles.logoSub}>{appTagline}</Text> : null}
-            </View>
-          )}
+          <View
+            style={[
+              styles.loginBrandHeader,
+              effectiveHeroBg && [
+                styles.loginBrandHeaderHero,
+                { backgroundColor: effectiveHeroBg },
+              ],
+            ]}
+          >
+            <BundledAppMark
+              style={[styles.logoImage, loginLogoBox]}
+              resizeMode="contain"
+              accessibilityLabel={appDisplayName}
+            />
+            {appTagline ? (
+              <Text
+                style={[
+                  styles.logoSub,
+                  effectiveHeroBg ? { color: loginHeroTaglineColor, opacity: 0.9 } : null,
+                ]}
+              >
+                {appTagline}
+              </Text>
+            ) : null}
+          </View>
 
 
           {/* Abas: Entrar (esta tela) / Criar conta (fluxo OTP + senha) */}

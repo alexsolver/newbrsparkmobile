@@ -38,6 +38,9 @@ const M = {
     integ_alert_nylas_key: 'API Key da Nylas é obrigatória.',
     integ_alert_smtp_host: 'Host SMTP é obrigatório.',
     integ_alert_dropbox_tokens: 'App Key, App Secret e Refresh Token são obrigatórios.',
+    integ_toast_dropbox_saved: 'Integração Dropbox guardada.',
+    integ_dropbox_refresh_hint:
+      'Não use o access_token (começa por sl.). Guarde só o refresh_token: na pasta admin-panel/backend corra npm run dropbox:oauth-local (com DROPBOX_APP_KEY e DROPBOX_APP_SECRET no .env), ou copie o campo refresh_token da resposta JSON do POST /oauth2/token após autorizar com token_access_type=offline.',
     integ_alert_s3_fields: 'Access Key, Secret e Bucket são obrigatórios.',
     integ_alert_r2_fields: 'Access Key, Secret e Bucket são obrigatórios.',
     integ_alert_aws_rekog: 'Region, Key e Secret são obrigatórios.',
@@ -109,6 +112,9 @@ const M = {
     integ_alert_nylas_key: 'Nylas API key is required.',
     integ_alert_smtp_host: 'SMTP host is required.',
     integ_alert_dropbox_tokens: 'App Key, App Secret and Refresh Token are required.',
+    integ_toast_dropbox_saved: 'Dropbox integration saved.',
+    integ_dropbox_refresh_hint:
+      'Do not use the access_token (starts with sl.). Save only refresh_token: from admin-panel/backend run npm run dropbox:oauth-local (with DROPBOX_APP_KEY and DROPBOX_APP_SECRET in .env), or copy the refresh_token field from the POST /oauth2/token JSON after authorizing with token_access_type=offline.',
     integ_alert_s3_fields: 'Access Key, Secret and Bucket are required.',
     integ_alert_r2_fields: 'Access Key, Secret and Bucket are required.',
     integ_alert_aws_rekog: 'Region, Key and Secret are required.',
@@ -196,6 +202,7 @@ export function applyIntegrationsPageI18n() {
   ];
   for (const [id, k] of sec) setText(id, k);
   setText('didit-cat-label', 'integ_didit_cat');
+  setText('integ-dropbox-refresh-hint', 'integ_dropbox_refresh_hint');
 }
 
 /** Rótulo «○ Desconectado» / «○ Público» (sem prefixo, só o texto após ○). */

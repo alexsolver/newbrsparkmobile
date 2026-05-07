@@ -25,7 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { getDeviceRegion } from '../../src/i18n';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/theme/ThemeContext';
-import { BrandingLogoImage } from '../../src/components/BrandingLogoImage';
+import { BundledAppMark } from '../../src/components/BrandingLogoImage';
 import { ThemedSwitch } from '../../src/components/ThemedSwitch';
 import { getPersonaHomeHref } from '../../src/navigation/personaRouting';
 interface ConsentState {
@@ -327,8 +327,7 @@ export default function OnboardingScreen() {
           return (
             <View style={s.slideContent}>
               <View style={s.heroLogoWrap}>
-                <BrandingLogoImage
-                  variant="login"
+                <BundledAppMark
                   style={s.heroLogoImg}
                   resizeMode="contain"
                   accessibilityLabel={t('consentFlow.a11yLogo')}
@@ -369,8 +368,7 @@ export default function OnboardingScreen() {
         return (
           <View style={s.slideContent}>
             <View style={s.heroLogoWrap}>
-              <BrandingLogoImage
-                variant="login"
+              <BundledAppMark
                 style={s.heroLogoImg}
                 resizeMode="contain"
                 accessibilityLabel={t('consentFlow.a11yLogo')}
@@ -766,12 +764,12 @@ const s = StyleSheet.create({
   /** Logo no slide «Bem-vindo» — sem caixa nem fundo (só a imagem). */
   heroLogoWrap: {
     alignSelf: 'center',
-    marginBottom: 20,
-    marginTop: 16,
+    marginBottom: 16,
+    marginTop: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroLogoImg: { width: 220, height: 72 },
+  heroLogoImg: { width: 132, height: 132 },
   heroBrandName: { fontSize: 16, fontWeight: '900', textAlign: 'center', marginTop: -8, marginBottom: 4 },
   heroBrandTagline: { fontSize: 12, fontWeight: '600', textAlign: 'center', marginBottom: 10 },
   /** Ícone circular (ex.: confirmação final) — fundo e sombra vêm do tema em runtime. */

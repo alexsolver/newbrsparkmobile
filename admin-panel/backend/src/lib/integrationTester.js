@@ -24,6 +24,7 @@ const {
 } = require('./visionMoondreamAnalyze');
 const { normalizeMailerSendApiBaseUrl } = require('./mailersendCredentials');
 const { testMicrosoftGraphAccess } = require('./microsoftGraphSendEmail');
+const { resolveDropboxRefreshToken, getDropboxAccessToken } = require('./dropboxOAuth');
 
 /** PNG 1×1 para POST de teste (mesmo contrato multipart do app). */
 const VISION_CHECKLIST_PROBE_PNG = Buffer.from(
@@ -501,41 +502,20 @@ async function testSmtp({ description, baseUrl }) {
   });
 }
 
-// ── Dropbox ───────────────────────────────────────────────
-function getDropboxAccessToken(appKey, appSecret, refreshToken) {
-  return new Promise((resolve, reject) => {
-    const data = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }).toString();
-    const auth = Buffer.from(`${appKey}:${appSecret}`).toString('base64');
-    const req = https.request({
-      hostname: 'api.dropbox.com', path: '/oauth2/token', method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': `Basic ${auth}`, 'Content-Length': Buffer.byteLength(data) }
-    }, res => {
-      let body = '';
-      res.on('data', d => { body += d; });
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          try { resolve(JSON.parse(body).access_token); } catch(e) { reject(e); }
-        } else reject(new Error(`Oauth Error ${res.statusCode}: ${body}`));
-      });
-    });
-    req.on('error', reject);
-    req.write(data); req.end();
-  });
-}
+async function testDropbox(integration) {
+  const { apiKey } = integration;
+  if (!apiKey) return { ok: false, message: 'App Key / Secret não configurados.' };
 
-async function testDropbox({ apiKey, description }) {
-  if (!apiKey || !description) return { ok: false, message: 'App Key, Secret ou Refresh Token ausentes.' };
-  
   const [appKey, ...secretParts] = apiKey.split(':');
   const appSecret = secretParts.join(':');
-  const refreshToken = (description.match(/refresh_token:(\S+)/) || [])[1];
+  const refreshToken = resolveDropboxRefreshToken(integration);
 
   if (!appKey || !appSecret || !refreshToken) {
     return { ok: false, message: 'OAuth2 incompleto. Configure App Key, Secret e Refresh Token.' };
   }
 
   try {
-    const token = await getDropboxAccessToken(appKey.trim(), appSecret.trim(), refreshToken.trim());
+    const token = await getDropboxAccessToken(appKey.trim(), appSecret.trim(), refreshToken);
     const r = await httpsPost('api.dropboxapi.com', '/2/users/get_current_account', { Authorization: `Bearer ${token}` }, 'null');
     
     if (r.status === 200) {
